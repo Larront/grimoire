@@ -1,11 +1,15 @@
 <script>
-  import { Pane, PaneGroup, PaneResizer } from "paneforge";
+  import AppSidebar from "./AppSidebar.svelte";
+  import * as Sidebar from "./ui/sidebar";
 
   const { children } = $props();
-
 </script>
-<PaneGroup direction="horizontal">
-	<Pane defaultSize={20} minSize={14}>Pane 1</Pane>
-	<PaneResizer />
-	<Pane defaultSize={80}>{@render children()}</Pane>
-</PaneGroup>
+
+<Sidebar.Provider>
+  <AppSidebar />
+  <main class="flex flex-1 flex-col">
+    <Sidebar.Inset>
+      {@render children?.()}
+    </Sidebar.Inset>
+  </main>
+</Sidebar.Provider>
