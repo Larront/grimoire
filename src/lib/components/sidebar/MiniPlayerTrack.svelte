@@ -30,11 +30,26 @@
         slot.source_id.includes(":album:"))
   );
 
+  // Fix 1: Reset mute state when slot identity changes
+  $effect(() => {
+    slot.id; // track slot identity
+    mutedVolume = null; // reset mute when a different slot is bound
+  });
+
+  // Fix 3: Busy guard to prevent double-invocation
+  let busy = $state(false);
+
   async function togglePlayback() {
-    if (isSlotPlaying) {
-      await audioEngine.pauseSlot(slot.id);
-    } else {
-      await audioEngine.resumeSlot(slot.id);
+    if (busy) return;
+    busy = true;
+    try {
+      if (isSlotPlaying) {
+        await audioEngine.pauseSlot(slot.id);
+      } else {
+        await audioEngine.resumeSlot(slot.id);
+      }
+    } finally {
+      busy = false;
     }
   }
 
@@ -75,7 +90,7 @@
       await invoke("update_scene_slot", {
         id: slot.id,
         label: slot.label,
-        volume: slot.volume,
+        volume: currentVolume,
         loop: !slot.loop,
         slotOrder: slot.slot_order,
         shuffle: !!slot.shuffle,
@@ -93,7 +108,7 @@
       await invoke("update_scene_slot", {
         id: slot.id,
         label: slot.label,
-        volume: slot.volume,
+        volume: currentVolume,
         loop: slot.loop,
         slotOrder: slot.slot_order,
         shuffle: !slot.shuffle,
@@ -161,13 +176,16 @@
         class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         oninput={handleVolumeInput}
         onchange={handleVolumeChange}
+        aria-label="Track volume"
+        aria-valuetext="{Math.round((isMuted ? 0 : currentVolume) * 100)}%"
       />
     </div>
 
     <button
       class="shrink-0 flex items-center justify-center size-5 rounded-sm hover:bg-sidebar-accent transition-colors"
       onclick={toggleLoop}
-      aria-label="Toggle loop"
+      aria-label={slot.loop ? "Disable loop" : "Enable loop"}
+      aria-pressed={slot.loop}
     >
       <Repeat class="size-3 {slot.loop ? 'text-primary' : 'text-muted-foreground/30'}" />
     </button>
@@ -176,7 +194,8 @@
       <button
         class="shrink-0 flex items-center justify-center size-5 rounded-sm hover:bg-sidebar-accent transition-colors"
         onclick={toggleShuffle}
-        aria-label="Toggle shuffle"
+        aria-label={slot.shuffle ? "Disable shuffle" : "Enable shuffle"}
+        aria-pressed={!!slot.shuffle}
       >
         <Shuffle class="size-3 {slot.shuffle ? 'text-primary' : 'text-muted-foreground/30'}" />
       </button>
