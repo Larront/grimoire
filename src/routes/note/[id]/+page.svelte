@@ -123,21 +123,29 @@
 </script>
 
 {#if notes.isLoading}
-  <LoaderCircle class="size-5 animate-spin" />
-  Loading Note...
+  <div class="flex flex-1 items-center justify-center">
+    <LoaderCircle class="size-5 animate-spin text-muted-foreground" />
+  </div>
 {:else if !note}
-  Note not found
+  <div class="flex flex-1 items-center justify-center text-muted-foreground">
+    Note not found
+  </div>
 {:else}
-  <div class="flex flex-1 flex-col">
-    <input
-      bind:this={titleInput}
-      bind:value={draftTitle}
-      class="bg-transparent border-none outline-none p-0 font-display text-4xl font-semibold leading-tight tracking-tight text-foreground placeholder:text-foreground-faint focus:ring-0"
-      placeholder="Untitled"
-      onblur={commitTitle}
-      onkeydown={handleTitleKeydown}
-    />
-    <div class="w-full mx-auto px-10 pt-8">
+  <div class="flex flex-1 flex-col overflow-y-auto">
+    <div class="w-full lg:max-w-[70%] mx-auto px-10 pt-10 pb-20">
+      <input
+        bind:this={titleInput}
+        bind:value={draftTitle}
+        class="w-full bg-transparent border-none outline-none p-0
+               font-heading text-4xl leading-tight tracking-tight
+               text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
+        placeholder="Untitled"
+        onblur={commitTitle}
+        onkeydown={handleTitleKeydown}
+      />
+      <div
+        class="mt-3 mb-8 h-px bg-gradient-to-r from-primary/25 to-transparent"
+      ></div>
       {#if body !== null}
         <Editor initialContent={body} onSave={handleSave} />
       {/if}

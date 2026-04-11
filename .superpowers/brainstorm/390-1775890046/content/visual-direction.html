@@ -1,0 +1,78 @@
+<h2>Visual Direction for the Splash Screen</h2>
+<p class="subtitle">Which mood feels right for the first thing you see when opening Grimoire?</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="height: 220px; background: linear-gradient(170deg, #2a1f1a 0%, #1a1210 40%, #0d0a08 100%); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+      <!-- Subtle vignette edges -->
+      <div style="position:absolute;inset:0;box-shadow:inset 0 0 80px rgba(0,0,0,0.6);"></div>
+      <!-- Title with warm glow -->
+      <div style="text-align:center;position:relative;z-index:1;">
+        <div style="font-family:Metamorphous,serif;font-size:48px;color:#c9a87c;text-shadow:0 0 40px rgba(180,140,80,0.3);letter-spacing:2px;">Grimoire</div>
+        <div style="width:60px;height:1px;background:linear-gradient(90deg,transparent,#c9a87c55,transparent);margin:12px auto 0;"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Quiet &amp; Centered</h3>
+      <p>Minimal, reverent. The title floats in darkness with a subtle warm glow. Vault list sits below, understated. Feels like opening a book in a dim library.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="height: 220px; background: #1a1210; display: flex; position: relative; overflow: hidden;">
+      <!-- Left panel with title -->
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px 32px;position:relative;z-index:1;">
+        <div style="font-family:Metamorphous,serif;font-size:36px;color:#c9a87c;letter-spacing:1px;">Grimoire</div>
+        <div style="font-family:sans-serif;font-size:11px;color:#8a7a6a;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">Your worldbuilding vault</div>
+      </div>
+      <!-- Right panel with vault cards -->
+      <div style="flex:1.2;padding:20px;display:flex;flex-direction:column;gap:8px;justify-content:center;">
+        <div style="background:#2a1f1a;border:1px solid #3a2f25;border-radius:6px;padding:12px 14px;">
+          <div style="font-family:sans-serif;font-size:13px;color:#d4c4a8;font-weight:600;">Erathia Campaign</div>
+          <div style="font-family:sans-serif;font-size:10px;color:#7a6a5a;margin-top:4px;">12 notes · Edited 2h ago</div>
+        </div>
+        <div style="background:#2a1f1a;border:1px solid #3a2f25;border-radius:6px;padding:12px 14px;">
+          <div style="font-family:sans-serif;font-size:13px;color:#d4c4a8;font-weight:600;">Sunken Isles</div>
+          <div style="font-family:sans-serif;font-size:10px;color:#7a6a5a;margin-top:4px;">8 notes · Edited 3d ago</div>
+        </div>
+        <div style="background:#22181266;border:1px dashed #3a2f25;border-radius:6px;padding:10px 14px;text-align:center;">
+          <div style="font-family:sans-serif;font-size:11px;color:#6a5a4a;">+ New Vault</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Split Panel</h3>
+      <p>Brand identity on the left, vault list on the right. Functional immediately — you see your vaults without scrolling. More of a "launcher" feel.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="height: 220px; background: linear-gradient(180deg, #1a1210 0%, #0d0a08 100%); display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden;">
+      <!-- Title area -->
+      <div style="text-align:center;padding-top:28px;position:relative;z-index:1;">
+        <div style="font-family:Metamorphous,serif;font-size:38px;color:#c9a87c;letter-spacing:1px;">Grimoire</div>
+        <div style="font-family:sans-serif;font-size:10px;color:#6a5a4a;margin-top:6px;letter-spacing:2px;text-transform:uppercase;">Worldbuilding toolkit</div>
+      </div>
+      <!-- Vault cards below -->
+      <div style="display:flex;gap:10px;margin-top:24px;padding:0 20px;position:relative;z-index:1;">
+        <div style="background:#2a1f1a;border:1px solid #3a2f25;border-radius:8px;padding:14px;width:110px;">
+          <div style="font-family:sans-serif;font-size:11px;color:#d4c4a8;font-weight:600;">Erathia</div>
+          <div style="font-family:sans-serif;font-size:9px;color:#7a6a5a;margin-top:6px;">12 notes</div>
+          <div style="font-family:sans-serif;font-size:9px;color:#5a4a3a;margin-top:2px;">2h ago</div>
+        </div>
+        <div style="background:#2a1f1a;border:1px solid #3a2f25;border-radius:8px;padding:14px;width:110px;">
+          <div style="font-family:sans-serif;font-size:11px;color:#d4c4a8;font-weight:600;">Sunken Isles</div>
+          <div style="font-family:sans-serif;font-size:9px;color:#7a6a5a;margin-top:6px;">8 notes</div>
+          <div style="font-family:sans-serif;font-size:9px;color:#5a4a3a;margin-top:2px;">3d ago</div>
+        </div>
+        <div style="background:transparent;border:1px dashed #3a2f25;border-radius:8px;padding:14px;width:110px;display:flex;align-items:center;justify-content:center;">
+          <div style="font-family:sans-serif;font-size:20px;color:#5a4a3a;">+</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Vertical Flow</h3>
+      <p>Title on top as a hero moment, vault cards arranged below as a grid. Scrolls naturally if you have many vaults. Feels like a curated collection page.</p>
+    </div>
+  </div>
+</div>

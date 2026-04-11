@@ -1,0 +1,101 @@
+<h2>Splash Screen — Full Mockup</h2>
+<p class="subtitle">Two states: first-time user (empty) and returning user (with recent vaults). Using your actual warm palette.</p>
+
+<div class="split" style="gap: 32px;">
+  <!-- FIRST TIME USER -->
+  <div class="mockup">
+    <div class="mockup-header">First-Time User</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="background: oklch(0.23 0.012 50); min-height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 32px; position: relative; overflow: hidden;">
+        <!-- Subtle radial glow -->
+        <div style="position:absolute;top:30%;left:50%;transform:translate(-50%,-50%);width:500px;height:300px;background:radial-gradient(ellipse,oklch(0.30 0.03 40 / 30%),transparent 70%);pointer-events:none;"></div>
+
+        <!-- Title -->
+        <div style="text-align:center;position:relative;z-index:1;">
+          <div style="font-family:Metamorphous,serif;font-size:52px;color:oklch(0.68 0.10 25);letter-spacing:1px;">Grimoire</div>
+          <div style="width:48px;height:1px;background:linear-gradient(90deg,transparent,oklch(0.68 0.10 25 / 40%),transparent);margin:14px auto 0;"></div>
+        </div>
+
+        <!-- Welcome copy -->
+        <p style="font-family:Nunito,sans-serif;font-size:13px;color:oklch(0.62 0.02 30);margin-top:28px;text-align:center;max-width:280px;line-height:1.6;position:relative;z-index:1;">
+          A worldbuilding vault for your campaigns,<br>lore, maps, and sessions.
+        </p>
+
+        <!-- Two paths -->
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:32px;width:280px;position:relative;z-index:1;">
+          <!-- Primary: Open existing -->
+          <div style="background:oklch(0.68 0.10 25);border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.20 0.04 25)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <div>
+              <div style="font-family:Nunito,sans-serif;font-size:13px;font-weight:700;color:oklch(0.20 0.04 25);">Open Existing Folder</div>
+              <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.20 0.04 25 / 70%);margin-top:1px;">Choose a folder with your notes and files</div>
+            </div>
+          </div>
+          <!-- Secondary: Create new -->
+          <div style="background:oklch(0.30 0.014 30);border:1px solid oklch(1 0.01 30 / 12%);border-radius:6px;padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.62 0.02 30)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <div>
+              <div style="font-family:Nunito,sans-serif;font-size:13px;font-weight:600;color:oklch(0.93 0.008 65);">Create New Vault</div>
+              <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.62 0.02 30);margin-top:1px;">Start fresh with an empty vault</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RETURNING USER -->
+  <div class="mockup">
+    <div class="mockup-header">Returning User (Recent Vaults)</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="background: oklch(0.23 0.012 50); min-height: 400px; display: flex; flex-direction: column; align-items: center; padding: 48px 32px; position: relative; overflow: hidden;">
+        <!-- Subtle radial glow -->
+        <div style="position:absolute;top:20%;left:50%;transform:translate(-50%,-50%);width:500px;height:250px;background:radial-gradient(ellipse,oklch(0.30 0.03 40 / 30%),transparent 70%);pointer-events:none;"></div>
+
+        <!-- Title (slightly smaller for returning users) -->
+        <div style="text-align:center;position:relative;z-index:1;">
+          <div style="font-family:Metamorphous,serif;font-size:44px;color:oklch(0.68 0.10 25);letter-spacing:1px;">Grimoire</div>
+          <div style="width:40px;height:1px;background:linear-gradient(90deg,transparent,oklch(0.68 0.10 25 / 40%),transparent);margin:10px auto 0;"></div>
+        </div>
+
+        <!-- Recent vaults label -->
+        <div style="width:300px;margin-top:32px;position:relative;z-index:1;">
+          <div style="font-family:Nunito,sans-serif;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:oklch(0.50 0.02 30);margin-bottom:10px;">Recent Vaults</div>
+
+          <!-- Vault row 1 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:5px;cursor:pointer;border-bottom:1px solid oklch(1 0.01 30 / 6%);">
+            <div>
+              <div style="font-family:Nunito,sans-serif;font-size:13px;font-weight:600;color:oklch(0.93 0.008 65);">Erathia Campaign</div>
+              <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.50 0.02 30);margin-top:2px;">12 notes · 3 scenes · 2 maps</div>
+            </div>
+            <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.42 0.015 30);">2h ago</div>
+          </div>
+
+          <!-- Vault row 2 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:5px;cursor:pointer;border-bottom:1px solid oklch(1 0.01 30 / 6%);">
+            <div>
+              <div style="font-family:Nunito,sans-serif;font-size:13px;font-weight:600;color:oklch(0.93 0.008 65);">Sunken Isles</div>
+              <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.50 0.02 30);margin-top:2px;">8 notes · 1 scene</div>
+            </div>
+            <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.42 0.015 30);">3d ago</div>
+          </div>
+
+          <!-- Vault row 3 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:5px;cursor:pointer;">
+            <div>
+              <div style="font-family:Nunito,sans-serif;font-size:13px;font-weight:600;color:oklch(0.93 0.008 65);">Homebrew Monsters</div>
+              <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.50 0.02 30);margin-top:2px;">24 notes</div>
+            </div>
+            <div style="font-family:Nunito,sans-serif;font-size:10px;color:oklch(0.42 0.015 30);">2w ago</div>
+          </div>
+        </div>
+
+        <!-- Actions row -->
+        <div style="display:flex;gap:12px;margin-top:24px;position:relative;z-index:1;">
+          <div style="font-family:Nunito,sans-serif;font-size:11px;color:oklch(0.68 0.10 25);cursor:pointer;padding:6px 12px;border-radius:4px;border:1px solid oklch(1 0.01 30 / 10%);">Open Other Vault</div>
+          <div style="font-family:Nunito,sans-serif;font-size:11px;color:oklch(0.62 0.02 30);cursor:pointer;padding:6px 12px;border-radius:4px;border:1px solid oklch(1 0.01 30 / 8%);">Create New Vault</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

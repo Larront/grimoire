@@ -1,0 +1,143 @@
+<h2>Settings Page: Layout Approaches</h2>
+<p class="subtitle">Three ways to organize Spotify + Vault + Preferences on one page</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1a1a2e;">
+      <!-- Approach A: Stacked sections -->
+      <div style="max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
+        <div style="font-family: serif; font-size: 18px; color: #e0d6c8; margin-bottom: 4px;">Settings</div>
+
+        <!-- Spotify section -->
+        <div style="background: #252540; border: 1px solid #3a3a5c; border-radius: 10px; padding: 16px;">
+          <div style="font-size: 10px; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Spotify</div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="color: #e0d6c8; font-size: 13px;">Connected</div>
+              <div style="color: #6a6a8a; font-size: 11px;">Premium required for playback</div>
+            </div>
+            <div style="border: 1px solid #3a3a5c; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #8888aa;">Disconnect</div>
+          </div>
+        </div>
+
+        <!-- Vault section -->
+        <div style="background: #252540; border: 1px solid #3a3a5c; border-radius: 10px; padding: 16px;">
+          <div style="font-size: 10px; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Vault</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #6a6a8a; font-size: 12px;">Path</span>
+              <span style="color: #e0d6c8; font-size: 12px; font-family: monospace;">~/vaults/campaign</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #6a6a8a; font-size: 12px;">Notes</span>
+              <span style="color: #e0d6c8; font-size: 12px;">24</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #6a6a8a; font-size: 12px;">Scenes</span>
+              <span style="color: #e0d6c8; font-size: 12px;">8</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preferences section -->
+        <div style="background: #252540; border: 1px solid #3a3a5c; border-radius: 10px; padding: 16px;">
+          <div style="font-size: 10px; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Preferences</div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="color: #e0d6c8; font-size: 13px;">Theme</div>
+            <div style="background: #1a1a2e; border-radius: 20px; padding: 3px; display: flex; gap: 2px;">
+              <div style="background: #3a3a5c; border-radius: 16px; padding: 3px 10px; font-size: 11px; color: #e0d6c8;">Dark</div>
+              <div style="border-radius: 16px; padding: 3px 10px; font-size: 11px; color: #6a6a8a;">Light</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Single Scroll — Stacked Cards</h3>
+      <p>All three sections as stacked cards in a single scrollable column. Simple, scannable, nothing hidden. The old code used this pattern.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Everything visible at once</li><li>Simple to build and maintain</li><li>Familiar settings pattern</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Could feel sparse with only 3 sections</li><li>Long page as sections grow</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1a1a2e;">
+      <!-- Approach B: Tabbed sections -->
+      <div style="max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
+        <div style="font-family: serif; font-size: 18px; color: #e0d6c8; margin-bottom: 4px;">Settings</div>
+
+        <!-- Tabs -->
+        <div style="display: flex; gap: 0; border-bottom: 1px solid #3a3a5c;">
+          <div style="padding: 8px 16px; font-size: 12px; color: #e0d6c8; border-bottom: 2px solid #5a8a7a;">Integrations</div>
+          <div style="padding: 8px 16px; font-size: 12px; color: #6a6a8a;">Vault</div>
+          <div style="padding: 8px 16px; font-size: 12px; color: #6a6a8a;">Preferences</div>
+        </div>
+
+        <!-- Active tab content -->
+        <div style="background: #252540; border: 1px solid #3a3a5c; border-radius: 10px; padding: 20px; min-height: 120px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: #1DB954; display: flex; align-items: center; justify-content: center; font-size: 14px; color: white;">♫</div>
+            <div>
+              <div style="color: #e0d6c8; font-size: 13px; font-weight: 600;">Spotify</div>
+              <div style="color: #1DB954; font-size: 11px;">Connected</div>
+            </div>
+            <div style="margin-left: auto; border: 1px solid #3a3a5c; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #8888aa;">Disconnect</div>
+          </div>
+          <div style="color: #6a6a8a; font-size: 11px; border-top: 1px solid #3a3a5c; padding-top: 10px;">
+            Spotify Premium required for in-app playback. Tracks and playlists can be added to scene slots.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Tabbed Sections</h3>
+      <p>Tab bar across the top — Integrations, Vault, Preferences. Each tab shows its own panel. Scales well if more integrations or preferences appear later.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Scales well with more content</li><li>Focused view per section</li><li>Feels polished and organized</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More complex to build (tab state)</li><li>Hides content behind clicks</li><li>Overkill for 3 small sections</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1a1a2e;">
+      <!-- Approach C: Grouped with left nav -->
+      <div style="max-width: 520px; margin: 0 auto; display: flex; gap: 20px;">
+        <!-- Left nav -->
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 100px; padding-top: 36px;">
+          <div style="padding: 6px 10px; font-size: 12px; color: #e0d6c8; background: #252540; border-radius: 6px;">Spotify</div>
+          <div style="padding: 6px 10px; font-size: 12px; color: #6a6a8a;">Vault</div>
+          <div style="padding: 6px 10px; font-size: 12px; color: #6a6a8a;">Preferences</div>
+        </div>
+
+        <!-- Content -->
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+          <div style="font-family: serif; font-size: 18px; color: #e0d6c8;">Settings</div>
+
+          <div style="background: #252540; border: 1px solid #3a3a5c; border-radius: 10px; padding: 16px;">
+            <div style="font-size: 10px; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Spotify</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="color: #e0d6c8; font-size: 13px;">Connected</div>
+                <div style="color: #6a6a8a; font-size: 11px;">Premium required for playback</div>
+              </div>
+              <div style="border: 1px solid #3a3a5c; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #8888aa;">Disconnect</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Side Navigation</h3>
+      <p>A left-hand nav inside the settings page that jumps between sections. macOS System Settings style. Scrolls content on the right.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Professional, familiar pattern</li><li>Scales to many sections</li><li>Quick access to any section</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>A lot of chrome for 3 items</li><li>Nested sidebars (app sidebar + settings nav)</li><li>Most complex to build</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 16px;">My recommendation: <strong>A (Stacked Cards)</strong> — with only 3 compact sections, everything fits on one screen. Tabs and side-nav add navigation overhead that isn't justified yet. Easy to add more sections later by stacking more cards.</p>

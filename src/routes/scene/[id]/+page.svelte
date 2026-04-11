@@ -287,9 +287,41 @@
     }
   }
 
+  function parseSpotifyInput(
+    input: string,
+  ): { uri: string; type: string; id: string } | null {
+    // Accept Spotify URLs: https://open.spotify.com/track/ID?si=...
+    const urlMatch = input.match(
+      /open\.spotify\.com\/(track|playlist|album)\/([A-Za-z0-9]+)/,
+    );
+    if (urlMatch) {
+      return {
+        uri: `spotify:${urlMatch[1]}:${urlMatch[2]}`,
+        type: urlMatch[1],
+        id: urlMatch[2],
+      };
+    }
+    // Accept raw URIs: spotify:track:ID, spotify:playlist:ID, spotify:album:ID
+    // Also handles playlist_v2 by normalizing to playlist
+    const uriMatch = input.match(
+      /^spotify:(track|playlist(?:_v2)?|album):([A-Za-z0-9]+)$/,
+    );
+    if (uriMatch) {
+      const type = uriMatch[1].replace("playlist_v2", "playlist");
+      return {
+        uri: `spotify:${type}:${uriMatch[2]}`,
+        type,
+        id: uriMatch[2],
+      };
+    }
+    return null;
+  }
+
+  let parsedSpotifyInput = $derived(parseSpotifyInput(addSpotifyUri.trim()));
+
   let canAdd = $derived(
     addLabel.trim() !== "" &&
-      (addTab === "local" ? !!addSourcePath : !!addSpotifyUri.trim())
+      (addTab === "local" ? !!addSourcePath : !!parsedSpotifyInput)
   );
 
   function resetAddDialog() {
@@ -334,8 +366,27 @@
         });
         source = "local";
       } else {
-        sourceId = addSpotifyUri.trim();
+        const parsed = parseSpotifyInput(addSpotifyUri.trim());
+        if (!parsed) return;
+        sourceId = parsed.uri;
         source = "spotify";
+        // Auto-fetch label from Spotify if user didn't provide one
+        if (!addLabel.trim()) {
+          try {
+            const token = await invoke<string>("spotify_get_access_token");
+            const apiType = parsed.type === "track" ? "tracks" : parsed.type === "playlist" ? "playlists" : "albums";
+            const fields = parsed.type === "playlist" ? "?fields=name" : "";
+            const res = await fetch(`https://api.spotify.com/v1/${apiType}/${parsed.id}${fields}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              addLabel = data.name ?? `Spotify ${parsed.type}`;
+            }
+          } catch {
+            addLabel = `Spotify ${parsed.type}`;
+          }
+        }
       }
       await invoke("create_scene_slot", {
         sceneId: scene.id,
@@ -723,7 +774,7 @@
             <Input
               id="add-spotify-uri"
               bind:value={addSpotifyUri}
-              placeholder="spotify:track:... or spotify:playlist:..."
+              placeholder="Paste Spotify link or URI..."
             />
           </div>
         {/if}

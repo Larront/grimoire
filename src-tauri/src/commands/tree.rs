@@ -49,6 +49,13 @@ pub fn build_file_tree(
                 continue;
             }
 
+            // Skip vault meta folders at the root level only
+            if relative_path.is_empty()
+                && (entry_name == "audio" || entry_name == "images")
+            {
+                continue;
+            }
+
             let entry_path = entry.path();
             let child_rel = if relative_path.is_empty() {
                 entry_name.clone()

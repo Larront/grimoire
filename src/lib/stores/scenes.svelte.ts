@@ -1,9 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { vault } from "./vault.svelte";
-import type { Scene, SceneSlot } from "$lib/types/vault";
+import type { Scene, SceneSlot, SceneWithCount } from "$lib/types/vault";
 
 function createScenesStore() {
-  let scenes = $state<Scene[]>([]);
+  let scenes = $state<SceneWithCount[]>([]);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
 
@@ -15,7 +15,7 @@ function createScenesStore() {
     isLoading = true;
     error = null;
     try {
-      scenes = await invoke<Scene[]>("get_scenes");
+      scenes = await invoke<SceneWithCount[]>("get_scenes_with_slot_counts");
     } catch (e) {
       error = String(e);
     } finally {

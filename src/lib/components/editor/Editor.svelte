@@ -48,8 +48,5 @@
   }
 </script>
 
-<div class="w-full max-w-7/10 mx-auto px-10 pt-8">
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <!-- svelte-ignore a11y_mouse_events_have_key_events -->
-  <div bind:this={element} onkeydown={handleKeydown}></div>
-</div>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={element} onkeydown={handleKeydown}></div>

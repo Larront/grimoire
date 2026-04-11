@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bunx:*)",
+      "mcp__plugin_svelte_svelte__svelte-autofixer",
+      "Bash(bun run:*)",
+      "Bash(find:*)",
+      "Bash(npm run:*)",
+      "Bash(bash:*)",
+      "Bash(cargo check:*)"
+    ]
+  }
+}
