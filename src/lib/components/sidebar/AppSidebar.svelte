@@ -26,6 +26,7 @@
   import { goto } from "$app/navigation";
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
+  import MiniPlayer from "./MiniPlayer.svelte";
 
   let {
     ref = $bindable(null),
@@ -347,6 +348,7 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
+    <MiniPlayer />
     <div
       class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
     >
