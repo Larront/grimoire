@@ -5,6 +5,7 @@ mod vault;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
+use commands::recent_vaults::*;
 use commands::scenes::*;
 use commands::spotify::*;
 use commands::tree::*;
@@ -22,6 +23,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_vault_path,
             open_vault,
+            get_recent_vaults,
+            add_recent_vault,
+            remove_recent_vault,
             create_note,
             get_notes,
             read_note_content,
