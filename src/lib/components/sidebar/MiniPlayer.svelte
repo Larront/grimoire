@@ -25,13 +25,19 @@
   $effect(() => {
     const sceneId = audioEngine.activeSceneId;
     scenes.scenes; // reactive dependency for freshness
+    let cancelled = false;
     if (sceneId) {
-      scenes.getSlots(sceneId).then((s) => { activeSlots = s; });
+      scenes.getSlots(sceneId).then((s) => {
+        if (!cancelled) activeSlots = s;
+      }).catch(() => {
+        if (!cancelled) activeSlots = [];
+      });
     } else {
       activeSlots = [];
       expanded = false;
       masterMutedVolume = null;
     }
+    return () => { cancelled = true; };
   });
 
   async function togglePlayPause() {
@@ -100,8 +106,9 @@
       <!-- Row 2: transport + master volume -->
       <div class="flex items-center gap-1">
         <button
-          class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors"
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           onclick={togglePlayPause}
+          disabled={audioEngine.isCrossfading}
           aria-label={allPaused ? "Resume scene" : "Pause scene"}
         >
           {#if allPaused}
@@ -112,8 +119,9 @@
         </button>
 
         <button
-          class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors"
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           onclick={handleStop}
+          disabled={audioEngine.isCrossfading}
           aria-label="Stop scene"
         >
           <Square class="size-3 text-sidebar-foreground" />
