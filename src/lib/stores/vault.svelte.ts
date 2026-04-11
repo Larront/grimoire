@@ -1,6 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+interface OpenVaultResult {
+  path: string;
+  note_count: number;
+  scene_count: number;
+  map_count: number;
+}
+
+export interface RecentVault {
+  path: string;
+  name: string;
+  note_count: number;
+  scene_count: number;
+  map_count: number;
+  last_opened: string;
+}
+
 function createVaultStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
@@ -24,9 +40,26 @@ function createVaultStore() {
         return false;
       }
 
-      await invoke("open_vault", { path: vaultPath });
-      path = vaultPath;
+      const result = await invoke<OpenVaultResult>("open_vault", {
+        path: vaultPath,
+      });
+
+      path = result.path;
       isOpen = true;
+
+      // Record in recent vaults (fire-and-forget)
+      const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
+      invoke("add_recent_vault", {
+        entry: {
+          path: result.path,
+          name,
+          note_count: result.note_count,
+          scene_count: result.scene_count,
+          map_count: result.map_count,
+          last_opened: new Date().toISOString(),
+        },
+      }).catch(console.error);
+
       return true;
     } catch (e) {
       error = String(e);
