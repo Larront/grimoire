@@ -78,7 +78,7 @@
 </script>
 
 {#if isActive}
-  <div class="border-t border-sidebar-border">
+  <div class="border-t border-sidebar-border group-data-[collapsible=icon]:hidden">
     <!-- Collapsed controls -->
     <div class="px-2 pt-2 pb-1.5">
       <!-- Row 1: viz + scene name + expand toggle -->
