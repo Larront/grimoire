@@ -7,7 +7,8 @@
       "Bash(find:*)",
       "Bash(npm run:*)",
       "Bash(bash:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(npm info:*)"
     ]
   }
 }
