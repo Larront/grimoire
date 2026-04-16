@@ -21,9 +21,9 @@ export interface Note {
 export interface Map {
   id: number;
   title: string;
-  image_path: string;
-  image_width: number;
-  image_height: number;
+  image_path: string | null;
+  image_width: number | null;
+  image_height: number | null;
   created_at: string;
   modified_at: string;
 }
