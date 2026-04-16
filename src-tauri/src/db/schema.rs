@@ -4,9 +4,9 @@ diesel::table! {
     maps (id) {
         id -> Integer,
         title -> Text,
-        image_path -> Text,
-        image_width -> Integer,
-        image_height -> Integer,
+        image_path -> Nullable<Text>,
+        image_width -> Nullable<Integer>,
+        image_height -> Nullable<Integer>,
         created_at -> Text,
         modified_at -> Text,
     }
