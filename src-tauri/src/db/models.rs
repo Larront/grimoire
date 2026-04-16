@@ -34,9 +34,9 @@ use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_aut
 pub struct Map {
     pub id: i32,
     pub title: String,
-    pub image_path: String,
-    pub image_width: i32,
-    pub image_height: i32,
+    pub image_path: Option<String>,
+    pub image_width: Option<i32>,
+    pub image_height: Option<i32>,
     pub created_at: String,
     pub modified_at: String,
 }
@@ -45,9 +45,18 @@ pub struct Map {
 #[diesel(table_name = maps)]
 pub struct NewMap<'a> {
     pub title: &'a str,
-    pub image_path: &'a str,
-    pub image_width: i32,
-    pub image_height: i32,
+    pub image_path: Option<&'a str>,
+    pub image_width: Option<i32>,
+    pub image_height: Option<i32>,
+}
+
+#[derive(AsChangeset, Debug)]
+#[diesel(table_name = maps)]
+pub struct AssignImageChangeset<'a> {
+    pub image_path: Option<&'a str>,
+    pub image_width: Option<i32>,
+    pub image_height: Option<i32>,
+    pub modified_at: &'a str,
 }
 
 // ── PinCategory ───────────────────────────────────────────────────────────────

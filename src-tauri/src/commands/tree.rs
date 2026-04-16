@@ -130,7 +130,7 @@ pub fn get_file_tree(vault: State<AppVault>) -> Result<FileNode, String> {
     let map_list = maps::table.load::<Map>(conn).map_err(|e| e.to_string())?;
     let map_map: HashMap<String, (i32, String)> = map_list
         .into_iter()
-        .map(|m| (m.image_path, (m.id, m.title)))
+        .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
         .collect();
 
     Ok(build_file_tree(&vault_path, "", &note_map, &map_map))
@@ -378,9 +378,9 @@ mod tests {
             CREATE TABLE maps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 title TEXT NOT NULL,
-                image_path TEXT NOT NULL,
-                image_width INTEGER NOT NULL DEFAULT 0,
-                image_height INTEGER NOT NULL DEFAULT 0,
+                image_path TEXT,
+                image_width INTEGER,
+                image_height INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 modified_at TEXT NOT NULL DEFAULT (datetime('now'))
             );"
@@ -566,6 +566,6 @@ mod tests {
         rename_folder_inner(dir.path(), "regions", "territories", &mut conn).unwrap();
 
         let updated: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
-        assert_eq!(updated[0].image_path, "territories/northlands.jpg");
+        assert_eq!(updated[0].image_path.as_deref(), Some("territories/northlands.jpg"));
     }
 }

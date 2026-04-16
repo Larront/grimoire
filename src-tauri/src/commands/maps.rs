@@ -1,7 +1,8 @@
-use crate::db::models::{Map, NewMap, Pin, NewPin, PinCategory, NewPinCategory};
+use crate::db::models::{Map, NewMap, AssignImageChangeset, Pin, NewPin, PinCategory, NewPinCategory};
 use crate::db::schema::{maps, pin_categories, pins};
 use crate::vault::AppVault;
 use base64::Engine;
+use chrono::Utc;
 use diesel::prelude::*;
 use std::fs;
 use std::path::Path;
@@ -61,13 +62,90 @@ pub fn create_map(
 
     let new_map = NewMap {
         title: &title,
-        image_path: &resolved_path,
-        image_width: img_width as i32,
-        image_height: img_height as i32,
+        image_path: Some(&resolved_path),
+        image_width: Some(img_width as i32),
+        image_height: Some(img_height as i32),
     };
 
     diesel::insert_into(maps::table)
         .values(&new_map)
+        .returning(Map::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_map_empty(title: String, vault: State<AppVault>) -> Result<Map, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+
+    let new_map = NewMap {
+        title: &title,
+        image_path: None,
+        image_width: None,
+        image_height: None,
+    };
+
+    diesel::insert_into(maps::table)
+        .values(&new_map)
+        .returning(Map::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn assign_map_image(
+    map_id: i32,
+    source_image_path: String,
+    vault: State<AppVault>,
+) -> Result<Map, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.clone().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+
+    let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
+
+    // Clean up existing image file if one is already assigned
+    if let Some(ref old_ip) = m.image_path {
+        let old_full = vault_path.join(old_ip);
+        if old_full.exists() {
+            fs::remove_file(&old_full).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let source = std::path::Path::new(&source_image_path);
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .to_lowercase();
+
+    let maps_dir = vault_path.join("Maps");
+    fs::create_dir_all(&maps_dir).map_err(|e| e.to_string())?;
+
+    let (_, dest_full) = resolve_map_filename(&m.title, &ext, &maps_dir);
+    fs::copy(&source_image_path, &dest_full).map_err(|e| e.to_string())?;
+
+    let (img_width, img_height) =
+        image::image_dimensions(&dest_full).map_err(|e| e.to_string())?;
+
+    let resolved_path = dest_full
+        .strip_prefix(&vault_path)
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    let modified_at = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+    let changeset = AssignImageChangeset {
+        image_path: Some(resolved_path.as_str()),
+        image_width: Some(img_width as i32),
+        image_height: Some(img_height as i32),
+        modified_at: &modified_at,
+    };
+
+    diesel::update(maps::table.find(map_id))
+        .set(&changeset)
         .returning(Map::as_returning())
         .get_result(conn)
         .map_err(|e| e.to_string())
@@ -98,9 +176,11 @@ pub fn delete_map(map_id: i32, vault: State<AppVault>) -> Result<usize, String> 
     let conn = state.connection.as_mut().ok_or("No vault open")?;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
-    let full_path = vault_path.join(&m.image_path);
-    if full_path.exists() {
-        fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+    if let Some(ref ip) = m.image_path {
+        let full_path = vault_path.join(ip);
+        if full_path.exists() {
+            fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+        }
     }
     diesel::delete(maps::table.find(map_id))
         .execute(conn)
@@ -114,10 +194,11 @@ pub fn get_map_image_data_url(map_id: i32, vault: State<AppVault>) -> Result<Str
     let conn = state.connection.as_mut().ok_or("No vault open")?;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
-    let full_path = vault_path.join(&m.image_path);
+    let image_path = m.image_path.ok_or("Map has no image assigned")?;
+    let full_path = vault_path.join(&image_path);
     let bytes = fs::read(&full_path).map_err(|e| e.to_string())?;
 
-    let ext = Path::new(&m.image_path)
+    let ext = Path::new(&image_path)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
