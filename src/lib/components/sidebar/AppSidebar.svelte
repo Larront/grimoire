@@ -1,6 +1,5 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tooltip from "$lib/components/ui/tooltip";
@@ -81,55 +80,14 @@
     }
   });
 
-  // New Map dialog state
-  let newMapDialogOpen = $state(false);
-  let newMapTitle = $state("");
-  let newMapSourcePath = $state<string | null>(null);
-  let newMapDestPath = $state("");
-  let isCreatingMap = $state(false);
-  let newMapError = $state<string | null>(null);
-
-  function deriveDestPath(sourcePath: string, title: string): string {
-    const ext = sourcePath.split(".").pop()?.toLowerCase() ?? "png";
-    return `Maps/${title}.${ext}`;
-  }
-
-  async function handlePickImage() {
-    const picked = await open({
-      title: "Choose Map Image",
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
-    });
-    if (picked && typeof picked === "string") {
-      newMapSourcePath = picked;
-      if (newMapTitle) {
-        newMapDestPath = deriveDestPath(picked, newMapTitle);
-      }
-    }
-  }
-
-  async function handleCreateMap() {
-    if (!newMapTitle.trim() || !newMapSourcePath) return;
-    isCreatingMap = true;
-    newMapError = null;
+  async function handleNewMap() {
     try {
-      const newMap = await invoke<VaultMap>("create_map", {
-        title: newMapTitle.trim(),
-        sourceImagePath: newMapSourcePath,
-        destPath:
-          newMapDestPath ||
-          deriveDestPath(newMapSourcePath, newMapTitle.trim()),
-      });
+      const newMap = await invoke<VaultMap>("create_map_empty", { title: "Untitled Map" });
       await maps.load();
       refresh();
-      newMapDialogOpen = false;
-      newMapTitle = "";
-      newMapSourcePath = null;
-      newMapDestPath = "";
       goto(`/map/${newMap.id}`);
     } catch (e) {
-      newMapError = String(e);
-    } finally {
-      isCreatingMap = false;
+      console.error("create map failed:", e);
     }
   }
 
@@ -203,6 +161,7 @@
             <Tooltip.Trigger
               class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               aria-label="New Map"
+              onclick={handleNewMap}
             >
               <MapPinPlus strokeWidth={1.5} class="text-primary/70" />
             </Tooltip.Trigger>
