@@ -20,6 +20,7 @@
     onpinclick,
     onpinmove,
     onmapclick,
+    onready,
   }: {
     map: VaultMap;
     imageDataUrl: string;
@@ -31,6 +32,7 @@
     onpinclick: (pin: Pin) => void;
     onpinmove: (pin: Pin, x: number, y: number) => void;
     onmapclick: () => void;
+    onready?: (map: import("leaflet").Map) => void;
   } = $props();
 
   let mapEl: HTMLDivElement | undefined = $state();
@@ -77,7 +79,7 @@
 
       mapInstance.on("click", (e: import("leaflet").LeafletMouseEvent) => {
         if (placingMode) {
-          onpinplace(e.latlng.lng, e.latlng.lat);
+          onpinplace(e.latlng.lng / map.image_width!, e.latlng.lat / map.image_height!);
         } else {
           onmapclick();
         }
@@ -85,6 +87,7 @@
 
       L = leaflet;
       leafletMap = mapInstance;
+      onready?.(mapInstance);
     })();
 
     return () => {
@@ -93,6 +96,12 @@
       L = null;
       markerMap.clear();
     };
+  });
+
+  // Sync placing-pin cursor class
+  $effect(() => {
+    if (!leafletMap) return;
+    leafletMap.getContainer().classList.toggle("placing-pin", placingMode);
   });
 
   // Sync pin markers reactively
@@ -119,7 +128,7 @@
       const existing = markerMap.get(pin.id);
       if (existing) {
         existing.setIcon(icon);
-        existing.setLatLng([pin.y, pin.x]);
+        existing.setLatLng([pin.y * map.image_height!, pin.x * map.image_width!]);
         existing.off("click");
         existing.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
@@ -128,18 +137,22 @@
         existing.off("dragend");
         existing.on("dragend", () => {
           const latlng = existing.getLatLng();
-          onpinmove(pin, latlng.lng, latlng.lat);
+          onpinmove(pin, latlng.lng / map.image_width!, latlng.lat / map.image_height!);
         });
       } else {
-        const marker = L!.marker([pin.y, pin.x], { icon, draggable: true });
+        const marker = L!.marker([pin.y * map.image_height!, pin.x * map.image_width!], { icon, draggable: true });
         marker.addTo(leafletMap!);
+        marker.bindTooltip(
+          `<span style="font-family:var(--font-sans);font-size:12px">${pin.title}</span>`,
+          { permanent: false, direction: "top", offset: [0, -10], opacity: 0.95 } as import("leaflet").TooltipOptions
+        );
         marker.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
           onpinclick(pin);
         });
         marker.on("dragend", () => {
           const latlng = marker.getLatLng();
-          onpinmove(pin, latlng.lng, latlng.lat);
+          onpinmove(pin, latlng.lng / map.image_width!, latlng.lat / map.image_height!);
         });
         markerMap.set(pin.id, marker);
       }
