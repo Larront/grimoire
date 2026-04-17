@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { maps } from "$lib/stores/maps.svelte";
@@ -11,6 +12,9 @@
   import CategorySelect from "$lib/components/map/CategorySelect.svelte";
   import { toast } from "svelte-sonner";
   import type { Pin, PinCategory, Note } from "$lib/types/vault";
+
+  let componentAlive = true;
+  onDestroy(() => { componentAlive = false; });
 
   // ── Map data ───────────────────────────────────────────────────────────────
   let mapData = $derived(
@@ -137,8 +141,10 @@
         categoryId: newPinCategoryId,
         noteId: null,
       });
-      pins = [...pins, created];
+      pins = [created, ...pins];
+      selectedPin = created;
       showPlacePinPopover = false;
+      placingPin = false;
       pendingPlacement = null;
       newPinTitle = "";
       newPinCategoryId = null;
@@ -172,7 +178,7 @@
     let undone = false;
 
     const doDelete = async () => {
-      if (undone) return;
+      if (undone || !componentAlive) return;
       try {
         await invoke("delete_pin", { pinId: pinToDelete.id });
       } catch {

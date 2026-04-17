@@ -41,6 +41,9 @@
   let markerMap = new Map<number, Marker>();
   let iconHtmlCache: Map<string, string> | null = null;
 
+  let _placingMode = false;
+  $effect(() => { _placingMode = placingMode ?? false; });
+
   function buildIconHtmlCache(): Map<string, string> {
     const cache = new Map<string, string>();
     for (const [key, Component] of CURATED_ICON_COMPONENTS) {
@@ -56,10 +59,12 @@
   }
 
   onMount(() => {
+    let cancelled = false;
     let mapInstance: LeafletMap | null = null;
 
     (async () => {
       const leaflet = await import("leaflet");
+      if (cancelled) return;
       iconHtmlCache = buildIconHtmlCache();
 
       const bounds: [[number, number], [number, number]] = [
@@ -78,7 +83,7 @@
       mapInstance.fitBounds(bounds);
 
       mapInstance.on("click", (e: import("leaflet").LeafletMouseEvent) => {
-        if (placingMode) {
+        if (_placingMode) {
           onpinplace(e.latlng.lng / map.image_width!, e.latlng.lat / map.image_height!);
         } else {
           onmapclick();
@@ -91,6 +96,7 @@
     })();
 
     return () => {
+      cancelled = true;
       mapInstance?.remove();
       leafletMap = null;
       L = null;
@@ -129,6 +135,7 @@
       if (existing) {
         existing.setIcon(icon);
         existing.setLatLng([pin.y * map.image_height!, pin.x * map.image_width!]);
+        existing.setTooltipContent(pin.title || "Pin");
         existing.off("click");
         existing.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
