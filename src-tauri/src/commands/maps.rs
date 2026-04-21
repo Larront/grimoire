@@ -97,6 +97,7 @@ pub fn create_map_empty(title: String, vault: State<AppVault>) -> Result<Map, St
 pub fn assign_map_image(
     map_id: i32,
     source_image_path: String,
+    dest_folder: Option<String>,
     vault: State<AppVault>,
 ) -> Result<Map, String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
@@ -120,10 +121,15 @@ pub fn assign_map_image(
         .unwrap_or("png")
         .to_lowercase();
 
-    let maps_dir = vault_path.join("Maps");
-    fs::create_dir_all(&maps_dir).map_err(|e| e.to_string())?;
-
-    let (_, dest_full) = resolve_map_filename(&m.title, &ext, &maps_dir);
+    let dest_dir = match dest_folder.as_deref().filter(|s| !s.is_empty()) {
+        Some(folder) => {
+            let dir = vault_path.join(folder);
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            dir
+        }
+        None => vault_path.clone(),
+    };
+    let (_, dest_full) = resolve_map_filename(&m.title, &ext, &dest_dir);
     fs::copy(&source_image_path, &dest_full).map_err(|e| e.to_string())?;
 
     let (img_width, img_height) =

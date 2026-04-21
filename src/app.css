@@ -131,6 +131,15 @@
   }
 }
 
+/* ── Map ──────────────────────────────────────────────────────── */
+
+/* Override Leaflet's grab cursor during pin placement */
+.placing-pin,
+.placing-pin .leaflet-container,
+.placing-pin .leaflet-interactive {
+  cursor: crosshair !important;
+}
+
 /* ── TipTap Editor Prose ──────────────────────────────────────── */
 
 .tiptap {
@@ -338,3 +347,4 @@ input[type="range"]:disabled {
 .splash-fade-delay-2 {
   animation: splash-fade-in 300ms ease-out 300ms both;
 }
+

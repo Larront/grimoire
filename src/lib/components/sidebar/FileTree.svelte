@@ -8,7 +8,13 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import FileTree from "$lib/components/sidebar/FileTree.svelte";
   import { goto } from "$app/navigation";
-  import { ChevronRight, FileText, Map as MapIcon, Folder } from "@lucide/svelte";
+  import {
+    ChevronRight,
+    FileText,
+    Map as MapIcon,
+    MapPinPlus,
+    Folder,
+  } from "@lucide/svelte";
   import { page } from "$app/state";
   import { slide } from "svelte/transition";
 
@@ -18,9 +24,10 @@
     refresh: () => Promise<void>;
     handleNewNote: (parentNode: FileNode | null) => Promise<void>;
     handleNewFolder: (parentNode: FileNode | null) => Promise<void>;
+    handleNewMap: (parentNode: FileNode | null) => Promise<void>;
   }
 
-  let { node, noteMap, refresh, handleNewNote, handleNewFolder }: Props =
+  let { node, noteMap, refresh, handleNewNote, handleNewFolder, handleNewMap }: Props =
     $props();
 
   // Active state: is this node the currently viewed page?
@@ -133,7 +140,7 @@
                 <Folder class="size-4 shrink-0 text-muted-foreground" />
                 <Rename.Root
                   this="span"
-                  class="flex-1 truncate"
+                  class="flex-1 truncate text-sm"
                   bind:value={
                     () =>
                       renamingPath === node.path ? renameValue : node.name,
@@ -166,6 +173,7 @@
                         {refresh}
                         {handleNewNote}
                         {handleNewFolder}
+                        {handleNewMap}
                       />
                     {/each}
                   </Sidebar.MenuSub>
@@ -187,6 +195,9 @@
         <ContextMenu.Item onSelect={() => handleNewFolder(node)}
           >New Subfolder</ContextMenu.Item
         >
+        <ContextMenu.Item onSelect={() => handleNewMap(node)}>
+          New Map
+        </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => startRename(node)}
           >Rename</ContextMenu.Item
         >
@@ -235,11 +246,11 @@
         </AlertDialog.Title>
         <AlertDialog.Description>
           {#if pendingDelete?.type === "folder"}
-            This will permanently delete "{pendingDelete.node
-              .name}" and all its contents. This cannot be undone.
+            This will permanently delete "{pendingDelete.node.name}" and all its
+            contents. This cannot be undone.
           {:else}
-            This will permanently delete "{pendingDelete?.node
-              .name}". This cannot be undone.
+            This will permanently delete "{pendingDelete?.node.name}". This
+            cannot be undone.
           {/if}
         </AlertDialog.Description>
       </AlertDialog.Header>

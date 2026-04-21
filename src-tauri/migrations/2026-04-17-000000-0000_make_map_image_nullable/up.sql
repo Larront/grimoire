@@ -1,3 +1,7 @@
+-- PRAGMA legacy_alter_table prevents SQLite 3.26+ from rewriting FK references
+-- in child tables (pins, pin_categories) when maps is renamed.
+PRAGMA legacy_alter_table = ON;
+
 ALTER TABLE maps RENAME TO maps_old;
 
 CREATE TABLE maps (
@@ -12,3 +16,5 @@ CREATE TABLE maps (
 
 INSERT INTO maps SELECT * FROM maps_old;
 DROP TABLE maps_old;
+
+PRAGMA legacy_alter_table = OFF;

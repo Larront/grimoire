@@ -80,9 +80,12 @@
 
   function formatVaultStats(v: RecentVault): string {
     const parts: string[] = [];
-    if (v.note_count > 0) parts.push(`${v.note_count} note${v.note_count !== 1 ? "s" : ""}`);
-    if (v.scene_count > 0) parts.push(`${v.scene_count} scene${v.scene_count !== 1 ? "s" : ""}`);
-    if (v.map_count > 0) parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
+    if (v.note_count > 0)
+      parts.push(`${v.note_count} note${v.note_count !== 1 ? "s" : ""}`);
+    if (v.scene_count > 0)
+      parts.push(`${v.scene_count} scene${v.scene_count !== 1 ? "s" : ""}`);
+    if (v.map_count > 0)
+      parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
     return parts.join(" · ") || "Empty vault";
   }
 
@@ -172,7 +175,9 @@
         A worldbuilding vault for your campaigns, lore, maps, and sessions.
       </p>
 
-      <div class="flex flex-col gap-2.5 mt-8 w-[280px] relative z-10 splash-fade-delay-2">
+      <div
+        class="flex flex-col gap-2.5 mt-8 w-[280px] relative z-10 splash-fade-delay-2"
+      >
         <Button
           onclick={handleCreateNew}
           class="justify-start gap-2.5 h-auto py-3 px-4"
@@ -185,7 +190,9 @@
           {/if}
           <div class="text-left">
             <div class="text-sm font-bold">Create New Vault</div>
-            <div class="text-[10px] opacity-70 font-normal">Start fresh with an empty vault</div>
+            <div class="text-[10px] opacity-70 font-normal">
+              Start fresh with an empty vault
+            </div>
           </div>
         </Button>
 
@@ -198,7 +205,9 @@
           <Folder class="w-4 h-4" />
           <div class="text-left">
             <div class="text-sm font-semibold">Open Existing Folder</div>
-            <div class="text-[10px] opacity-70 font-normal">Choose a folder with your notes and files</div>
+            <div class="text-[10px] opacity-70 font-normal">
+              Choose a folder with your notes and files
+            </div>
           </div>
         </Button>
       </div>
@@ -224,13 +233,19 @@
               <div class="min-w-0 flex-1">
                 {#if openingPath === v.path}
                   <div class="flex items-center gap-2">
-                    <LoaderCircle class="w-3.5 h-3.5 animate-spin text-primary" />
-                    <span class="font-sans text-[13px] font-semibold text-foreground">
+                    <LoaderCircle
+                      class="w-3.5 h-3.5 animate-spin text-primary"
+                    />
+                    <span
+                      class="font-sans text-[13px] font-semibold text-foreground"
+                    >
                       {v.name}
                     </span>
                   </div>
                 {:else}
-                  <div class="font-sans text-[13px] font-semibold text-foreground truncate">
+                  <div
+                    class="font-sans text-[13px] font-semibold text-foreground truncate"
+                  >
                     {v.name}
                   </div>
                 {/if}
@@ -238,7 +253,9 @@
                   {formatVaultStats(v)}
                 </div>
               </div>
-              <div class="font-sans text-[10px] text-muted-foreground/60 ml-3 shrink-0">
+              <div
+                class="font-sans text-[10px] text-muted-foreground/60 ml-3 shrink-0"
+              >
                 {formatRelativeTime(v.last_opened)}
               </div>
             </button>
@@ -271,7 +288,9 @@
 
     <!-- Error message -->
     {#if errorMsg}
-      <p class="font-sans text-xs text-destructive mt-4 text-center max-w-[300px] relative z-10">
+      <p
+        class="font-sans text-xs text-destructive mt-4 text-center max-w-[300px] relative z-10"
+      >
         {errorMsg}
       </p>
     {/if}

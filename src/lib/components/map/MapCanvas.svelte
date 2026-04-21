@@ -2,12 +2,12 @@
   import { onMount } from "svelte";
   import { mount, unmount } from "svelte";
   import type { Map as VaultMap, Pin, PinCategory } from "$lib/types/vault";
-  import {
-    buildDivIcon,
-    resolvedAppearance,
-    CURATED_ICON_COMPONENTS,
-  } from "./pinAppearance";
   import type { Map as LeafletMap, Marker } from "leaflet";
+  import {
+    CURATED_ICON_COMPONENTS,
+    resolvedAppearance,
+    buildDivIcon,
+  } from "./pinAppearance";
 
   let {
     map,
@@ -42,7 +42,9 @@
   let iconHtmlCache: Map<string, string> | null = null;
 
   let _placingMode = false;
-  $effect(() => { _placingMode = placingMode ?? false; });
+  $effect(() => {
+    _placingMode = placingMode ?? false;
+  });
 
   function buildIconHtmlCache(): Map<string, string> {
     const cache = new Map<string, string>();
@@ -77,6 +79,7 @@
         zoomSnap: 0.25,
         minZoom: -3,
         maxBoundsViscosity: 1.0,
+        zoomControl: false,
       });
 
       leaflet.imageOverlay(imageDataUrl, bounds).addTo(mapInstance);
@@ -84,7 +87,10 @@
 
       mapInstance.on("click", (e: import("leaflet").LeafletMouseEvent) => {
         if (_placingMode) {
-          onpinplace(e.latlng.lng / map.image_width!, e.latlng.lat / map.image_height!);
+          onpinplace(
+            e.latlng.lng / map.image_width!,
+            e.latlng.lat / map.image_height!,
+          );
         } else {
           onmapclick();
         }
@@ -134,7 +140,10 @@
       const existing = markerMap.get(pin.id);
       if (existing) {
         existing.setIcon(icon);
-        existing.setLatLng([pin.y * map.image_height!, pin.x * map.image_width!]);
+        existing.setLatLng([
+          pin.y * map.image_height!,
+          pin.x * map.image_width!,
+        ]);
         existing.setTooltipContent(pin.title || "Pin");
         existing.off("click");
         existing.on("click", (e: import("leaflet").LeafletMouseEvent) => {
@@ -144,14 +153,26 @@
         existing.off("dragend");
         existing.on("dragend", () => {
           const latlng = existing.getLatLng();
-          onpinmove(pin, latlng.lng / map.image_width!, latlng.lat / map.image_height!);
+          onpinmove(
+            pin,
+            latlng.lng / map.image_width!,
+            latlng.lat / map.image_height!,
+          );
         });
       } else {
-        const marker = L!.marker([pin.y * map.image_height!, pin.x * map.image_width!], { icon, draggable: true });
+        const marker = L!.marker(
+          [pin.y * map.image_height!, pin.x * map.image_width!],
+          { icon, draggable: true },
+        );
         marker.addTo(leafletMap!);
         marker.bindTooltip(
           `<span style="font-family:var(--font-sans);font-size:12px">${pin.title}</span>`,
-          { permanent: false, direction: "top", offset: [0, -10], opacity: 0.95 } as import("leaflet").TooltipOptions
+          {
+            permanent: false,
+            direction: "top",
+            offset: [0, -10],
+            opacity: 0.95,
+          } as import("leaflet").TooltipOptions,
         );
         marker.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
@@ -159,7 +180,11 @@
         });
         marker.on("dragend", () => {
           const latlng = marker.getLatLng();
-          onpinmove(pin, latlng.lng / map.image_width!, latlng.lat / map.image_height!);
+          onpinmove(
+            pin,
+            latlng.lng / map.image_width!,
+            latlng.lat / map.image_height!,
+          );
         });
         markerMap.set(pin.id, marker);
       }

@@ -71,6 +71,7 @@
 
   $effect(() => {
     notes.notes;
+    maps.maps;
     if (vault.isOpen) {
       treeLoading = true;
       invoke<FileNode>("get_file_tree")
@@ -80,12 +81,15 @@
     }
   });
 
-  async function handleNewMap() {
+  async function handleNewMap(parentNode: FileNode | null = null) {
     try {
       const newMap = await invoke<VaultMap>("create_map_empty", { title: "Untitled Map" });
       await maps.load();
       refresh();
-      goto(`/map/${newMap.id}`);
+      const url = parentNode
+        ? `/map/${newMap.id}?folder=${encodeURIComponent(parentNode.path)}`
+        : `/map/${newMap.id}`;
+      goto(url);
     } catch (e) {
       console.error("create map failed:", e);
     }
@@ -161,7 +165,7 @@
             <Tooltip.Trigger
               class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
               aria-label="New Map"
-              onclick={handleNewMap}
+              onclick={() => handleNewMap(null)}
             >
               <MapPinPlus strokeWidth={1.5} class="text-primary/70" />
             </Tooltip.Trigger>
@@ -214,6 +218,7 @@
                           {refresh}
                           {handleNewNote}
                           {handleNewFolder}
+                          {handleNewMap}
                         />
                       {/each}
                     </Sidebar.Menu>

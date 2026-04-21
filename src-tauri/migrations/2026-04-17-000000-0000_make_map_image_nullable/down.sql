@@ -1,3 +1,5 @@
+PRAGMA legacy_alter_table = ON;
+
 ALTER TABLE maps RENAME TO maps_old;
 
 CREATE TABLE maps (
@@ -14,3 +16,5 @@ INSERT INTO maps
     SELECT id, title, COALESCE(image_path, ''), COALESCE(image_width, 0), COALESCE(image_height, 0), created_at, modified_at
     FROM maps_old;
 DROP TABLE maps_old;
+
+PRAGMA legacy_alter_table = OFF;
