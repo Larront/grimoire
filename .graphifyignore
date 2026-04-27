@@ -1,0 +1,8 @@
+node_modules/
+build/
+docs/
+src-tauri/icons
+
+CLAUDE.md
+.claude/
+.superpowers/
