@@ -1,5 +1,5 @@
-use crate::db::models::{Map, NewMap, AssignImageChangeset, Pin, NewPin, PinCategory, NewPinCategory};
-use crate::db::schema::{maps, pin_categories, pins};
+use crate::db::models::{Map, NewMap, AssignImageChangeset, MapAnnotation, NewMapAnnotation, Pin, NewPin, PinCategory, NewPinCategory};
+use crate::db::schema::{map_annotations, maps, pin_categories, pins};
 use crate::vault::AppVault;
 use base64::Engine;
 use chrono::Utc;
@@ -330,6 +330,79 @@ pub fn delete_pin_category(category_id: i32, vault: State<AppVault>) -> Result<u
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     diesel::delete(pin_categories::table.find(category_id))
+        .execute(conn)
+        .map_err(|e| e.to_string())
+}
+
+// ── Annotation commands ───────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_annotations(map_id: i32, vault: State<AppVault>) -> Result<Vec<MapAnnotation>, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    map_annotations::table
+        .filter(map_annotations::map_id.eq(map_id))
+        .load::<MapAnnotation>(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_annotation(
+    map_id: i32,
+    kind: String,
+    x: f32,
+    y: f32,
+    x2: Option<f32>,
+    y2: Option<f32>,
+    radius: Option<f32>,
+    label: Option<String>,
+    color: String,
+    stroke_color: String,
+    stroke_width: i32,
+    font_size: i32,
+    opacity: f32,
+    vault: State<AppVault>,
+) -> Result<MapAnnotation, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let new_ann = NewMapAnnotation {
+        map_id,
+        kind: &kind,
+        x,
+        y,
+        x2,
+        y2,
+        radius,
+        label: label.as_deref(),
+        color: &color,
+        stroke_color: &stroke_color,
+        stroke_width,
+        font_size,
+        opacity,
+    };
+    diesel::insert_into(map_annotations::table)
+        .values(&new_ann)
+        .returning(MapAnnotation::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_annotation(annotation: MapAnnotation, vault: State<AppVault>) -> Result<MapAnnotation, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    diesel::update(map_annotations::table.find(annotation.id))
+        .set(&annotation)
+        .returning(MapAnnotation::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_annotation(annotation_id: i32, vault: State<AppVault>) -> Result<usize, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    diesel::delete(map_annotations::table.find(annotation_id))
         .execute(conn)
         .map_err(|e| e.to_string())
 }

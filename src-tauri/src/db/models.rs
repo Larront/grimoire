@@ -1,4 +1,4 @@
-use super::schema::notes;
+use super::schema::{map_annotations, notes};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,46 @@ pub struct NewNote<'a> {
 }
 
 use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_auth};
+
+// ── MapAnnotation ─────────────────────────────────────────────────────────────
+
+#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable)]
+#[diesel(table_name = map_annotations, treat_none_as_null = true)]
+pub struct MapAnnotation {
+    pub id: i32,
+    pub map_id: i32,
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub x2: Option<f32>,
+    pub y2: Option<f32>,
+    pub radius: Option<f32>,
+    pub label: Option<String>,
+    pub color: String,
+    pub stroke_color: String,
+    pub stroke_width: i32,
+    pub font_size: i32,
+    pub opacity: f32,
+    pub created_at: String,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = map_annotations)]
+pub struct NewMapAnnotation<'a> {
+    pub map_id: i32,
+    pub kind: &'a str,
+    pub x: f32,
+    pub y: f32,
+    pub x2: Option<f32>,
+    pub y2: Option<f32>,
+    pub radius: Option<f32>,
+    pub label: Option<&'a str>,
+    pub color: &'a str,
+    pub stroke_color: &'a str,
+    pub stroke_width: i32,
+    pub font_size: i32,
+    pub opacity: f32,
+}
 
 // ── Map ──────────────────────────────────────────────────────────────────────
 

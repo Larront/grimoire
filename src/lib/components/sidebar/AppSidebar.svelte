@@ -83,7 +83,9 @@
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
-      const newMap = await invoke<VaultMap>("create_map_empty", { title: "Untitled Map" });
+      const newMap = await invoke<VaultMap>("create_map_empty", {
+        title: "Untitled Map",
+      });
       await maps.load();
       refresh();
       const url = parentNode
@@ -139,45 +141,57 @@
         <div
           class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50"
         >
-          <Tooltip.Root>
+          <Tooltip.Root delayDuration={600}>
             <Tooltip.Trigger
-              class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              class="{buttonVariants({
+                variant: 'ghost',
+                size: 'icon-sm',
+              })} text-primary/70 hover:text-primary"
               aria-label="New Note"
               onclick={() => handleNewNote(null)}
             >
-              <FilePlus strokeWidth={1.5} class="text-primary/70" />
+              <FilePlus strokeWidth={1.5} />
             </Tooltip.Trigger>
             <Tooltip.Content side="bottom">New Note</Tooltip.Content>
           </Tooltip.Root>
 
-          <Tooltip.Root>
+          <Tooltip.Root delayDuration={600}>
             <Tooltip.Trigger
-              class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              class="{buttonVariants({
+                variant: 'ghost',
+                size: 'icon-sm',
+              })} text-primary/70 hover:text-primary"
               aria-label="New Folder"
               onclick={() => handleNewFolder(null)}
             >
-              <FolderPlus strokeWidth={1.5} class="text-primary/70" />
+              <FolderPlus strokeWidth={1.5} />
             </Tooltip.Trigger>
             <Tooltip.Content side="bottom">New Folder</Tooltip.Content>
           </Tooltip.Root>
 
-          <Tooltip.Root>
+          <Tooltip.Root delayDuration={600}>
             <Tooltip.Trigger
-              class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              class="{buttonVariants({
+                variant: 'ghost',
+                size: 'icon-sm',
+              })} text-primary/70 hover:text-primary"
               aria-label="New Map"
               onclick={() => handleNewMap(null)}
             >
-              <MapPinPlus strokeWidth={1.5} class="text-primary/70" />
+              <MapPinPlus strokeWidth={1.5} />
             </Tooltip.Trigger>
             <Tooltip.Content side="bottom">New Map</Tooltip.Content>
           </Tooltip.Root>
 
-          <Tooltip.Root>
+          <Tooltip.Root delayDuration={600}>
             <Tooltip.Trigger
-              class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              class="{buttonVariants({
+                variant: 'ghost',
+                size: 'icon-sm',
+              })} text-primary/70 hover:text-primary"
               aria-label="New Scene"
             >
-              <Music2 strokeWidth={1.5} class="text-primary/70" />
+              <Music2 strokeWidth={1.5} />
             </Tooltip.Trigger>
             <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
           </Tooltip.Root>

@@ -1,6 +1,26 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    map_annotations (id) {
+        id -> Integer,
+        map_id -> Integer,
+        kind -> Text,
+        x -> Float,
+        y -> Float,
+        x2 -> Nullable<Float>,
+        y2 -> Nullable<Float>,
+        radius -> Nullable<Float>,
+        label -> Nullable<Text>,
+        color -> Text,
+        stroke_color -> Text,
+        stroke_width -> Integer,
+        font_size -> Integer,
+        opacity -> Float,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
     maps (id) {
         id -> Integer,
         title -> Text,
@@ -85,6 +105,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(map_annotations -> maps (map_id));
 diesel::joinable!(pin_categories -> maps (map_id));
 diesel::joinable!(pins -> maps (map_id));
 diesel::joinable!(pins -> notes (note_id));
@@ -92,6 +113,7 @@ diesel::joinable!(pins -> pin_categories (category_id));
 diesel::joinable!(scene_slots -> scenes (scene_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    map_annotations,
     maps,
     notes,
     pin_categories,

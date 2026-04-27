@@ -59,6 +59,26 @@ export interface Pin {
   color: string | null;
 }
 
+export type AnnotationKind = 'text' | 'rect' | 'circle';
+
+export interface MapAnnotation {
+  id: number;
+  map_id: number;
+  kind: AnnotationKind;
+  x: number;
+  y: number;
+  x2: number | null;
+  y2: number | null;
+  radius: number | null;
+  label: string | null;
+  color: string;
+  stroke_color: string;
+  stroke_width: number;
+  font_size: number;
+  opacity: number;
+  created_at: string;
+}
+
 export interface Scene {
   id: number;
   name: string;

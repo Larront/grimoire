@@ -53,6 +53,11 @@ pub fn run() {
             create_pin_category,
             update_pin_category,
             delete_pin_category,
+            // Annotations
+            get_annotations,
+            create_annotation,
+            update_annotation,
+            delete_annotation,
             // Scenes
             get_scenes,
             create_scene,
