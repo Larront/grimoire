@@ -430,6 +430,12 @@
       onready?.(mapInstance);
     })();
 
+    // Cleanup note (FOUN-04): mapInstance.remove() tears down all Leaflet layers including
+    // markers and tile layers. markerMap and annotationLayerMap are component-local, so they
+    // are garbage collected when the component unmounts. SvelteKit file-based routing unmounts
+    // this component on every map-to-map navigation, so no orphaned layers accumulate.
+    // If this component is ever wrapped in a persistent layout container (keep-alive pattern),
+    // this cleanup must be re-verified.
     return () => {
       cancelled = true;
       mapInstance?.remove();
