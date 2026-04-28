@@ -74,6 +74,12 @@ function createVaultStore() {
   }
 
   async function closeVault(): Promise<void> {
+    try {
+      await invoke("close_vault");
+    } catch (e) {
+      // Log but do not block frontend close — we still clear local state
+      console.warn("[vault] close_vault command failed:", e);
+    }
     path = null;
     isOpen = false;
     error = null;

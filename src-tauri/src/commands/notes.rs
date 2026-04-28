@@ -68,7 +68,7 @@ pub fn get_notes(vault: State<AppVault>) -> Result<Vec<Note>, String> {
 #[tauri::command]
 pub fn create_note(
     note_title: String,
-    _note_path: String,
+    note_path: String,
     note_parent_path: Option<String>,
     vault: State<AppVault>,
 ) -> Result<Note, String> {
@@ -78,7 +78,7 @@ pub fn create_note(
 
     // Determine the parent directory and resolve any filename conflicts
     // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
-    let initial_full_path = validate_parent_path(&vault_path, &_note_path)?;
+    let initial_full_path = validate_parent_path(&vault_path, &note_path)?;
     let parent_dir = initial_full_path
         .parent()
         .ok_or("Cannot determine parent directory")?;

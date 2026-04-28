@@ -26,6 +26,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_vault_path,
             open_vault,
+            close_vault,
             get_recent_vaults,
             add_recent_vault,
             remove_recent_vault,

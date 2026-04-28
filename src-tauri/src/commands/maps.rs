@@ -141,7 +141,7 @@ pub fn assign_map_image(
         .to_string_lossy()
         .replace('\\', "/");
 
-    let modified_at = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let modified_at = Utc::now().to_rfc3339();
 
     let changeset = AssignImageChangeset {
         image_path: Some(resolved_path.as_str()),
