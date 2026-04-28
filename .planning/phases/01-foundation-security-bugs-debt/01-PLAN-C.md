@@ -2,14 +2,17 @@
 phase: 01-foundation-security-bugs-debt
 plan: C
 type: execute
-wave: 1
-depends_on: []
+wave: 2
+depends_on:
+  - 01-PLAN-A
 files_modified:
   - src/lib/stores/audio-engine.svelte.ts
   - src/lib/stores/vault.svelte.ts
   - src/lib/stores/notes.svelte.ts
   - src/lib/stores/scenes.svelte.ts
   - src/lib/stores/maps.svelte.ts
+  - src/lib/components/sidebar/AppSidebar.svelte
+  - src/lib/components/sidebar/FileTree.svelte
 autonomous: true
 requirements:
   - FOUN-03
@@ -166,6 +169,8 @@ After implementing: verify the catch block sets both `isCrossfading = false` AND
     src/lib/stores/scenes.svelte.ts
     src/lib/stores/maps.svelte.ts
     src/lib/stores/vault.svelte.ts
+    src/lib/components/sidebar/AppSidebar.svelte
+    src/lib/components/sidebar/FileTree.svelte
   </files>
   <read_first>
     - src/lib/stores/notes.svelte.ts — confirm load() is exported and notes.length is $derived or direct

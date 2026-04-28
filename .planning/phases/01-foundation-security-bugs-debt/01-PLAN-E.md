@@ -5,12 +5,14 @@ type: execute
 wave: 2
 depends_on:
   - 01-PLAN-A
+  - 01-PLAN-B
 files_modified:
   - src-tauri/src/commands/vault.rs
   - src-tauri/src/lib.rs
   - src-tauri/src/vault.rs
   - src-tauri/src/commands/maps.rs
   - src-tauri/src/commands/notes.rs
+  - src-tauri/src/commands/scenes.rs
   - src-tauri/src/db/models.rs
   - src/lib/stores/vault.svelte.ts
   - src/lib/types/vault.ts
@@ -261,6 +263,7 @@ Grep the full maps.rs for any other `.format(` calls on Utc that use a custom fo
   <files>
     src-tauri/src/db/models.rs
     src/lib/types/vault.ts
+    src-tauri/src/commands/scenes.rs
   </files>
   <read_first>
     - src-tauri/src/db/models.rs — read SceneSlot struct (lines ~196-233) and Note struct (lines ~5-18) to confirm the i32 fields before changing to bool

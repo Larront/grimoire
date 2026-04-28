@@ -405,22 +405,25 @@ Step 2.6: SKIPPED (no external dependencies identified — all changes are code 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **FOUN-04: Is MapCanvas already correct?**
    - What we know: `onMount` teardown calls `mapInstance?.remove()`, `markerMap.clear()`, `annotationLayerMap.clear()`. SvelteKit file-based routing unmounts components on navigation.
    - What's unclear: Whether any parent layout or transition wrapper could prevent unmount.
    - Recommendation: Verify by navigating map-to-map in the running app and checking for duplicate markers. If none — mark FOUN-04 as a documentation/comment fix only (add an explicit comment explaining the cleanup).
+   - **RESOLVED:** MapCanvas cleanup is already correct. Plan D (Task 1) reads and confirms the code, then adds a documentation comment. No substantive code change unless verification reveals a gap.
 
 2. **FOUN-08: Migrate existing timestamp data in the boolean migration, or a separate migration?**
    - What we know: Mixing `datetime()` format and RFC3339 in the same column breaks `ORDER BY`.
    - What's unclear: Whether the project has any real vaults with data that would be affected.
    - Recommendation: Include a `UPDATE` to convert existing timestamps in the FOUN-11 migration. This is safe for an early-stage project.
+   - **RESOLVED:** Plan E Task 2 includes a `CASE WHEN modified_at LIKE '%T%' THEN ...` UPDATE statement in the RFC3339 migration to normalize existing rows in the same migration pass.
 
 3. **FOUN-10: Store client ID on VaultState or as a separate Tauri-managed struct?**
    - What we know: `VaultState` is re-initialized on `open_vault`. `SPOTIFY_CLIENT_ID` is app-wide, not vault-specific.
    - What's unclear: Which is cleaner architecturally.
    - Recommendation: Add `spotify_client_id: String` to `VaultState::new()` — it's read at process start, same as the initial state. Alternatively, use a separate `SpotifyConfig` struct managed via `.manage()`. Either works; `VaultState` is simpler given the existing pattern.
+   - **RESOLVED:** Plan A uses `VaultState` (adds `spotify_client_id: String` field, reads it once in `open_vault`). Simpler than a separate struct given the existing codebase pattern.
 
 ---
 

@@ -35,12 +35,20 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Vault item counts update immediately after a create or delete without requiring a full reload
 **Plans**: 6 plans
 Plans:
+
+**Wave 1** *(independent — can run in parallel)*
 - [ ] 01-PLAN-A.md — Spotify token security: move API calls to Rust, fix OAuth unlisten, cache client ID (FOUN-01, FOUN-05, FOUN-10)
 - [ ] 01-PLAN-B.md — Path traversal guard: validate user-supplied paths in notes.rs and media.rs (FOUN-02)
-- [ ] 01-PLAN-C.md — Crossfade lock fix and vault item count update (FOUN-03, FOUN-09)
 - [ ] 01-PLAN-D.md — Leaflet cleanup verification + isLoadingData race fix (FOUN-04, FOUN-06)
-- [ ] 01-PLAN-E.md — Rust backend debt: close_vault, boolean migration, RFC3339 timestamps, _note_path rename (FOUN-07, FOUN-08, FOUN-11, FOUN-12)
 - [ ] 01-PLAN-F.md — Git workflow: next branch + CLAUDE.md documentation (FOUN-15)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-PLAN-C.md — Crossfade lock fix and vault item count update (FOUN-03, FOUN-09) *(depends on A: audio-engine.svelte.ts)*
+- [ ] 01-PLAN-E.md — Rust backend debt: close_vault, boolean migration, RFC3339 timestamps, _note_path rename (FOUN-07, FOUN-08, FOUN-11, FOUN-12) *(depends on A: VaultState, B: notes.rs)*
+
+Cross-cutting constraints:
+- All Spotify API calls go through Rust (no renderer fetch to api.spotify.com)
+- Path validation (`validate_path`) applied to all file-touching Rust commands
 **UI hint**: no
 
 ### Phase 2: Foundation — Test Infrastructure

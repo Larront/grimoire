@@ -17,7 +17,7 @@ requirements:
 
 must_haves:
   truths:
-    - "The Spotify access token is never returned to the renderer via IPC; `spotify_get_access_token` command is removed from the IPC bridge"
+    - "The Spotify access token is never returned to the renderer for Spotify Web API calls; `spotify_get_access_token` remains on the IPC bridge only for the Spotify Web Playback SDK `getOAuthToken` callback (SDK authentication — not API calls)"
     - "All five Spotify Web API HTTP calls (play, repeat, shuffle, next, previous) are made from Rust using reqwest, not from the renderer using fetch"
     - "The Spotify OAuth event listener is unregistered after the auth flow completes (success or failure)"
     - "SPOTIFY_CLIENT_ID is loaded once at process startup into VaultState, not read from env on every Spotify command"
@@ -27,7 +27,7 @@ must_haves:
     - path: "src-tauri/src/vault.rs"
       provides: "VaultState with spotify_client_id: String field"
     - path: "src-tauri/src/lib.rs"
-      provides: "Registers new Spotify commands; removes spotify_get_access_token from handler list"
+      provides: "Registers new Spotify API commands; keeps spotify_get_access_token registered for SDK getOAuthToken callback"
     - path: "src/lib/stores/audio-engine.svelte.ts"
       provides: "SpotifyPlayer methods invoke Rust commands instead of calling fetch; spotify_get_access_token invoke removed"
   key_links:
@@ -261,6 +261,7 @@ pub async fn spotify_skip_prev(
 ) -> Result<(), String> {
     let (_client_id, access_token) = get_token_and_client(&vault).await?;
     let client = reqwest::Client::new();
+    client
         .post(format!("https://api.spotify.com/v1/me/player/previous?device_id={device_id}"))
         .header("Authorization", format!("Bearer {access_token}"))
         .send().await.map_err(|e| e.to_string())?;
