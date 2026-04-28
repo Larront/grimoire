@@ -12,7 +12,7 @@ Grimoire is a Tauri 2 desktop worldbuilding app for tabletop RPG game masters. T
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation — Security, Bugs & Debt** - Resolve all high-severity security issues, known bugs, and tech debt before any new surface area is added
+- [x] **Phase 1: Foundation — Security, Bugs & Debt** - Resolve all high-severity security issues, known bugs, and tech debt before any new surface area is added *(completed 2026-04-29)*
 - [ ] **Phase 2: Foundation — Test Infrastructure** - Establish Vitest and Rust unit test suites covering all stores and command handlers
 - [ ] **Phase 3: Images** - User can insert images from their filesystem directly into notes
 - [ ] **Phase 4: Tags** - Notes can be tagged, persisted, and filtered by tag in the sidebar
@@ -37,14 +37,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 
 **Wave 1** *(independent — can run in parallel)*
-- [ ] 01-PLAN-A.md — Spotify token security: move API calls to Rust, fix OAuth unlisten, cache client ID (FOUN-01, FOUN-05, FOUN-10)
-- [ ] 01-PLAN-B.md — Path traversal guard: validate user-supplied paths in notes.rs and media.rs (FOUN-02)
-- [ ] 01-PLAN-D.md — Leaflet cleanup verification + isLoadingData race fix (FOUN-04, FOUN-06)
-- [ ] 01-PLAN-F.md — Git workflow: next branch + CLAUDE.md documentation (FOUN-15)
+- [x] 01-PLAN-A.md — Spotify token security: move API calls to Rust, fix OAuth unlisten, cache client ID (FOUN-01, FOUN-05, FOUN-10)
+- [x] 01-PLAN-B.md — Path traversal guard: validate user-supplied paths in notes.rs and media.rs (FOUN-02)
+- [x] 01-PLAN-D.md — Leaflet cleanup verification + isLoadingData race fix (FOUN-04, FOUN-06)
+- [x] 01-PLAN-F.md — Git workflow: next branch + CLAUDE.md documentation (FOUN-15)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-PLAN-C.md — Crossfade lock fix and vault item count update (FOUN-03, FOUN-09) *(depends on A: audio-engine.svelte.ts)*
-- [ ] 01-PLAN-E.md — Rust backend debt: close_vault, boolean migration, RFC3339 timestamps, _note_path rename (FOUN-07, FOUN-08, FOUN-11, FOUN-12) *(depends on A: VaultState, B: notes.rs)*
+- [x] 01-PLAN-C.md — Crossfade lock fix and vault item count update (FOUN-03, FOUN-09) *(depends on A: audio-engine.svelte.ts)*
+- [x] 01-PLAN-E.md — Rust backend debt: close_vault, boolean migration, RFC3339 timestamps, _note_path rename (FOUN-07, FOUN-08, FOUN-11, FOUN-12) *(depends on A: VaultState, B: notes.rs)*
 
 Cross-cutting constraints:
 - All Spotify API calls go through Rust (no renderer fetch to api.spotify.com)
