@@ -10,19 +10,26 @@ export async function getSpotifyStatus(): Promise<SpotifyAuthStatus | null> {
 export async function connectSpotify(): Promise<SpotifyAuthStatus> {
   const authUrl = await invoke<string>("spotify_start_auth_flow");
 
-  // Set up listener BEFORE opening the URL so we don't miss the callback
+  // Set up listener BEFORE opening the URL so we don't miss the callback.
+  // Capture the unlisten promise so the handler can unregister itself after
+  // the first invocation — prevents duplicate firings on subsequent auth flows.
   const statusPromise = new Promise<SpotifyAuthStatus>((resolve, reject) => {
-    listen<{ code: string; state: string }>("spotify-auth-callback", async (event) => {
-      try {
-        const result = await invoke<SpotifyAuthStatus>("spotify_exchange_code", {
-          code: event.payload.code,
-          state: event.payload.state,
-        });
-        resolve(result);
-      } catch (e) {
-        reject(e);
-      }
-    });
+    const unlistenPromise = listen<{ code: string; state: string }>(
+      "spotify-auth-callback",
+      async (event) => {
+        const unlisten = await unlistenPromise;
+        unlisten();
+        try {
+          const result = await invoke<SpotifyAuthStatus>("spotify_exchange_code", {
+            code: event.payload.code,
+            state: event.payload.state,
+          });
+          resolve(result);
+        } catch (e) {
+          reject(e);
+        }
+      },
+    );
   });
 
   // Now open the browser for the user to authorize

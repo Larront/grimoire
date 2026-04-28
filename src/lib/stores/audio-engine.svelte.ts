@@ -180,109 +180,35 @@ class SpotifyPlayer {
     this.currentVolume = initialVolume;
     this.currentSlot = slot;
 
-    const token = await invoke<string>("spotify_get_access_token");
     // Normalize playlist_v2 URIs — the Web API only accepts "playlist"
     const sourceUri = slot.source_id.replace(/playlist_v2/g, "playlist");
     const usesContext =
       sourceUri.startsWith("spotify:playlist:") ||
       sourceUri.startsWith("spotify:album:");
-    const body = JSON.stringify(
-      usesContext
-        ? { context_uri: sourceUri }
-        : { uris: [sourceUri] },
-    );
 
-    // The Spotify Web API may 400 briefly after the SDK "ready" event
-    // because the device isn't fully registered yet. Retry once after a delay.
-    let resp = await fetch(
-      `https://api.spotify.com/v1/me/player/play?device_id=${this.deviceId}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body,
-      },
-    );
-    if (!resp.ok && resp.status >= 400 && resp.status < 500) {
-      await new Promise((r) => setTimeout(r, 1000));
-      resp = await fetch(
-        `https://api.spotify.com/v1/me/player/play?device_id=${this.deviceId}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body,
-        },
-      );
-    }
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      console.error(`[SpotifyPlayer] play failed (${resp.status}):`, text);
-    }
-
-    // Set repeat mode to match the slot's loop setting
-    const repeatState = slot.loop ? "track" : "off";
-    await fetch(
-      `https://api.spotify.com/v1/me/player/repeat?state=${repeatState}&device_id=${this.deviceId}`,
-      {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
-
-    // Set shuffle (playlists/albums only)
-    if (usesContext) {
-      await fetch(
-        `https://api.spotify.com/v1/me/player/shuffle?state=${!!slot.shuffle}&device_id=${this.deviceId}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-    }
+    // All Spotify Web API calls are made from Rust — token never crosses IPC bridge
+    await invoke("spotify_play_track", {
+      sourceId: sourceUri,
+      useContext: usesContext,
+      loopMode: slot.loop,
+      shuffle: !!slot.shuffle,
+      deviceId: this.deviceId,
+    });
   }
 
   async resume(): Promise<void> {
     if (!this.player || !this.deviceId) return;
-    const token = await invoke<string>("spotify_get_access_token");
-    await fetch(
-      `https://api.spotify.com/v1/me/player/play?device_id=${this.deviceId}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    await invoke("spotify_resume", { deviceId: this.deviceId });
   }
 
   async skipNext(): Promise<void> {
     if (!this.deviceId) return;
-    const token = await invoke<string>("spotify_get_access_token");
-    await fetch(
-      `https://api.spotify.com/v1/me/player/next?device_id=${this.deviceId}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    await invoke("spotify_skip_next", { deviceId: this.deviceId });
   }
 
   async skipPrev(): Promise<void> {
     if (!this.deviceId) return;
-    const token = await invoke<string>("spotify_get_access_token");
-    await fetch(
-      `https://api.spotify.com/v1/me/player/previous?device_id=${this.deviceId}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    await invoke("spotify_skip_prev", { deviceId: this.deviceId });
   }
 
   async stop(): Promise<void> {
