@@ -1,12 +1,29 @@
 use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::sql_types::Integer;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 use crate::db::models::{NewScene, NewSceneSlot, Scene, SceneSlot, SceneWithCount, UpdateScene, UpdateSceneSlot};
 use crate::db::schema::{scene_slots, scenes};
 use crate::vault::AppVault;
+
+/// Validates that `relative` resolves to a path inside `vault_root`.
+/// Both sides are canonicalized so the starts_with check works correctly on Windows
+/// (where canonicalize returns \\?\ extended-length paths).
+fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = vault_root
+        .canonicalize()
+        .map_err(|e| format!("Invalid vault root: {e}"))?;
+    let joined = vault_root.join(relative);
+    let canonical = joined
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err("Path escapes vault root".to_string());
+    }
+    Ok(canonical)
+}
 
 #[tauri::command]
 pub fn get_scenes(vault: State<AppVault>) -> Result<Vec<Scene>, String> {
@@ -232,8 +249,8 @@ pub fn get_audio_absolute_path(
 ) -> Result<String, String> {
     let state = vault.lock().map_err(|e| e.to_string())?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?;
-    vault_path
-        .join(&relative_path)
+    let canonical = validate_path(vault_path, &relative_path)?;
+    canonical
         .to_str()
         .map(|s| s.to_string())
         .ok_or("Path contains invalid UTF-8".to_string())
