@@ -15,11 +15,14 @@ use crate::vault::{AppVault, VaultState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    dotenvy::dotenv().ok();
+    let client_id = std::env::var("SPOTIFY_CLIENT_ID").unwrap_or_default();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(AppVault::new(VaultState::new()))
+        .manage(AppVault::new(VaultState::new(client_id)))
         .invoke_handler(tauri::generate_handler![
             get_vault_path,
             open_vault,
@@ -82,6 +85,10 @@ pub fn run() {
             spotify_refresh_token,
             spotify_get_access_token,
             spotify_revoke,
+            spotify_play_track,
+            spotify_resume,
+            spotify_skip_next,
+            spotify_skip_prev,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
