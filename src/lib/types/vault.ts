@@ -14,7 +14,7 @@ export interface Note {
   icon: string | null;
   cover_image: string | null;
   parent_path: string | null;
-  archived: number;
+  archived: boolean;
   modified_at: string;
 }
 
@@ -103,7 +103,7 @@ export interface SceneSlot {
   volume: number;
   loop: boolean;
   slot_order: number;
-  shuffle: number;
+  shuffle: boolean;
 }
 
 export interface SpotifyAuthStatus {

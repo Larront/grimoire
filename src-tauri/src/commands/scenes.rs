@@ -125,9 +125,9 @@ pub fn create_scene_slot(
             source_id,
             label,
             volume: volume as f32,
-            is_loop: loop_ as i32,
+            is_loop: loop_,
             slot_order,
-            shuffle: shuffle as i32,
+            shuffle,
         })
         .returning(SceneSlot::as_returning())
         .get_result(conn)
@@ -150,9 +150,9 @@ pub fn update_scene_slot(
         .set(UpdateSceneSlot {
             label,
             volume: volume as f32,
-            is_loop: loop_ as i32,
+            is_loop: loop_,
             slot_order,
-            shuffle: shuffle as i32,
+            shuffle,
         })
         .returning(SceneSlot::as_returning())
         .get_result(conn)
@@ -296,9 +296,9 @@ mod tests {
                 source_id: "audio/drums.mp3".to_string(),
                 label: "Drums".to_string(),
                 volume: 0.8,
-                is_loop: 1,
+                is_loop: true,
                 slot_order: 0,
-                shuffle: 0,
+                shuffle: false,
             })
             .execute(&mut conn)
             .unwrap();
@@ -323,9 +323,9 @@ mod tests {
             source_id: format!("audio/{}.mp3", label),
             label: label.to_string(),
             volume: 0.8,
-            is_loop: 1,
+            is_loop: true,
             slot_order: order,
-            shuffle: 0,
+            shuffle: false,
         };
         let a: SceneSlot = diesel::insert_into(scene_slots::table)
             .values(make("birds", 0))
@@ -432,9 +432,9 @@ mod tests {
                     source_id: format!("audio/track{}.mp3", i),
                     label: format!("Track {}", i),
                     volume: 0.8,
-                    is_loop: 1,
+                    is_loop: true,
                     slot_order: i,
-                    shuffle: 0,
+                    shuffle: false,
                 })
                 .execute(&mut conn)
                 .unwrap();

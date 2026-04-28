@@ -13,7 +13,7 @@ pub struct Note {
     pub icon: Option<String>,
     pub cover_image: Option<String>,
     pub parent_path: Option<String>,
-    pub archived: i32,
+    pub archived: bool,
     pub modified_at: String,
 }
 
@@ -204,9 +204,9 @@ pub struct SceneSlot {
     pub label: String,
     pub volume: f32,
     #[serde(rename = "loop")]
-    pub is_loop: i32,
+    pub is_loop: bool,
     pub slot_order: i32,
-    pub shuffle: i32,
+    pub shuffle: bool,
 }
 
 #[derive(Insertable, Debug)]
@@ -217,9 +217,9 @@ pub struct NewSceneSlot {
     pub source_id: String,
     pub label: String,
     pub volume: f32,
-    pub is_loop: i32,
+    pub is_loop: bool,
     pub slot_order: i32,
-    pub shuffle: i32,
+    pub shuffle: bool,
 }
 
 #[derive(AsChangeset, Debug)]
@@ -227,9 +227,9 @@ pub struct NewSceneSlot {
 pub struct UpdateSceneSlot {
     pub label: String,
     pub volume: f32,
-    pub is_loop: i32,
+    pub is_loop: bool,
     pub slot_order: i32,
-    pub shuffle: i32,
+    pub shuffle: bool,
 }
 
 // ── SpotifyAuth ───────────────────────────────────────────────────────────────
