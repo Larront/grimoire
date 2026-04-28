@@ -43,6 +43,9 @@ function createNotesStore() {
 
   return {
     get notes() { return notes; },
+    // Called after any create/delete mutation to keep the count reactive.
+    // AppSidebar calls notes.load() after handleNewNote and delete operations.
+    get noteCount() { return notes.length; },
     get isLoading() { return isLoading; },
     get error() { return error; },
     load,

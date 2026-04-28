@@ -8,6 +8,8 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import FileTree from "$lib/components/sidebar/FileTree.svelte";
   import { goto } from "$app/navigation";
+  import { notes } from "$lib/stores/notes.svelte";
+  import { maps } from "$lib/stores/maps.svelte";
   import {
     ChevronRight,
     FileText,
@@ -60,12 +62,16 @@
         const openNote = noteMap.get(openId);
         if (openNote?.path.startsWith(target.path + "/")) await goto("/");
         await invoke("delete_folder", { folderPath: target.path });
+        // Folder may contain notes — reload to keep counts accurate
+        await notes.load();
       } else if (type === "note" && target.note_id !== null) {
         if (page.params.id === String(target.note_id)) await goto("/");
         await invoke("delete_note", { noteId: target.note_id });
+        await notes.load();
       } else if (type === "map" && target.map_id !== null) {
         if (page.params.id === String(target.map_id)) await goto("/");
         await invoke("delete_map", { mapId: target.map_id });
+        await maps.load();
       }
       refresh();
     } catch (e) {

@@ -47,7 +47,10 @@ function createVaultStore() {
       path = result.path;
       isOpen = true;
 
-      // Record in recent vaults (fire-and-forget)
+      // Record in recent vaults (fire-and-forget).
+      // Item counts in this entry are set at open time and refreshed on the next open_vault call.
+      // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
+      // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
       const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
       invoke("add_recent_vault", {
         entry: {
