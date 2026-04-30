@@ -11,10 +11,10 @@
   }
 
   let open = $state(false);
-  let results = $derived<SearchResult[]>([
-    ...notes.notes.map((note) => ({ entity: note, type: "note" })),
-    ...maps.maps.map((map) => ({ entity: map, type: "map" })),
-  ]);
+  // let results = $derived<SearchResult[]>([
+  //   ...notes.notes.map((note) => ({ entity: note, type: "note" })),
+  //   ...maps.maps.map((map) => ({ entity: map, type: "map" })),
+  // ]);
 
   const isMac = $derived(
     typeof navigator !== "undefined" && /mac/i.test(navigator.platform),
@@ -33,7 +33,7 @@
 <Command.Dialog bind:open>
   <Command.Input placeholder="Type a command or search..." />
   <Command.List>
-    {#if results.length === 0}
+    <!-- {#if results.length === 0}
       <Command.Empty>No results found.</Command.Empty>
     {/if}
     <Command.Group heading="Pages">
@@ -47,7 +47,7 @@
           {result.entity.title}
         </Command.Item>
       {/each}
-    </Command.Group>
+    </Command.Group> -->
   </Command.List>
 </Command.Dialog>
 <div

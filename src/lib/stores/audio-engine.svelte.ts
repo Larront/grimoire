@@ -57,14 +57,11 @@ class LocalPlayer {
     this.nodes.set(slot.id, { source, gain });
   }
 
-  fadeTo(slotId: number, target: number, durationSec: number): void {
+  fadeTo(slotId: number, target: number, durationSec: number): Promise<void> {
     const n = this.nodes.get(slotId);
-    if (n) {
-      n.gain.gain.linearRampToValueAtTime(
-        target,
-        this.ctx.currentTime + durationSec,
-      );
-    }
+    if (!n) return Promise.resolve();
+    n.gain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + durationSec);
+    return new Promise(resolve => setTimeout(resolve, durationSec * 1000));
   }
 
   setVolume(slotId: number, volume: number): void {
@@ -222,24 +219,24 @@ class SpotifyPlayer {
     this.currentSlot = null;
   }
 
-  fadeVolumeTo(targetVolume: number, durationMs: number): void {
-    if (!this.player) return;
+  fadeTo(target: number, durationSec: number): Promise<void> {
+    if (!this.player) return Promise.resolve();
+    const durationMs = durationSec * 1000;
     const startVol = this.currentVolume;
     const steps = 25;
     const interval = durationMs / steps;
     let step = 0;
-    const id = setInterval(async () => {
-      if (!this.player) {
-        clearInterval(id);
-        return;
-      }
-      step++;
-      const vol = startVol + ((targetVolume - startVol) * step) / steps;
-      const clamped = Math.max(0, Math.min(1, vol));
-      await this.player.setVolume(clamped);
-      this.currentVolume = clamped;
-      if (step >= steps) clearInterval(id);
-    }, interval);
+    return new Promise<void>(resolve => {
+      const id = setInterval(async () => {
+        if (!this.player) { clearInterval(id); resolve(); return; }
+        step++;
+        const vol = startVol + ((target - startVol) * step) / steps;
+        const clamped = Math.max(0, Math.min(1, vol));
+        await this.player.setVolume(clamped);
+        this.currentVolume = clamped;
+        if (step >= steps) { clearInterval(id); resolve(); }
+      }, interval);
+    });
   }
 
   async setVolume(volume: number): Promise<void> {
@@ -262,7 +259,7 @@ class SpotifyPlayer {
 // ---- SlotPlaybackState ----------------------------------------------------------
 
 interface SlotPlaybackState {
-  source: "local" | "spotify";
+  slot: SceneSlot;
   volume: number;
   playing: boolean;
 }
@@ -281,8 +278,7 @@ function createAudioEngine() {
   let ctx: AudioContext | null = null;
   let localPlayer: LocalPlayer | null = null;
   let spotifyPlayer: SpotifyPlayer | null = null;
-  let crossfadeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let activeSlotData = new Map<number, SceneSlot>();
+  let crossfadeAborted = false;
 
   function getOrCreateCtx(): AudioContext {
     if (!ctx) ctx = new AudioContext();
@@ -294,16 +290,12 @@ function createAudioEngine() {
   }
 
   function stopAll(): void {
-    if (crossfadeTimeoutId !== null) {
-      clearTimeout(crossfadeTimeoutId);
-      crossfadeTimeoutId = null;
-    }
+    crossfadeAborted = true;
     pendingSceneId = null;
     loadingSceneId = null;
     localPlayer?.stopAll();
     spotifyPlayer?.stop();
     slotStates = new Map<number, SlotPlaybackState>();
-    activeSlotData = new Map<number, SceneSlot>();
     isPlaying = false;
     isCrossfading = false;
     activeSceneId = null;
@@ -312,12 +304,11 @@ function createAudioEngine() {
   function setSlotVolume(slotId: number, volume: number): void {
     const state = slotStates.get(slotId);
     if (!state) return;
-    if (state.source === "local") {
+    if (state.slot.source === "local") {
       localPlayer?.setVolume(slotId, volume);
     } else {
       spotifyPlayer?.setVolume(volume * masterVolume);
     }
-    // Update reactive state
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, volume });
     slotStates = updated;
@@ -328,9 +319,8 @@ function createAudioEngine() {
     masterVolume = clamped;
     localPlayer?.setMasterVolume(clamped);
 
-    // Find active Spotify slot and scale its volume
-    for (const [slotId, state] of slotStates.entries()) {
-      if (state.source === "spotify") {
+    for (const [, state] of slotStates.entries()) {
+      if (state.slot.source === "spotify") {
         spotifyPlayer?.setVolume(state.volume * clamped);
         break;
       }
@@ -340,7 +330,7 @@ function createAudioEngine() {
   async function pauseSlot(slotId: number): Promise<void> {
     const state = slotStates.get(slotId);
     if (!state) return;
-    if (state.source === "local") {
+    if (state.slot.source === "local") {
       localPlayer?.stop(slotId);
     } else {
       await spotifyPlayer?.stop();
@@ -353,11 +343,8 @@ function createAudioEngine() {
   async function resumeSlot(slotId: number): Promise<void> {
     const state = slotStates.get(slotId);
     if (!state) return;
-    if (state.source === "local") {
-      const slot = activeSlotData.get(slotId);
-      if (slot && localPlayer) {
-        await localPlayer.startAtVolume(slot, state.volume);
-      }
+    if (state.slot.source === "local") {
+      if (localPlayer) await localPlayer.startAtVolume(state.slot, state.volume);
     } else {
       await spotifyPlayer?.resume();
     }
@@ -377,14 +364,12 @@ function createAudioEngine() {
   async function crossfadeTo(newSceneId: number): Promise<void> {
     if (newSceneId === activeSceneId) return;
     if (isCrossfading) {
-      pendingSceneId = newSceneId; // queue last-requested scene
+      pendingSceneId = newSceneId;
       return;
     }
 
-    // Acquire lock before any async work so the guard above is reliable.
-    // The catch block is the only other release point besides the setTimeout callback.
+    crossfadeAborted = false;
     isCrossfading = true;
-    // Signal immediately so the UI can show a loading state
     loadingSceneId = newSceneId;
 
     try {
@@ -392,36 +377,27 @@ function createAudioEngine() {
       const newLocalSlots = newSlots.filter((s) => s.source === "local");
       const newSpotifySlot = newSlots.find((s) => s.source === "spotify") ?? null;
 
-      // Enforce single-Spotify constraint (safety net — UI enforces this too)
-      const spotifyCount = newSlots.filter((s) => s.source === "spotify").length;
-      if (spotifyCount > 1) {
-        console.warn(
-          "[audio-engine] scene has multiple Spotify slots; only first will play",
-        );
+      if (newSlots.filter((s) => s.source === "spotify").length > 1) {
+        console.warn("[audio-engine] scene has multiple Spotify slots; only first will play");
       }
 
-      // Snapshot outgoing state
       const outgoingLocalIds = [...slotStates.entries()]
-        .filter(([, s]) => s.source === "local")
+        .filter(([, s]) => s.slot.source === "local")
         .map(([id]) => id);
-      const hadSpotify = [...slotStates.values()].some(
-        (s) => s.source === "spotify",
-      );
+      const hadSpotify = [...slotStates.values()].some((s) => s.slot.source === "spotify");
 
-      // Use a short fade when nothing is currently playing (cold start)
       const isColdStart = outgoingLocalIds.length === 0 && !hadSpotify;
       const fadeSec = isColdStart ? FADE_SEC_COLD : FADE_SEC;
 
-      // Fade out outgoing local slots
-      for (const id of outgoingLocalIds) {
-        localPlayer?.fadeTo(id, 0, fadeSec);
-      }
-      // Fade out outgoing Spotify
+      // Kick off fade-outs, collecting promises to await
+      const fadeOuts: Promise<void>[] = outgoingLocalIds.map((id) =>
+        localPlayer!.fadeTo(id, 0, fadeSec),
+      );
       if (hadSpotify && spotifyPlayer) {
-        spotifyPlayer.fadeVolumeTo(0, fadeSec * 1000);
+        fadeOuts.push(spotifyPlayer.fadeTo(0, fadeSec));
       }
 
-      // Start incoming local slots at volume 0, then ramp to target
+      // Start incoming slots concurrently while outgoing fades
       const audioCtx = getOrCreateCtx();
       if (!localPlayer) localPlayer = new LocalPlayer(audioCtx);
 
@@ -430,72 +406,50 @@ function createAudioEngine() {
       for (const slot of newLocalSlots) {
         try {
           await localPlayer.startAtVolume(slot, 0);
-          localPlayer.fadeTo(slot.id, slot.volume, fadeSec);
-          newStates.set(slot.id, {
-            source: "local",
-            volume: slot.volume,
-            playing: true,
-          });
-          activeSlotData.set(slot.id, slot);
+          void localPlayer.fadeTo(slot.id, slot.volume, fadeSec);
+          newStates.set(slot.id, { slot, volume: slot.volume, playing: true });
         } catch (e) {
-          console.error(
-            `[audio-engine] failed to start local slot ${slot.id}:`,
-            e,
-          );
+          console.error(`[audio-engine] failed to start local slot ${slot.id}:`, e);
         }
       }
 
-      // Start incoming Spotify slot
       if (newSpotifySlot) {
         if (!spotifyPlayer) spotifyPlayer = new SpotifyPlayer();
         try {
           await spotifyPlayer.playAtVolume(newSpotifySlot, 0);
-          spotifyPlayer.fadeVolumeTo(
-            newSpotifySlot.volume * masterVolume,
-            fadeSec * 1000,
-          );
-          newStates.set(newSpotifySlot.id, {
-            source: "spotify",
-            volume: newSpotifySlot.volume,
-            playing: true,
-          });
-          activeSlotData.set(newSpotifySlot.id, newSpotifySlot);
+          void spotifyPlayer.fadeTo(newSpotifySlot.volume * masterVolume, fadeSec);
+          newStates.set(newSpotifySlot.id, { slot: newSpotifySlot, volume: newSpotifySlot.volume, playing: true });
         } catch (e) {
           console.error("[audio-engine] Spotify playback failed:", e);
         }
       }
 
-      // After fade completes, stop outgoing and update state.
-      // isCrossfading is released here on the normal completion path.
-      crossfadeTimeoutId = setTimeout(() => {
-        for (const id of outgoingLocalIds) {
-          localPlayer?.stop(id);
-          activeSlotData.delete(id);
-        }
-        if (hadSpotify && !newSpotifySlot) {
-          spotifyPlayer?.stop();
-        }
+      await Promise.all(fadeOuts);
 
-        slotStates = newStates;
-        activeSceneId = newStates.size > 0 ? newSceneId : null;
-        isPlaying = newStates.size > 0;
-        isCrossfading = false;
-        loadingSceneId = null;
+      // stopAll() may have fired during the await — bail without committing state
+      if (crossfadeAborted) return;
 
-        // Fire queued crossfade if one was requested during this transition
-        if (pendingSceneId !== null && pendingSceneId !== activeSceneId) {
-          const next = pendingSceneId;
-          pendingSceneId = null;
-          crossfadeTo(next);
-        }
-      }, fadeSec * 1000);
+      for (const id of outgoingLocalIds) {
+        localPlayer?.stop(id);
+      }
+      if (hadSpotify && !newSpotifySlot) {
+        spotifyPlayer?.stop();
+      }
+
+      slotStates = newStates;
+      activeSceneId = newStates.size > 0 ? newSceneId : null;
+      isPlaying = newStates.size > 0;
     } catch (e) {
-      // Release the lock so future crossfade calls are not permanently blocked.
-      // This path fires when scenes.getSlots() throws or any setup step fails
-      // before the setTimeout is scheduled.
       console.error("[audio-engine] crossfadeTo failed:", e);
+    } finally {
       isCrossfading = false;
       loadingSceneId = null;
+    }
+
+    if (pendingSceneId !== null && pendingSceneId !== activeSceneId) {
+      const next = pendingSceneId;
+      pendingSceneId = null;
+      crossfadeTo(next);
     }
   }
 
