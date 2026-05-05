@@ -76,26 +76,27 @@
     placingMode = false;
     annotationMode = null;
 
-    Promise.all([
+    const ipcFetches = Promise.all([
       invoke<Pin[]>("get_pins", { mapId: m.id }),
       invoke<PinCategory[]>("get_pin_categories"),
       invoke<MapAnnotation[]>("get_annotations", { mapId: m.id }),
-    ])
-      .then(([p, c, a]) => {
+    ]);
+
+    const imageFetch = m.image_path
+      ? invoke<string>("get_map_image_data_url", { mapId: m.id })
+      : Promise.resolve(null);
+
+    Promise.all([ipcFetches, imageFetch])
+      .then(([[p, c, a], url]) => {
         pins = p;
         categories = c;
         annotations = a;
+        imageDataUrl = url;
       })
-      .catch(console.error);
-
-    if (m.image_path) {
-      invoke<string>("get_map_image_data_url", { mapId: m.id })
-        .then((url) => { imageDataUrl = url; })
-        .catch(console.error)
-        .finally(() => { isLoadingData = false; });
-    } else {
-      isLoadingData = false;
-    }
+      .catch(console.error)
+      .finally(() => {
+        isLoadingData = false;
+      });
   });
 
   // ── Title rename ───────────────────────────────────────────────────────────

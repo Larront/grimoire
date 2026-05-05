@@ -86,6 +86,17 @@ pub fn get_vault_path(vault: State<AppVault>) -> Option<String> {
     state.path.as_ref().map(|p| p.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+pub fn close_vault(vault: State<AppVault>) -> Result<(), String> {
+    let mut state = vault.lock().map_err(|e| e.to_string())?;
+    state.connection = None;  // drops SqliteConnection, closes the file handle
+    state.path = None;
+    state.pending_spotify_verifier = None;
+    state.pending_spotify_state = None;
+    // spotify_client_id is intentionally kept — it is app-level config, not vault-specific
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::tempdir;

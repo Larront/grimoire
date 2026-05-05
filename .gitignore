@@ -10,10 +10,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/vault.db
 
-.claude
-.superpowers
-/docs
-/claude_images
 
-.impeccable.md
-CLAUDE.md

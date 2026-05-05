@@ -40,7 +40,7 @@ diesel::table! {
         icon -> Nullable<Text>,
         cover_image -> Nullable<Text>,
         parent_path -> Nullable<Text>,
-        archived -> Integer,
+        archived -> Bool,
         modified_at -> Text,
     }
 }
@@ -81,9 +81,9 @@ diesel::table! {
         source_id -> Text,
         label -> Text,
         volume -> Float,
-        is_loop -> Integer,
+        is_loop -> Bool,
         slot_order -> Integer,
-        shuffle -> Integer,
+        shuffle -> Bool,
     }
 }
 

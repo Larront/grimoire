@@ -1,9 +1,6 @@
-use std::env;
-
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::Utc;
 use diesel::prelude::*;
-use dotenvy::dotenv;
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, State};
@@ -113,8 +110,13 @@ pub async fn spotify_start_auth_flow(
     vault: State<'_, AppVault>,
     app: AppHandle,
 ) -> Result<String, String> {
-    dotenv().ok();
-    let client_id = env::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set at build time");
+    let client_id = {
+        let state = vault.lock().map_err(|e| e.to_string())?;
+        state.spotify_client_id.clone()
+    };
+    if client_id.is_empty() {
+        return Err("SPOTIFY_CLIENT_ID is not configured".to_string());
+    }
 
     // Bind first — fail fast if port is in use
     let listener = std::net::TcpListener::bind("127.0.0.1:8888").map_err(|_| {
@@ -209,12 +211,10 @@ pub async fn spotify_exchange_code(
     state: String,
     vault: State<'_, AppVault>,
 ) -> Result<SpotifyAuthStatus, String> {
-    dotenv().ok();
-    let client_id = env::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set at build time");
-
-    // Brief lock: take verifier + validate state, then drop
-    let verifier = {
+    // Brief lock: take verifier + validate state + read client_id, then drop
+    let (client_id, verifier) = {
         let mut vault_state = vault.lock().map_err(|e| e.to_string())?;
+        let client_id = vault_state.spotify_client_id.clone();
         let verifier = vault_state
             .pending_spotify_verifier
             .take()
@@ -226,7 +226,7 @@ pub async fn spotify_exchange_code(
         if stored_state != state {
             return Err("State mismatch — possible CSRF attack".to_string());
         }
-        verifier
+        (client_id, verifier)
     };
 
     let token_data = post_to_token_endpoint(&[
@@ -257,17 +257,16 @@ pub async fn spotify_exchange_code(
 pub async fn spotify_refresh_token(
     vault: State<'_, AppVault>,
 ) -> Result<SpotifyAuthStatus, String> {
-    dotenv().ok();
-    let client_id = env::var("SPOTIFY_CLIENT_ID").expect("SPOTIFY_CLIENT_ID not set at build time");
-
-    let current_refresh = {
+    let (client_id, current_refresh) = {
         let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let client_id = state.spotify_client_id.clone();
         let conn = state.connection.as_mut().ok_or("No vault open")?;
-        spotify_auth::table
+        let current_refresh = spotify_auth::table
             .find(1)
             .select(spotify_auth::refresh_token)
             .first::<String>(conn)
-            .map_err(|_| "Spotify not connected".to_string())?
+            .map_err(|_| "Spotify not connected".to_string())?;
+        (client_id, current_refresh)
     };
 
     let token_data = post_to_token_endpoint(&[
@@ -294,17 +293,15 @@ pub async fn spotify_refresh_token(
 
 #[tauri::command]
 pub async fn spotify_get_access_token(vault: State<'_, AppVault>) -> Result<String, String> {
-    dotenv().ok();
-    let client_id =
-        env::var("SPOTIFY_CLIENT_ID").map_err(|_| "SPOTIFY_CLIENT_ID not set".to_string())?;
-
-    let auth = {
+    let (client_id, auth) = {
         let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let client_id = state.spotify_client_id.clone();
         let conn = state.connection.as_mut().ok_or("No vault open")?;
-        spotify_auth::table
+        let auth = spotify_auth::table
             .find(1)
             .first::<SpotifyAuth>(conn)
-            .map_err(|_| "Spotify not connected".to_string())?
+            .map_err(|_| "Spotify not connected".to_string())?;
+        (client_id, auth)
     };
 
     let expires_at = chrono::DateTime::parse_from_rfc3339(&auth.expires_at)
@@ -340,6 +337,168 @@ pub fn spotify_revoke(vault: State<AppVault>) -> Result<(), String> {
         .execute(conn)
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+// ---- Private helper: read token + client_id, auto-refresh if expiring ----
+
+async fn get_token_and_client(vault: &State<'_, AppVault>) -> Result<(String, String), String> {
+    let (auth, client_id) = {
+        let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let client_id = state.spotify_client_id.clone();
+        let conn = state.connection.as_mut().ok_or("No vault open")?;
+        let auth = spotify_auth::table
+            .find(1)
+            .first::<SpotifyAuth>(conn)
+            .map_err(|_| "Spotify not connected".to_string())?;
+        (auth, client_id)
+    };
+    let expires_at = chrono::DateTime::parse_from_rfc3339(&auth.expires_at)
+        .map_err(|e| format!("Invalid expires_at: {e}"))?
+        .with_timezone(&Utc);
+    if expires_at <= Utc::now() + chrono::Duration::minutes(5) {
+        let token_data = post_to_token_endpoint(&[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", &auth.refresh_token),
+            ("client_id", &client_id),
+        ])
+        .await?;
+        let new_auth = parse_token_response(&token_data, Some(auth.refresh_token))?;
+        let new_access = new_auth.access_token.clone();
+        {
+            let mut state = vault.lock().map_err(|e| e.to_string())?;
+            let conn = state.connection.as_mut().ok_or("No vault open")?;
+            persist_auth(&new_auth, conn)?;
+        }
+        return Ok((client_id, new_access));
+    }
+    Ok((client_id, auth.access_token))
+}
+
+// ---- New Spotify Web API commands (all HTTP calls stay in Rust) ----
+
+#[tauri::command]
+pub async fn spotify_play_track(
+    source_id: String,
+    use_context: bool,
+    loop_mode: bool,
+    shuffle: bool,
+    device_id: String,
+    vault: State<'_, AppVault>,
+) -> Result<(), String> {
+    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let source_uri = source_id.replace("playlist_v2", "playlist");
+    let body = if use_context {
+        serde_json::json!({ "context_uri": source_uri })
+    } else {
+        serde_json::json!({ "uris": [source_uri] })
+    };
+    let client = reqwest::Client::new();
+    let resp = client
+        .put(format!(
+            "https://api.spotify.com/v1/me/player/play?device_id={device_id}"
+        ))
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("Content-Type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| format!("play request failed: {e}"))?;
+    if !resp.status().is_success() && resp.status().as_u16() >= 400 && resp.status().as_u16() < 500
+    {
+        // Retry once after 1s — device may not be fully registered yet
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let resp2 = client
+            .put(format!(
+                "https://api.spotify.com/v1/me/player/play?device_id={device_id}"
+            ))
+            .header("Authorization", format!("Bearer {access_token}"))
+            .header("Content-Type", "application/json")
+            .body(body.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("play retry failed: {e}"))?;
+        if !resp2.status().is_success() {
+            let text = resp2.text().await.unwrap_or_default();
+            return Err(format!("play failed: {text}"));
+        }
+    }
+    // Set repeat mode
+    let repeat_state = if loop_mode { "track" } else { "off" };
+    client
+        .put(format!(
+            "https://api.spotify.com/v1/me/player/repeat?state={repeat_state}&device_id={device_id}"
+        ))
+        .header("Authorization", format!("Bearer {access_token}"))
+        .send()
+        .await
+        .ok();
+    // Set shuffle (only for context tracks)
+    if use_context {
+        client
+            .put(format!(
+                "https://api.spotify.com/v1/me/player/shuffle?state={shuffle}&device_id={device_id}"
+            ))
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .ok();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn spotify_resume(
+    device_id: String,
+    vault: State<'_, AppVault>,
+) -> Result<(), String> {
+    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let client = reqwest::Client::new();
+    client
+        .put(format!(
+            "https://api.spotify.com/v1/me/player/play?device_id={device_id}"
+        ))
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("Content-Type", "application/json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn spotify_skip_next(
+    device_id: String,
+    vault: State<'_, AppVault>,
+) -> Result<(), String> {
+    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let client = reqwest::Client::new();
+    client
+        .post(format!(
+            "https://api.spotify.com/v1/me/player/next?device_id={device_id}"
+        ))
+        .header("Authorization", format!("Bearer {access_token}"))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn spotify_skip_prev(
+    device_id: String,
+    vault: State<'_, AppVault>,
+) -> Result<(), String> {
+    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let client = reqwest::Client::new();
+    client
+        .post(format!(
+            "https://api.spotify.com/v1/me/player/previous?device_id={device_id}"
+        ))
+        .header("Authorization", format!("Bearer {access_token}"))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg(test)]

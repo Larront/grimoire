@@ -10,7 +10,7 @@
 <ModeWatcher defaultMode="dark" />
 
 {#if vault.isOpen}
-  <AppShell>{@render children()}</AppShell>
+  <AppShell>{@render children?.()}</AppShell>
 {:else}
-  {@render children()}
+  {@render children?.()}
 {/if}

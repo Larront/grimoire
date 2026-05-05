@@ -32,6 +32,8 @@ function createMapsStore() {
 
   return {
     get maps() { return maps; },
+    // Called after any create/delete mutation to keep the count reactive.
+    get mapCount() { return maps.length; },
     get isLoading() { return isLoading; },
     get error() { return error; },
     load,

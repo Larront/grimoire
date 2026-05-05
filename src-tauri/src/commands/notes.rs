@@ -4,7 +4,45 @@ use crate::vault::AppVault;
 use diesel::prelude::*;
 use serde::Serialize;
 use std::fs;
+use std::path::{Path, PathBuf};
 use tauri::State;
+
+/// Validates that `relative` resolves to a path inside `vault_root`.
+/// Use for reading/deleting existing files — the file must exist for canonicalize().
+/// Both sides are canonicalized so the starts_with check works correctly on Windows
+/// (where canonicalize returns \\?\ extended-length paths).
+fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = vault_root
+        .canonicalize()
+        .map_err(|e| format!("Invalid vault root: {e}"))?;
+    let joined = vault_root.join(relative);
+    let canonical = joined
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err("Path escapes vault root".to_string());
+    }
+    Ok(canonical)
+}
+
+/// Validates that the PARENT of `relative` resolves inside `vault_root`.
+/// Use for creating/writing new files — the file itself may not exist yet.
+/// Both sides are canonicalized so the starts_with check works correctly on Windows.
+fn validate_parent_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = vault_root
+        .canonicalize()
+        .map_err(|e| format!("Invalid vault root: {e}"))?;
+    let joined = vault_root.join(relative);
+    let parent = joined.parent().ok_or("Cannot determine parent directory")?;
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|e| format!("Invalid parent path: {e}"))?;
+    if !canonical_parent.starts_with(&canonical_root) {
+        return Err("Path escapes vault root".to_string());
+    }
+    Ok(joined) // parent is validated; return the full (not yet existing) file path
+}
 
 fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Path) -> (String, std::path::PathBuf) {
     let mut resolved_title = base_title.to_string();
@@ -30,7 +68,7 @@ pub fn get_notes(vault: State<AppVault>) -> Result<Vec<Note>, String> {
 #[tauri::command]
 pub fn create_note(
     note_title: String,
-    _note_path: String,
+    note_path: String,
     note_parent_path: Option<String>,
     vault: State<AppVault>,
 ) -> Result<Note, String> {
@@ -39,11 +77,11 @@ pub fn create_note(
     let conn = state.connection.as_mut().ok_or("No vault open")?;
 
     // Determine the parent directory and resolve any filename conflicts
-    let initial_full_path = vault_path.join(&_note_path);
+    // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
+    let initial_full_path = validate_parent_path(&vault_path, &note_path)?;
     let parent_dir = initial_full_path
         .parent()
         .ok_or("Cannot determine parent directory")?;
-    fs::create_dir_all(parent_dir).map_err(|e| e.to_string())?;
 
     let (resolved_title, full_path) = resolve_note_filename(&note_title, parent_dir);
 
@@ -80,13 +118,10 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
 
     // Rename file on disk if the path changed
     if old_note.path != note.path {
-        let old_full = vault_path.join(&old_note.path);
-        let new_full = vault_path.join(&note.path);
+        let old_full = validate_path(&vault_path, &old_note.path)?;
+        let new_full = validate_parent_path(&vault_path, &note.path)?;
         if new_full.exists() {
             return Err(format!("A file already exists at '{}'", note.path));
-        }
-        if let Some(parent) = new_full.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
@@ -107,7 +142,7 @@ pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String
     let conn = state.connection.as_mut().ok_or("No vault open")?;
 
     let note: Note = notes.find(note_id).first(conn).map_err(|e| e.to_string())?;
-    let full_path = vault_path.join(&note.path);
+    let full_path = validate_path(&vault_path, &note.path)?;
     if full_path.exists() {
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
@@ -121,7 +156,7 @@ pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String
 pub fn read_note_content(note_path: String, vault: State<AppVault>) -> Result<String, String> {
     let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = vault_path.join(&note_path);
+    let full_path = validate_path(&vault_path, &note_path)?;
     fs::read_to_string(&full_path).map_err(|e| e.to_string())
 }
 
@@ -133,7 +168,7 @@ pub fn write_note_content(
 ) -> Result<(), String> {
     let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = vault_path.join(&note_path);
+    let full_path = validate_parent_path(&vault_path, &note_path)?;
     fs::write(&full_path, content).map_err(|e| e.to_string())
 }
 
@@ -192,7 +227,7 @@ pub fn get_note_by_path(note_path: String, vault: State<AppVault>) -> Result<Opt
     match result {
         None => Ok(None),
         Some((note_id, note_title)) => {
-            let full_path = vault_path.join(&note_path);
+            let full_path = validate_path(&vault_path, &note_path)?;
             let content = std::fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
             Ok(Some(NotePathResult {
                 id: note_id,

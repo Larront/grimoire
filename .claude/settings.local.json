@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bunx:*)",
+      "mcp__plugin_svelte_svelte__svelte-autofixer",
+      "Bash(bun run:*)",
+      "Bash(find:*)",
+      "Bash(npm run:*)",
+      "Bash(bash:*)",
+      "Bash(cargo check:*)",
+      "Bash(npm info:*)",
+      "Bash(diesel migration:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(xargs grep:*)",
+      "Bash(cargo test:*)",
+      "Bash(bun add:*)",
+      "Bash(head -50 src/routes/map/[id]/+page.svelte)",
+      "Bash(gh issue *)"
+    ]
+  }
+}
