@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mode } from 'mode-watcher';
+  import { ModeWatcher, mode } from 'mode-watcher';
   import { vault, type AccentPreset } from '$lib/stores/vault.svelte';
 
   const ALL_ACCENT_CLASSES: AccentPreset[] = [
@@ -55,6 +55,7 @@
     '--primary-muted',
   ] as const;
 
+  // Accent watcher
   $effect(() => {
     const root = document.documentElement;
     const currentMode = mode.current ?? 'dark';
@@ -80,4 +81,11 @@
       root.style.setProperty('--primary-muted', tokens.muted);
     }
   });
+
+  // Density watcher
+  $effect(() => {
+    document.documentElement.dataset.density = vault.density;
+  });
 </script>
+
+<ModeWatcher defaultMode="dark" />

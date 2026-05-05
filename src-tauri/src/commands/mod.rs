@@ -1,4 +1,5 @@
 pub mod maps;
+pub mod preferences;
 pub mod media;
 pub mod notes;
 pub mod recent_vaults;

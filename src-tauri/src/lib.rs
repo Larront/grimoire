@@ -5,6 +5,7 @@ mod vault;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
+use commands::preferences::*;
 use commands::recent_vaults::*;
 use commands::scenes::*;
 use commands::spotify::*;
@@ -27,6 +28,10 @@ pub fn run() {
             get_vault_path,
             open_vault,
             close_vault,
+            save_accent_preset,
+            get_accent_preset,
+            save_density_level,
+            get_density_level,
             get_recent_vaults,
             add_recent_vault,
             remove_recent_vault,

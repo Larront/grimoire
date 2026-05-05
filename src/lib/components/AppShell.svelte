@@ -12,7 +12,7 @@
   <main class="flex flex-1 flex-col">
     <Sidebar.Inset>
       <header
-        class="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b border-sidebar-border bg-background px-3"
+        class="sticky top-0 z-10 flex h-[var(--tab-bar-h)] shrink-0 items-center gap-2 border-b border-sidebar-border bg-background px-3"
       >
         <Sidebar.Trigger class="-ml-1" />
         <Separator orientation="vertical" class="mr-1 h-4" />

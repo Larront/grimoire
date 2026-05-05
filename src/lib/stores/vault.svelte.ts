@@ -8,6 +8,8 @@ export type AccentPreset =
   | "accent-ice"
   | "accent-amber";
 
+export type DensityLevel = "cozy" | "balanced" | "dense";
+
 interface OpenVaultResult {
   path: string;
   note_count: number;
@@ -30,6 +32,7 @@ function createVaultStore() {
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let accent = $state<AccentPreset>("accent-crimson");
+  let density = $state<DensityLevel>("balanced");
 
   async function openVault(selectedPath?: string): Promise<boolean> {
     isLoading = true;
@@ -81,6 +84,11 @@ function createVaultStore() {
     }
   }
 
+  function setDensity(level: DensityLevel): void {
+    density = level;
+    invoke("save_density_level", { level }).catch(console.error);
+  }
+
   function setAccent(preset: AccentPreset): void {
     accent = preset;
     invoke("save_accent_preset", { preset }).catch(console.error);
@@ -96,6 +104,7 @@ function createVaultStore() {
     path = null;
     isOpen = false;
     accent = "accent-crimson";
+    density = "balanced";
     error = null;
   }
 
@@ -108,6 +117,8 @@ function createVaultStore() {
       }
       const savedAccent = await invoke<AccentPreset | null>("get_accent_preset").catch(() => null);
       if (savedAccent) accent = savedAccent;
+      const savedDensity = await invoke<DensityLevel | null>("get_density_level").catch(() => null);
+      if (savedDensity) density = savedDensity;
     } catch {
       // No vault open — normal on first launch
     }
@@ -129,10 +140,14 @@ function createVaultStore() {
     get accent() {
       return accent;
     },
+    get density() {
+      return density;
+    },
     openVault,
     closeVault,
     checkExistingVault,
     setAccent,
+    setDensity,
   };
 }
 
