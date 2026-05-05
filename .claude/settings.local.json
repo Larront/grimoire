@@ -15,7 +15,8 @@
       "Bash(xargs grep:*)",
       "Bash(cargo test:*)",
       "Bash(bun add:*)",
-      "Bash(head -50 src/routes/map/[id]/+page.svelte)"
+      "Bash(head -50 src/routes/map/[id]/+page.svelte)",
+      "Bash(gh issue *)"
     ]
   }
 }
