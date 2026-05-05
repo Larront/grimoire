@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+export type AccentPreset =
+  | "accent-crimson"
+  | "accent-arcane"
+  | "accent-verdant"
+  | "accent-ice"
+  | "accent-amber";
+
 interface OpenVaultResult {
   path: string;
   note_count: number;
@@ -22,6 +29,7 @@ function createVaultStore() {
   let isOpen = $state(false);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
+  let accent = $state<AccentPreset>("accent-crimson");
 
   async function openVault(selectedPath?: string): Promise<boolean> {
     isLoading = true;
@@ -73,6 +81,11 @@ function createVaultStore() {
     }
   }
 
+  function setAccent(preset: AccentPreset): void {
+    accent = preset;
+    invoke("save_accent_preset", { preset }).catch(console.error);
+  }
+
   async function closeVault(): Promise<void> {
     try {
       await invoke("close_vault");
@@ -82,6 +95,7 @@ function createVaultStore() {
     }
     path = null;
     isOpen = false;
+    accent = "accent-crimson";
     error = null;
   }
 
@@ -92,6 +106,8 @@ function createVaultStore() {
         path = existingPath;
         isOpen = true;
       }
+      const savedAccent = await invoke<AccentPreset | null>("get_accent_preset").catch(() => null);
+      if (savedAccent) accent = savedAccent;
     } catch {
       // No vault open — normal on first launch
     }
@@ -110,9 +126,13 @@ function createVaultStore() {
     get error() {
       return error;
     },
+    get accent() {
+      return accent;
+    },
     openVault,
     closeVault,
     checkExistingVault,
+    setAccent,
   };
 }
 
