@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { vault, type RecentVault } from "$lib/stores/vault.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { invoke } from "@tauri-apps/api/core";
@@ -121,9 +122,11 @@
       </div>
 
       {#if notes.isLoading}
-        <div class="flex items-center gap-2 text-foreground-faint">
-          <LoaderCircle class="w-4 h-4 animate-spin" />
-          <span class="font-sans text-sm">Loading vault…</span>
+        <div class="flex flex-col gap-3" aria-label="Loading notes">
+          <Skeleton class="h-4 w-1/3" />
+          <Skeleton class="h-4 w-3/5" />
+          <Skeleton class="h-4 w-2/5" />
+          <Skeleton class="h-4 w-1/2" />
         </div>
       {:else}
         <div class="flex flex-col gap-4">

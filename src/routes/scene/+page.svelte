@@ -4,13 +4,13 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
   import { Button } from "$lib/components/ui/button";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Music2, Plus, Star, Trash2, Pencil } from "@lucide/svelte";
   import * as Rename from "$lib/components/ui/rename";
   import type { Scene, SceneWithCount } from "$lib/types/vault";
+  import { toastUndo } from "$lib/toast";
 
-  let deleteTarget = $state<SceneWithCount | null>(null);
   let isCreating = $state(false);
   let renamingId = $state<number | null>(null);
   let renameValue = $state("");
@@ -43,16 +43,15 @@
     }
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    try {
-      await invoke("delete_scene", { id: deleteTarget.id });
-      await scenes.load();
-    } catch (e) {
-      console.error("Failed to delete scene:", e);
-    } finally {
-      deleteTarget = null;
-    }
+  function deleteScene(scene: SceneWithCount) {
+    toastUndo(`"${scene.name}" deleted`, async () => {
+      try {
+        await invoke("delete_scene", { id: scene.id });
+        await scenes.load();
+      } catch (e) {
+        console.error("Failed to delete scene:", e);
+      }
+    });
   }
 
   function startRename(scene: SceneWithCount) {
@@ -103,7 +102,7 @@
     {#if scenes.isLoading}
       <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {#each { length: 6 } as _, i (i)}
-          <div class="h-28 animate-pulse rounded-lg bg-muted"></div>
+          <Skeleton class="h-28 rounded-lg" />
         {/each}
       </div>
 
@@ -200,7 +199,7 @@
               <ContextMenu.Separator />
               <ContextMenu.Item
                 variant="destructive"
-                onclick={() => (deleteTarget = scene)}
+                onclick={() => deleteScene(scene)}
               >
                 <Trash2 class="size-4" />
                 Delete
@@ -213,27 +212,3 @@
   </div>
 </div>
 
-<!-- Delete confirmation dialog -->
-<AlertDialog.Root
-  open={deleteTarget !== null}
-  onOpenChange={(open) => {
-    if (!open) deleteTarget = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete scene</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete
-        <span class="font-medium text-foreground">{deleteTarget?.name}</span>?
-        This action cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" onclick={confirmDelete}>
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

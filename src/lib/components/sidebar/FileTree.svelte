@@ -5,11 +5,11 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Rename from "$lib/components/ui/rename";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import FileTree from "$lib/components/sidebar/FileTree.svelte";
   import { goto } from "$app/navigation";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
+  import { toastUndo } from "$lib/toast";
   import {
     ChevronRight,
     FileText,
@@ -41,45 +41,35 @@
     return false;
   });
 
-  // Delete confirmation state
-  let deleteDialogOpen = $state(false);
-  let pendingDelete = $state<{
-    type: "note" | "folder" | "map";
-    node: FileNode;
-  } | null>(null);
-
-  function requestDelete(type: "note" | "folder" | "map", target: FileNode) {
-    pendingDelete = { type, node: target };
-    deleteDialogOpen = true;
+  function deleteNote(target: FileNode) {
+    toastUndo(`"${target.name}" deleted`, async () => {
+      if (target.note_id === null) return;
+      if (page.params.id === String(target.note_id)) await goto("/");
+      await invoke("delete_note", { noteId: target.note_id });
+      await notes.load();
+      refresh();
+    });
   }
 
-  async function confirmDelete() {
-    if (!pendingDelete) return;
-    const { type, node: target } = pendingDelete;
-    try {
-      if (type === "folder") {
-        const openId = Number(page.params.id);
-        const openNote = noteMap.get(openId);
-        if (openNote?.path.startsWith(target.path + "/")) await goto("/");
-        await invoke("delete_folder", { folderPath: target.path });
-        // Folder may contain notes — reload to keep counts accurate
-        await notes.load();
-      } else if (type === "note" && target.note_id !== null) {
-        if (page.params.id === String(target.note_id)) await goto("/");
-        await invoke("delete_note", { noteId: target.note_id });
-        await notes.load();
-      } else if (type === "map" && target.map_id !== null) {
-        if (page.params.id === String(target.map_id)) await goto("/");
-        await invoke("delete_map", { mapId: target.map_id });
-        await maps.load();
-      }
+  function deleteMap(target: FileNode) {
+    toastUndo(`"${target.name}" deleted`, async () => {
+      if (target.map_id === null) return;
+      if (page.params.id === String(target.map_id)) await goto("/");
+      await invoke("delete_map", { mapId: target.map_id });
+      await maps.load();
       refresh();
-    } catch (e) {
-      console.error(`delete ${type} failed:`, e);
-    } finally {
-      pendingDelete = null;
-      deleteDialogOpen = false;
-    }
+    });
+  }
+
+  function deleteFolder(target: FileNode) {
+    toastUndo(`"${target.name}" deleted`, async () => {
+      const openId = Number(page.params.id);
+      const openNote = noteMap.get(openId);
+      if (openNote?.path.startsWith(target.path + "/")) await goto("/");
+      await invoke("delete_folder", { folderPath: target.path });
+      await notes.load();
+      refresh();
+    });
   }
 
   // Rename state
@@ -210,14 +200,14 @@
         <ContextMenu.Separator />
         <ContextMenu.Item
           variant="destructive"
-          onSelect={() => requestDelete("folder", node)}
+          onSelect={() => deleteFolder(node)}
         >
           Delete Folder
         </ContextMenu.Item>
       {:else if node.map_id !== null}
         <ContextMenu.Item
           variant="destructive"
-          onSelect={() => requestDelete("map", node)}
+          onSelect={() => deleteMap(node)}
         >
           Delete Map
         </ContextMenu.Item>
@@ -229,7 +219,7 @@
         <ContextMenu.Separator />
         <ContextMenu.Item
           variant="destructive"
-          onSelect={() => requestDelete("note", node)}
+          onSelect={() => deleteNote(node)}
         >
           Delete Note
         </ContextMenu.Item>
@@ -237,38 +227,3 @@
     </ContextMenu.Content>
   </ContextMenu.Portal>
 </ContextMenu.Root>
-
-<AlertDialog.Root bind:open={deleteDialogOpen}>
-  <AlertDialog.Portal>
-    <AlertDialog.Overlay />
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>
-          Delete {pendingDelete?.type === "folder"
-            ? "folder"
-            : pendingDelete?.type === "map"
-              ? "map"
-              : "note"}?
-        </AlertDialog.Title>
-        <AlertDialog.Description>
-          {#if pendingDelete?.type === "folder"}
-            This will permanently delete "{pendingDelete.node.name}" and all its
-            contents. This cannot be undone.
-          {:else}
-            This will permanently delete "{pendingDelete?.node.name}". This
-            cannot be undone.
-          {/if}
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action
-          class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          onclick={confirmDelete}
-        >
-          Delete
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Portal>
-</AlertDialog.Root>

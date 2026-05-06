@@ -14,4 +14,11 @@ describe('root layout', () => {
 		// preference it should apply the dark class to the document root.
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
 	});
+
+	it('mounts a Toaster for toast notifications', () => {
+		render(Layout);
+		// svelte-sonner renders a <section aria-live="polite" aria-label="Notifications ...">
+		const toaster = document.querySelector('section[aria-live="polite"]');
+		expect(toaster).toBeTruthy();
+	});
 });

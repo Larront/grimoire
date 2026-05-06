@@ -477,6 +477,24 @@ input[type="range"]:disabled {
   opacity: 0.35;
 }
 
+/* ── Sonner toast token overrides ────────────────────────────── */
+/*
+  Override svelte-sonner's built-in rich-color palette with Grimoire's
+  --error / --success / --background-elevated design tokens so toast colours
+  are consistent with the rest of the UI and theme-aware.
+*/
+[data-sonner-toaster] {
+  --success-bg: color-mix(in srgb, var(--success) 12%, var(--background-elevated));
+  --success-border: color-mix(in srgb, var(--success) 25%, var(--background-elevated));
+  --success-text: var(--success);
+  --error-bg: color-mix(in srgb, var(--error) 12%, var(--background-elevated));
+  --error-border: color-mix(in srgb, var(--error) 25%, var(--background-elevated));
+  --error-text: var(--error);
+  --normal-bg: var(--background-elevated);
+  --normal-border: var(--background-border);
+  --normal-text: var(--foreground);
+}
+
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
 
 [data-wiki-link] {
