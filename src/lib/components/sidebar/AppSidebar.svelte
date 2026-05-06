@@ -13,8 +13,6 @@
     LayoutList,
     Star,
     Music2,
-    FolderOpen,
-    Settings,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as VaultMap } from "$lib/types/vault";
@@ -26,24 +24,21 @@
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
+  import VaultSelector from "./VaultSelector.svelte";
 
   let {
     ref = $bindable(null),
+    filesSectionEl = $bindable<HTMLElement | null>(null),
     ...restProps
-  }: ComponentProps<typeof Sidebar.Root> = $props();
+  }: ComponentProps<typeof Sidebar.Root> & {
+    filesSectionEl?: HTMLElement | null;
+  } = $props();
 
   let tree = $state<FileNode | null>(null);
   let treeLoading = $state(false);
   let noteMap = $state(new Map<number, Note>());
 
   setContext<Map<number, Note>>("noteMap", noteMap);
-
-  // Derive vault name from path
-  const vaultName = $derived(() => {
-    if (!vault.path) return "";
-    const parts = vault.path.replace(/\\/g, "/").split("/");
-    return parts[parts.length - 1] || "";
-  });
 
   // Favorite scenes from real data
   const favoriteScenes = $derived(scenes.scenes.filter((s) => s.favorited));
@@ -200,77 +195,79 @@
     </Sidebar.Group>
 
     <!-- Files section -->
-    <Collapsible.Root open class="group/collapsible">
-      <Sidebar.Group>
-        <Sidebar.GroupLabel>
-          {#snippet child({ props })}
-            <Collapsible.Trigger {...props}>
-              Files
-              <ChevronDown
-                class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-              />
-            </Collapsible.Trigger>
-          {/snippet}
-        </Sidebar.GroupLabel>
-        <Collapsible.Content forceMount>
-          {#snippet child({ props, open })}
-            {#if open}
-              <div {...props} transition:slide>
-                <Sidebar.GroupContent>
-                  {#if treeLoading && !tree}
-                    <div class="space-y-1 px-2">
-                      <Sidebar.MenuSkeleton showIcon />
-                      <Sidebar.MenuSkeleton showIcon />
-                      <Sidebar.MenuSkeleton showIcon />
-                    </div>
-                  {:else if tree && tree.children.length > 0}
-                    <Sidebar.Menu>
-                      {#each tree.children as treeNode (treeNode.path)}
-                        <FileTree
-                          node={treeNode}
-                          {noteMap}
-                          {refresh}
-                          {handleNewNote}
-                          {handleNewFolder}
-                          {handleNewMap}
-                        />
-                      {/each}
-                    </Sidebar.Menu>
-                  {:else if tree}
-                    <div
-                      class="flex flex-col items-center gap-3 px-4 py-6 text-center"
-                    >
+    <div bind:this={filesSectionEl} id="sidebar-files-section">
+      <Collapsible.Root open class="group/collapsible">
+        <Sidebar.Group>
+          <Sidebar.GroupLabel>
+            {#snippet child({ props })}
+              <Collapsible.Trigger {...props}>
+                Files
+                <ChevronDown
+                  class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
+                />
+              </Collapsible.Trigger>
+            {/snippet}
+          </Sidebar.GroupLabel>
+          <Collapsible.Content forceMount>
+            {#snippet child({ props, open })}
+              {#if open}
+                <div {...props} transition:slide>
+                  <Sidebar.GroupContent>
+                    {#if treeLoading && !tree}
+                      <div class="space-y-1 px-2">
+                        <Sidebar.MenuSkeleton showIcon />
+                        <Sidebar.MenuSkeleton showIcon />
+                        <Sidebar.MenuSkeleton showIcon />
+                      </div>
+                    {:else if tree && tree.children.length > 0}
+                      <Sidebar.Menu>
+                        {#each tree.children as treeNode (treeNode.path)}
+                          <FileTree
+                            node={treeNode}
+                            {noteMap}
+                            {refresh}
+                            {handleNewNote}
+                            {handleNewFolder}
+                            {handleNewMap}
+                          />
+                        {/each}
+                      </Sidebar.Menu>
+                    {:else if tree}
                       <div
-                        class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
+                        class="flex flex-col items-center gap-3 px-4 py-6 text-center"
                       >
-                        <FilePlus
-                          class="size-5 text-primary"
-                          strokeWidth={1.5}
-                        />
+                        <div
+                          class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
+                        >
+                          <FilePlus
+                            class="size-5 text-primary"
+                            strokeWidth={1.5}
+                          />
+                        </div>
+                        <div class="space-y-1">
+                          <p class="text-sm font-medium">No notes yet</p>
+                          <p class="text-xs text-muted-foreground">
+                            Create your first note to start building your world.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onclick={() => handleNewNote(null)}
+                        >
+                          <FilePlus strokeWidth={1.5} />
+                          New Note
+                        </Button>
                       </div>
-                      <div class="space-y-1">
-                        <p class="text-sm font-medium">No notes yet</p>
-                        <p class="text-xs text-muted-foreground">
-                          Create your first note to start building your world.
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onclick={() => handleNewNote(null)}
-                      >
-                        <FilePlus strokeWidth={1.5} />
-                        New Note
-                      </Button>
-                    </div>
-                  {/if}
-                </Sidebar.GroupContent>
-              </div>
-            {/if}
-          {/snippet}
-        </Collapsible.Content>
-      </Sidebar.Group>
-    </Collapsible.Root>
+                    {/if}
+                  </Sidebar.GroupContent>
+                </div>
+              {/if}
+            {/snippet}
+          </Collapsible.Content>
+        </Sidebar.Group>
+      </Collapsible.Root>
+    </div>
 
     <!-- Scenes section -->
     <Collapsible.Root open class="group/collapsible">
@@ -327,22 +324,7 @@
 
   <Sidebar.Footer>
     <MiniPlayer />
-    <div
-      class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-    >
-      <FolderOpen class="size-3.5 shrink-0" />
-      <span class="flex-1 truncate">{vaultName()}</span>
-      <Tooltip.Root>
-        <Tooltip.Trigger
-          class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-          aria-label="Settings"
-          onclick={() => goto("/settings")}
-        >
-          <Settings class="size-3.5" />
-        </Tooltip.Trigger>
-        <Tooltip.Content side="top">Settings</Tooltip.Content>
-      </Tooltip.Root>
-    </div>
+    <VaultSelector />
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

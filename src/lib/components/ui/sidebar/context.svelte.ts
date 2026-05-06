@@ -30,7 +30,7 @@ class SidebarState {
 
 	constructor(props: SidebarStateProps) {
 		this.setOpen = props.setOpen;
-		this.#isMobile = new IsMobile();
+		this.#isMobile = new IsMobile(1024);
 		this.props = props;
 	}
 

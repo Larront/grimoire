@@ -86,7 +86,7 @@
 			class={cn(
 				"fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
 				side === "left"
-					? "start-0 group-data-[collapsible=offcanvas]:start-[calc(var(--sidebar-width)*-1)]"
+					? "start-[var(--rail-w,0px)] group-data-[collapsible=offcanvas]:start-[calc(var(--rail-w,0px)_-_var(--sidebar-width))]"
 					: "end-0 group-data-[collapsible=offcanvas]:end-[calc(var(--sidebar-width)*-1)]",
 				// Adjust the padding for floating and inset variants.
 				variant === "floating" || variant === "inset"

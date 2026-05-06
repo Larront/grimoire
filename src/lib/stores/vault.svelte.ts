@@ -94,6 +94,14 @@ function createVaultStore() {
     invoke("save_accent_preset", { preset }).catch(console.error);
   }
 
+  async function getRecentVaults(): Promise<RecentVault[]> {
+    try {
+      return (await invoke<RecentVault[]>("get_recent_vaults")) ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   async function closeVault(): Promise<void> {
     try {
       await invoke("close_vault");
@@ -146,6 +154,7 @@ function createVaultStore() {
     openVault,
     closeVault,
     checkExistingVault,
+    getRecentVaults,
     setAccent,
     setDensity,
   };
