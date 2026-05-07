@@ -1,4 +1,5 @@
 import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
+import { overlay } from "$lib/stores/overlay.svelte.js";
 import { getContext, setContext } from "svelte";
 import { SIDEBAR_KEYBOARD_SHORTCUT } from "./constants.js";
 
@@ -23,7 +24,9 @@ export type SidebarStateProps = {
 class SidebarState {
 	readonly props: SidebarStateProps;
 	open = $derived.by(() => this.props.open());
-	openMobile = $state(false);
+	// openMobile is false when another overlay panel is active (mutual exclusion)
+	#openMobileInternal = $state(false);
+	openMobile = $derived.by(() => this.#openMobileInternal && overlay.active === 'sidebar');
 	setOpen: SidebarStateProps["setOpen"];
 	#isMobile: IsMobile;
 	state = $derived.by(() => (this.open ? "expanded" : "collapsed"));
@@ -49,12 +52,14 @@ class SidebarState {
 	};
 
 	setOpenMobile = (value: boolean) => {
-		this.openMobile = value;
+		this.#openMobileInternal = value;
+		if (value) overlay.request('sidebar');
+		else overlay.release('sidebar');
 	};
 
 	toggle = () => {
 		return this.#isMobile.current
-			? (this.openMobile = !this.openMobile)
+			? this.setOpenMobile(!this.#openMobileInternal)
 			: this.setOpen(!this.open);
 	};
 }
