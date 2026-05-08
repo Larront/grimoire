@@ -3,10 +3,11 @@
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
 
-  let { onFilesClick, onScenesClick, onSearchClick }: {
+  let { onFilesClick, onScenesClick, onSearchClick, onSettingsClick }: {
     onFilesClick?: () => void;
     onScenesClick?: () => void;
     onSearchClick?: () => void;
+    onSettingsClick?: () => void;
   } = $props();
 
   const sidebar = useSidebar();
@@ -90,6 +91,7 @@
       type="button"
       aria-label="Settings"
       class={cn(btnBase, "text-sidebar-foreground/40 hover:text-sidebar-foreground/60")}
+      onclick={onSettingsClick}
     >
       <Settings class="size-4" strokeWidth={1.5} />
     </button>

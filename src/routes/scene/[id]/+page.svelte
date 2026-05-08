@@ -756,12 +756,9 @@
                 Connect Spotify
               {/if}
             </Button>
-            <a
-              href="/settings"
-              class="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              or go to Settings &rarr; Integrations
-            </a>
+            <span class="text-[10px] text-foreground-muted">
+              Open Settings from the icon rail to manage integrations.
+            </span>
           </div>
         {:else}
           <div>

@@ -2,6 +2,7 @@
   import IconRail from "./sidebar/IconRail.svelte";
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import RightRail from "./RightRail.svelte";
+  import SettingsDialog from "./SettingsDialog.svelte";
   import * as Sidebar from "./ui/sidebar";
   import { Separator } from "./ui/separator";
   import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
@@ -12,6 +13,7 @@
 
   const rail = new RightRailState();
   let filesSectionEl = $state<HTMLElement | null>(null);
+  let settingsOpen = $state(false);
 
   function handleFilesClick() {
     // Scroll the files section into view after the sidebar open animation settles
@@ -28,7 +30,8 @@
 -->
 <div class="relative" style="--rail-w: 3rem">
   <Sidebar.Provider>
-    <IconRail onFilesClick={handleFilesClick} />
+    <IconRail onFilesClick={handleFilesClick} onSettingsClick={() => settingsOpen = true} />
+    <SettingsDialog bind:open={settingsOpen} />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar bind:filesSectionEl />
       <main class="flex min-w-0 flex-1 flex-col">

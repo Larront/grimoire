@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ModeWatcher, mode } from 'mode-watcher';
   import { vault, type AccentPreset } from '$lib/stores/vault.svelte';
+  import { appPrefs } from '$lib/stores/app-prefs.svelte';
 
   const ALL_ACCENT_CLASSES: AccentPreset[] = [
     'accent-crimson',
@@ -85,6 +86,15 @@
   // Density watcher
   $effect(() => {
     document.documentElement.dataset.density = vault.density;
+  });
+
+  // Reduce motion watcher
+  $effect(() => {
+    if (appPrefs.reduceMotion) {
+      document.documentElement.dataset.reduceMotion = 'true';
+    } else {
+      delete document.documentElement.dataset.reduceMotion;
+    }
   });
 </script>
 
