@@ -49,6 +49,7 @@
 			)}
 			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
 			{side}
+			onOpenAutoFocus={(e) => e.preventDefault()}
 		>
 			<Sheet.Header class="sr-only">
 				<Sheet.Title>Sidebar</Sheet.Title>

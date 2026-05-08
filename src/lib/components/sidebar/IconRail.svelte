@@ -12,24 +12,6 @@
 
   const sidebar = useSidebar();
 
-  function ensureOpen() {
-    if (sidebar.isMobile) {
-      if (!sidebar.openMobile) sidebar.setOpenMobile(true);
-    } else {
-      if (!sidebar.open) sidebar.setOpen(true);
-    }
-  }
-
-  function handleFilesClick() {
-    ensureOpen();
-    onFilesClick?.();
-  }
-
-  function handleScenesClick() {
-    ensureOpen();
-    onScenesClick?.();
-  }
-
   const btnBase =
     "flex size-[var(--row-h)] items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 </script>
@@ -45,7 +27,7 @@
       type="button"
       aria-label="Grimoire — expand sidebar"
       class={cn(btnBase, "mb-1")}
-      onclick={ensureOpen}
+      onclick={sidebar.toggle}
     >
       <span class="font-heading text-base font-semibold text-primary select-none">G</span>
     </button>
@@ -65,7 +47,7 @@
       type="button"
       aria-label="Files"
       class={btnBase}
-      onclick={handleFilesClick}
+      onclick={onFilesClick}
     >
       <Files class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>
@@ -75,7 +57,7 @@
       type="button"
       aria-label="Scenes"
       class={btnBase}
-      onclick={handleScenesClick}
+      onclick={onScenesClick}
     >
       <Music2 class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>

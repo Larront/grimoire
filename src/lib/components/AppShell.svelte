@@ -5,21 +5,23 @@
   import SettingsDialog from "./SettingsDialog.svelte";
   import * as Sidebar from "./ui/sidebar";
   import { Separator } from "./ui/separator";
+  import { goto } from "$app/navigation";
   import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
   import { RightRailState } from "$lib/stores/right-rail.svelte";
+  import { tabState } from "$lib/stores/tab-state.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
 
   const { children } = $props();
 
   const rail = new RightRailState();
-  let filesSectionEl = $state<HTMLElement | null>(null);
   let settingsOpen = $state(false);
 
   function handleFilesClick() {
-    // Scroll the files section into view after the sidebar open animation settles
-    setTimeout(() => {
-      filesSectionEl?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 200);
+    if (tabState.lastNoteId !== null) goto(`/note/${tabState.lastNoteId}`);
+  }
+
+  function handleScenesClick() {
+    goto("/scene");
   }
 </script>
 
@@ -30,10 +32,10 @@
 -->
 <div class="relative" style="--rail-w: 3rem">
   <Sidebar.Provider>
-    <IconRail onFilesClick={handleFilesClick} onSettingsClick={() => settingsOpen = true} />
+    <IconRail onFilesClick={handleFilesClick} onScenesClick={handleScenesClick} onSettingsClick={() => settingsOpen = true} />
     <SettingsDialog bind:open={settingsOpen} />
     <div class="ml-12 flex min-h-svh flex-1">
-      <AppSidebar bind:filesSectionEl />
+      <AppSidebar />
       <main class="flex min-w-0 flex-1 flex-col">
         <Sidebar.Inset>
           <header

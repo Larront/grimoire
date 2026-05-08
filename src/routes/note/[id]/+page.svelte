@@ -7,6 +7,7 @@
   import { LoaderCircle } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
+  import { tabState } from "$lib/stores/tab-state.svelte";
   import Editor from "$lib/components/editor/Editor.svelte";
 
   let note = $derived(
@@ -17,6 +18,10 @@
   let body = $state<string | null>(null);
   let lastMarkdown = $state<string | null>(null);
   let lastFetchedId = $state<number | null>(null);
+
+  $effect(() => {
+    if (note) tabState.lastNoteId = note.id;
+  });
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {

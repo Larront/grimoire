@@ -28,11 +28,8 @@
 
   let {
     ref = $bindable(null),
-    filesSectionEl = $bindable<HTMLElement | null>(null),
     ...restProps
-  }: ComponentProps<typeof Sidebar.Root> & {
-    filesSectionEl?: HTMLElement | null;
-  } = $props();
+  }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
   let treeLoading = $state(false);
@@ -195,7 +192,7 @@
     </Sidebar.Group>
 
     <!-- Files section -->
-    <div bind:this={filesSectionEl} id="sidebar-files-section">
+    <div id="sidebar-files-section">
       <Collapsible.Root open class="group/collapsible">
         <Sidebar.Group>
           <Sidebar.GroupLabel>
