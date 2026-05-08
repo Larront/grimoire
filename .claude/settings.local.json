@@ -17,7 +17,8 @@
       "Bash(bun add:*)",
       "Bash(head -50 src/routes/map/[id]/+page.svelte)",
       "Bash(gh issue *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Skill(impeccable)"
     ]
   }
 }

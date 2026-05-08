@@ -1,19 +1,28 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
   import { vault, type RecentVault } from "$lib/stores/vault.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { goto } from "$app/navigation";
+  import type { Note } from "$lib/types/vault";
   import { Folder, Plus, LoaderCircle } from "@lucide/svelte";
 
   let recentVaults = $state<RecentVault[]>([]);
   let isLoadingRecents = $state(true);
   let openingPath = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
+  let isCreatingNote = $state(false);
+
+  // Create vault form
+  let mode = $state<"idle" | "creating">("idle");
+  let newVaultName = $state("");
+  let newVaultParent = $state<string | null>(null);
+  let nameError = $state<string | null>(null);
+  let isPickingLocation = $state(false);
 
   const vaultName = $derived(vault.path?.split(/[\\/]/).pop() ?? "My Vault");
 
-  // Load recent vaults on mount
   $effect(() => {
     if (!vault.isOpen) {
       invoke<RecentVault[]>("get_recent_vaults")
@@ -39,7 +48,7 @@
     }
   }
 
-  async function handleOpenOther() {
+  async function handleOpenExisting() {
     openingPath = "__dialog__";
     errorMsg = null;
     try {
@@ -51,12 +60,58 @@
     }
   }
 
-  async function handleCreateNew() {
-    // Same as open — open_vault creates the directory if it doesn't exist
-    openingPath = "__dialog__";
+  function startCreate() {
+    mode = "creating";
+    newVaultName = "";
+    newVaultParent = null;
+    nameError = null;
+    errorMsg = null;
+  }
+
+  function cancelCreate() {
+    mode = "idle";
+    nameError = null;
+    errorMsg = null;
+  }
+
+  async function handleChooseLocation() {
+    isPickingLocation = true;
+    try {
+      const selected = await open({ directory: true, title: "Choose Location" });
+      if (selected && typeof selected === "string") {
+        newVaultParent = selected;
+        if (nameError === "Please choose a storage location.") nameError = null;
+      }
+    } finally {
+      isPickingLocation = false;
+    }
+  }
+
+  async function handleCreateVault() {
+    nameError = null;
+    const name = newVaultName.trim();
+
+    if (!name) {
+      nameError = "Please enter a vault name.";
+      return;
+    }
+    if (/[/\\:*?"<>|]/.test(name)) {
+      nameError = 'Name contains invalid characters ( / \\ : * ? " < > | ).';
+      return;
+    }
+    if (name === "." || name === "..") {
+      nameError = "Invalid vault name.";
+      return;
+    }
+    if (!newVaultParent) {
+      nameError = "Please choose a storage location.";
+      return;
+    }
+
+    openingPath = "__creating__";
     errorMsg = null;
     try {
-      await vault.openVault();
+      await vault.openVault(`${newVaultParent}/${name}`);
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -79,6 +134,24 @@
     return `${months}mo ago`;
   }
 
+  async function handleCreateFirstNote() {
+    isCreatingNote = true;
+    errorMsg = null;
+    try {
+      const newNote = await invoke<Note>("create_note", {
+        noteTitle: "Untitled",
+        notePath: "Untitled.md",
+        noteParentPath: null,
+      });
+      await notes.load();
+      goto(`/note/${newNote.id}?new=1`);
+    } catch (e) {
+      errorMsg = String(e);
+    } finally {
+      isCreatingNote = false;
+    }
+  }
+
   function formatVaultStats(v: RecentVault): string {
     const parts: string[] = [];
     if (v.note_count > 0)
@@ -90,57 +163,40 @@
     return parts.join(" · ") || "Empty vault";
   }
 
-  const VAULT_PROMPTS = [
-    "Every map begins as a blank page. Every legend begins with a first line.",
-    "The world doesn't build itself. Your notes do.",
-    "Great stories start somewhere. This one starts here.",
-    "Even dragons have origins. Where does yours begin?",
-    "Kingdoms rise from a single idea. What's yours?",
-    "History is written by those who show up. Start your world.",
-  ];
-
-  const vaultPrompt =
-    VAULT_PROMPTS[Math.floor(Math.random() * VAULT_PROMPTS.length)];
 </script>
 
 {#if vault.isOpen}
-  <!-- ── Vault home ─────────────────────────────────────────────── -->
-  <div class="h-full overflow-y-auto">
-    <div
-      class="flex flex-col gap-12 w-full max-w-lg py-16 px-10 mx-auto reveal"
-    >
-      <div class="flex flex-col gap-1.5">
-        <h1
-          class="font-display text-[2.25rem] font-semibold tracking-[-0.01em]
-                 text-foreground leading-tight"
-        >
-          {vaultName}
-        </h1>
-        <p class="font-sans text-sm text-foreground-muted">
-          Your worldbuilding vault
-        </p>
-      </div>
+  <!-- ── Vault home (new vault) ────────────────────────────────── -->
+  <div class="flex flex-col items-center justify-center h-full">
+    <div class="flex flex-col items-center gap-8 w-full max-w-[480px] px-10 splash-fade">
+      <h1 class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight">
+        {vaultName}
+      </h1>
 
-      {#if notes.isLoading}
-        <div class="flex flex-col gap-3" aria-label="Loading notes">
-          <Skeleton class="h-4 w-1/3" />
-          <Skeleton class="h-4 w-3/5" />
-          <Skeleton class="h-4 w-2/5" />
-          <Skeleton class="h-4 w-1/2" />
-        </div>
-      {:else}
-        <div class="flex flex-col gap-4">
-          <span
-            class="font-sans text-[10px] uppercase tracking-widest text-foreground-faint"
-          >
-            Continue writing
-          </span>
-          <p
-            class="font-display text-base italic text-foreground-muted leading-relaxed"
-          >
-            {vaultPrompt}
+      {#if !notes.isLoading}
+        <div class="flex flex-col items-center gap-6">
+          <p class="font-sans text-sm italic text-foreground-muted text-center">
+            Every world begins with its first note.
           </p>
+          <Button
+            onclick={handleCreateFirstNote}
+            disabled={isCreatingNote}
+            class="gap-2"
+          >
+            {#if isCreatingNote}
+              <LoaderCircle class="w-3.5 h-3.5 animate-spin" />
+              Creating...
+            {:else}
+              New note
+            {/if}
+          </Button>
         </div>
+      {/if}
+
+      {#if errorMsg}
+        <p class="font-sans text-xs text-destructive text-center" role="alert">
+          {errorMsg}
+        </p>
       {/if}
     </div>
   </div>
@@ -168,7 +224,101 @@
     </div>
 
     {#if isLoadingRecents}
-      <!-- Minimal loading — title is visible, content loads beneath -->
+      <!-- Minimal loading — title visible, content loads beneath -->
+    {:else if mode === "creating"}
+      <!-- ── Create new vault form ───────────────────────────────── -->
+      <div
+        class="flex flex-col gap-3 mt-9 w-[280px] relative z-10 splash-fade-delay-1"
+      >
+        <span
+          class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint"
+        >
+          New Vault
+        </span>
+
+        <!-- Vault name -->
+        <div class="flex flex-col gap-1.5">
+          <label for="vault-name" class="font-sans text-[11px] text-muted-foreground">
+            Name
+          </label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="vault-name"
+            type="text"
+            placeholder="My Campaign"
+            bind:value={newVaultName}
+            autofocus
+            disabled={openingPath !== null}
+            onkeydown={(e) => {
+              if (e.key === "Enter") handleCreateVault();
+              if (e.key === "Escape") cancelCreate();
+            }}
+            class="h-9 px-3 rounded-[6px] bg-[var(--hover-overlay)] border border-border
+                   text-[13px] text-foreground placeholder:text-foreground-faint
+                   focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
+                   focus-visible:ring-offset-1 focus-visible:ring-offset-background
+                   disabled:opacity-50 w-full"
+          />
+        </div>
+
+        <!-- Storage location -->
+        <div class="flex flex-col gap-1.5">
+          <span class="font-sans text-[11px] text-muted-foreground">Location</span>
+          <button
+            type="button"
+            onclick={handleChooseLocation}
+            disabled={openingPath !== null || isPickingLocation}
+            class="h-9 px-3 rounded-[6px] bg-[var(--hover-overlay)] border border-border
+                   flex items-center gap-2 text-left w-full min-w-0
+                   hover:bg-[var(--background-elevated)] transition-colors duration-150
+                   disabled:opacity-50 cursor-default"
+          >
+            <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
+            {#if newVaultParent}
+              <span class="font-sans text-[12px] text-foreground truncate min-w-0">
+                {newVaultParent}
+              </span>
+            {:else}
+              <span class="font-sans text-[12px] text-foreground/30 italic">
+                Choose location...
+              </span>
+            {/if}
+          </button>
+        </div>
+
+        <!-- Inline validation error -->
+        {#if nameError}
+          <p class="font-sans text-[11px] text-destructive leading-snug" role="alert">
+            {nameError}
+          </p>
+        {/if}
+
+        <!-- Actions -->
+        <div class="flex gap-2 mt-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={cancelCreate}
+            disabled={openingPath !== null}
+            class="flex-1 text-[11px] text-muted-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onclick={handleCreateVault}
+            disabled={openingPath !== null || !newVaultName.trim() || !newVaultParent}
+            class="flex-1 text-[11px]"
+          >
+            {#if openingPath === "__creating__"}
+              <LoaderCircle class="w-3 h-3 animate-spin mr-1.5" />
+              Creating...
+            {:else}
+              Create Vault
+            {/if}
+          </Button>
+        </div>
+      </div>
     {:else if recentVaults.length === 0}
       <!-- ── First-time user ──────────────────────────────────── -->
       <p
@@ -182,17 +332,13 @@
         class="flex flex-col gap-2.5 mt-8 w-[280px] relative z-10 splash-fade-delay-2"
       >
         <Button
-          onclick={handleCreateNew}
+          onclick={startCreate}
           class="justify-start gap-2.5 h-auto py-3 px-4"
           disabled={openingPath !== null}
         >
-          {#if openingPath === "__dialog__"}
-            <LoaderCircle class="w-4 h-4 animate-spin" />
-          {:else}
-            <Plus class="w-4 h-4" />
-          {/if}
+          <Plus class="w-4 h-4 shrink-0" />
           <div class="text-left">
-            <div class="text-sm font-bold">Create New Vault</div>
+            <div class="text-sm font-semibold">Create New Vault</div>
             <div class="text-[10px] opacity-70 font-normal">
               Start fresh with an empty vault
             </div>
@@ -201,24 +347,28 @@
 
         <Button
           variant="secondary"
-          onclick={handleOpenOther}
+          onclick={handleOpenExisting}
           class="justify-start gap-2.5 h-auto py-3 px-4"
           disabled={openingPath !== null}
         >
-          <Folder class="w-4 h-4" />
+          {#if openingPath === "__dialog__"}
+            <LoaderCircle class="w-4 h-4 animate-spin shrink-0" />
+          {:else}
+            <Folder class="w-4 h-4 shrink-0" />
+          {/if}
           <div class="text-left">
-            <div class="text-sm font-semibold">Open Existing Folder</div>
+            <div class="text-sm font-semibold">Open Existing Vault</div>
             <div class="text-[10px] opacity-70 font-normal">
-              Choose a folder with your notes and files
+              Browse for an existing vault
             </div>
           </div>
         </Button>
       </div>
     {:else}
       <!-- ── Returning user ───────────────────────────────────── -->
-      <div class="w-[320px] mt-8 relative z-10 splash-fade-delay-1">
+      <div class="w-[280px] mt-8 relative z-10 splash-fade-delay-1">
         <span
-          class="font-sans text-[9px] uppercase tracking-[2px] text-muted-foreground mb-2.5 block"
+          class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint mb-2.5 block"
         >
           Recent Vaults
         </span>
@@ -226,9 +376,9 @@
         <div class="flex flex-col">
           {#each recentVaults as v (v.path)}
             <button
-              class="flex items-center justify-between py-2.5 px-3 rounded-md
-                     border-b border-border/30 text-left
-                     hover:bg-muted/50 transition-colors duration-150
+              class="flex items-center justify-between py-2.5 px-3 rounded-sm
+                     border-b border-border text-left
+                     hover:bg-[var(--hover-overlay)] transition-colors duration-150
                      disabled:opacity-50"
               disabled={openingPath !== null}
               onclick={() => handleOpenRecent(v.path)}
@@ -236,29 +386,21 @@
               <div class="min-w-0 flex-1">
                 {#if openingPath === v.path}
                   <div class="flex items-center gap-2">
-                    <LoaderCircle
-                      class="w-3.5 h-3.5 animate-spin text-primary"
-                    />
-                    <span
-                      class="font-sans text-[13px] font-semibold text-foreground"
-                    >
+                    <LoaderCircle class="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                    <span class="font-heading text-[15px] font-normal text-foreground truncate">
                       {v.name}
                     </span>
                   </div>
                 {:else}
-                  <div
-                    class="font-sans text-[13px] font-semibold text-foreground truncate"
-                  >
+                  <div class="font-heading text-[15px] font-normal text-foreground truncate">
                     {v.name}
                   </div>
                 {/if}
-                <div class="font-sans text-[10px] text-muted-foreground mt-0.5">
+                <div class="font-mono text-[10px] text-foreground-muted mt-0.5">
                   {formatVaultStats(v)}
                 </div>
               </div>
-              <div
-                class="font-sans text-[10px] text-muted-foreground/60 ml-3 shrink-0"
-              >
+              <div class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0">
                 {formatRelativeTime(v.last_opened)}
               </div>
             </button>
@@ -271,16 +413,19 @@
         <Button
           variant="outline"
           size="sm"
-          onclick={handleOpenOther}
+          onclick={handleOpenExisting}
           class="text-[11px] text-primary"
           disabled={openingPath !== null}
         >
-          Open Other Vault
+          {#if openingPath === "__dialog__"}
+            <LoaderCircle class="w-3 h-3 animate-spin mr-1.5" />
+          {/if}
+          Open Existing Vault
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          onclick={handleCreateNew}
+          onclick={startCreate}
           class="text-[11px] text-muted-foreground"
           disabled={openingPath !== null}
         >
@@ -289,10 +434,11 @@
       </div>
     {/if}
 
-    <!-- Error message -->
+    <!-- Operation-level error -->
     {#if errorMsg}
       <p
         class="font-sans text-xs text-destructive mt-4 text-center max-w-[300px] relative z-10"
+        role="alert"
       >
         {errorMsg}
       </p>
