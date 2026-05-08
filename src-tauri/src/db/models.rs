@@ -246,6 +246,7 @@ pub struct UpdateSceneSlot {
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = spotify_auth)]
 pub struct SpotifyAuth {
+    pub id: i32,
     pub access_token: String,
     pub refresh_token: String,
     pub expires_at: String,
