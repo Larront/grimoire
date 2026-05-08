@@ -29,7 +29,9 @@ use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_aut
 
 // ── MapAnnotation ─────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable)]
+#[derive(
+    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+)]
 #[diesel(table_name = map_annotations, treat_none_as_null = true)]
 pub struct MapAnnotation {
     pub id: i32,
@@ -69,7 +71,9 @@ pub struct NewMapAnnotation<'a> {
 
 // ── Map ──────────────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable)]
+#[derive(
+    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+)]
 #[diesel(table_name = maps)]
 pub struct Map {
     pub id: i32,
@@ -101,7 +105,9 @@ pub struct AssignImageChangeset<'a> {
 
 // ── PinCategory ───────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable)]
+#[derive(
+    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+)]
 #[diesel(table_name = pin_categories)]
 pub struct PinCategory {
     pub id: i32,
@@ -123,7 +129,9 @@ pub struct NewPinCategory<'a> {
 
 // ── Pin ───────────────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable)]
+#[derive(
+    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+)]
 #[diesel(table_name = pins, treat_none_as_null = true)]
 pub struct Pin {
     pub id: i32,
@@ -238,7 +246,6 @@ pub struct UpdateSceneSlot {
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = spotify_auth)]
 pub struct SpotifyAuth {
-    pub id: i32,
     pub access_token: String,
     pub refresh_token: String,
     pub expires_at: String,
