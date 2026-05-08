@@ -11,9 +11,6 @@ class OverlayState {
 		if (this.active === panel) this.active = null;
 	}
 
-	isActive(panel: OverlayPanel) {
-		return this.active === panel;
-	}
 }
 
 export const overlay = new OverlayState();
