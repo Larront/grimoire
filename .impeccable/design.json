@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-09T00:00:00.000Z",
+  "title": "Design System: Grimoire",
+  "extensions": {
+    "colorMeta": {
+      "iron-dark": {
+        "role": "neutral",
+        "displayName": "Iron Dark",
+        "canonical": "oklch(14.3% 0.003 20)",
+        "tonalRamp": ["#1c1b1a", "#272524", "#363332", "#4d4a49", "#6a6764", "#8d8a87", "#b5b0ac", "#d7d2ce"]
+      },
+      "iron-deep": {
+        "role": "neutral",
+        "displayName": "Iron Deep",
+        "canonical": "oklch(11.1% 0.002 20)",
+        "tonalRamp": ["#141312", "#1a1918", "#222020", "#2e2c2b", "#423f3e", "#5d5a58", "#7e7b78", "#a5a19e"]
+      },
+      "iron-raised": {
+        "role": "neutral",
+        "displayName": "Iron Raised",
+        "canonical": "oklch(18.5% 0.003 20)",
+        "tonalRamp": ["#1c1b1a", "#272524", "#313030", "#3e3c3b", "#555251", "#706d6b", "#958f8d", "#c0bab7"]
+      },
+      "ember-ash": {
+        "role": "neutral",
+        "displayName": "Ember Ash",
+        "canonical": "oklch(93.8% 0.009 68)",
+        "tonalRamp": ["#1d1b18", "#2c2a26", "#3f3c38", "#585450", "#756f6c", "#989390", "#c1bcb8", "#f0ece8"]
+      },
+      "ember-ash-muted": {
+        "role": "neutral",
+        "displayName": "Ember Muted",
+        "canonical": "oklch(66.2% 0.008 54)",
+        "tonalRamp": ["#1a1817", "#29272580", "#3a3836", "#524f4e", "#6e6b69", "#8f8c8a", "#b3aeab", "#d9d4d0"]
+      },
+      "ember-ash-faint": {
+        "role": "neutral",
+        "displayName": "Ember Faint",
+        "canonical": "oklch(43.1% 0.007 38)",
+        "tonalRamp": ["#171514", "#222020", "#2f2d2c", "#403d3c", "#545251", "#6b6460", "#8b8582", "#b0a9a5"]
+      },
+      "crimson": {
+        "role": "primary",
+        "displayName": "Crimson",
+        "canonical": "oklch(50.4% 0.168 25)",
+        "tonalRamp": ["#200604", "#390e0b", "#541513", "#76201d", "#a83028", "#c2483d", "#d97b73", "#edada8"]
+      },
+      "crimson-lit": {
+        "role": "primary",
+        "displayName": "Crimson Text",
+        "canonical": "oklch(95.9% 0.009 69)",
+        "tonalRamp": ["#2b1c1b", "#3e2726", "#563433", "#724645", "#9a6462", "#c09290", "#dcbab8", "#f9f1f0"]
+      },
+      "ember-error": {
+        "role": "semantic",
+        "displayName": "Ember Error",
+        "canonical": "oklch(57.3% 0.139 24)",
+        "tonalRamp": ["#200806", "#390f0c", "#561713", "#78221f", "#a0342f", "#d4645a", "#e39590", "#f3c4c1"]
+      },
+      "verdant-confirm": {
+        "role": "semantic",
+        "displayName": "Verdant Confirm",
+        "canonical": "oklch(66.4% 0.078 155)",
+        "tonalRamp": ["#0a1f14", "#122e1e", "#1c4029", "#2a5837", "#3d7150", "#6ab187", "#96caa8", "#c3e0cc"]
+      },
+      "parchment": {
+        "role": "neutral",
+        "displayName": "Parchment",
+        "canonical": "oklch(97.4% 0.006 83)",
+        "tonalRamp": ["#1e1c19", "#2d2b27", "#403d38", "#585450", "#75716c", "#989490", "#c0bbb6", "#faf8f5"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "World Display",
+        "purpose": "GM-authored content only: note titles, map names, scene names, sidebar wordmark. Never on app-constructed chrome. Weight 400 always — do not bold Metamorphous."
+      },
+      "headline": {
+        "displayName": "App Headline",
+        "purpose": "Major app-constructed headings: modal titles, right rail header, major content section headers."
+      },
+      "title": {
+        "displayName": "UI Title",
+        "purpose": "Tab labels, command palette section groups, popover headings. Also used at 10.5px / uppercase / 0.1em letter-spacing for sidebar section headers."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Editor prose, sidebar note rows, settings descriptions. Cap line length at 65–75ch in long-form reading contexts."
+      },
+      "label": {
+        "displayName": "UI Label",
+        "purpose": "Buttons, input text, tooltips, command palette result items, interactive element text."
+      },
+      "meta": {
+        "displayName": "Metadata",
+        "purpose": "Tags (pill labels), right rail metadata (type, folder, date), inline code, sidebar section header caps. JetBrains Mono only."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "swift",
+        "value": "150ms ease-out",
+        "purpose": "Standard state transitions: hover background, color changes, focus rings, icon state changes."
+      },
+      {
+        "name": "instant",
+        "value": "100ms ease-out",
+        "purpose": "Fastest interactions: command palette result hover, minimal-latency feedback."
+      },
+      {
+        "name": "entrance",
+        "value": "300ms ease-out",
+        "purpose": "Arrival moments: splash screen fade-in, panel open. Single-instance entrances only — not repeating UI interactions."
+      }
+    ],
+    "breakpoints": [
+      { "name": "tablet-portrait", "value": "600px", "notes": "Minimum supported viewport. All features accessible, denser layout, sidebar starts closed." },
+      { "name": "tablet-landscape", "value": "768px", "notes": "Full feature parity. Sidebar and right rail are overlays, mutually exclusive." },
+      { "name": "laptop", "value": "1024px", "notes": "Sidebar and right rail dock. Pointer input primary." },
+      { "name": "desktop", "value": "1280px", "notes": "Full layout. Sidebar docked open by default." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main CTA. Creates notes, scenes, maps. Height tracks density via --row-h; 36px shown (balanced).",
+      "html": "<button class=\"ds-btn-primary\">Create Note</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; background-color: #c2483d; color: #f9f1f0; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 500; line-height: 1; border: none; border-radius: 6px; cursor: pointer; transition: background-color 150ms ease-out; } .ds-btn-primary:hover { background-color: #a83228; } .ds-btn-primary:focus-visible { outline: 2px solid #c2483d; outline-offset: 2px; } .ds-btn-primary:active { background-color: #8c2420; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions: cancel, toolbar controls, contextual operations. Transparent at rest.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 12px; background-color: transparent; color: #a39e99; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 500; line-height: 1; border: none; border-radius: 6px; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-btn-ghost:hover { background-color: rgba(255,255,255,0.04); color: #f0ece8; } .ds-btn-ghost:focus-visible { outline: 2px solid #c2483d; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Standard text field. Iron Border stroke, focus ring tracks primary accent.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search your world...\" />",
+      "css": ".ds-input { display: block; width: 100%; height: 36px; padding: 0 12px; background-color: rgba(255,255,255,0.04); color: #f0ece8; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; outline: none; transition: border-color 150ms ease-out; box-sizing: border-box; } .ds-input::placeholder { color: #6b6460; } .ds-input:focus-visible { outline: 2px solid #c2483d; outline-offset: 2px; } .ds-input:disabled { opacity: 0.35; cursor: default; }"
+    },
+    {
+      "name": "Tag Chip",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Inline content labels. JetBrains Mono, pill radius. No color coding — text differentiates.",
+      "html": "<span class=\"ds-tag\">dungeon</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; background-color: #262626; color: #a39e99; font-family: \"JetBrains Mono\", monospace; font-size: 10.5px; font-weight: 400; letter-spacing: 0.03em; border: 1px solid rgba(255,255,255,0.08); border-radius: 100px; cursor: default; }"
+    },
+    {
+      "name": "Sidebar Row",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "File tree / navigation row. Active state: Crimson Tint background, Crimson icon.",
+      "html": "<div class=\"ds-sidebar-row ds-sidebar-row--active\"><svg class=\"ds-sidebar-row__icon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/></svg><span class=\"ds-sidebar-row__label\">The Sunken Keep</span></div>",
+      "css": ".ds-sidebar-row { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; background-color: transparent; color: #a39e99; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; border-radius: 6px; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; user-select: none; } .ds-sidebar-row:hover { background-color: rgba(255,255,255,0.04); color: #f0ece8; } .ds-sidebar-row--active { background-color: rgba(194,72,61,0.12); color: #f0ece8; } .ds-sidebar-row--active .ds-sidebar-row__icon { color: #c2483d; } .ds-sidebar-row__icon { flex-shrink: 0; width: 16px; height: 16px; color: inherit; } .ds-sidebar-row__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+    },
+    {
+      "name": "Command Palette Result",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Search result row inside the command palette. World content names render in Metamorphous.",
+      "html": "<div class=\"ds-cmd-result\"><svg class=\"ds-cmd-result__icon\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/></svg><span class=\"ds-cmd-result__name\">The Sunken Keep</span><span class=\"ds-cmd-result__meta\">Notes</span></div>",
+      "css": ".ds-cmd-result { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background-color: transparent; border-radius: 6px; cursor: pointer; transition: background-color 100ms ease-out; } .ds-cmd-result:hover { background-color: rgba(194,72,61,0.12); } .ds-cmd-result__icon { flex-shrink: 0; color: #a39e99; } .ds-cmd-result__name { flex: 1; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; color: #f0ece8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-cmd-result__meta { font-family: \"JetBrains Mono\", monospace; font-size: 10.5px; font-weight: 400; color: #6b6460; text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; }"
+    },
+    {
+      "name": "Note Title",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "World content heading in Metamorphous. The Two Voices Rule in one element — GM-authored names only.",
+      "html": "<h1 class=\"ds-note-title\">The Sunken Keep</h1>",
+      "css": ".ds-note-title { font-family: \"Metamorphous\", Georgia, serif; font-size: 30px; font-weight: 400; line-height: 1.25; color: #f0ece8; margin: 0; letter-spacing: normal; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Cartographer's Study",
+    "overview": "Measured, purposeful, quietly beautiful. Maps and notes share a surface. Utility and mystery inhabit the same room. Like a scholar's workroom lit from outside the frame: the tools are excellent and unpretentious, the work laid out on top of them carries all the magic.\n\nGrimoire operates across two registers simultaneously. The application shell is a precision instrument — iron surfaces, sparse chrome, functional Nunito type, restrained 150ms transitions. Then the GM names something: a note, a scene, a map. That name appears in Metamorphous and the world materialises. Chrome stays invisible. World content carries voice.\n\nThis system refuses theatricality. No leather textures, chrome bevels, glowing rune borders, ambient fog overlays, or parchment backgrounds. The fantasy is already in the content; the interface needs only to get out of the way.",
+    "keyCharacteristics": [
+      "Dark-first. Iron surfaces are the default posture; light mode (Parchment) is a deliberate alt.",
+      "Two-voice typography. Nunito for the tool; Metamorphous for the world. Boundary is content ownership.",
+      "Single user-switchable accent. Five named presets (Crimson, Arcane, Verdant, Ice, Amber). No secondary palette.",
+      "Flat tonal layering. Depth via surface values only; no shadows on structural chrome.",
+      "Restrained component geometry. 6px structural / 8px elevated / 100px pill.",
+      "Motion is purposeful. 150ms ease-out for state changes; nothing bounces."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "One accent family, one user-controlled preset. No secondary palette. The primary is present on every screen but dominant on none.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Decorative Color Rule",
+        "body": "Color never categorizes file types, tag categories, or organizes information visually. Only five semantic families exist. Differentiate with shape, icon, or text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Sub-AA Exception",
+        "body": "Ember Faint (42% opacity) is intentionally below AA contrast. Reserved strictly for non-essential decorative labels, section headers, and placeholders. Prohibited for body text, interactive elements, or any content that conveys meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "If the app constructed it, Nunito. If the GM named it, Metamorphous. This boundary holds even for the same piece of text in different contexts.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fixed Scale Rule",
+        "body": "Type sizes do not change across density settings. Only spacing and component height change. Dense mode is not smaller text — it is less vertical space.",
+        "section": "typography"
+      },
+      {
+        "name": "The Shadowless Rule",
+        "body": "No box-shadow or drop-shadow on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use Metamorphous exclusively for GM-authored content: note titles, map names, scene names, splash wordmark.",
+      "Do use tonal surface steps (Iron Deep / Iron Dark / Iron Raised) to convey depth.",
+      "Do pair every error and success state with a status icon (circle-x / circle-check).",
+      "Do use Crimson sparingly — active states, primary buttons, links, focus rings.",
+      "Do keep component height tied to --row-h for automatic density support.",
+      "Do give every icon-only button an aria-label.",
+      "Do return focus to the triggering element when overlays and dialogs close.",
+      "Do make empty states purposeful: a Metamorphous headline, one Nunito orienting line, one CTA.",
+      "Do use prefers-reduced-motion to snap all transitions to instant."
+    ],
+    "donts": [
+      "Don't use leather textures, chrome bevels, glowing rune borders, or Diablo-style ornamentation.",
+      "Don't use parchment backgrounds, ambient fog overlays, or calligraphy fonts as structural UI elements.",
+      "Don't apply box-shadow or drop-shadow to interface chrome. The Shadowless Rule is absolute.",
+      "Don't introduce a second accent color. The five presets are a single --primary family.",
+      "Don't use color to categorize files, tags, or folders. Shape and text only.",
+      "Don't use Ember Faint (#6b6460) for body text or interactive labels — it is sub-AA.",
+      "Don't bold Metamorphous. Weight 400 only, always.",
+      "Don't use a modal dialog for destructive confirmation. Prefer undo toast or inline confirmation.",
+      "Don't animate CSS layout properties. Transitions use opacity, transform, and color only.",
+      "Don't make this look like Obsidian with a TTRPG skin."
+    ]
+  }
+}
