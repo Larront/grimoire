@@ -56,7 +56,6 @@
     '--primary-muted',
   ] as const;
 
-  // Accent watcher
   $effect(() => {
     const root = document.documentElement;
     const currentMode = mode.current ?? 'dark';
@@ -83,12 +82,10 @@
     }
   });
 
-  // Density watcher
   $effect(() => {
     document.documentElement.dataset.density = vault.density;
   });
 
-  // Reduce motion watcher
   $effect(() => {
     if (appPrefs.reduceMotion) {
       document.documentElement.dataset.reduceMotion = 'true';

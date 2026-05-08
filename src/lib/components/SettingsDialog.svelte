@@ -46,7 +46,6 @@
       await disconnectSpotify();
       authStatus = null;
     } catch {
-      // silent
     }
   }
 
@@ -64,14 +63,7 @@
     { value: 'dense',    label: 'Dense'    },
   ];
 
-  const themeSegBtn = (active: boolean) =>
-    `px-3 py-1.5 text-xs transition-colors ${
-      active
-        ? 'bg-primary text-primary-foreground font-medium'
-        : 'text-foreground-muted hover:text-foreground'
-    }`;
-
-  const densityBtn = (active: boolean) =>
+  const segmentedBtn = (active: boolean) =>
     `px-3 py-1.5 text-xs transition-colors ${
       active
         ? 'bg-primary text-primary-foreground font-medium'
@@ -102,17 +94,17 @@
           <div class="flex rounded-md border border-border overflow-hidden shrink-0">
             <button
               type="button"
-              class={themeSegBtn(userPrefersMode.current === 'dark')}
+              class={segmentedBtn(userPrefersMode.current === 'dark')}
               onclick={() => setMode('dark')}
             >Dark</button>
             <button
               type="button"
-              class={themeSegBtn(userPrefersMode.current === 'light')}
+              class={segmentedBtn(userPrefersMode.current === 'light')}
               onclick={() => setMode('light')}
             >Light</button>
             <button
               type="button"
-              class={themeSegBtn(userPrefersMode.current === 'system')}
+              class={segmentedBtn(userPrefersMode.current === 'system')}
               onclick={() => setMode('system')}
             >System</button>
           </div>
@@ -149,7 +141,7 @@
             {#each DENSITY_LEVELS as level (level.value)}
               <button
                 type="button"
-                class={densityBtn(vault.density === level.value)}
+                class={segmentedBtn(vault.density === level.value)}
                 onclick={() => vault.setDensity(level.value)}
               >{level.label}</button>
             {/each}

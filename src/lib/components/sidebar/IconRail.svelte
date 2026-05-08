@@ -20,10 +20,6 @@
     }
   }
 
-  function handleBrandClick() {
-    ensureOpen();
-  }
-
   function handleFilesClick() {
     ensureOpen();
     onFilesClick?.();
@@ -49,7 +45,7 @@
       type="button"
       aria-label="Grimoire — expand sidebar"
       class={cn(btnBase, "mb-1")}
-      onclick={handleBrandClick}
+      onclick={ensureOpen}
     >
       <span class="font-heading text-base font-semibold text-primary select-none">G</span>
     </button>

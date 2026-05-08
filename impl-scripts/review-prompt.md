@@ -56,7 +56,7 @@ If you find improvements to make:
 
 1. Make the changes directly on this branch
 2. Run `bun run test` to ensure nothing is broken
-3. Commit with a message starting with `Review: ` describing the refinements
+3. Commit with a message starting with `Review: ` describing the refinements, and close the issue in the commit
 
 If the code is already clean and well-structured, do nothing.
 
