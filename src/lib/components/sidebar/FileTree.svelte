@@ -136,7 +136,7 @@
                 <Folder class="size-4 shrink-0 text-muted-foreground" />
                 <Rename.Root
                   this="span"
-                  class="flex-1 truncate text-sm"
+                  class="flex-1 truncate text-[var(--font-body)]"
                   bind:value={
                     () =>
                       renamingPath === node.path ? renameValue : node.name,

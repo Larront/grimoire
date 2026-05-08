@@ -8,16 +8,16 @@
 
 {#snippet railContent()}
   <div class="flex h-full flex-col">
-    <div class="flex items-center gap-2 border-b border-sidebar-border px-4 py-3">
+    <div class="flex h-[var(--tab-bar-h)] shrink-0 items-center gap-2 border-b border-sidebar-border px-[var(--pad-x)]">
       {#if focusedDocument.name}
         <span
           data-testid="right-rail-doc-breadcrumb"
-          class="truncate text-xs text-muted-foreground"
+          class="truncate text-[var(--font-ui)] text-muted-foreground"
         >{focusedDocument.name}</span>
       {/if}
-      <span class="ml-auto text-sm font-medium text-foreground">Details</span>
+      <span class="ml-auto text-[var(--font-body)] font-medium text-foreground">Details</span>
     </div>
-    <div class="flex-1 overflow-y-auto p-4 text-sm text-muted-foreground">
+    <div class="flex-1 overflow-y-auto p-[var(--pad-x)] text-[var(--font-body)] text-muted-foreground">
     </div>
   </div>
 {/snippet}

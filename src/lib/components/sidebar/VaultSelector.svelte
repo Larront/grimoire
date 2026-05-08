@@ -44,7 +44,7 @@
     )}
   >
     <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
-    <span class="flex-1 truncate text-xs">{vaultName}</span>
+    <span class="flex-1 truncate text-[var(--font-ui)]">{vaultName}</span>
     <ChevronDown
       class={cn(
         "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
@@ -64,7 +64,7 @@
           role="menuitem"
           class={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "w-full justify-start gap-2 rounded-none px-3 text-sm"
+            "w-full justify-start gap-2 rounded-none px-3 text-[var(--font-body)]"
           )}
           onclick={() => switchVault(v.path)}
         >
@@ -82,7 +82,7 @@
         role="menuitem"
         class={cn(
           buttonVariants({ variant: "ghost", size: "sm" }),
-          "w-full justify-start gap-2 rounded-none px-3 text-sm"
+          "w-full justify-start gap-2 rounded-none px-3 text-[var(--font-body)]"
         )}
         onclick={openNewVault}
       >

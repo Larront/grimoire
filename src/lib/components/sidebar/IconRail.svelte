@@ -31,7 +31,7 @@
   }
 
   const btnBase =
-    "flex size-9 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+    "flex h-[var(--row-h)] w-[var(--row-h)] items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 </script>
 
 <div
@@ -57,7 +57,7 @@
       class={btnBase}
       onclick={onSearchClick}
     >
-      <Search class="size-4" strokeWidth={1.5} />
+      <Search class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>
 
     <!-- Files -->
@@ -67,7 +67,7 @@
       class={btnBase}
       onclick={handleFilesClick}
     >
-      <Files class="size-4" strokeWidth={1.5} />
+      <Files class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>
 
     <!-- Scenes -->
@@ -77,7 +77,7 @@
       class={btnBase}
       onclick={handleScenesClick}
     >
-      <Music2 class="size-4" strokeWidth={1.5} />
+      <Music2 class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>
   </div>
 
@@ -89,7 +89,7 @@
       class={cn(btnBase, "text-sidebar-foreground/40 hover:text-sidebar-foreground/60")}
       onclick={onSettingsClick}
     >
-      <Settings class="size-4" strokeWidth={1.5} />
+      <Settings class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
     </button>
   </div>
 </div>
