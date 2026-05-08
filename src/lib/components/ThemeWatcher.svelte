@@ -98,4 +98,4 @@
   });
 </script>
 
-<ModeWatcher defaultMode="dark" />
+<ModeWatcher defaultMode="dark" lightClassNames={["light"]} />
