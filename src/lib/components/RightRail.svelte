@@ -40,12 +40,15 @@
       {@render railContent()}
     </Sheet.Content>
   </Sheet.Root>
-{:else if rail.open}
+{:else}
   <aside
     data-slot="right-rail"
     data-mobile="false"
-    class="hidden w-[300px] shrink-0 border-l border-sidebar-border bg-sidebar lg:flex lg:flex-col"
+    data-state={rail.open ? 'open' : 'closed'}
+    class="hidden w-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-linear data-[state=open]:w-[300px] lg:flex lg:flex-col"
   >
-    {@render railContent()}
+    <div class="flex h-full w-[300px] flex-col border-l border-sidebar-border bg-sidebar">
+      {@render railContent()}
+    </div>
   </aside>
 {/if}
