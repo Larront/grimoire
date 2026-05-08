@@ -41,7 +41,7 @@
       {@render railContent()}
     </Sheet.Content>
   </Sheet.Root>
-{:else}
+{:else if rail.open}
   <aside
     data-slot="right-rail"
     data-mobile="false"

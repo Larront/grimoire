@@ -51,6 +51,19 @@ describe('right rail responsive behaviour', () => {
 		expect(getByTestId('right-rail-trigger')).toBeTruthy();
 	});
 
+	it('trigger toggles the docked rail closed and open on desktop', async () => {
+		Object.defineProperty(window, 'matchMedia', { writable: true, value: desktopMatchMedia });
+		const { container, getByTestId } = render(AppShell);
+
+		expect(container.querySelector('[data-slot="right-rail"][data-mobile="false"]')).toBeTruthy();
+
+		await fireEvent.click(getByTestId('right-rail-trigger'));
+		expect(container.querySelector('[data-slot="right-rail"][data-mobile="false"]')).toBeFalsy();
+
+		await fireEvent.click(getByTestId('right-rail-trigger'));
+		expect(container.querySelector('[data-slot="right-rail"][data-mobile="false"]')).toBeTruthy();
+	});
+
 	it('right rail opens as overlay at ≤1023px after trigger click', async () => {
 		Object.defineProperty(window, 'matchMedia', { writable: true, value: mobileMatchMedia });
 		const { getByTestId } = render(AppShell);
