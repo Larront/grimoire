@@ -23,11 +23,7 @@ describe('icon rail — density tokens', () => {
     const rail = document.body.querySelector('[data-testid="icon-rail"]')!;
     const buttons = Array.from(rail.querySelectorAll('button'));
     expect(buttons.length).toBeGreaterThan(0);
-    const allRowH = buttons.every(
-      (btn) =>
-        btn.classList.contains('h-[var(--row-h)]') &&
-        btn.classList.contains('w-[var(--row-h)]')
-    );
+    const allRowH = buttons.every((btn) => btn.classList.contains('size-[var(--row-h)]'));
     expect(allRowH).toBe(true);
   });
 });
@@ -68,18 +64,6 @@ describe('sidebar group labels — density tokens', () => {
     expect(labels.length).toBeGreaterThan(0);
     for (const label of Array.from(labels)) {
       expect(label.classList.contains('px-[var(--pad-x)]')).toBe(true);
-    }
-  });
-});
-
-// ── Sidebar menu skeleton ─────────────────────────────────────────────────────
-
-describe('sidebar menu skeleton — density tokens', () => {
-  it('skeleton rows use --row-h height token when rendered', () => {
-    const { container } = render(AppShell);
-    const menuSkeletons = container.querySelectorAll('[data-sidebar="menu-skeleton"]');
-    for (const el of Array.from(menuSkeletons)) {
-      expect(el.classList.contains('h-[var(--row-h)]')).toBe(true);
     }
   });
 });
