@@ -21,7 +21,7 @@
 	onclick={() => tabs.setFocusedPane(pane)}
 	role="none"
 >
-	{#if !activeTab}
+	{#if !activeTab || activeTab.type === 'empty'}
 		<div class="flex flex-1 items-center justify-center text-muted-foreground">
 			<div class="text-center space-y-2">
 				<p class="text-sm font-medium">No tab open</p>

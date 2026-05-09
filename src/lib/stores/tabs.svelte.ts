@@ -1,7 +1,7 @@
 import { untrack } from "svelte";
 import { vault } from "./vault.svelte";
 
-export type TabType = "note" | "map" | "scene";
+export type TabType = "note" | "map" | "scene" | "empty";
 
 export interface Tab {
   type: TabType;
@@ -26,6 +26,7 @@ function createTabsStore() {
   let right = $state<TabPane | null>(null);
   let focusedPane = $state<"left" | "right">("left");
   let dragging = $state<{ pane: "left" | "right"; index: number } | null>(null);
+  let _nextEmptyId = 0;
 
   function storageKey(vaultPath: string): string {
     return `grimoire:tabs:${vaultPath}`;
@@ -34,23 +35,21 @@ function createTabsStore() {
   function persist() {
     untrack(() => {
       if (!vault.path) return;
+      const serializeTabs = (tabs: Tab[]) =>
+        tabs
+          .filter((t) => t.type !== "empty")
+          .map((t) => ({ type: t.type, id: t.id, title: t.title }));
+      const leftTabs = serializeTabs(left.tabs);
+      const rightTabs = right ? serializeTabs(right.tabs) : null;
       const state: PersistedState = {
         left: {
-          tabs: left.tabs.map((t) => ({
-            type: t.type,
-            id: t.id,
-            title: t.title,
-          })),
-          activeIndex: left.activeIndex,
+          tabs: leftTabs,
+          activeIndex: Math.min(left.activeIndex, Math.max(0, leftTabs.length - 1)),
         },
-        right: right
+        right: right && rightTabs
           ? {
-              tabs: right.tabs.map((t) => ({
-                type: t.type,
-                id: t.id,
-                title: t.title,
-              })),
-              activeIndex: right.activeIndex,
+              tabs: rightTabs,
+              activeIndex: Math.min(right.activeIndex, Math.max(0, rightTabs.length - 1)),
             }
           : null,
         focusedPane,
@@ -89,7 +88,7 @@ function createTabsStore() {
   }
 
   function openTab(tab: Tab, targetPane?: "left" | "right") {
-    // Switch to existing tab in left pane
+    // Switch to existing tab if already open
     const leftIdx = left.tabs.findIndex(
       (t) => t.type === tab.type && t.id === tab.id,
     );
@@ -99,7 +98,6 @@ function createTabsStore() {
       persist();
       return;
     }
-    // Switch to existing tab in right pane
     if (right) {
       const rightIdx = right.tabs.findIndex(
         (t) => t.type === tab.type && t.id === tab.id,
@@ -121,13 +119,34 @@ function createTabsStore() {
     };
 
     if (dest === "right") {
+      if (!right || right.tabs.length === 0) {
+        right = { tabs: [newTab], activeIndex: 0 };
+      } else {
+        const tabs = [...right.tabs];
+        tabs[right.activeIndex] = newTab;
+        right = { ...right, tabs };
+      }
+      focusedPane = "right";
+    } else {
+      if (left.tabs.length === 0) {
+        left = { tabs: [newTab], activeIndex: 0 };
+      } else {
+        const tabs = [...left.tabs];
+        tabs[left.activeIndex] = newTab;
+        left = { ...left, tabs };
+      }
+      focusedPane = "left";
+    }
+    persist();
+  }
+
+  function addEmptyTab(pane: "left" | "right") {
+    const newTab: Tab = { type: "empty", id: --_nextEmptyId, title: "New Tab" };
+    if (pane === "right") {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };
       } else {
-        right = {
-          tabs: [...right.tabs, newTab],
-          activeIndex: right.tabs.length,
-        };
+        right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
       }
       focusedPane = "right";
     } else {
@@ -381,6 +400,7 @@ function createTabsStore() {
           : null;
     },
     openTab,
+    addEmptyTab,
     openTabWithRename,
     closeTab,
     closeOthers,

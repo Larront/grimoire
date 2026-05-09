@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tabs } from '$lib/stores/tabs.svelte';
-	import { FileText, Map as MapIcon, Music2, ChevronRight, X } from '@lucide/svelte';
+	import { FileText, Map as MapIcon, Music2, ChevronRight, X, Plus, File } from '@lucide/svelte';
 	import * as ContextMenu from '$lib/components/ui/context-menu';
 	import type { TabType } from '$lib/stores/tabs.svelte';
 
@@ -34,6 +34,7 @@
 
 	function onChipPointerDown(e: PointerEvent, i: number) {
 		if (e.button !== 0) return;
+		if ((e.target as HTMLElement).closest('button')) return;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		dragSrcIdx = i;
 		_startX = e.clientX;
@@ -110,6 +111,7 @@
 			case 'note':  return FileText;
 			case 'map':   return MapIcon;
 			case 'scene': return Music2;
+			case 'empty': return File;
 		}
 	}
 
@@ -200,6 +202,16 @@
 			</div>
 		{/each}
 	</div>
+
+	<!-- New tab button -->
+	<button
+		type="button"
+		class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+		onclick={() => tabs.addEmptyTab(pane)}
+		aria-label="New tab"
+	>
+		<Plus class="size-3.5" />
+	</button>
 
 	<!-- Chevron overflow button -->
 	{#if hasOverflow}
