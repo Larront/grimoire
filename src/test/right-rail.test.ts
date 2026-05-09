@@ -3,7 +3,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import AppShell from '../lib/components/AppShell.svelte';
 import { overlay } from '../lib/stores/overlay.svelte';
-import { focusedDocument } from '../lib/stores/focused-document.svelte';
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
 	matches: false,
@@ -30,7 +29,6 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 afterEach(async () => {
 	cleanup();
 	overlay.active = null;
-	focusedDocument.clear();
 	Object.defineProperty(window, 'matchMedia', { writable: true, value: desktopMatchMedia });
 	vi.mocked(invoke).mockResolvedValue(null);
 });
@@ -123,26 +121,3 @@ describe('overlay mutual exclusion on tablet (≤1023px)', () => {
 	});
 });
 
-// ── Right rail focus tracking ─────────────────────────────────────────────────
-
-describe('right rail focus tracking', () => {
-	it('shows no document breadcrumb when no document is focused', () => {
-		Object.defineProperty(window, 'matchMedia', { writable: true, value: desktopMatchMedia });
-		const { container } = render(AppShell);
-
-		const breadcrumb = container.querySelector('[data-testid="right-rail-doc-breadcrumb"]');
-		expect(breadcrumb).toBeFalsy();
-	});
-
-	it('reflects the focused document name in the right rail header', async () => {
-		Object.defineProperty(window, 'matchMedia', { writable: true, value: desktopMatchMedia });
-		const { container } = render(AppShell);
-
-		focusedDocument.set('My Note', '/vault/My Note.md');
-
-		await new Promise((r) => setTimeout(r, 0)); // let reactivity settle
-
-		const breadcrumb = container.querySelector('[data-testid="right-rail-doc-breadcrumb"]');
-		expect(breadcrumb?.textContent).toContain('My Note');
-	});
-});

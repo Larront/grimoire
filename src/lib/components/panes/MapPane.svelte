@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { page } from "$app/state";
+  import { untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { maps } from "$lib/stores/maps.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import {
     FileXCorner,
     LoaderCircle,
@@ -22,14 +23,16 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { fly } from "svelte/transition";
 
+  interface Props {
+    mapId: number;
+    pane: 'left' | 'right';
+  }
+  let { mapId, pane }: Props = $props();
+
   let leafletMap = $state<import("leaflet").Map | null>(null);
 
   // ── Map data ───────────────────────────────────────────────────────────────
-  let mapData = $derived(
-    maps.maps.find((m) => m.id === Number(page.params.id)) ?? null,
-  );
-
-  const destFolder = $derived(page.url.searchParams.get("folder") ?? null);
+  let mapData = $derived(maps.maps.find((m) => m.id === mapId) ?? null);
 
   // ── Per-map state ──────────────────────────────────────────────────────────
   let pins = $state<Pin[]>([]);
@@ -99,6 +102,14 @@
       });
   });
 
+  // ── Tab title sync ─────────────────────────────────────────────────────────
+  $effect(() => {
+    if (mapData) {
+      const title = mapData.title;
+      untrack(() => tabs.updateTabTitle('map', mapId, title));
+    }
+  });
+
   // ── Title rename ───────────────────────────────────────────────────────────
   let renamingTitle = $state(false);
   let draftTitle = $state("");
@@ -134,7 +145,7 @@
 
     isAssigningImage = true;
     try {
-      await invoke("assign_map_image", { mapId: mapData.id, sourceImagePath: picked, destFolder });
+      await invoke("assign_map_image", { mapId: mapData.id, sourceImagePath: picked, destFolder: null });
       await maps.load();
       imageDataUrl = await invoke<string>("get_map_image_data_url", { mapId: mapData.id });
     } catch (e) {

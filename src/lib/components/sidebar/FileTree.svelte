@@ -6,7 +6,6 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Rename from "$lib/components/ui/rename";
   import FileTree from "$lib/components/sidebar/FileTree.svelte";
-  import { goto } from "$app/navigation";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { toastUndo } from "$lib/toast";
@@ -17,7 +16,7 @@
     MapPinPlus,
     Folder,
   } from "@lucide/svelte";
-  import { page } from "$app/state";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { slide } from "svelte/transition";
 
   interface Props {
@@ -32,19 +31,19 @@
   let { node, noteMap, refresh, handleNewNote, handleNewFolder, handleNewMap }: Props =
     $props();
 
-  // Active state: is this node the currently viewed page?
+  // Active state: is this node the active tab in the focused pane?
   const isActive = $derived.by(() => {
-    const id = page.params.id;
-    if (!id) return false;
-    if (node.note_id !== null) return String(node.note_id) === id;
-    if (node.map_id !== null) return String(node.map_id) === id;
+    const active = tabs.activeTab;
+    if (!active) return false;
+    if (node.note_id !== null) return active.type === 'note' && active.id === node.note_id;
+    if (node.map_id !== null) return active.type === 'map'  && active.id === node.map_id;
     return false;
   });
 
   function deleteNote(target: FileNode) {
     toastUndo(`"${target.name}" deleted`, async () => {
       if (target.note_id === null) return;
-      if (page.params.id === String(target.note_id)) await goto("/");
+      tabs.closeTabByTypeAndId('note', target.note_id!);
       await invoke("delete_note", { noteId: target.note_id });
       await notes.load();
       refresh();
@@ -54,7 +53,7 @@
   function deleteMap(target: FileNode) {
     toastUndo(`"${target.name}" deleted`, async () => {
       if (target.map_id === null) return;
-      if (page.params.id === String(target.map_id)) await goto("/");
+      tabs.closeTabByTypeAndId('map', target.map_id!);
       await invoke("delete_map", { mapId: target.map_id });
       await maps.load();
       refresh();
@@ -63,9 +62,11 @@
 
   function deleteFolder(target: FileNode) {
     toastUndo(`"${target.name}" deleted`, async () => {
-      const openId = Number(page.params.id);
-      const openNote = noteMap.get(openId);
-      if (openNote?.path.startsWith(target.path + "/")) await goto("/");
+      for (const [id, note] of noteMap) {
+        if (note.path.startsWith(target.path + '/')) {
+          tabs.closeTabByTypeAndId('note', id);
+        }
+      }
       await invoke("delete_folder", { folderPath: target.path });
       await notes.load();
       refresh();
@@ -113,8 +114,8 @@
         {isActive}
         onclick={() => {
           if (renamingPath === node.path) return;
-          if (node.note_id !== null) goto("/note/" + node.note_id);
-          else if (node.map_id !== null) goto("/map/" + node.map_id);
+          if (node.note_id !== null) tabs.openTab({ type: 'note', id: node.note_id, title: node.name });
+          else if (node.map_id !== null) tabs.openTab({ type: 'map', id: node.map_id, title: node.name });
         }}
       >
         {#if node.map_id !== null}
@@ -205,6 +206,8 @@
           Delete Folder
         </ContextMenu.Item>
       {:else if node.map_id !== null}
+        <ContextMenu.Item onSelect={() => tabs.openTab({ type: 'map', id: node.map_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
+        <ContextMenu.Separator />
         <ContextMenu.Item
           variant="destructive"
           onSelect={() => deleteMap(node)}
@@ -212,10 +215,8 @@
           Delete Map
         </ContextMenu.Item>
       {:else}
-        <ContextMenu.Item
-          onSelect={() => goto(`/note/${node.note_id}?rename=1`)}
-          >Rename</ContextMenu.Item
-        >
+        <ContextMenu.Item onSelect={() => tabs.openTab({ type: 'note', id: node.note_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => tabs.openTabWithRename('note', node.note_id!, node.name)}>Rename</ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item
           variant="destructive"

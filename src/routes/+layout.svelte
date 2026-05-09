@@ -12,7 +12,7 @@
 <Toaster richColors closeButton />
 
 {#if vault.isOpen}
-  <AppShell>{@render children?.()}</AppShell>
+  <AppShell />
 {:else}
   {@render children?.()}
 {/if}

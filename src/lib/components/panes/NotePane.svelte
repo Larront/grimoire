@@ -1,27 +1,26 @@
 <script lang="ts">
-  import { tick } from "svelte";
-  import { page } from "$app/state";
-  import { replaceState } from "$app/navigation";
+  import { tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { notes } from "$lib/stores/notes.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { LoaderCircle } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
-  import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
-  import { tabState } from "$lib/stores/tab-state.svelte";
   import Editor from "$lib/components/editor/Editor.svelte";
 
-  let note = $derived(
-    notes.notes.find((n) => n.id === Number(page.params.id)) ?? null,
-  );
+  interface Props {
+    noteId: number;
+    rename?: boolean;
+    pane: 'left' | 'right';
+    tabIndex: number;
+  }
+  let { noteId, rename, pane, tabIndex }: Props = $props();
+
+  let note = $derived(notes.notes.find((n) => n.id === noteId) ?? null);
 
   // ── Content loading ──────────────────────────────────────────────────────
   let body = $state<string | null>(null);
   let lastMarkdown = $state<string | null>(null);
   let lastFetchedId = $state<number | null>(null);
-
-  $effect(() => {
-    if (note) tabState.lastNoteId = note.id;
-  });
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
@@ -46,18 +45,12 @@
     if (note && !isSavingTitle) draftTitle = note.title;
   });
 
+  // Keep tab title in sync when note title changes
   $effect(() => {
     if (note) {
-      breadcrumbs.set(
-        note.path
-          .split("/")
-          .slice(0, -1)
-          .map((segment) => ({ label: segment })),
-      );
-    } else {
-      breadcrumbs.clear();
+      const title = note.title;
+      untrack(() => tabs.updateTabTitle('note', noteId, title));
     }
-    return () => breadcrumbs.clear();
   });
 
   function parentDir(path: string): string {
@@ -99,16 +92,13 @@
     }
   }
 
-  // ── Auto-focus on new note or rename ─────────────────────────────────────
+  // ── Auto-focus on rename ─────────────────────────────────────────────────
   $effect(() => {
-    if (
-      note &&
-      (page.url.searchParams.has("new") || page.url.searchParams.has("rename"))
-    ) {
+    if (rename) {
       tick().then(() => {
         titleInput?.focus();
         titleInput?.select();
-        replaceState(`/note/${note!.id}`, {}); // note! safe: guarded by outer if(note &&)
+        tabs.clearRenameFlag(pane, tabIndex);
       });
     }
   });

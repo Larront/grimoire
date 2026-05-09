@@ -4,7 +4,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { goto } from "$app/navigation";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import type { Note } from "$lib/types/vault";
   import { Folder, Plus, LoaderCircle } from "@lucide/svelte";
 
@@ -144,7 +144,7 @@
         noteParentPath: null,
       });
       await notes.load();
-      goto(`/note/${newNote.id}?new=1`);
+      tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
     } catch (e) {
       errorMsg = String(e);
     } finally {

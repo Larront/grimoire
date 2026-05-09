@@ -20,7 +20,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { goto } from "$app/navigation";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
@@ -80,10 +80,7 @@
       });
       await maps.load();
       refresh();
-      const url = parentNode
-        ? `/map/${newMap.id}?folder=${encodeURIComponent(parentNode.path)}`
-        : `/map/${newMap.id}`;
-      goto(url);
+      tabs.openTab({ type: 'map', id: newMap.id, title: 'Untitled Map' });
     } catch (e) {
       console.error("create map failed:", e);
     }
@@ -98,7 +95,7 @@
       });
       await notes.load();
       refresh();
-      goto(`/note/${newNote.id}?new=1`);
+      tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
     } catch (e) {
       console.error("create note failed:", e);
     }
@@ -288,10 +285,10 @@
                     <Sidebar.MenuItem>
                       <Sidebar.MenuButton>
                         {#snippet child({ props })}
-                          <a href="/scene" {...props}>
+                          <button type="button" {...props} onclick={() => {}}>
                             <LayoutList class="size-4" />
                             All Scenes
-                          </a>
+                          </button>
                         {/snippet}
                       </Sidebar.MenuButton>
                     </Sidebar.MenuItem>
@@ -299,12 +296,10 @@
                       <Sidebar.MenuItem>
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
-                            <a href="/scene/{scene.id}" {...props}>
-                              <Star
-                                class="size-4 fill-primary/30 text-primary"
-                              />
+                            <button type="button" {...props} onclick={() => tabs.openTab({ type: 'scene', id: scene.id, title: scene.name })}>
+                              <Star class="size-4 fill-primary/30 text-primary" />
                               <span class="truncate">{scene.name}</span>
-                            </a>
+                            </button>
                           {/snippet}
                         </Sidebar.MenuButton>
                       </Sidebar.MenuItem>

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { page } from "$app/state";
+  import { untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import { breadcrumbs } from "$lib/stores/breadcrumbs.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
@@ -29,10 +29,22 @@
     connectSpotify,
   } from "$lib/utils/spotify-auth";
 
+  interface Props {
+    sceneId: number;
+    pane: 'left' | 'right';
+  }
+  let { sceneId, pane }: Props = $props();
+
   // ---- Scene lookup ----
-  let scene = $derived(
-    scenes.scenes.find((s) => s.id === Number(page.params.id)) ?? null
-  );
+  let scene = $derived(scenes.scenes.find((s) => s.id === sceneId) ?? null);
+
+  // ---- Tab title sync ----
+  $effect(() => {
+    if (scene) {
+      const name = scene.name;
+      untrack(() => tabs.updateTabTitle('scene', sceneId, name));
+    }
+  });
 
   // ---- Scene name editing ----
   let draftName = $state("");
@@ -96,17 +108,6 @@
   let isThisSceneLoading = $derived(
     audioEngine.loadingSceneId === scene?.id
   );
-
-  // ---- Breadcrumbs ----
-  $effect(() => {
-    if (scene) {
-      breadcrumbs.set([
-        { label: "Scenes", href: "/scene" },
-        { label: scene.name },
-      ]);
-    }
-    return () => breadcrumbs.clear();
-  });
 
   // ---- Play / Stop ----
   async function handlePlayStop() {
