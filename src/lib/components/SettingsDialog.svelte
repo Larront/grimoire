@@ -81,15 +81,15 @@
 
       <!-- ── Appearance ──────────────────────────────────────────── -->
       <section class="flex flex-col gap-4">
-        <h3 class="text-[var(--font-ui)] font-semibold text-foreground-muted uppercase tracking-wider">
+        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
           Appearance
         </h3>
 
         <!-- Theme -->
         <div class="flex items-center justify-between gap-4">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[var(--font-body)] font-medium text-foreground">Theme</span>
-            <span class="text-[var(--font-ui)] text-foreground-muted">Light, Dark, or System</span>
+            <span class="text-(--font-body) font-medium text-foreground">Theme</span>
+            <span class="text-(--font-ui) text-foreground-muted">Light, Dark, or System</span>
           </div>
           <div class="flex rounded-md border border-border overflow-hidden shrink-0">
             <button
@@ -113,8 +113,8 @@
         <!-- Accent -->
         <div class="flex items-center justify-between gap-4">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[var(--font-body)] font-medium text-foreground">Accent</span>
-            <span class="text-[var(--font-ui)] text-foreground-muted">Choose a colour preset</span>
+            <span class="text-(--font-body) font-medium text-foreground">Accent</span>
+            <span class="text-(--font-ui) text-foreground-muted">Choose a colour preset</span>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             {#each ACCENT_PRESETS as preset (preset.value)}
@@ -134,8 +134,8 @@
         <!-- Density -->
         <div class="flex items-center justify-between gap-4">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[var(--font-body)] font-medium text-foreground">Density</span>
-            <span class="text-[var(--font-ui)] text-foreground-muted">Layout compactness</span>
+            <span class="text-(--font-body) font-medium text-foreground">Density</span>
+            <span class="text-(--font-ui) text-foreground-muted">Layout compactness</span>
           </div>
           <div class="flex rounded-md border border-border overflow-hidden shrink-0">
             {#each DENSITY_LEVELS as level (level.value)}
@@ -151,8 +151,8 @@
         <!-- Reduce Motion -->
         <div class="flex items-center justify-between gap-4">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[var(--font-body)] font-medium text-foreground">Reduce Motion</span>
-            <span class="text-[var(--font-ui)] text-foreground-muted">Disable animations and transitions</span>
+            <span class="text-(--font-body) font-medium text-foreground">Reduce Motion</span>
+            <span class="text-(--font-ui) text-foreground-muted">Disable animations and transitions</span>
           </div>
           <button
             type="button"
@@ -172,7 +172,7 @@
 
       <!-- ── Integrations ────────────────────────────────────────── -->
       <section class="flex flex-col gap-4">
-        <h3 class="text-[var(--font-ui)] font-semibold text-foreground-muted uppercase tracking-wider">
+        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
           Integrations
         </h3>
 
@@ -180,21 +180,21 @@
         {#if isAuthLoading}
           <div class="flex items-center gap-3 p-4 rounded-lg bg-background-elevated border border-border">
             <LoaderCircle class="size-4 animate-spin text-foreground-muted" />
-            <span class="text-[var(--font-body)] text-foreground-muted">Loading…</span>
+            <span class="text-(--font-body) text-foreground-muted">Loading…</span>
           </div>
         {:else if authStatus?.is_connected}
           <div class="flex items-center justify-between p-4 rounded-lg bg-background-elevated border border-border">
             <div class="flex flex-col gap-0.5">
-              <span class="text-[var(--font-body)] font-medium text-foreground">Spotify connected</span>
-              <span class="text-[var(--font-ui)] text-foreground-muted">Premium required for in-app playback</span>
+              <span class="text-(--font-body) font-medium text-foreground">Spotify connected</span>
+              <span class="text-(--font-ui) text-foreground-muted">Premium required for in-app playback</span>
             </div>
             <Button variant="outline" size="sm" onclick={handleDisconnect}>Disconnect</Button>
           </div>
         {:else}
           <div class="flex flex-col gap-3 p-4 rounded-lg bg-background-elevated border border-border">
             <div class="flex flex-col gap-1">
-              <span class="text-[var(--font-body)] font-medium text-foreground">Connect Spotify</span>
-              <span class="text-[var(--font-ui)] text-foreground-muted">
+              <span class="text-(--font-body) font-medium text-foreground">Connect Spotify</span>
+              <span class="text-(--font-ui) text-foreground-muted">
                 Add tracks and playlists to your scenes. Requires Spotify Premium.
               </span>
             </div>

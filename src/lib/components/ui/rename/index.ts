@@ -1,8 +1,8 @@
-import Root from './rename.svelte';
-import Provider from './rename-provider.svelte';
-import Cancel from './rename-cancel.svelte';
-import Save from './rename-save.svelte';
-import Edit from './rename-edit.svelte';
+import Root from "./rename.svelte";
+import Provider from "./rename-provider.svelte";
+import Cancel from "./rename-cancel.svelte";
+import Save from "./rename-save.svelte";
+import Edit from "./rename-edit.svelte";
 
 /**
  * This can be consumed one of two ways:

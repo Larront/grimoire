@@ -7,10 +7,10 @@
 
 {#snippet railContent()}
   <div class="flex h-full flex-col">
-    <div class="flex h-[var(--tab-bar-h)] shrink-0 items-center gap-2 border-b border-sidebar-border px-[var(--pad-x)]">
-      <span class="ml-auto text-[var(--font-body)] font-medium text-foreground">Details</span>
+    <div class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-sidebar-border px-(--pad-x)">
+      <span class="ml-auto text-(--font-body) font-medium text-foreground">Details</span>
     </div>
-    <div class="flex-1 overflow-y-auto p-[var(--pad-x)] text-[var(--font-body)] text-muted-foreground">
+    <div class="flex-1 overflow-y-auto p-(--pad-x) text-(--font-body) text-muted-foreground">
     </div>
   </div>
 {/snippet}

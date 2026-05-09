@@ -19,7 +19,7 @@ function createNotesStore() {
     }
   }
 
- async function readContent(id: number): Promise<string | null> {
+  async function readContent(id: number): Promise<string | null> {
     try {
       const note = notes.find((n) => n.id === id);
       if (!note) return null;
@@ -42,14 +42,22 @@ function createNotesStore() {
   });
 
   return {
-    get notes() { return notes; },
+    get notes() {
+      return notes;
+    },
     // Called after any create/delete mutation to keep the count reactive.
     // AppSidebar calls notes.load() after handleNewNote and delete operations.
-    get noteCount() { return notes.length; },
-    get isLoading() { return isLoading; },
-    get error() { return error; },
+    get noteCount() {
+      return notes.length;
+    },
+    get isLoading() {
+      return isLoading;
+    },
+    get error() {
+      return error;
+    },
     load,
-    readContent
+    readContent,
   };
 }
 

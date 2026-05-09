@@ -15,7 +15,7 @@
 </script>
 
 <div
-  class="fixed z-[100] w-72 overflow-hidden rounded-lg border border-border
+  class="fixed z-100 w-72 overflow-hidden rounded-lg border border-border
          bg-popover shadow-xl shadow-black/40 pointer-events-none"
   style="left: {x}px; top: {y}px;"
   role="tooltip"

@@ -8,67 +8,166 @@
         "role": "neutral",
         "displayName": "Iron Dark",
         "canonical": "oklch(14.3% 0.003 20)",
-        "tonalRamp": ["#1c1b1a", "#272524", "#363332", "#4d4a49", "#6a6764", "#8d8a87", "#b5b0ac", "#d7d2ce"]
+        "tonalRamp": [
+          "#1c1b1a",
+          "#272524",
+          "#363332",
+          "#4d4a49",
+          "#6a6764",
+          "#8d8a87",
+          "#b5b0ac",
+          "#d7d2ce"
+        ]
       },
       "iron-deep": {
         "role": "neutral",
         "displayName": "Iron Deep",
         "canonical": "oklch(11.1% 0.002 20)",
-        "tonalRamp": ["#141312", "#1a1918", "#222020", "#2e2c2b", "#423f3e", "#5d5a58", "#7e7b78", "#a5a19e"]
+        "tonalRamp": [
+          "#141312",
+          "#1a1918",
+          "#222020",
+          "#2e2c2b",
+          "#423f3e",
+          "#5d5a58",
+          "#7e7b78",
+          "#a5a19e"
+        ]
       },
       "iron-raised": {
         "role": "neutral",
         "displayName": "Iron Raised",
         "canonical": "oklch(18.5% 0.003 20)",
-        "tonalRamp": ["#1c1b1a", "#272524", "#313030", "#3e3c3b", "#555251", "#706d6b", "#958f8d", "#c0bab7"]
+        "tonalRamp": [
+          "#1c1b1a",
+          "#272524",
+          "#313030",
+          "#3e3c3b",
+          "#555251",
+          "#706d6b",
+          "#958f8d",
+          "#c0bab7"
+        ]
       },
       "ember-ash": {
         "role": "neutral",
         "displayName": "Ember Ash",
         "canonical": "oklch(93.8% 0.009 68)",
-        "tonalRamp": ["#1d1b18", "#2c2a26", "#3f3c38", "#585450", "#756f6c", "#989390", "#c1bcb8", "#f0ece8"]
+        "tonalRamp": [
+          "#1d1b18",
+          "#2c2a26",
+          "#3f3c38",
+          "#585450",
+          "#756f6c",
+          "#989390",
+          "#c1bcb8",
+          "#f0ece8"
+        ]
       },
       "ember-ash-muted": {
         "role": "neutral",
         "displayName": "Ember Muted",
         "canonical": "oklch(66.2% 0.008 54)",
-        "tonalRamp": ["#1a1817", "#29272580", "#3a3836", "#524f4e", "#6e6b69", "#8f8c8a", "#b3aeab", "#d9d4d0"]
+        "tonalRamp": [
+          "#1a1817",
+          "#29272580",
+          "#3a3836",
+          "#524f4e",
+          "#6e6b69",
+          "#8f8c8a",
+          "#b3aeab",
+          "#d9d4d0"
+        ]
       },
       "ember-ash-faint": {
         "role": "neutral",
         "displayName": "Ember Faint",
         "canonical": "oklch(43.1% 0.007 38)",
-        "tonalRamp": ["#171514", "#222020", "#2f2d2c", "#403d3c", "#545251", "#6b6460", "#8b8582", "#b0a9a5"]
+        "tonalRamp": [
+          "#171514",
+          "#222020",
+          "#2f2d2c",
+          "#403d3c",
+          "#545251",
+          "#6b6460",
+          "#8b8582",
+          "#b0a9a5"
+        ]
       },
       "crimson": {
         "role": "primary",
         "displayName": "Crimson",
         "canonical": "oklch(50.4% 0.168 25)",
-        "tonalRamp": ["#200604", "#390e0b", "#541513", "#76201d", "#a83028", "#c2483d", "#d97b73", "#edada8"]
+        "tonalRamp": [
+          "#200604",
+          "#390e0b",
+          "#541513",
+          "#76201d",
+          "#a83028",
+          "#c2483d",
+          "#d97b73",
+          "#edada8"
+        ]
       },
       "crimson-lit": {
         "role": "primary",
         "displayName": "Crimson Text",
         "canonical": "oklch(95.9% 0.009 69)",
-        "tonalRamp": ["#2b1c1b", "#3e2726", "#563433", "#724645", "#9a6462", "#c09290", "#dcbab8", "#f9f1f0"]
+        "tonalRamp": [
+          "#2b1c1b",
+          "#3e2726",
+          "#563433",
+          "#724645",
+          "#9a6462",
+          "#c09290",
+          "#dcbab8",
+          "#f9f1f0"
+        ]
       },
       "ember-error": {
         "role": "semantic",
         "displayName": "Ember Error",
         "canonical": "oklch(57.3% 0.139 24)",
-        "tonalRamp": ["#200806", "#390f0c", "#561713", "#78221f", "#a0342f", "#d4645a", "#e39590", "#f3c4c1"]
+        "tonalRamp": [
+          "#200806",
+          "#390f0c",
+          "#561713",
+          "#78221f",
+          "#a0342f",
+          "#d4645a",
+          "#e39590",
+          "#f3c4c1"
+        ]
       },
       "verdant-confirm": {
         "role": "semantic",
         "displayName": "Verdant Confirm",
         "canonical": "oklch(66.4% 0.078 155)",
-        "tonalRamp": ["#0a1f14", "#122e1e", "#1c4029", "#2a5837", "#3d7150", "#6ab187", "#96caa8", "#c3e0cc"]
+        "tonalRamp": [
+          "#0a1f14",
+          "#122e1e",
+          "#1c4029",
+          "#2a5837",
+          "#3d7150",
+          "#6ab187",
+          "#96caa8",
+          "#c3e0cc"
+        ]
       },
       "parchment": {
         "role": "neutral",
         "displayName": "Parchment",
         "canonical": "oklch(97.4% 0.006 83)",
-        "tonalRamp": ["#1e1c19", "#2d2b27", "#403d38", "#585450", "#75716c", "#989490", "#c0bbb6", "#faf8f5"]
+        "tonalRamp": [
+          "#1e1c19",
+          "#2d2b27",
+          "#403d38",
+          "#585450",
+          "#75716c",
+          "#989490",
+          "#c0bbb6",
+          "#faf8f5"
+        ]
       }
     },
     "typographyMeta": {
@@ -116,10 +215,26 @@
       }
     ],
     "breakpoints": [
-      { "name": "tablet-portrait", "value": "600px", "notes": "Minimum supported viewport. All features accessible, denser layout, sidebar starts closed." },
-      { "name": "tablet-landscape", "value": "768px", "notes": "Full feature parity. Sidebar and right rail are overlays, mutually exclusive." },
-      { "name": "laptop", "value": "1024px", "notes": "Sidebar and right rail dock. Pointer input primary." },
-      { "name": "desktop", "value": "1280px", "notes": "Full layout. Sidebar docked open by default." }
+      {
+        "name": "tablet-portrait",
+        "value": "600px",
+        "notes": "Minimum supported viewport. All features accessible, denser layout, sidebar starts closed."
+      },
+      {
+        "name": "tablet-landscape",
+        "value": "768px",
+        "notes": "Full feature parity. Sidebar and right rail are overlays, mutually exclusive."
+      },
+      {
+        "name": "laptop",
+        "value": "1024px",
+        "notes": "Sidebar and right rail dock. Pointer input primary."
+      },
+      {
+        "name": "desktop",
+        "value": "1280px",
+        "notes": "Full layout. Sidebar docked open by default."
+      }
     ]
   },
   "components": [
@@ -161,7 +276,7 @@
       "refersTo": null,
       "description": "File tree / navigation row. Active state: Crimson Tint background, Crimson icon.",
       "html": "<div class=\"ds-sidebar-row ds-sidebar-row--active\"><svg class=\"ds-sidebar-row__icon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/></svg><span class=\"ds-sidebar-row__label\">The Sunken Keep</span></div>",
-      "css": ".ds-sidebar-row { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; background-color: transparent; color: #a39e99; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; border-radius: 6px; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; user-select: none; } .ds-sidebar-row:hover { background-color: rgba(255,255,255,0.04); color: #f0ece8; } .ds-sidebar-row--active { background-color: rgba(194,72,61,0.12); color: #f0ece8; } .ds-sidebar-row--active .ds-sidebar-row__icon { color: #c2483d; } .ds-sidebar-row__icon { flex-shrink: 0; width: 16px; height: 16px; color: inherit; } .ds-sidebar-row__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+      "css": ".ds-sidebar-row { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; background-color: transparent; color: #a39e99; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; border-radius: 6px; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; user-select: none; } .ds-sidebar-row:hover { background-color: rgba(255,255,255,0.04); color: #f0ece8; } .ds-sidebar-row--active { background-color: rgba(194,72,61,0.12); color: #f0ece8; } .ds-sidebar-row--active .ds-sidebar-row__icon { color: #c2483d; } .ds-sidebar-row__icon { shrink: 0; width: 16px; height: 16px; color: inherit; } .ds-sidebar-row__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
     },
     {
       "name": "Command Palette Result",
@@ -169,7 +284,7 @@
       "refersTo": null,
       "description": "Search result row inside the command palette. World content names render in Metamorphous.",
       "html": "<div class=\"ds-cmd-result\"><svg class=\"ds-cmd-result__icon\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/></svg><span class=\"ds-cmd-result__name\">The Sunken Keep</span><span class=\"ds-cmd-result__meta\">Notes</span></div>",
-      "css": ".ds-cmd-result { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background-color: transparent; border-radius: 6px; cursor: pointer; transition: background-color 100ms ease-out; } .ds-cmd-result:hover { background-color: rgba(194,72,61,0.12); } .ds-cmd-result__icon { flex-shrink: 0; color: #a39e99; } .ds-cmd-result__name { flex: 1; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; color: #f0ece8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-cmd-result__meta { font-family: \"JetBrains Mono\", monospace; font-size: 10.5px; font-weight: 400; color: #6b6460; text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; }"
+      "css": ".ds-cmd-result { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background-color: transparent; border-radius: 6px; cursor: pointer; transition: background-color 100ms ease-out; } .ds-cmd-result:hover { background-color: rgba(194,72,61,0.12); } .ds-cmd-result__icon { shrink: 0; color: #a39e99; } .ds-cmd-result__name { flex: 1; font-family: \"Nunito\", sans-serif; font-size: 13px; font-weight: 400; color: #f0ece8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-cmd-result__meta { font-family: \"JetBrains Mono\", monospace; font-size: 10.5px; font-weight: 400; color: #6b6460; text-transform: uppercase; letter-spacing: 0.08em; shrink: 0; }"
     },
     {
       "name": "Note Title",

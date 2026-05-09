@@ -15,10 +15,10 @@
 
 The app has two typographic voices that map to a content boundary:
 
-| Voice  | Font         | Applies to                                      |
-| ------ | ------------ | ----------------------------------------------- |
-| Tool   | Nunito       | All UI chrome: sidebar, tabs, buttons, metadata |
-| World  | Metamorphous | Anything the GM authored: note titles, map names, scene names |
+| Voice | Font         | Applies to                                                    |
+| ----- | ------------ | ------------------------------------------------------------- |
+| Tool  | Nunito       | All UI chrome: sidebar, tabs, buttons, metadata               |
+| World | Metamorphous | Anything the GM authored: note titles, map names, scene names |
 
 The boundary is **content ownership** — if the app constructed it, Nunito. If the GM named it, Metamorphous. This boundary holds even for the same piece of text in different contexts (a note title in the tab bar uses Nunito; the same title in the editor heading uses Metamorphous).
 
@@ -52,11 +52,11 @@ Tracks `--primary`. 2px solid, 2px offset. Uses `:focus-visible` only.
 
 ### Border Radius
 
-| Context                                | Radius |
-| -------------------------------------- | ------ |
-| Structural (rows, inputs, buttons)     | 6px    |
-| Elevated (cards, popovers, palette)    | 8px    |
-| Pill tags / chips                      | 100px  |
+| Context                             | Radius |
+| ----------------------------------- | ------ |
+| Structural (rows, inputs, buttons)  | 6px    |
+| Elevated (cards, popovers, palette) | 8px    |
+| Pill tags / chips                   | 100px  |
 
 ### Default Theme
 
@@ -90,15 +90,15 @@ Invisible until at least one scene exists in the vault. Once a scene exists, the
 
 ## Resolved Decisions
 
-| Decision | Choice | Reason |
-| -------- | ------ | ------ |
-| Accent token name | `--primary` (not `--accent`) | Aligns with shadcn token model; avoids split naming |
-| Ice preset | Intentional | Atmospheric (elemental), not corporate blue |
-| Focus ring | Tracks `--primary` | Cohesion; all five presets meet AA on `--background` |
-| Default theme | Dark | Crimson accent and warm palette land hardest on dark |
-| Session mode | None (ambient) | No explicit trigger; interface is always session-ready |
-| Settings location | Dialog | Not sidebar-embedded, not full-screen |
-| Right rail at tablet | Overlay, mutual exclusion with sidebar | Avoids double-overlay stacking complexity |
-| Right rail in split view | Follows focus | Least surprising; no extra UI needed |
-| Border radius base | 6px structural / 8px elevated | "Restrained by default" — 10px reads too consumer-app |
-| Scene Player visibility | Hidden until first scene exists | No placeholder noise; Scene Dashboard handles discoverability |
+| Decision                 | Choice                                 | Reason                                                        |
+| ------------------------ | -------------------------------------- | ------------------------------------------------------------- |
+| Accent token name        | `--primary` (not `--accent`)           | Aligns with shadcn token model; avoids split naming           |
+| Ice preset               | Intentional                            | Atmospheric (elemental), not corporate blue                   |
+| Focus ring               | Tracks `--primary`                     | Cohesion; all five presets meet AA on `--background`          |
+| Default theme            | Dark                                   | Crimson accent and warm palette land hardest on dark          |
+| Session mode             | None (ambient)                         | No explicit trigger; interface is always session-ready        |
+| Settings location        | Dialog                                 | Not sidebar-embedded, not full-screen                         |
+| Right rail at tablet     | Overlay, mutual exclusion with sidebar | Avoids double-overlay stacking complexity                     |
+| Right rail in split view | Follows focus                          | Least surprising; no extra UI needed                          |
+| Border radius base       | 6px structural / 8px elevated          | "Restrained by default" — 10px reads too consumer-app         |
+| Scene Player visibility  | Hidden until first scene exists        | No placeholder noise; Scene Dashboard handles discoverability |

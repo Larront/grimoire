@@ -435,7 +435,7 @@
 
       <!-- Gradient divider -->
       <div
-        class="mt-3 h-px bg-gradient-to-r from-primary/30 via-primary/10 to-transparent"
+        class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"
       ></div>
 
       <!-- Controls row -->

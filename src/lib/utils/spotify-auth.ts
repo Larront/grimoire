@@ -20,10 +20,13 @@ export async function connectSpotify(): Promise<SpotifyAuthStatus> {
         const unlisten = await unlistenPromise;
         unlisten();
         try {
-          const result = await invoke<SpotifyAuthStatus>("spotify_exchange_code", {
-            code: event.payload.code,
-            state: event.payload.state,
-          });
+          const result = await invoke<SpotifyAuthStatus>(
+            "spotify_exchange_code",
+            {
+              code: event.payload.code,
+              state: event.payload.state,
+            },
+          );
           resolve(result);
         } catch (e) {
           reject(e);

@@ -239,8 +239,8 @@
                           />
                         </div>
                         <div class="space-y-1">
-                          <p class="text-[var(--font-body)] font-medium">No notes yet</p>
-                          <p class="text-[var(--font-ui)] text-muted-foreground">
+                          <p class="text-(--font-body) font-medium">No notes yet</p>
+                          <p class="text-(--font-ui) text-muted-foreground">
                             Create your first note to start building your world.
                           </p>
                         </div>

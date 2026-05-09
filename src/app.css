@@ -1,6 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Metamorphous&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap");
 
-@import 'leaflet/dist/leaflet.css';
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
@@ -81,7 +81,7 @@
   --background: #faf8f5;
   --background-subtle: #f2ede8;
   --background-elevated: #ffffff;
-  --background-border: rgba(31, 26, 29, 0.10);
+  --background-border: rgba(31, 26, 29, 0.1);
 
   --foreground: #1a1614;
   --foreground-muted: #6b6460;
@@ -89,8 +89,8 @@
 
   --primary: #a83228;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(168, 50, 40, 0.10);
-  --primary-muted: rgba(168, 50, 40, 0.20);
+  --primary-subtle: rgba(168, 50, 40, 0.1);
+  --primary-muted: rgba(168, 50, 40, 0.2);
 
   --error: #a02020;
   --success: #2e6e4a;
@@ -112,8 +112,8 @@
 .light.accent-crimson {
   --primary: #a83228;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(168, 50, 40, 0.10);
-  --primary-muted: rgba(168, 50, 40, 0.20);
+  --primary-subtle: rgba(168, 50, 40, 0.1);
+  --primary-muted: rgba(168, 50, 40, 0.2);
 }
 
 .accent-arcane {
@@ -125,8 +125,8 @@
 .light.accent-arcane {
   --primary: #7b4da0;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(123, 77, 160, 0.10);
-  --primary-muted: rgba(123, 77, 160, 0.20);
+  --primary-subtle: rgba(123, 77, 160, 0.1);
+  --primary-muted: rgba(123, 77, 160, 0.2);
 }
 
 .accent-verdant {
@@ -138,8 +138,8 @@
 .light.accent-verdant {
   --primary: #3d7a52;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(61, 122, 82, 0.10);
-  --primary-muted: rgba(61, 122, 82, 0.20);
+  --primary-subtle: rgba(61, 122, 82, 0.1);
+  --primary-muted: rgba(61, 122, 82, 0.2);
 }
 
 .accent-ice {
@@ -151,8 +151,8 @@
 .light.accent-ice {
   --primary: #3a7fa8;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(58, 127, 168, 0.10);
-  --primary-muted: rgba(58, 127, 168, 0.20);
+  --primary-subtle: rgba(58, 127, 168, 0.1);
+  --primary-muted: rgba(58, 127, 168, 0.2);
 }
 
 .accent-amber {
@@ -164,8 +164,8 @@
 .light.accent-amber {
   --primary: #a07a20;
   --primary-foreground: #ffffff;
-  --primary-subtle: rgba(160, 122, 32, 0.10);
-  --primary-muted: rgba(160, 122, 32, 0.20);
+  --primary-subtle: rgba(160, 122, 32, 0.1);
+  --primary-muted: rgba(160, 122, 32, 0.2);
 }
 
 /* ── Reduce Motion ────────────────────────────────────────────── */
@@ -495,11 +495,23 @@ input[type="range"]:disabled {
   are consistent with the rest of the UI and theme-aware.
 */
 [data-sonner-toaster] {
-  --success-bg: color-mix(in srgb, var(--success) 12%, var(--background-elevated));
-  --success-border: color-mix(in srgb, var(--success) 25%, var(--background-elevated));
+  --success-bg: color-mix(
+    in srgb,
+    var(--success) 12%,
+    var(--background-elevated)
+  );
+  --success-border: color-mix(
+    in srgb,
+    var(--success) 25%,
+    var(--background-elevated)
+  );
   --success-text: var(--success);
   --error-bg: color-mix(in srgb, var(--error) 12%, var(--background-elevated));
-  --error-border: color-mix(in srgb, var(--error) 25%, var(--background-elevated));
+  --error-border: color-mix(
+    in srgb,
+    var(--error) 25%,
+    var(--background-elevated)
+  );
   --error-text: var(--error);
   --normal-bg: var(--background-elevated);
   --normal-border: var(--background-border);

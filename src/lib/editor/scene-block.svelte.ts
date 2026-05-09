@@ -48,7 +48,9 @@ export const SceneBlock = Node.create({
   },
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
-  renderMarkdown(node: { attrs: { sceneId: number | null; expanded: boolean } }) {
+  renderMarkdown(node: {
+    attrs: { sceneId: number | null; expanded: boolean };
+  }) {
     const id = node.attrs.sceneId ?? "";
     const exp = String(node.attrs.expanded);
     return `<scene-block data-id="${id}" data-expanded="${exp}"></scene-block>`;

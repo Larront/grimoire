@@ -21,7 +21,7 @@
 	bind:this={ref}
 	data-slot="sidebar-menu-skeleton"
 	data-sidebar="menu-skeleton"
-	class={cn("h-[var(--row-h)] gap-2 rounded-md px-[var(--pad-x)] flex items-center", className)}
+	class={cn("h-(--row-h) gap-2 rounded-md px-(--pad-x) flex items-center", className)}
 	{...restProps}
 >
 	{#if showIcon}

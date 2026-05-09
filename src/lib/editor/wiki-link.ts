@@ -78,7 +78,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           "data-path": node.attrs.path,
           "data-title": node.attrs.title,
         },
-        HTMLAttributes
+        HTMLAttributes,
       ),
       node.attrs.title ?? node.attrs.path,
     ];
@@ -107,7 +107,8 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           if (updatedNode.type !== node.type) return false;
           dom.dataset.path = updatedNode.attrs.path ?? "";
           dom.dataset.title = updatedNode.attrs.title ?? "";
-          dom.textContent = updatedNode.attrs.title ?? updatedNode.attrs.path ?? "?";
+          dom.textContent =
+            updatedNode.attrs.title ?? updatedNode.attrs.path ?? "?";
           applyClasses(dom);
           return true;
         },
@@ -150,7 +151,10 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           ed.chain()
             .focus()
             .deleteRange(range)
-            .insertContent({ type: "wikiLink", attrs: { path: props.path, title: props.title } })
+            .insertContent({
+              type: "wikiLink",
+              attrs: { path: props.path, title: props.title },
+            })
             .run();
         },
 
@@ -162,8 +166,12 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           let currentState: WikiLinkSuggestionState | null = null;
 
           function buildState(
-            props: { clientRect?: (() => DOMRect | null) | null; items: NoteSearchResult[]; command: (p: NoteSearchResult) => void },
-            si: number
+            props: {
+              clientRect?: (() => DOMRect | null) | null;
+              items: NoteSearchResult[];
+              command: (p: NoteSearchResult) => void;
+            },
+            si: number,
           ): WikiLinkSuggestionState {
             const rect = props.clientRect?.();
             return {
@@ -176,13 +184,21 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           }
 
           return {
-            onStart(props: { clientRect?: (() => DOMRect | null) | null; items: NoteSearchResult[]; command: (p: NoteSearchResult) => void }) {
+            onStart(props: {
+              clientRect?: (() => DOMRect | null) | null;
+              items: NoteSearchResult[];
+              command: (p: NoteSearchResult) => void;
+            }) {
               selectedIndex = 0;
               currentState = buildState(props, selectedIndex);
               onSuggestion(currentState);
             },
 
-            onUpdate(props: { clientRect?: (() => DOMRect | null) | null; items: NoteSearchResult[]; command: (p: NoteSearchResult) => void }) {
+            onUpdate(props: {
+              clientRect?: (() => DOMRect | null) | null;
+              items: NoteSearchResult[];
+              command: (p: NoteSearchResult) => void;
+            }) {
               selectedIndex = 0;
               currentState = buildState(props, selectedIndex);
               onSuggestion(currentState);

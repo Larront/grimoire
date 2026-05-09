@@ -28,12 +28,31 @@ export interface Map {
   modified_at: string;
 }
 
-export type PinShape = 'circle' | 'pin' | 'diamond' | 'headstone' | 'shield' | 'banner';
+export type PinShape =
+  | "circle"
+  | "pin"
+  | "diamond"
+  | "headstone"
+  | "shield"
+  | "banner";
 
 export type PinIcon =
-  | 'star' | 'sword' | 'shield' | 'crown' | 'skull' | 'house'
-  | 'anchor' | 'flame' | 'eye' | 'scroll' | 'footprints' | 'castle'
-  | 'gem' | 'cross' | 'flag' | 'tree-pine';
+  | "star"
+  | "sword"
+  | "shield"
+  | "crown"
+  | "skull"
+  | "house"
+  | "anchor"
+  | "flame"
+  | "eye"
+  | "scroll"
+  | "footprints"
+  | "castle"
+  | "gem"
+  | "cross"
+  | "flag"
+  | "tree-pine";
 
 export interface PinCategory {
   id: number;
@@ -59,7 +78,7 @@ export interface Pin {
   color: string | null;
 }
 
-export type AnnotationKind = 'text' | 'rect' | 'circle';
+export type AnnotationKind = "text" | "rect" | "circle";
 
 export interface MapAnnotation {
   id: number;

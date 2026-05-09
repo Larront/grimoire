@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi } from "vitest";
 
 export const goto = vi.fn().mockResolvedValue(undefined);
 export const invalidate = vi.fn().mockResolvedValue(undefined);

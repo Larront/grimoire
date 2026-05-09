@@ -112,6 +112,7 @@ Grimoire operates across two registers simultaneously. The application shell is 
 This system refuses theatricality. No leather textures, chrome bevels, glowing rune borders, ambient fog overlays, or parchment backgrounds. Those are costumes, not craft. The fantasy is already in the content; the interface needs only to get out of the way. The SaaS productivity aesthetic is equally banned: no rounded card grids, gradient blobs, Inter-on-white onboarding, or Obsidian-with-a-dungeon-icon imitation.
 
 **Key Characteristics:**
+
 - Dark-first. Iron surfaces are the default posture; light mode (Parchment) is a deliberate alt.
 - Two-voice typography. Nunito for the tool; Metamorphous for the world. Boundary is content ownership.
 - Single user-switchable accent. Five named presets (Crimson, Arcane, Verdant, Ice, Amber). No secondary palette.
@@ -130,7 +131,7 @@ Iron surfaces — warm dark neutrals tinted slightly toward the red-brown axis, 
 - **Crimson Veil** (`#c2483d3d` / rgba 24%): Accent borders, secondary tints.
 - **Crimson Text** (`#f9f1f0`): Text on a Crimson-filled surface (primary button label).
 
-*Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same three-token structure. All five meet AA contrast on Iron Dark.*
+_Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same three-token structure. All five meet AA contrast on Iron Dark._
 
 ### Neutral
 

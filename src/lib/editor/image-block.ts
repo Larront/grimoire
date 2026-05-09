@@ -62,8 +62,18 @@ export const ImageBlock = Image.extend({
     return {
       markdown: {
         serialize(
-          state: { write: (s: string) => void; closeBlock: (n: unknown) => void },
-          node: { attrs: { src: string; alt: string | null; align: string; width: string } },
+          state: {
+            write: (s: string) => void;
+            closeBlock: (n: unknown) => void;
+          },
+          node: {
+            attrs: {
+              src: string;
+              alt: string | null;
+              align: string;
+              width: string;
+            };
+          },
         ) {
           const { src, alt, align, width } = node.attrs;
           let md = `![${alt ?? ""}](${src})`;
@@ -178,7 +188,10 @@ export async function insertImageFromHandle(
   editor
     .chain()
     .focus()
-    .insertContent({ type: "image", attrs: { src, align: "center", width: "100%" } })
+    .insertContent({
+      type: "image",
+      attrs: { src, align: "center", width: "100%" },
+    })
     .run();
 }
 
@@ -190,6 +203,9 @@ export async function insertImageFromFile(
   editor
     .chain()
     .focus()
-    .insertContent({ type: "image", attrs: { src, align: "center", width: "100%" } })
+    .insertContent({
+      type: "image",
+      attrs: { src, align: "center", width: "100%" },
+    })
     .run();
 }

@@ -79,12 +79,43 @@ type ShapeDef = {
 };
 
 const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
-  circle:    { svgTag: 'circle',  svgAttrs: 'cx="14" cy="14" r="12"',                                          anchor: [20, 20], iconOffset: { top: 10, left: 10 } },
-  pin:       { svgTag: 'path',    svgAttrs: 'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"', anchor: [20, 39], iconOffset: { top: 7,  left: 10 } },
-  diamond:   { svgTag: 'polygon', svgAttrs: 'points="14,1 27,14 14,27 1,14"',                                  anchor: [20, 20], iconOffset: { top: 10, left: 10 } },
-  headstone: { svgTag: 'path',    svgAttrs: 'd="M3 27 V12 Q3 1 14 1 Q25 1 25 12 V27 Z"',                      anchor: [20, 39], iconOffset: { top: 10, left: 10 } },
-  shield:    { svgTag: 'path',    svgAttrs: 'd="M14 2 L26 6 V17 Q26 25 14 28 Q2 25 2 17 V6 Z"',               anchor: [20, 40], iconOffset: { top: 10, left: 10 } },
-  banner:    { svgTag: 'path',    svgAttrs: 'd="M5 2 H23 V26 L14 22 L5 26 Z"',                                anchor: [20, 3],  iconOffset: { top: 7,  left: 10 } },
+  circle: {
+    svgTag: "circle",
+    svgAttrs: 'cx="14" cy="14" r="12"',
+    anchor: [20, 20],
+    iconOffset: { top: 10, left: 10 },
+  },
+  pin: {
+    svgTag: "path",
+    svgAttrs:
+      'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"',
+    anchor: [20, 39],
+    iconOffset: { top: 7, left: 10 },
+  },
+  diamond: {
+    svgTag: "polygon",
+    svgAttrs: 'points="14,1 27,14 14,27 1,14"',
+    anchor: [20, 20],
+    iconOffset: { top: 10, left: 10 },
+  },
+  headstone: {
+    svgTag: "path",
+    svgAttrs: 'd="M3 27 V12 Q3 1 14 1 Q25 1 25 12 V27 Z"',
+    anchor: [20, 39],
+    iconOffset: { top: 10, left: 10 },
+  },
+  shield: {
+    svgTag: "path",
+    svgAttrs: 'd="M14 2 L26 6 V17 Q26 25 14 28 Q2 25 2 17 V6 Z"',
+    anchor: [20, 40],
+    iconOffset: { top: 10, left: 10 },
+  },
+  banner: {
+    svgTag: "path",
+    svgAttrs: 'd="M5 2 H23 V26 L14 22 L5 26 Z"',
+    anchor: [20, 3],
+    iconOffset: { top: 7, left: 10 },
+  },
 };
 
 export function tooltipOffset(shape: PinShape): [number, number] {
@@ -106,7 +137,7 @@ export function buildDivIcon(
 
   const selectionRing = selected
     ? `<${svgTag} ${svgAttrs} fill="none" stroke="${safeCol}" stroke-width="9" stroke-linejoin="round" opacity="0.9"/>`
-    : '';
+    : "";
 
   const html = `
 		<div style="position:relative;width:28px;height:28px">

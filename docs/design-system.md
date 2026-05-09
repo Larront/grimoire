@@ -101,12 +101,12 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 **Surface hierarchy** within the `background` family:
 
-| Variable               | Light                 | Dark                  | Use                                 |
-| ---------------------- | --------------------- | --------------------- | ----------------------------------- |
-| `--background`         | `#fcfafb`             | `#1f1f1f`             | Main canvas                         |
-| `--background-subtle`  | `#f3f1f2`             | `#181818`             | Sidebar surface — slightly recessed |
-| `--background-elevated`| `#ffffff`             | `#262626`             | Cards, popovers, raised surfaces    |
-| `--background-border`  | 8% foreground opacity | 8% foreground opacity | Dividers, subtle borders            |
+| Variable                | Light                 | Dark                  | Use                                 |
+| ----------------------- | --------------------- | --------------------- | ----------------------------------- |
+| `--background`          | `#fcfafb`             | `#1f1f1f`             | Main canvas                         |
+| `--background-subtle`   | `#f3f1f2`             | `#181818`             | Sidebar surface — slightly recessed |
+| `--background-elevated` | `#ffffff`             | `#262626`             | Cards, popovers, raised surfaces    |
+| `--background-border`   | 8% foreground opacity | 8% foreground opacity | Dividers, subtle borders            |
 
 **Text** within the `foreground` family:
 
@@ -120,12 +120,12 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 **Primary** is accent-preset-driven — it changes based on the user's chosen preset. Values for each preset are in the Accent Theming section. The default (crimson):
 
-| Variable              | Light                      | Dark                       | Use                                     |
-| --------------------- | -------------------------- | -------------------------- | --------------------------------------- |
-| `--primary`           | `#8a2e26`                  | `#c4685e`                  | Accent color — buttons, icons, links    |
-| `--primary-foreground`| `#fcfafb`                  | `#1f1f1f`                  | Text/icons placed on a primary surface  |
-| `--primary-subtle`    | `--primary` at 16% opacity | `--primary` at 16% opacity | Selection backgrounds, active row tints |
-| `--primary-muted`     | `--primary` at 40% opacity | `--primary` at 40% opacity | Accent borders, secondary tints         |
+| Variable               | Light                      | Dark                       | Use                                     |
+| ---------------------- | -------------------------- | -------------------------- | --------------------------------------- |
+| `--primary`            | `#8a2e26`                  | `#c4685e`                  | Accent color — buttons, icons, links    |
+| `--primary-foreground` | `#fcfafb`                  | `#1f1f1f`                  | Text/icons placed on a primary surface  |
+| `--primary-subtle`     | `--primary` at 16% opacity | `--primary` at 16% opacity | Selection backgrounds, active row tints |
+| `--primary-muted`      | `--primary` at 40% opacity | `--primary` at 40% opacity | Accent borders, secondary tints         |
 
 **Primary owns:**
 
@@ -139,10 +139,10 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 **Error and Success** are system feedback only — sparingly. Never use as decorative color. Success (green) is the one non-warm color allowed; its semantic is too universal to fight.
 
-| Variable           | Dark      | Light     |
-| ------------------ | --------- | --------- |
-| `--error`          | `#d4645a` | `#a02020` |
-| `--success`        | `#6ab187` | `#2e6e4a` |
+| Variable    | Dark      | Light     |
+| ----------- | --------- | --------- |
+| `--error`   | `#d4645a` | `#a02020` |
+| `--success` | `#6ab187` | `#2e6e4a` |
 
 Both are muted and warm-adjacent — they read as semantic signals without clashing against the palette.
 
@@ -152,8 +152,8 @@ Both are muted and warm-adjacent — they read as semantic signals without clash
 
 The near-neutral palette produces high contrast between text and background. `--foreground-faint` (42% opacity) is intentionally sub-AA — it is only used for decorative, non-essential labels. Never use it for body text or interactive labels.
 
-| Foreground               | Surface          | Hex pairing           | Approx ratio | Status            |
-| ------------------------ | ---------------- | --------------------- | ------------ | ----------------- |
+| Foreground                   | Surface                | Hex pairing           | Approx ratio | Status            |
+| ---------------------------- | ---------------------- | --------------------- | ------------ | ----------------- |
 | `--foreground` (light)       | `--background` (light) | `#1f1a1d` / `#fcfafb` | ~17:1        | ✓ AAA             |
 | `--foreground-muted` (light) | `--background` (light) | —                     | ~5.8:1       | ✓ AA              |
 | `--foreground-faint` (light) | `--background` (light) | —                     | ~3.4:1       | ⚠ Large text only |
@@ -171,12 +171,12 @@ Contrast for non-default accent presets must be verified separately — some may
 
 Restrained by default. Structural chrome is tight; elevated surfaces get slightly more softness.
 
-| Context                                  | Radius |
-| ---------------------------------------- | ------ |
-| Sidebar rows, tab bar, inputs, buttons   | 6px    |
-| Scene cards, command palette, popovers   | 8px    |
-| Toasts                                   | 8px    |
-| Pill tags / chips                        | 100px  |
+| Context                                | Radius |
+| -------------------------------------- | ------ |
+| Sidebar rows, tab bar, inputs, buttons | 6px    |
+| Scene cards, command palette, popovers | 8px    |
+| Toasts                                 | 8px    |
+| Pill tags / chips                      | 100px  |
 
 ### Motion
 
@@ -228,12 +228,14 @@ The sidebar collapses to a narrow icon rail — the grid responds accordingly.
 **Icon Rail (collapsed state)** — 48px wide, contains:
 
 Main icons (top):
+
 - Brand mark — re-expands sidebar to last active section
 - Search icon — triggers Command Palette
 - Files icon — expands sidebar and activates the file tree section
 - Scenes icon — opens the scenes page
 
 Footer icon (bottom, smaller / subdued):
+
 - Settings — opens the settings dialog (not a full primary rail icon; visually lighter, pinned to bottom of rail)
 
 **Main Content Area** — hosts the active document or view. Supports tabs and split view.

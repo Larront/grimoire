@@ -13,7 +13,7 @@
   const sidebar = useSidebar();
 
   const btnBase =
-    "flex size-[var(--row-h)] items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
+    "flex size-(--row-h) items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 </script>
 
 <div
@@ -39,7 +39,7 @@
       class={btnBase}
       onclick={onSearchClick}
     >
-      <Search class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
+      <Search class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
 
     <!-- Files -->
@@ -49,7 +49,7 @@
       class={btnBase}
       onclick={onFilesClick}
     >
-      <Files class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
+      <Files class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
 
     <!-- Scenes -->
@@ -59,7 +59,7 @@
       class={btnBase}
       onclick={onScenesClick}
     >
-      <Music2 class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
+      <Music2 class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
   </div>
 
@@ -71,7 +71,7 @@
       class={cn(btnBase, "text-sidebar-foreground/40 hover:text-sidebar-foreground/60")}
       onclick={onSettingsClick}
     >
-      <Settings class="size-[var(--icon-rail-icon)]" strokeWidth={1.5} />
+      <Settings class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
   </div>
 </div>

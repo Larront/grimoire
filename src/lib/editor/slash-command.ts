@@ -11,7 +11,10 @@ export interface SlashCommandItem {
   label: string;
   keywords: string[]; // extra search terms beyond label
   icon: string; // lucide icon name — resolved to Component in SlashCommandMenu
-  command: (editor: Editor, range: { from: number; to: number }) => void | boolean | Promise<void>;
+  command: (
+    editor: Editor,
+    range: { from: number; to: number },
+  ) => void | boolean | Promise<void>;
 }
 
 // State pushed to Editor.svelte on every suggestion update.
@@ -135,7 +138,12 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).run();
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp", "svg"] }],
+        filters: [
+          {
+            name: "Images",
+            extensions: ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+          },
+        ],
       });
       if (typeof selected === "string") {
         await insertImageFromFile(selected, editor);
@@ -156,7 +164,7 @@ export function filterCommands(query: string): SlashCommandItem[] {
   return SLASH_COMMANDS.filter(
     (item) =>
       item.label.toLowerCase().includes(q) ||
-      item.keywords.some((kw) => kw.includes(q))
+      item.keywords.some((kw) => kw.includes(q)),
   );
 }
 
@@ -179,8 +187,8 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         pluginKey: new PluginKey("slashCommand"),
         editor: this.editor,
         char: "/",
-        startOfLine: false,  // '/' opens the menu anywhere in a line
-        allowSpaces: false,  // session ends on a space keypress
+        startOfLine: false, // '/' opens the menu anywhere in a line
+        allowSpaces: false, // session ends on a space keypress
 
         // Synchronous filter — unlike WikiLink which uses async invoke.
         items: ({ query }: { query: string }) => filterCommands(query),
@@ -214,7 +222,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               items: SlashCommandItem[];
               command: (item: SlashCommandItem) => void;
             },
-            si: number
+            si: number,
           ): SlashCommandSuggestionState {
             const rect = props.clientRect?.();
             return {

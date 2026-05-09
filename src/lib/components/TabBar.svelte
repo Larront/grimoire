@@ -131,7 +131,7 @@
 </script>
 
 <div
-	class="flex h-[var(--tab-bar-h)] shrink-0 items-center border-b border-sidebar-border bg-background overflow-hidden"
+	class="flex h-(--tab-bar-h) shrink-0 items-center border-b border-sidebar-border bg-background overflow-hidden"
 >
 	<div use:observeOverflow class="flex flex-1 overflow-hidden min-w-0 h-full">
 		{#each tabList as tab, i (tab.id + tab.type)}
@@ -206,7 +206,7 @@
 		<div use:clickOutside class="relative shrink-0">
 			<button
 				type="button"
-				class="flex items-center justify-center h-[var(--tab-bar-h)] w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+				class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
 				onclick={() => (dropdownOpen = !dropdownOpen)}
 				aria-label="Show all tabs"
 			>
@@ -245,7 +245,7 @@
 {#if isDragging && dragSrcIdx >= 0 && dragSrcIdx < tabList.length}
 	{@const GhostIcon = getIcon(tabList[dragSrcIdx].type)}
 	<div
-		class="fixed pointer-events-none z-[9999] flex items-center gap-1.5 px-3 py-1 rounded border border-primary/40 bg-background/95 shadow-lg text-sm text-foreground -translate-x-1/2"
+		class="fixed pointer-events-none z-9999 flex items-center gap-1.5 px-3 py-1 rounded border border-primary/40 bg-background/95 shadow-lg text-sm text-foreground -translate-x-1/2"
 		style="left: {ghostX}px; top: {ghostY - 36}px"
 	>
 		<GhostIcon class="size-3.5 shrink-0" />

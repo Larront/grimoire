@@ -52,8 +52,8 @@
 </Command.Dialog>
 <div
   data-testid="app-search-bar"
-  class="relative flex items-center justify-between gap-3 mx-3 mb-1 mt-2 h-[var(--row-h)] px-[var(--pad-x)]
-         bg-muted text-muted-foreground rounded-lg text-[var(--font-ui)] font-normal
+  class="relative flex items-center justify-between gap-3 mx-3 mb-1 mt-2 h-(--row-h) px-(--pad-x)
+         bg-muted text-muted-foreground rounded-lg text-(--font-ui) font-normal
          cursor-pointer whitespace-nowrap select-none
          hover:bg-sidebar-accent hover:text-foreground transition-colors duration-100"
 >

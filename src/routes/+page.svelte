@@ -77,7 +77,10 @@
   async function handleChooseLocation() {
     isPickingLocation = true;
     try {
-      const selected = await open({ directory: true, title: "Choose Location" });
+      const selected = await open({
+        directory: true,
+        title: "Choose Location",
+      });
       if (selected && typeof selected === "string") {
         newVaultParent = selected;
         if (nameError === "Please choose a storage location.") nameError = null;
@@ -144,7 +147,12 @@
         noteParentPath: null,
       });
       await notes.load();
-      tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
+      tabs.openTab({
+        type: "note",
+        id: newNote.id,
+        title: "Untitled",
+        rename: true,
+      });
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -162,14 +170,17 @@
       parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
     return parts.join(" · ") || "Empty vault";
   }
-
 </script>
 
 {#if vault.isOpen}
   <!-- ── Vault home (new vault) ────────────────────────────────── -->
   <div class="flex flex-col items-center justify-center h-full">
-    <div class="flex flex-col items-center gap-8 w-full max-w-[480px] px-10 splash-fade">
-      <h1 class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight">
+    <div
+      class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade"
+    >
+      <h1
+        class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight"
+      >
         {vaultName}
       </h1>
 
@@ -208,7 +219,7 @@
     <!-- Radial glow -->
     <div
       class="pointer-events-none absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2
-             w-[500px] h-[300px]"
+             w-125 h-75"
       style="background: radial-gradient(ellipse, oklch(0.30 0.03 40 / 30%), transparent 70%)"
     ></div>
 
@@ -228,17 +239,20 @@
     {:else if mode === "creating"}
       <!-- ── Create new vault form ───────────────────────────────── -->
       <div
-        class="flex flex-col gap-3 mt-9 w-[280px] relative z-10 splash-fade-delay-1"
+        class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1"
       >
         <span
-          class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint"
+          class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint"
         >
           New Vault
         </span>
 
         <!-- Vault name -->
         <div class="flex flex-col gap-1.5">
-          <label for="vault-name" class="font-sans text-[11px] text-muted-foreground">
+          <label
+            for="vault-name"
+            class="font-sans text-[11px] text-muted-foreground"
+          >
             Name
           </label>
           <!-- svelte-ignore a11y_autofocus -->
@@ -253,7 +267,7 @@
               if (e.key === "Enter") handleCreateVault();
               if (e.key === "Escape") cancelCreate();
             }}
-            class="h-9 px-3 rounded-[6px] bg-[var(--hover-overlay)] border border-border
+            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
                    text-[13px] text-foreground placeholder:text-foreground-faint
                    focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
                    focus-visible:ring-offset-1 focus-visible:ring-offset-background
@@ -263,19 +277,23 @@
 
         <!-- Storage location -->
         <div class="flex flex-col gap-1.5">
-          <span class="font-sans text-[11px] text-muted-foreground">Location</span>
+          <span class="font-sans text-[11px] text-muted-foreground"
+            >Location</span
+          >
           <button
             type="button"
             onclick={handleChooseLocation}
             disabled={openingPath !== null || isPickingLocation}
-            class="h-9 px-3 rounded-[6px] bg-[var(--hover-overlay)] border border-border
+            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
                    flex items-center gap-2 text-left w-full min-w-0
-                   hover:bg-[var(--background-elevated)] transition-colors duration-150
+                   hover:bg-(--background-elevated) transition-colors duration-150
                    disabled:opacity-50 cursor-default"
           >
             <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
             {#if newVaultParent}
-              <span class="font-sans text-[12px] text-foreground truncate min-w-0">
+              <span
+                class="font-sans text-[12px] text-foreground truncate min-w-0"
+              >
                 {newVaultParent}
               </span>
             {:else}
@@ -288,7 +306,10 @@
 
         <!-- Inline validation error -->
         {#if nameError}
-          <p class="font-sans text-[11px] text-destructive leading-snug" role="alert">
+          <p
+            class="font-sans text-[11px] text-destructive leading-snug"
+            role="alert"
+          >
             {nameError}
           </p>
         {/if}
@@ -307,7 +328,9 @@
           <Button
             size="sm"
             onclick={handleCreateVault}
-            disabled={openingPath !== null || !newVaultName.trim() || !newVaultParent}
+            disabled={openingPath !== null ||
+              !newVaultName.trim() ||
+              !newVaultParent}
             class="flex-1 text-[11px]"
           >
             {#if openingPath === "__creating__"}
@@ -322,14 +345,14 @@
     {:else if recentVaults.length === 0}
       <!-- ── First-time user ──────────────────────────────────── -->
       <p
-        class="font-sans text-sm text-muted-foreground mt-7 text-center max-w-[280px]
+        class="font-sans text-sm text-muted-foreground mt-7 text-center max-w-70
                leading-relaxed relative z-10 splash-fade-delay-1"
       >
         A worldbuilding vault for your campaigns, lore, maps, and sessions.
       </p>
 
       <div
-        class="flex flex-col gap-2.5 mt-8 w-[280px] relative z-10 splash-fade-delay-2"
+        class="flex flex-col gap-2.5 mt-8 w-70 relative z-10 splash-fade-delay-2"
       >
         <Button
           onclick={startCreate}
@@ -366,9 +389,9 @@
       </div>
     {:else}
       <!-- ── Returning user ───────────────────────────────────── -->
-      <div class="w-[280px] mt-8 relative z-10 splash-fade-delay-1">
+      <div class="w-70 mt-8 relative z-10 splash-fade-delay-1">
         <span
-          class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint mb-2.5 block"
+          class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint mb-2.5 block"
         >
           Recent Vaults
         </span>
@@ -378,7 +401,7 @@
             <button
               class="flex items-center justify-between py-2.5 px-3 rounded-sm
                      border-b border-border text-left
-                     hover:bg-[var(--hover-overlay)] transition-colors duration-150
+                     hover:bg-(--hover-overlay) transition-colors duration-150
                      disabled:opacity-50"
               disabled={openingPath !== null}
               onclick={() => handleOpenRecent(v.path)}
@@ -386,13 +409,19 @@
               <div class="min-w-0 flex-1">
                 {#if openingPath === v.path}
                   <div class="flex items-center gap-2">
-                    <LoaderCircle class="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
-                    <span class="font-heading text-[15px] font-normal text-foreground truncate">
+                    <LoaderCircle
+                      class="w-3.5 h-3.5 animate-spin text-primary shrink-0"
+                    />
+                    <span
+                      class="font-heading text-[15px] font-normal text-foreground truncate"
+                    >
                       {v.name}
                     </span>
                   </div>
                 {:else}
-                  <div class="font-heading text-[15px] font-normal text-foreground truncate">
+                  <div
+                    class="font-heading text-[15px] font-normal text-foreground truncate"
+                  >
                     {v.name}
                   </div>
                 {/if}
@@ -400,7 +429,9 @@
                   {formatVaultStats(v)}
                 </div>
               </div>
-              <div class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0">
+              <div
+                class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0"
+              >
                 {formatRelativeTime(v.last_opened)}
               </div>
             </button>
@@ -437,7 +468,7 @@
     <!-- Operation-level error -->
     {#if errorMsg}
       <p
-        class="font-sans text-xs text-destructive mt-4 text-center max-w-[300px] relative z-10"
+        class="font-sans text-xs text-destructive mt-4 text-center max-w-75 relative z-10"
         role="alert"
       >
         {errorMsg}

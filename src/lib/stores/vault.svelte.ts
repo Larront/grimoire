@@ -123,9 +123,13 @@ function createVaultStore() {
         path = existingPath;
         isOpen = true;
       }
-      const savedAccent = await invoke<AccentPreset | null>("get_accent_preset").catch(() => null);
+      const savedAccent = await invoke<AccentPreset | null>(
+        "get_accent_preset",
+      ).catch(() => null);
       if (savedAccent) accent = savedAccent;
-      const savedDensity = await invoke<DensityLevel | null>("get_density_level").catch(() => null);
+      const savedDensity = await invoke<DensityLevel | null>(
+        "get_density_level",
+      ).catch(() => null);
       if (savedDensity) density = savedDensity;
     } catch {
       // No vault open — normal on first launch

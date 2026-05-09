@@ -47,7 +47,7 @@
               role="none"
             >
               <div class="flex items-center border-b border-sidebar-border">
-                <div class="flex items-center shrink-0 h-[var(--tab-bar-h)] pl-1">
+                <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />
                 </div>
                 <TabBar pane="left" />

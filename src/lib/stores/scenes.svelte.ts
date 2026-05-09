@@ -51,11 +51,19 @@ function createScenesStore() {
   });
 
   return {
-    get scenes() { return scenes; },
+    get scenes() {
+      return scenes;
+    },
     // Called after any create/delete mutation to keep the count reactive.
-    get sceneCount() { return scenes.length; },
-    get isLoading() { return isLoading; },
-    get error() { return error; },
+    get sceneCount() {
+      return scenes.length;
+    },
+    get isLoading() {
+      return isLoading;
+    },
+    get error() {
+      return error;
+    },
     load,
     getSlots,
     invalidateSlots,
