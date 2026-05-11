@@ -170,6 +170,9 @@ pub struct Scene {
     pub name: String,
     pub created_at: String,
     pub favorited: i32,
+    pub thumbnail_path: Option<String>,
+    pub thumbnail_color: Option<String>,
+    pub thumbnail_icon: Option<String>,
 }
 
 #[derive(Insertable, Debug)]
@@ -184,7 +187,15 @@ pub struct UpdateScene {
     pub name: String,
 }
 
-use diesel::sql_types::{BigInt, Integer, Text};
+#[derive(AsChangeset, Debug)]
+#[diesel(table_name = scenes, treat_none_as_null = true)]
+pub struct UpdateSceneThumbnail {
+    pub thumbnail_path: Option<String>,
+    pub thumbnail_color: Option<String>,
+    pub thumbnail_icon: Option<String>,
+}
+
+use diesel::sql_types::{BigInt, Integer, Nullable, Text};
 
 #[derive(QueryableByName, Serialize, Deserialize, Debug)]
 pub struct SceneWithCount {
@@ -198,6 +209,12 @@ pub struct SceneWithCount {
     pub created_at: String,
     #[diesel(sql_type = BigInt)]
     pub slot_count: i64,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub thumbnail_path: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub thumbnail_color: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub thumbnail_icon: Option<String>,
 }
 
 // ── SceneSlot ─────────────────────────────────────────────────────────────────

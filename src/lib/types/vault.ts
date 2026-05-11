@@ -103,6 +103,9 @@ export interface Scene {
   name: string;
   favorited: number;
   created_at: string;
+  thumbnail_path: string | null;
+  thumbnail_color: string | null;
+  thumbnail_icon: string | null;
 }
 
 export interface SceneWithCount {
@@ -111,6 +114,9 @@ export interface SceneWithCount {
   favorited: number;
   created_at: string;
   slot_count: number;
+  thumbnail_path: string | null;
+  thumbnail_color: string | null;
+  thumbnail_icon: string | null;
 }
 
 export interface SceneSlot {

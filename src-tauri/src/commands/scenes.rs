@@ -4,7 +4,7 @@ use diesel::sql_types::Integer;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-use crate::db::models::{NewScene, NewSceneSlot, Scene, SceneSlot, SceneWithCount, UpdateScene, UpdateSceneSlot};
+use crate::db::models::{NewScene, NewSceneSlot, Scene, SceneSlot, SceneWithCount, UpdateScene, UpdateSceneSlot, UpdateSceneThumbnail};
 use crate::db::schema::{scene_slots, scenes};
 use crate::vault::AppVault;
 
@@ -83,7 +83,8 @@ pub fn get_scenes_with_slot_counts(vault: State<AppVault>) -> Result<Vec<SceneWi
     let mut state = vault.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     diesel::sql_query(
-        "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count \
+        "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count, \
+         s.thumbnail_path, s.thumbnail_color, s.thumbnail_icon \
          FROM scenes s \
          LEFT JOIN scene_slots ss ON ss.scene_id = s.id \
          GROUP BY s.id \
@@ -254,6 +255,81 @@ pub fn get_audio_absolute_path(
         .to_str()
         .map(|s| s.to_string())
         .ok_or("Path contains invalid UTF-8".to_string())
+}
+
+#[tauri::command]
+pub fn update_scene_thumbnail(
+    id: i32,
+    thumbnail_path: Option<String>,
+    thumbnail_color: Option<String>,
+    thumbnail_icon: Option<String>,
+    vault: State<AppVault>,
+) -> Result<Scene, String> {
+    let mut state = vault.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    diesel::update(scenes::table.find(id))
+        .set(UpdateSceneThumbnail { thumbnail_path, thumbnail_color, thumbnail_icon })
+        .returning(Scene::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn copy_thumbnail_file(absolute_path: String, vault: State<AppVault>) -> Result<String, String> {
+    let src = PathBuf::from(&absolute_path);
+    let file_name = src
+        .file_name()
+        .ok_or("Invalid file path")?
+        .to_string_lossy()
+        .to_string();
+
+    let ext_lower = src
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if !matches!(ext_lower.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif") {
+        return Err("Unsupported image format".to_string());
+    }
+
+    let (dest, relative) = {
+        let state = vault.lock().map_err(|e| e.to_string())?;
+        let vault_path = state.path.as_ref().ok_or("No vault open")?;
+        let thumb_dir = vault_path.join(".grimoire").join("thumbnails");
+        std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
+        let dest = resolve_thumbnail_filename(&thumb_dir, &file_name);
+        let relative = format!(
+            ".grimoire/thumbnails/{}",
+            dest.file_name().unwrap().to_string_lossy()
+        );
+        (dest, relative)
+    };
+
+    std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+    Ok(relative)
+}
+
+pub fn resolve_thumbnail_filename(thumb_dir: &PathBuf, file_name: &str) -> PathBuf {
+    let stem = PathBuf::from(file_name)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let ext = PathBuf::from(file_name)
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let candidate = thumb_dir.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let mut counter = 2u32;
+    loop {
+        let path = thumb_dir.join(format!("{} {}{}", stem, counter, ext));
+        if !path.exists() {
+            return path;
+        }
+        counter += 1;
+    }
 }
 
 #[cfg(test)]
@@ -440,7 +516,8 @@ mod tests {
                 .unwrap();
         }
         let results: Vec<crate::db::models::SceneWithCount> = diesel::sql_query(
-            "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count \
+            "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count, \
+             s.thumbnail_path, s.thumbnail_color, s.thumbnail_icon \
              FROM scenes s \
              LEFT JOIN scene_slots ss ON ss.scene_id = s.id \
              GROUP BY s.id ORDER BY s.id ASC"
@@ -452,5 +529,94 @@ mod tests {
         assert_eq!(results[0].slot_count, 2);
         assert_eq!(results[1].name, "Tavern");
         assert_eq!(results[1].slot_count, 0);
+    }
+
+    #[test]
+    fn test_thumbnail_round_trip() {
+        let mut conn = setup_db();
+        let scene: Scene = diesel::insert_into(scenes::table)
+            .values(NewScene { name: "Mystic Glade".to_string() })
+            .returning(Scene::as_returning())
+            .get_result(&mut conn)
+            .unwrap();
+        assert!(scene.thumbnail_path.is_none());
+        assert!(scene.thumbnail_color.is_none());
+        assert!(scene.thumbnail_icon.is_none());
+
+        use crate::db::models::UpdateSceneThumbnail;
+        let updated: Scene = diesel::update(scenes::table.find(scene.id))
+            .set(UpdateSceneThumbnail {
+                thumbnail_path: Some(".grimoire/thumbnails/glade.webp".to_string()),
+                thumbnail_color: Some("crimson".to_string()),
+                thumbnail_icon: Some("tree-pine".to_string()),
+            })
+            .returning(Scene::as_returning())
+            .get_result(&mut conn)
+            .unwrap();
+        assert_eq!(updated.thumbnail_path.as_deref(), Some(".grimoire/thumbnails/glade.webp"));
+        assert_eq!(updated.thumbnail_color.as_deref(), Some("crimson"));
+        assert_eq!(updated.thumbnail_icon.as_deref(), Some("tree-pine"));
+
+        // Clearing fields with null
+        let cleared: Scene = diesel::update(scenes::table.find(scene.id))
+            .set(UpdateSceneThumbnail {
+                thumbnail_path: None,
+                thumbnail_color: None,
+                thumbnail_icon: None,
+            })
+            .returning(Scene::as_returning())
+            .get_result(&mut conn)
+            .unwrap();
+        assert!(cleared.thumbnail_path.is_none());
+        assert!(cleared.thumbnail_color.is_none());
+        assert!(cleared.thumbnail_icon.is_none());
+    }
+
+    #[test]
+    fn test_scenes_with_slot_counts_includes_thumbnail_fields() {
+        let mut conn = setup_db();
+        let scene: Scene = diesel::insert_into(scenes::table)
+            .values(NewScene { name: "Dragon Lair".to_string() })
+            .returning(Scene::as_returning())
+            .get_result(&mut conn)
+            .unwrap();
+        use crate::db::models::UpdateSceneThumbnail;
+        diesel::update(scenes::table.find(scene.id))
+            .set(UpdateSceneThumbnail {
+                thumbnail_path: Some(".grimoire/thumbnails/lair.webp".to_string()),
+                thumbnail_color: Some("ember".to_string()),
+                thumbnail_icon: None,
+            })
+            .execute(&mut conn)
+            .unwrap();
+
+        let results: Vec<crate::db::models::SceneWithCount> = diesel::sql_query(
+            "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count, \
+             s.thumbnail_path, s.thumbnail_color, s.thumbnail_icon \
+             FROM scenes s \
+             LEFT JOIN scene_slots ss ON ss.scene_id = s.id \
+             GROUP BY s.id ORDER BY s.id ASC"
+        )
+        .load(&mut conn)
+        .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].thumbnail_path.as_deref(), Some(".grimoire/thumbnails/lair.webp"));
+        assert_eq!(results[0].thumbnail_color.as_deref(), Some("ember"));
+        assert!(results[0].thumbnail_icon.is_none());
+    }
+
+    #[test]
+    fn test_resolve_thumbnail_filename_no_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = resolve_thumbnail_filename(&dir.path().to_path_buf(), "scene.webp");
+        assert_eq!(result, dir.path().join("scene.webp"));
+    }
+
+    #[test]
+    fn test_resolve_thumbnail_filename_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("scene.webp"), b"").unwrap();
+        let result = resolve_thumbnail_filename(&dir.path().to_path_buf(), "scene.webp");
+        assert_eq!(result, dir.path().join("scene 2.webp"));
     }
 }

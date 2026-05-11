@@ -93,6 +93,9 @@ diesel::table! {
         name -> Text,
         created_at -> Text,
         favorited -> Integer,
+        thumbnail_path -> Nullable<Text>,
+        thumbnail_color -> Nullable<Text>,
+        thumbnail_icon -> Nullable<Text>,
     }
 }
 

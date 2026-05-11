@@ -79,6 +79,8 @@ pub fn run() {
             reorder_scene_slots,
             copy_audio_file,
             get_audio_absolute_path,
+            update_scene_thumbnail,
+            copy_thumbnail_file,
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
