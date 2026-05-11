@@ -138,7 +138,7 @@ describe("ScenesDashboard", () => {
   it("shows slot count metadata on each card", () => {
     mockScenes = [makeScene(1, "My Scene", false, "2024-01-01", 3)];
     const { getByText } = render(ScenesDashboard);
-    expect(getByText(/3/)).toBeTruthy();
+    expect(getByText(/3\s+tracks/)).toBeTruthy();
   });
 
   it("shows a play button on each scene card", () => {

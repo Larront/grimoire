@@ -18,8 +18,7 @@
   const ACCENT_FG = ["#c2483d", "#9b6bbf", "#5c9e6e", "#5b9ec9", "#c49a3c"];
 
   function cardBg(scene: SceneWithCount): string {
-    if (scene.thumbnail_color) return scene.thumbnail_color;
-    return ACCENT_BG[scene.id % 5];
+    return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
   }
 
   function cardFg(scene: SceneWithCount): string {
@@ -44,15 +43,10 @@
       console.error("create scene failed:", e);
     }
   }
-
-  function playScene(id: number) {
-    audioEngine.playScene(id);
-  }
 </script>
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
   <div class="mx-auto w-full max-w-5xl px-8 pt-8 pb-20">
-    <!-- Header -->
     <div class="flex items-center justify-between">
       <h1 class="font-heading text-3xl tracking-tight text-foreground">
         All Scenes
@@ -67,7 +61,6 @@
     ></div>
 
     {#if scenes.scenes.length === 0}
-      <!-- Empty state -->
       <div
         data-empty-state
         class="mt-16 flex flex-col items-center justify-center py-20 text-center"
@@ -95,7 +88,6 @@
         </Button>
       </div>
     {:else}
-      <!-- Scene grid -->
       <div
         data-scenes-grid
         class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4"
@@ -105,7 +97,6 @@
             data-scene-card
             class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg"
           >
-            <!-- Thumbnail -->
             <div
               class="relative flex aspect-[4/3] items-center justify-center"
               style="background: {cardBg(scene)}"
@@ -116,25 +107,22 @@
                 strokeWidth={1.5}
               />
 
-              <!-- Favorite indicator -->
               {#if scene.favorited}
                 <div class="absolute top-2 left-2">
                   <Star class="size-3.5 fill-amber-400 text-amber-400" />
                 </div>
               {/if}
 
-              <!-- Play button overlay -->
               <button
                 data-play-btn
                 aria-label="Play {scene.name}"
                 class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
-                onclick={() => playScene(scene.id)}
+                onclick={() => audioEngine.playScene(scene.id)}
               >
                 <Play class="size-3.5 fill-white text-white" />
               </button>
             </div>
 
-            <!-- Card body -->
             <div class="px-3 py-2.5">
               <p class="truncate font-heading text-sm text-foreground">
                 {scene.name}
