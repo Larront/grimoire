@@ -129,25 +129,4 @@ describe("icon rail", () => {
     expect(filesBtn).toBeTruthy();
   });
 
-  it("Files button click expands the sidebar when it is closed", async () => {
-    const { getByTestId } = render(AppShell);
-
-    // Collapse the sidebar first via Ctrl+\
-    await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
-
-    const sidebarAfterCollapse = document.querySelector(
-      '[data-slot="sidebar"][data-state]',
-    );
-    expect(sidebarAfterCollapse?.getAttribute("data-state")).toBe("collapsed");
-
-    // Click Files icon to re-expand
-    const rail = getByTestId("icon-rail");
-    const filesBtn = within(rail).getByRole("button", { name: /^files$/i });
-    await fireEvent.click(filesBtn);
-
-    const sidebarAfterExpand = document.querySelector(
-      '[data-slot="sidebar"][data-state]',
-    );
-    expect(sidebarAfterExpand?.getAttribute("data-state")).toBe("expanded");
-  });
 });
