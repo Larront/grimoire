@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tabs } from '$lib/stores/tabs.svelte';
-	import { FileText, Map as MapIcon, Music2, ChevronRight, X, Plus, File } from '@lucide/svelte';
+	import { FileText, Map as MapIcon, Music2, Clapperboard, ChevronRight, X, Plus, File } from '@lucide/svelte';
 	import * as ContextMenu from '$lib/components/ui/context-menu';
 	import type { TabType } from '$lib/stores/tabs.svelte';
 
@@ -108,10 +108,11 @@
 
 	function getIcon(type: TabType) {
 		switch (type) {
-			case 'note':  return FileText;
-			case 'map':   return MapIcon;
-			case 'scene': return Music2;
-			case 'empty': return File;
+			case 'note':   return FileText;
+			case 'map':    return MapIcon;
+			case 'scenes': return Clapperboard;
+			case 'scene':  return Music2;
+			case 'empty':  return File;
 		}
 	}
 

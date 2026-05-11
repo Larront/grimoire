@@ -285,7 +285,7 @@
                     <Sidebar.MenuItem>
                       <Sidebar.MenuButton>
                         {#snippet child({ props })}
-                          <button type="button" {...props} onclick={() => {}}>
+                          <button type="button" {...props} onclick={() => tabs.openTab({ type: 'scenes', id: 0, title: 'All Scenes' })}>
                             <LayoutList class="size-4" />
                             All Scenes
                           </button>

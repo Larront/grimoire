@@ -3,6 +3,7 @@
 	import NotePane from './panes/NotePane.svelte';
 	import MapPane from './panes/MapPane.svelte';
 	import ScenePane from './panes/ScenePane.svelte';
+	import ScenesDashboard from './panes/ScenesDashboard.svelte';
 
 	interface Props {
 		pane: 'left' | 'right';
@@ -41,6 +42,8 @@
 		{#key activeTab.id}
 			<MapPane mapId={activeTab.id} {pane} />
 		{/key}
+	{:else if activeTab.type === 'scenes'}
+		<ScenesDashboard />
 	{:else if activeTab.type === 'scene'}
 		{#key activeTab.id}
 			<ScenePane sceneId={activeTab.id} {pane} />

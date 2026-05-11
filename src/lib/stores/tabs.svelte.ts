@@ -1,7 +1,7 @@
 import { untrack } from "svelte";
 import { vault } from "./vault.svelte";
 
-export type TabType = "note" | "map" | "scene" | "empty";
+export type TabType = "note" | "map" | "scene" | "scenes" | "empty";
 
 export interface Tab {
   type: TabType;
