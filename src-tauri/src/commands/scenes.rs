@@ -209,7 +209,7 @@ pub fn copy_audio_file(absolute_path: String, vault: State<AppVault>) -> Result<
         let vault_path = state.path.as_ref().ok_or("No vault open")?;
         let audio_dir = vault_path.join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
-        let dest = resolve_audio_filename(&audio_dir, &file_name);
+        let dest = resolve_filename(&audio_dir, &file_name);
         let relative = format!("audio/{}", dest.file_name().unwrap().to_string_lossy());
         (dest, relative)
     }; // lock dropped here — fs::copy runs without holding mutex
@@ -218,24 +218,24 @@ pub fn copy_audio_file(absolute_path: String, vault: State<AppVault>) -> Result<
     Ok(relative)
 }
 
-// Naming matches maps.rs: "stem counter.ext" (no parentheses), e.g. "forest 2.mp3"
-pub fn resolve_audio_filename(audio_dir: &PathBuf, file_name: &str) -> PathBuf {
-    let stem = PathBuf::from(file_name)
+// "stem counter.ext" convention (no parens), e.g. "forest 2.mp3" — matches maps.rs
+fn resolve_filename(dir: &Path, file_name: &str) -> PathBuf {
+    let stem = Path::new(file_name)
         .file_stem()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
-    let ext = PathBuf::from(file_name)
+    let ext = Path::new(file_name)
         .extension()
         .map(|e| format!(".{}", e.to_string_lossy()))
         .unwrap_or_default();
-    let candidate = audio_dir.join(file_name);
+    let candidate = dir.join(file_name);
     if !candidate.exists() {
         return candidate;
     }
     let mut counter = 2u32;
     loop {
-        let path = audio_dir.join(format!("{} {}{}", stem, counter, ext));
+        let path = dir.join(format!("{} {}{}", stem, counter, ext));
         if !path.exists() {
             return path;
         }
@@ -296,7 +296,7 @@ pub fn copy_thumbnail_file(absolute_path: String, vault: State<AppVault>) -> Res
         let vault_path = state.path.as_ref().ok_or("No vault open")?;
         let thumb_dir = vault_path.join(".grimoire").join("thumbnails");
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
-        let dest = resolve_thumbnail_filename(&thumb_dir, &file_name);
+        let dest = resolve_filename(&thumb_dir, &file_name);
         let relative = format!(
             ".grimoire/thumbnails/{}",
             dest.file_name().unwrap().to_string_lossy()
@@ -306,30 +306,6 @@ pub fn copy_thumbnail_file(absolute_path: String, vault: State<AppVault>) -> Res
 
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(relative)
-}
-
-pub fn resolve_thumbnail_filename(thumb_dir: &PathBuf, file_name: &str) -> PathBuf {
-    let stem = PathBuf::from(file_name)
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    let ext = PathBuf::from(file_name)
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy()))
-        .unwrap_or_default();
-    let candidate = thumb_dir.join(file_name);
-    if !candidate.exists() {
-        return candidate;
-    }
-    let mut counter = 2u32;
-    loop {
-        let path = thumb_dir.join(format!("{} {}{}", stem, counter, ext));
-        if !path.exists() {
-            return path;
-        }
-        counter += 1;
-    }
 }
 
 #[cfg(test)]
@@ -432,28 +408,27 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_audio_filename_no_conflict() {
+    fn test_resolve_filename_no_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let result = resolve_audio_filename(&dir.path().to_path_buf(), "forest.mp3");
+        let result = resolve_filename(dir.path(), "forest.mp3");
         assert_eq!(result, dir.path().join("forest.mp3"));
     }
 
     #[test]
-    fn test_resolve_audio_filename_one_conflict() {
+    fn test_resolve_filename_one_conflict() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("forest.mp3"), b"").unwrap();
-        let result = resolve_audio_filename(&dir.path().to_path_buf(), "forest.mp3");
-        // Matches maps.rs convention: "stem counter" (no parentheses)
+        let result = resolve_filename(dir.path(), "forest.mp3");
         assert_eq!(result, dir.path().join("forest 2.mp3"));
     }
 
     #[test]
-    fn test_resolve_audio_filename_multi_conflict() {
+    fn test_resolve_filename_multi_conflict() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("forest.mp3"), b"").unwrap();
         std::fs::write(dir.path().join("forest 2.mp3"), b"").unwrap();
         std::fs::write(dir.path().join("forest 3.mp3"), b"").unwrap();
-        let result = resolve_audio_filename(&dir.path().to_path_buf(), "forest.mp3");
+        let result = resolve_filename(dir.path(), "forest.mp3");
         assert_eq!(result, dir.path().join("forest 4.mp3"));
     }
 
@@ -543,7 +518,6 @@ mod tests {
         assert!(scene.thumbnail_color.is_none());
         assert!(scene.thumbnail_icon.is_none());
 
-        use crate::db::models::UpdateSceneThumbnail;
         let updated: Scene = diesel::update(scenes::table.find(scene.id))
             .set(UpdateSceneThumbnail {
                 thumbnail_path: Some(".grimoire/thumbnails/glade.webp".to_string()),
@@ -580,7 +554,6 @@ mod tests {
             .returning(Scene::as_returning())
             .get_result(&mut conn)
             .unwrap();
-        use crate::db::models::UpdateSceneThumbnail;
         diesel::update(scenes::table.find(scene.id))
             .set(UpdateSceneThumbnail {
                 thumbnail_path: Some(".grimoire/thumbnails/lair.webp".to_string()),
@@ -605,18 +578,4 @@ mod tests {
         assert!(results[0].thumbnail_icon.is_none());
     }
 
-    #[test]
-    fn test_resolve_thumbnail_filename_no_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        let result = resolve_thumbnail_filename(&dir.path().to_path_buf(), "scene.webp");
-        assert_eq!(result, dir.path().join("scene.webp"));
-    }
-
-    #[test]
-    fn test_resolve_thumbnail_filename_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("scene.webp"), b"").unwrap();
-        let result = resolve_thumbnail_filename(&dir.path().to_path_buf(), "scene.webp");
-        assert_eq!(result, dir.path().join("scene 2.webp"));
-    }
 }
