@@ -1,7 +1,11 @@
-import { render } from "@testing-library/svelte";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, fireEvent, waitFor, cleanup } from "@testing-library/svelte";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import ScenesDashboard from "../lib/components/panes/ScenesDashboard.svelte";
 import type { SceneWithCount } from "../lib/types/vault";
+import { tabs } from "../lib/stores/tabs.svelte";
+import { audioEngine } from "../lib/stores/audio-engine.svelte";
+import { scenes } from "../lib/stores/scenes.svelte";
 
 // Mutable mock data — reassigned per test
 let mockScenes: SceneWithCount[] = [];
@@ -57,6 +61,11 @@ function makeScene(
     thumbnail_icon: null,
   };
 }
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("ScenesDashboard", () => {
   beforeEach(() => {
@@ -146,5 +155,158 @@ describe("ScenesDashboard", () => {
     const { container } = render(ScenesDashboard);
     const card = container.querySelector("[data-scene-card]");
     expect(card?.querySelector("[data-play-btn]")).toBeTruthy();
+  });
+});
+
+// ── Context menu helpers ──────────────────────────────────────────────────────
+
+async function openCardContextMenu(container: HTMLElement) {
+  const trigger =
+    container.querySelector('[data-slot="context-menu-trigger"]') ??
+    container.querySelector("[data-scene-card]")!;
+  await fireEvent.contextMenu(trigger);
+}
+
+async function clickMenuItem(label: RegExp | string): Promise<HTMLElement> {
+  return waitFor(() => {
+    const items = Array.from(
+      document.body.querySelectorAll('[data-slot="context-menu-item"]'),
+    );
+    const item = items.find((el) => {
+      const text = el.textContent ?? "";
+      return label instanceof RegExp ? label.test(text) : text.includes(label);
+    }) as HTMLElement | undefined;
+    if (!item) throw new Error(`Menu item "${String(label)}" not found`);
+    return item;
+  });
+}
+
+// ── Context menu: structure ───────────────────────────────────────────────────
+
+describe("ScenesDashboard — context menu structure", () => {
+  it("shows context menu items on right-click", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    await waitFor(() => {
+      const items = document.body.querySelectorAll('[data-slot="context-menu-item"]');
+      expect(items.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows Favorite label for unfavorited scene", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Favorite");
+    expect(item).toBeTruthy();
+  });
+
+  it("shows Unfavorite label for favorited scene", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", true, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Unfavorite");
+    expect(item).toBeTruthy();
+  });
+});
+
+// ── Context menu: actions ─────────────────────────────────────────────────────
+
+describe("ScenesDashboard — context menu actions", () => {
+  it("Open calls tabs.openTab", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Open");
+    await fireEvent.click(item);
+    expect(tabs.openTab).toHaveBeenCalledWith({ type: "scene", id: 1, title: "Forest Ambience" });
+  });
+
+  it("Play calls audioEngine.playScene", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Play");
+    await fireEvent.click(item);
+    expect(audioEngine.playScene).toHaveBeenCalledWith(1);
+  });
+
+  it("Favorite toggles via toggle_scene_favorite and reloads", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Favorite");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("toggle_scene_favorite", { id: 1 });
+      expect(scenes.load).toHaveBeenCalled();
+    });
+  });
+});
+
+// ── Context menu: rename ──────────────────────────────────────────────────────
+
+describe("ScenesDashboard — inline rename", () => {
+  it("Rename shows an input field on the scene card", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Rename");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(container.querySelector('[data-mode="edit"]')).toBeTruthy();
+    });
+  });
+
+  it("committing rename calls update_scene", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Rename");
+    await fireEvent.click(item);
+    const input = await waitFor(() => {
+      const el = container.querySelector('[data-mode="edit"]') as HTMLInputElement;
+      if (!el) throw new Error("rename input not found");
+      return el;
+    });
+    await fireEvent.input(input, { target: { value: "New Name" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene", { id: 1, name: "New Name" });
+    });
+  });
+});
+
+// ── Context menu: delete ──────────────────────────────────────────────────────
+
+describe("ScenesDashboard — delete", () => {
+  it("Delete shows confirmation dialog", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Delete");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy();
+    });
+  });
+
+  it("confirming delete calls delete_scene and reloads", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    const item = await clickMenuItem("Delete");
+    await fireEvent.click(item);
+    const confirmBtn = await waitFor(() => {
+      const btn = document.body.querySelector('[role="alertdialog"] button[data-slot="alert-dialog-action"]') as HTMLElement;
+      if (!btn) throw new Error("confirm button not found");
+      return btn;
+    });
+    await fireEvent.click(confirmBtn);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("delete_scene", { id: 1 });
+      expect(scenes.load).toHaveBeenCalled();
+    });
   });
 });
