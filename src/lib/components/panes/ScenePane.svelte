@@ -1,7 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
@@ -168,10 +167,12 @@
     scenePaused = false;
   }
 
+  function handleStop() {
+    scenePaused = false;
+    audioEngine.stopAll();
+  }
+
   // ---- Spotify playlist controls ----
-  let hasSpotifyPlaylist = $derived(
-    slots.some((s) => s.source_id.startsWith("spotify:playlist:"))
-  );
   let spotifyPlaylistSlot = $derived(
     slots.find((s) => s.source_id.startsWith("spotify:playlist:")) ?? null
   );
@@ -526,7 +527,7 @@
             <Play class="size-3.5" />
             Resume
           </Button>
-          <Button variant="secondary" size="sm" onclick={() => { scenePaused = false; audioEngine.stopAll(); }}>
+          <Button variant="secondary" size="sm" onclick={handleStop}>
             <Square class="size-3.5" />
             Stop
           </Button>
@@ -547,7 +548,7 @@
         {/if}
 
         <!-- Spotify playlist controls (skip, shuffle) -->
-        {#if hasSpotifyPlaylist}
+        {#if spotifyPlaylistSlot}
           <div data-spotify-controls class="ml-1 flex items-center gap-0.5 border-l border-border/60 pl-3">
             <Button variant="ghost" size="icon" class="size-7" onclick={() => audioEngine.skipPrev()}>
               <SkipBack class="size-3.5" />
@@ -594,9 +595,7 @@
 
     <!-- SLOT LIST -->
     <div class="mx-auto w-full max-w-3xl px-8 pt-6 pb-20">
-      <!-- Track list -->
-      <div>
-        {#if slotsLoading}
+      {#if slotsLoading}
           <div class="space-y-3">
             {#each { length: 3 } as _, i (i)}
               <div class="h-14 animate-pulse rounded-lg bg-muted"></div>
@@ -773,8 +772,7 @@
             <Plus class="size-4 inline" />
             Add Track
           </button>
-        {/if}
-      </div>
+      {/if}
     </div>
   {/if}
 </div>

@@ -95,7 +95,6 @@ describe("ScenePane hero header", () => {
     vi.clearAllMocks();
   });
 
-  // TRACER BULLET: hero header renders
   it("renders a hero header when scene exists", () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
