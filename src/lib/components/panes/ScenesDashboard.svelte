@@ -95,7 +95,11 @@
         {#each sortedScenes as scene (scene.id)}
           <div
             data-scene-card
+            role="button"
+            tabindex="0"
             class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg"
+            onclick={() => tabs.openTab({ type: "scene", id: scene.id, title: scene.name })}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") tabs.openTab({ type: "scene", id: scene.id, title: scene.name }); }}
           >
             <div
               class="relative flex aspect-[4/3] items-center justify-center"
@@ -117,7 +121,7 @@
                 data-play-btn
                 aria-label="Play {scene.name}"
                 class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
-                onclick={() => audioEngine.playScene(scene.id)}
+                onclick={(e) => { e.stopPropagation(); audioEngine.playScene(scene.id); }}
               >
                 <Play class="size-3.5 fill-white text-white" />
               </button>

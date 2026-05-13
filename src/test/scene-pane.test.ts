@@ -130,30 +130,30 @@ describe("ScenePane hero header", () => {
     expect(nameInput?.classList.contains("font-heading")).toBeTruthy();
   });
 
-  it("does not show Spotify controls when scene has only local slots", async () => {
+  it("does not show skip controls when scene has only local slots", async () => {
     mockScenes = [makeScene()];
     mockSlots = [makeSlot({ source: "local" })];
     const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
     await waitFor(() => {
-      expect(container.querySelector("[data-spotify-controls]")).toBeNull();
+      expect(container.querySelector("[data-slot-skip-controls]")).toBeNull();
     });
   });
 
-  it("shows Spotify controls when scene has a Spotify playlist slot", async () => {
+  it("shows skip controls in the slot row for a Spotify playlist slot", async () => {
     mockScenes = [makeScene()];
     mockSlots = [makeSlot({ source: "spotify", source_id: "spotify:playlist:abc123" })];
     const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
     await waitFor(() => {
-      expect(container.querySelector("[data-spotify-controls]")).toBeTruthy();
+      expect(container.querySelector("[data-slot-skip-controls]")).toBeTruthy();
     });
   });
 
-  it("does not show Spotify controls when only Spotify track slots exist (not playlists)", async () => {
+  it("does not show skip controls for Spotify track slots (not playlists)", async () => {
     mockScenes = [makeScene()];
     mockSlots = [makeSlot({ source: "spotify", source_id: "spotify:track:xyz789" })];
     const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
     await waitFor(() => {
-      expect(container.querySelector("[data-spotify-controls]")).toBeNull();
+      expect(container.querySelector("[data-slot-skip-controls]")).toBeNull();
     });
   });
 });

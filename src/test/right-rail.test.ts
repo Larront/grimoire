@@ -67,13 +67,13 @@ describe("right rail responsive behaviour", () => {
     const rail = container.querySelector(
       '[data-slot="right-rail"][data-mobile="false"]',
     )!;
-    expect(rail.getAttribute("data-state")).toBe("open");
-
-    await fireEvent.click(getByTestId("right-rail-trigger"));
     expect(rail.getAttribute("data-state")).toBe("closed");
 
     await fireEvent.click(getByTestId("right-rail-trigger"));
     expect(rail.getAttribute("data-state")).toBe("open");
+
+    await fireEvent.click(getByTestId("right-rail-trigger"));
+    expect(rail.getAttribute("data-state")).toBe("closed");
   });
 
   it("right rail opens as overlay at ≤1023px after trigger click", async () => {

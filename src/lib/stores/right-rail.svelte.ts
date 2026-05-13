@@ -3,7 +3,7 @@ import { overlay } from "./overlay.svelte.js";
 
 export class RightRailState {
   #isMobile: IsMobile;
-  open = $state(true);
+  open = $state(false);
   #openMobileInternal = $state(false);
 
   // Derived: false when another overlay panel is active (mutual exclusion)

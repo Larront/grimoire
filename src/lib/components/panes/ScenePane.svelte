@@ -172,11 +172,6 @@
     audioEngine.stopAll();
   }
 
-  // ---- Spotify playlist controls ----
-  let spotifyPlaylistSlot = $derived(
-    slots.find((s) => s.source_id.startsWith("spotify:playlist:")) ?? null
-  );
-
   // ---- Master volume ----
   function handleMasterVolumeInput(e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
@@ -547,27 +542,6 @@
           </Button>
         {/if}
 
-        <!-- Spotify playlist controls (skip, shuffle) -->
-        {#if spotifyPlaylistSlot}
-          <div data-spotify-controls class="ml-1 flex items-center gap-0.5 border-l border-border/60 pl-3">
-            <Button variant="ghost" size="icon" class="size-7" onclick={() => audioEngine.skipPrev()}>
-              <SkipBack class="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7"
-              onclick={() => spotifyPlaylistSlot && toggleShuffle(spotifyPlaylistSlot)}
-            >
-              <Shuffle
-                class="size-3.5 {spotifyPlaylistSlot?.shuffle ? 'text-primary' : 'text-muted-foreground/40'}"
-              />
-            </Button>
-            <Button variant="ghost" size="icon" class="size-7" onclick={() => audioEngine.skipNext()}>
-              <SkipForward class="size-3.5" />
-            </Button>
-          </div>
-        {/if}
       </div>
 
       <!-- Master volume -->
@@ -636,25 +610,50 @@
                   <div
                     class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/50 hover:bg-card transition-colors"
                   >
-                    <!-- Play/pause per-slot -->
-                    {#if isThisScenePlaying}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="size-7 shrink-0"
-                        onclick={() => toggleSlotPlayback(slot.id)}
-                      >
-                        {#if getSlotPlaying(slot.id)}
-                          <Pause class="size-3.5 text-foreground" />
+                    <!-- Playback group: skip-back · play/pause · skip-forward -->
+                    <div class="flex shrink-0 items-center gap-1">
+                      {#if slot.source_id.startsWith("spotify:playlist:")}
+                        {#if isThisScenePlaying}
+                          <Button data-slot-skip-controls variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipPrev()}>
+                            <SkipBack class="size-3.5" />
+                          </Button>
                         {:else}
-                          <Play class="size-3.5 text-foreground" />
+                          <div data-slot-skip-controls class="flex size-7 shrink-0 items-center justify-center">
+                            <SkipBack class="size-3.5 text-muted-foreground/30" />
+                          </div>
                         {/if}
-                      </Button>
-                    {:else}
-                      <div class="flex size-7 shrink-0 items-center justify-center">
-                        <Play class="size-3.5 text-muted-foreground/30" />
-                      </div>
-                    {/if}
+                      {:else}
+                        <div class="size-7 shrink-0"></div>
+                      {/if}
+
+                      {#if isThisScenePlaying}
+                        <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => toggleSlotPlayback(slot.id)}>
+                          {#if getSlotPlaying(slot.id)}
+                            <Pause class="size-3.5 text-foreground" />
+                          {:else}
+                            <Play class="size-3.5 text-foreground" />
+                          {/if}
+                        </Button>
+                      {:else}
+                        <div class="flex size-7 shrink-0 items-center justify-center">
+                          <Play class="size-3.5 text-muted-foreground/30" />
+                        </div>
+                      {/if}
+
+                      {#if slot.source_id.startsWith("spotify:playlist:")}
+                        {#if isThisScenePlaying}
+                          <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipNext()}>
+                            <SkipForward class="size-3.5" />
+                          </Button>
+                        {:else}
+                          <div class="flex size-7 shrink-0 items-center justify-center">
+                            <SkipForward class="size-3.5 text-muted-foreground/30" />
+                          </div>
+                        {/if}
+                      {:else}
+                        <div class="size-7 shrink-0"></div>
+                      {/if}
+                    </div>
 
                     <!-- Source indicator -->
                     {#if slot.source === "spotify"}
@@ -744,6 +743,7 @@
                           : 'text-muted-foreground/30'}"
                       />
                     </Button>
+
                   </div>
                 </ContextMenu.Trigger>
                 <ContextMenu.Content>
