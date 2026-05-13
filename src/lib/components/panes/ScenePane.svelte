@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
@@ -22,6 +23,8 @@
     Shuffle,
     Pause,
     LoaderCircle,
+    SkipBack,
+    SkipForward,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/vault";
   import {
@@ -37,6 +40,31 @@
 
   // ---- Scene lookup ----
   let scene = $derived(scenes.scenes.find((s) => s.id === sceneId) ?? null);
+
+  // ---- Hero header ----
+  const ACCENT_BG = [
+    "rgba(194,72,61,0.18)",
+    "rgba(155,107,191,0.18)",
+    "rgba(92,158,110,0.18)",
+    "rgba(91,158,201,0.18)",
+    "rgba(196,154,60,0.18)",
+  ];
+  const ACCENT_FG = ["#c2483d", "#9b6bbf", "#5c9e6e", "#5b9ec9", "#c49a3c"];
+
+  let heroColor = $derived(scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0]);
+  let heroIconColor = $derived(scene ? ACCENT_FG[scene.id % 5] : ACCENT_FG[0]);
+  let thumbnailUrl = $state<string | null>(null);
+
+  $effect(() => {
+    const path = scene?.thumbnail_path;
+    if (path) {
+      invoke<string>("get_audio_absolute_path", { relativePath: path })
+        .then((abs) => { thumbnailUrl = convertFileSrc(abs); })
+        .catch(() => { thumbnailUrl = null; });
+    } else {
+      thumbnailUrl = null;
+    }
+  });
 
   // ---- Tab title sync ----
   $effect(() => {
@@ -118,6 +146,35 @@
       await audioEngine.playScene(scene.id);
     }
   }
+
+  // ---- Scene pause / resume ----
+  let scenePaused = $state(false);
+
+  $effect(() => {
+    if (!isThisScenePlaying) scenePaused = false;
+  });
+
+  async function handlePause() {
+    for (const [slotId, state] of audioEngine.slotStates) {
+      if (state.playing) await audioEngine.pauseSlot(slotId);
+    }
+    scenePaused = true;
+  }
+
+  async function handleResume() {
+    for (const [slotId, state] of audioEngine.slotStates) {
+      if (!state.playing) await audioEngine.resumeSlot(slotId);
+    }
+    scenePaused = false;
+  }
+
+  // ---- Spotify playlist controls ----
+  let hasSpotifyPlaylist = $derived(
+    slots.some((s) => s.source_id.startsWith("spotify:playlist:"))
+  );
+  let spotifyPlaylistSlot = $derived(
+    slots.find((s) => s.source_id.startsWith("spotify:playlist:")) ?? null
+  );
 
   // ---- Master volume ----
   function handleMasterVolumeInput(e: Event) {
@@ -423,68 +480,122 @@
       <p class="text-sm text-muted-foreground">Scene not found</p>
     </div>
   {:else}
-    <div class="mx-auto w-full max-w-3xl px-8 pt-8 pb-20">
-      <!-- Header: editable name -->
-      <input
-        bind:value={draftName}
-        class="w-full bg-transparent border-none outline-none p-0 font-heading text-3xl leading-tight tracking-tight text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
-        placeholder="Untitled Scene"
-        onblur={commitName}
-        onkeydown={handleNameKeydown}
-      />
+    <!-- HERO HEADER -->
+    <div
+      data-hero-header
+      class="relative flex min-h-52 flex-col justify-end overflow-hidden"
+      style="background-color: {heroColor}; {thumbnailUrl ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;` : ''}"
+    >
+      <!-- Gradient overlay for legibility (stronger on images) -->
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
 
-      <!-- Gradient divider -->
-      <div
-        class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"
-      ></div>
-
-      <!-- Controls row -->
-      <div class="mt-4 flex items-center justify-between">
-        <!-- Play / Stop button -->
-        <div class="flex items-center gap-3">
-          {#if isThisSceneLoading || audioEngine.isCrossfading}
-            <Button variant="secondary" size="sm" disabled>
-              <LoaderCircle class="size-3.5 animate-spin" />
-              Loading...
-            </Button>
-          {:else if isThisScenePlaying}
-            <Button variant="secondary" size="sm" onclick={handlePlayStop}>
-              <Square class="size-3.5" />
-              Stop
-            </Button>
-          {:else}
-            <Button variant="default" size="sm" onclick={handlePlayStop}>
-              <Play class="size-3.5" />
-              Play Scene
-            </Button>
-          {/if}
-        </div>
-
-        <!-- Master volume -->
-        <div class="flex items-center gap-2">
-          <Volume2 class="size-4 text-muted-foreground" />
-          <div class="relative flex items-center">
-            <div class="relative h-1 w-28 rounded-full bg-muted">
-              <div
-                class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-                style="width: {audioEngine.masterVolume * 100}%"
-              ></div>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={audioEngine.masterVolume}
-              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              oninput={handleMasterVolumeInput}
-            />
-          </div>
-        </div>
+      <!-- Icon — always rendered per ADR-0002 -->
+      <div data-hero-icon class="pointer-events-none absolute top-5 right-6">
+        <Music2
+          class="size-14 opacity-70"
+          strokeWidth={1.5}
+          style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))' : ''}"
+        />
       </div>
 
+      <!-- Scene name (editable) -->
+      <div class="relative z-10 px-8 pb-5">
+        <input
+          data-scene-name
+          bind:value={draftName}
+          class="font-heading w-full bg-transparent border-none outline-none p-0 text-3xl leading-tight tracking-tight placeholder:opacity-40 focus:ring-0"
+          style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)' : ''}"
+          placeholder="Untitled Scene"
+          onblur={commitName}
+          onkeydown={handleNameKeydown}
+        />
+      </div>
+    </div>
+
+    <!-- CONTROLS BAR -->
+    <div class="flex items-center justify-between border-b border-border/60 px-8 py-3">
+      <!-- Playback controls -->
+      <div class="flex items-center gap-3">
+        {#if isThisSceneLoading || audioEngine.isCrossfading}
+          <Button variant="secondary" size="sm" disabled>
+            <LoaderCircle class="size-3.5 animate-spin" />
+            Loading...
+          </Button>
+        {:else if scenePaused}
+          <Button variant="default" size="sm" onclick={handleResume}>
+            <Play class="size-3.5" />
+            Resume
+          </Button>
+          <Button variant="secondary" size="sm" onclick={() => { scenePaused = false; audioEngine.stopAll(); }}>
+            <Square class="size-3.5" />
+            Stop
+          </Button>
+        {:else if isThisScenePlaying}
+          <Button variant="secondary" size="sm" onclick={handlePause}>
+            <Pause class="size-3.5" />
+            Pause
+          </Button>
+          <Button variant="secondary" size="sm" onclick={handlePlayStop}>
+            <Square class="size-3.5" />
+            Stop
+          </Button>
+        {:else}
+          <Button variant="default" size="sm" onclick={handlePlayStop}>
+            <Play class="size-3.5" />
+            Play Scene
+          </Button>
+        {/if}
+
+        <!-- Spotify playlist controls (skip, shuffle) -->
+        {#if hasSpotifyPlaylist}
+          <div data-spotify-controls class="ml-1 flex items-center gap-0.5 border-l border-border/60 pl-3">
+            <Button variant="ghost" size="icon" class="size-7" onclick={() => audioEngine.skipPrev()}>
+              <SkipBack class="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-7"
+              onclick={() => spotifyPlaylistSlot && toggleShuffle(spotifyPlaylistSlot)}
+            >
+              <Shuffle
+                class="size-3.5 {spotifyPlaylistSlot?.shuffle ? 'text-primary' : 'text-muted-foreground/40'}"
+              />
+            </Button>
+            <Button variant="ghost" size="icon" class="size-7" onclick={() => audioEngine.skipNext()}>
+              <SkipForward class="size-3.5" />
+            </Button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Master volume -->
+      <div class="flex items-center gap-2">
+        <Volume2 class="size-4 text-muted-foreground" />
+        <div class="relative flex items-center">
+          <div class="relative h-1 w-28 rounded-full bg-muted">
+            <div
+              class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
+              style="width: {audioEngine.masterVolume * 100}%"
+            ></div>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={audioEngine.masterVolume}
+            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            oninput={handleMasterVolumeInput}
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- SLOT LIST -->
+    <div class="mx-auto w-full max-w-3xl px-8 pt-6 pb-20">
       <!-- Track list -->
-      <div class="mt-6">
+      <div>
         {#if slotsLoading}
           <div class="space-y-3">
             {#each { length: 3 } as _, i (i)}
