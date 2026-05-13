@@ -13,6 +13,7 @@
     LayoutList,
     Star,
     Music2,
+    Volume2,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as VaultMap } from "$lib/types/vault";
@@ -21,6 +22,7 @@
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
@@ -39,6 +41,8 @@
 
   // Favorite scenes from real data
   const favoriteScenes = $derived(scenes.scenes.filter((s) => s.favorited));
+
+  const activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
 
   async function refresh() {
     if (!vault.isOpen) return;
@@ -296,8 +300,17 @@
                       <Sidebar.MenuItem>
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
-                            <button type="button" {...props} onclick={() => tabs.openTab({ type: 'scene', id: scene.id, title: scene.name })}>
-                              <Star class="size-4 fill-primary/30 text-primary" />
+                            <button
+                              type="button"
+                              {...props}
+                              data-scene-playing={scene.id === activeSceneDisplayId ? true : undefined}
+                              onclick={() => tabs.openTab({ type: 'scene', id: scene.id, title: scene.name })}
+                            >
+                              {#if scene.id === activeSceneDisplayId}
+                                <Volume2 class="size-4 text-primary" />
+                              {:else}
+                                <Star class="size-4 fill-primary/30 text-primary" />
+                              {/if}
                               <span class="truncate">{scene.name}</span>
                             </button>
                           {/snippet}

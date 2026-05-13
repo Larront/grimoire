@@ -9,6 +9,8 @@ import { scenes } from "../lib/stores/scenes.svelte";
 
 // Mutable mock data — reassigned per test
 let mockScenes: SceneWithCount[] = [];
+let mockActiveSceneId: number | null = null;
+let mockLoadingSceneId: number | null = null;
 
 vi.mock("../lib/stores/scenes.svelte", () => ({
   scenes: {
@@ -35,7 +37,10 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
   audioEngine: {
     playScene: vi.fn(),
     get activeSceneId() {
-      return null;
+      return mockActiveSceneId;
+    },
+    get loadingSceneId() {
+      return mockLoadingSceneId;
     },
     get isPlaying() {
       return false;
@@ -70,6 +75,8 @@ afterEach(() => {
 describe("ScenesDashboard", () => {
   beforeEach(() => {
     mockScenes = [];
+    mockActiveSceneId = null;
+    mockLoadingSceneId = null;
     vi.clearAllMocks();
   });
 
@@ -308,5 +315,52 @@ describe("ScenesDashboard — delete", () => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("delete_scene", { id: 1 });
       expect(scenes.load).toHaveBeenCalled();
     });
+  });
+});
+
+// ── Playing indicator ─────────────────────────────────────────────────────────
+
+describe("ScenesDashboard — playing indicator", () => {
+  beforeEach(() => {
+    mockActiveSceneId = null;
+    mockLoadingSceneId = null;
+  });
+
+  it("no card has data-playing when both activeSceneId and loadingSceneId are null", () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    expect(container.querySelector("[data-playing]")).toBeNull();
+  });
+
+  it("card with matching activeSceneId gets data-playing", () => {
+    mockScenes = [
+      makeScene(1, "Forest Ambience", false, "2024-01-01"),
+      makeScene(2, "Tavern Noise", false, "2024-01-02"),
+    ];
+    mockActiveSceneId = 2;
+    const { container } = render(ScenesDashboard);
+    const playingCards = container.querySelectorAll("[data-playing]");
+    expect(playingCards.length).toBe(1);
+    expect(playingCards[0].textContent).toContain("Tavern Noise");
+  });
+
+  it("loadingSceneId takes precedence over activeSceneId for the indicator", () => {
+    mockScenes = [
+      makeScene(1, "Forest Ambience", false, "2024-01-01"),
+      makeScene(2, "Tavern Noise", false, "2024-01-02"),
+    ];
+    mockActiveSceneId = 1;
+    mockLoadingSceneId = 2;
+    const { container } = render(ScenesDashboard);
+    const playingCards = container.querySelectorAll("[data-playing]");
+    expect(playingCards.length).toBe(1);
+    expect(playingCards[0].textContent).toContain("Tavern Noise");
+  });
+
+  it("no card has data-playing when activeSceneId doesn't match any scene", () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    mockActiveSceneId = 99;
+    const { container } = render(ScenesDashboard);
+    expect(container.querySelector("[data-playing]")).toBeNull();
   });
 });

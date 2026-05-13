@@ -35,6 +35,8 @@
     }),
   );
 
+  let activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
+
   async function createScene() {
     try {
       const scene = await invoke<SceneWithCount>("create_scene", {
@@ -156,9 +158,10 @@
             <ContextMenu.Trigger>
               <div
                 data-scene-card
+                data-playing={scene.id === activeSceneDisplayId ? true : undefined}
                 role="button"
                 tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg"
+                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg {scene.id === activeSceneDisplayId ? 'ring-2 ring-primary' : ''}"
                 onclick={() => openScene(scene)}
                 onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
               >
