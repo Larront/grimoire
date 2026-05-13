@@ -300,13 +300,14 @@
                       <Sidebar.MenuItem>
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
+                            {@const isPlaying = scene.id === activeSceneDisplayId}
                             <button
                               type="button"
                               {...props}
-                              data-scene-playing={scene.id === activeSceneDisplayId ? true : undefined}
+                              data-scene-playing={isPlaying || undefined}
                               onclick={() => tabs.openTab({ type: 'scene', id: scene.id, title: scene.name })}
                             >
-                              {#if scene.id === activeSceneDisplayId}
+                              {#if isPlaying}
                                 <Volume2 class="size-4 text-primary" />
                               {:else}
                                 <Star class="size-4 fill-primary/30 text-primary" />

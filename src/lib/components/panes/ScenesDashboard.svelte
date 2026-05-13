@@ -154,14 +154,15 @@
         class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4"
       >
         {#each sortedScenes as scene (scene.id)}
+          {@const isPlaying = scene.id === activeSceneDisplayId}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
               <div
                 data-scene-card
-                data-playing={scene.id === activeSceneDisplayId ? true : undefined}
+                data-playing={isPlaying || undefined}
                 role="button"
                 tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg {scene.id === activeSceneDisplayId ? 'ring-2 ring-primary' : ''}"
+                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg {isPlaying ? 'ring-2 ring-primary' : ''}"
                 onclick={() => openScene(scene)}
                 onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
               >
