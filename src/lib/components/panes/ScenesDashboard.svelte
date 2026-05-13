@@ -47,7 +47,9 @@
     }
   }
 
-  // ── Context menu: rename ───────────────────────────────────────────────────
+  function openScene(scene: SceneWithCount) {
+    tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
+  }
 
   let renamingSceneId = $state<number | null>(null);
   let renameSceneValue = $state("");
@@ -78,8 +80,6 @@
     }
   }
 
-  // ── Context menu: delete ───────────────────────────────────────────────────
-
   let deleteSceneTarget = $state<SceneWithCount | null>(null);
 
   async function confirmDeleteScene() {
@@ -93,8 +93,6 @@
       console.error("delete scene failed:", e);
     }
   }
-
-  // ── Context menu: favorite ─────────────────────────────────────────────────
 
   async function toggleFavorite(scene: SceneWithCount) {
     try {
@@ -161,8 +159,8 @@
                 role="button"
                 tabindex="0"
                 class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg"
-                onclick={() => tabs.openTab({ type: "scene", id: scene.id, title: scene.name })}
-                onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") tabs.openTab({ type: "scene", id: scene.id, title: scene.name }); }}
+                onclick={() => openScene(scene)}
+                onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
               >
                 <div
                   class="relative flex aspect-[4/3] items-center justify-center"
@@ -215,7 +213,7 @@
             </ContextMenu.Trigger>
 
             <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => tabs.openTab({ type: "scene", id: scene.id, title: scene.name })}>
+              <ContextMenu.Item onclick={() => openScene(scene)}>
                 <ExternalLink class="size-4" />
                 Open
               </ContextMenu.Item>
@@ -260,7 +258,6 @@
   </div>
 </div>
 
-<!-- Delete scene confirmation -->
 <AlertDialog.Root
   open={deleteSceneTarget !== null}
   onOpenChange={(o) => {
