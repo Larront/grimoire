@@ -1,6 +1,7 @@
 import { render, fireEvent, waitFor, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import ScenesDashboard from "../lib/components/panes/ScenesDashboard.svelte";
 import type { SceneWithCount } from "../lib/types/vault";
 import { tabs } from "../lib/stores/tabs.svelte";
@@ -480,6 +481,96 @@ describe("ScenesDashboard — icon picker", () => {
     await fireEvent.click(resetBtn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1, thumbnailIcon: null }));
+    });
+  });
+});
+
+// ── Thumbnail image upload ────────────────────────────────────────────────────
+
+describe("ScenesDashboard — thumbnail image upload", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Change thumbnail opens file picker filtered to image types", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    vi.mocked(open).mockResolvedValueOnce(null);
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change thumbnail");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(vi.mocked(open)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.arrayContaining([
+            expect.objectContaining({ extensions: expect.arrayContaining(["jpg", "png", "webp"]) }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  it("selected image calls copy_thumbnail_file and update_scene_thumbnail", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    vi.mocked(open).mockResolvedValueOnce("/path/to/image.jpg");
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "copy_thumbnail_file") return ".grimoire/thumbnails/image.jpg";
+      return null;
+    });
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change thumbnail");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("copy_thumbnail_file", {
+        absolutePath: "/path/to/image.jpg",
+      });
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1, thumbnailPath: ".grimoire/thumbnails/image.jpg" }),
+      );
+      expect(scenes.load).toHaveBeenCalled();
+    });
+  });
+
+  it("Remove image option appears when thumbnail_path is set", async () => {
+    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Remove image");
+    expect(item).toBeTruthy();
+  });
+
+  it("Remove image option does not appear when thumbnail_path is null", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
+    expect(items.some((el) => el.textContent?.includes("Remove image"))).toBe(false);
+  });
+
+  it("Remove image calls update_scene_thumbnail with thumbnailPath null and reloads", async () => {
+    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Remove image");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1, thumbnailPath: null }),
+      );
+      expect(scenes.load).toHaveBeenCalled();
+    });
+  });
+
+  it("card with thumbnail_path resolves absolute path via get_audio_absolute_path", async () => {
+    mockScenes = [{ ...makeScene(1, "Scene", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    render(ScenesDashboard);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("get_audio_absolute_path", {
+        relativePath: ".grimoire/thumbnails/img.jpg",
+      });
     });
   });
 });

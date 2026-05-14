@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { remove } from "@tauri-apps/plugin-fs";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -133,6 +135,70 @@
       iconPickerScene = null;
     }
   }
+
+  // ---- Thumbnail image upload ----
+  let thumbnailUrls = $state<Record<number, string>>({});
+
+  $effect(() => {
+    const scenesWithImages = sortedScenes.filter((s) => s.thumbnail_path);
+    const activeIds = new Set(scenesWithImages.map((s) => s.id));
+    for (const key of Object.keys(thumbnailUrls)) {
+      if (!activeIds.has(Number(key))) delete thumbnailUrls[Number(key)];
+    }
+    for (const scene of scenesWithImages) {
+      invoke<string>("get_audio_absolute_path", { relativePath: scene.thumbnail_path! })
+        .then((abs) => { if (abs) thumbnailUrls[scene.id] = convertFileSrc(abs); })
+        .catch(() => { delete thumbnailUrls[scene.id]; });
+    }
+  });
+
+  async function changeThumbnail(scene: SceneWithCount) {
+    const picked = await open({
+      title: "Choose Thumbnail Image",
+      filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
+    });
+    if (!picked || typeof picked !== "string") return;
+    const oldPath = scene.thumbnail_path;
+    try {
+      const relativePath = await invoke<string>("copy_thumbnail_file", { absolutePath: picked });
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: relativePath,
+      });
+      await scenes.load();
+      if (oldPath) {
+        try {
+          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
+          if (abs) await remove(abs);
+        } catch { /* non-critical */ }
+      }
+    } catch (e) {
+      console.error("change thumbnail failed:", e);
+    }
+  }
+
+  async function removeThumbnail(scene: SceneWithCount) {
+    const oldPath = scene.thumbnail_path;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: null,
+      });
+      await scenes.load();
+      if (oldPath) {
+        try {
+          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
+          if (abs) await remove(abs);
+        } catch { /* non-critical */ }
+      }
+    } catch (e) {
+      console.error("remove thumbnail failed:", e);
+    }
+  }
 </script>
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
@@ -185,6 +251,7 @@
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
           {@const ThumbnailIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) ?? Clapperboard}
+          {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
               <div
@@ -198,13 +265,17 @@
               >
                 <div
                   class="relative flex aspect-[4/3] items-center justify-center"
-                  style="background: {cardBg(scene)}"
+                  style={cardImgUrl ? `background-image: url(${cardImgUrl}); background-size: cover; background-position: center;` : `background: ${cardBg(scene)}`}
+                  data-has-thumbnail={scene.thumbnail_path ? true : undefined}
                 >
+                  {#if cardImgUrl}
+                    <div class="pointer-events-none absolute inset-0 bg-black/30"></div>
+                  {/if}
                   <span data-thumbnail-icon={scene.thumbnail_icon ?? "Clapperboard"}>
                     <ThumbnailIcon
                       class="size-10 opacity-80"
-                      style="color: {cardFg(scene)}"
                       strokeWidth={1.5}
+                      style={cardImgUrl ? "color: white; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6))" : `color: ${cardFg(scene)}`}
                     />
                   </span>
 
@@ -269,7 +340,10 @@
                   Customise
                 </ContextMenu.SubTrigger>
                 <ContextMenu.SubContent>
-                  <ContextMenu.Item>Change thumbnail</ContextMenu.Item>
+                  <ContextMenu.Item onclick={() => changeThumbnail(scene)}>Change thumbnail</ContextMenu.Item>
+                  {#if scene.thumbnail_path}
+                    <ContextMenu.Item onclick={() => removeThumbnail(scene)}>Remove image</ContextMenu.Item>
+                  {/if}
                   <ContextMenu.Item onclick={() => { colorPickerScene = scene; }}>Change color</ContextMenu.Item>
                   <ContextMenu.Item onclick={() => { iconPickerScene = scene; }}>Change icon</ContextMenu.Item>
                 </ContextMenu.SubContent>

@@ -1,5 +1,7 @@
 import { render, waitFor, fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
 import type { Scene, SceneSlot } from "../lib/types/vault";
 
@@ -207,5 +209,61 @@ describe("ScenePane hero header — thumbnail pickers", () => {
     mockScenes = [makeScene({ thumbnail_icon: null })];
     const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
     expect(container.querySelector('[data-hero-icon][data-icon-name="Music2"]')).toBeTruthy();
+  });
+});
+
+describe("ScenePane hero header — thumbnail image upload", () => {
+  beforeEach(() => {
+    mockScenes = [];
+    mockSlots = [];
+    vi.clearAllMocks();
+  });
+
+  it("hero header has a change thumbnail button", () => {
+    mockScenes = [makeScene()];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
+  });
+
+  it("clicking change thumbnail opens file picker filtered to image types", async () => {
+    mockScenes = [makeScene()];
+    vi.mocked(open).mockResolvedValueOnce(null);
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const btn = container.querySelector("[data-edit-thumbnail-btn]") as HTMLElement;
+    await fireEvent.click(btn);
+    await waitFor(() => {
+      expect(vi.mocked(open)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.arrayContaining([
+            expect.objectContaining({ extensions: expect.arrayContaining(["jpg", "png", "webp"]) }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  it("remove thumbnail button not visible when thumbnail_path is null", () => {
+    mockScenes = [makeScene({ thumbnail_path: null })];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
+  });
+
+  it("remove thumbnail button visible when thumbnail_path is set", () => {
+    mockScenes = [makeScene({ thumbnail_path: ".grimoire/thumbnails/img.jpg" })];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeTruthy();
+  });
+
+  it("clicking remove thumbnail calls update_scene_thumbnail with thumbnailPath null", async () => {
+    mockScenes = [makeScene({ thumbnail_path: ".grimoire/thumbnails/img.jpg" })];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const btn = container.querySelector("[data-remove-thumbnail-btn]") as HTMLElement;
+    await fireEvent.click(btn);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1, thumbnailPath: null }),
+      );
+    });
   });
 });

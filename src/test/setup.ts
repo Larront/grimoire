@@ -46,6 +46,7 @@ global.ResizeObserver = class {
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue(null),
+  convertFileSrc: vi.fn().mockImplementation((url: string) => url),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -56,6 +57,7 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn().mockResolvedValue(""),
   writeTextFile: vi.fn().mockResolvedValue(undefined),
   exists: vi.fn().mockResolvedValue(false),
+  remove: vi.fn().mockResolvedValue(undefined),
   watch: vi.fn().mockResolvedValue(() => {}),
   watchImmediate: vi.fn().mockResolvedValue(() => {}),
 }));

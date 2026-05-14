@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { remove } from "@tauri-apps/plugin-fs";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -26,6 +27,8 @@
     SkipBack,
     SkipForward,
     Palette,
+    Image as ImageIcon,
+    X,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/vault";
   import {
@@ -95,6 +98,56 @@
       console.error("update thumbnail icon failed:", e);
     } finally {
       iconPickerOpen = false;
+    }
+  }
+
+  async function changeThumbnail() {
+    if (!scene) return;
+    const picked = await open({
+      title: "Choose Thumbnail Image",
+      filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
+    });
+    if (!picked || typeof picked !== "string") return;
+    const oldPath = scene.thumbnail_path;
+    try {
+      const relativePath = await invoke<string>("copy_thumbnail_file", { absolutePath: picked });
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: relativePath,
+      });
+      await scenes.load();
+      if (oldPath) {
+        try {
+          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
+          if (abs) await remove(abs);
+        } catch { /* non-critical */ }
+      }
+    } catch (e) {
+      console.error("change thumbnail failed:", e);
+    }
+  }
+
+  async function removeThumbnail() {
+    if (!scene) return;
+    const oldPath = scene.thumbnail_path;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: null,
+      });
+      await scenes.load();
+      if (oldPath) {
+        try {
+          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
+          if (abs) await remove(abs);
+        } catch { /* non-critical */ }
+      }
+    } catch (e) {
+      console.error("remove thumbnail failed:", e);
     }
   }
 
@@ -534,6 +587,24 @@
 
       <!-- Thumbnail edit buttons (visible on hover) -->
       <div class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          data-edit-thumbnail-btn
+          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          onclick={changeThumbnail}
+        >
+          <ImageIcon class="size-3" />
+          Image
+        </button>
+        {#if scene?.thumbnail_path}
+          <button
+            data-remove-thumbnail-btn
+            class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+            onclick={removeThumbnail}
+          >
+            <X class="size-3" />
+            Remove
+          </button>
+        {/if}
         <button
           data-edit-color-btn
           class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
