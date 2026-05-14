@@ -136,7 +136,6 @@
     }
   }
 
-  // ---- Thumbnail image upload ----
   let thumbnailUrls = $state<Record<number, string>>({});
 
   $effect(() => {
@@ -151,6 +150,14 @@
         .catch(() => { delete thumbnailUrls[scene.id]; });
     }
   });
+
+  async function deleteOldThumbnailFile(path: string | null) {
+    if (!path) return;
+    try {
+      const abs = await invoke<string>("get_audio_absolute_path", { relativePath: path });
+      if (abs) await remove(abs);
+    } catch { /* non-critical */ }
+  }
 
   async function changeThumbnail(scene: SceneWithCount) {
     const picked = await open({
@@ -168,12 +175,7 @@
         thumbnailPath: relativePath,
       });
       await scenes.load();
-      if (oldPath) {
-        try {
-          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
-          if (abs) await remove(abs);
-        } catch { /* non-critical */ }
-      }
+      await deleteOldThumbnailFile(oldPath);
     } catch (e) {
       console.error("change thumbnail failed:", e);
     }
@@ -189,12 +191,7 @@
         thumbnailPath: null,
       });
       await scenes.load();
-      if (oldPath) {
-        try {
-          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
-          if (abs) await remove(abs);
-        } catch { /* non-critical */ }
-      }
+      await deleteOldThumbnailFile(oldPath);
     } catch (e) {
       console.error("remove thumbnail failed:", e);
     }

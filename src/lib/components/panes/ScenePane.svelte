@@ -101,6 +101,14 @@
     }
   }
 
+  async function deleteOldThumbnailFile(path: string | null) {
+    if (!path) return;
+    try {
+      const abs = await invoke<string>("get_audio_absolute_path", { relativePath: path });
+      if (abs) await remove(abs);
+    } catch { /* non-critical */ }
+  }
+
   async function changeThumbnail() {
     if (!scene) return;
     const picked = await open({
@@ -118,12 +126,7 @@
         thumbnailPath: relativePath,
       });
       await scenes.load();
-      if (oldPath) {
-        try {
-          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
-          if (abs) await remove(abs);
-        } catch { /* non-critical */ }
-      }
+      await deleteOldThumbnailFile(oldPath);
     } catch (e) {
       console.error("change thumbnail failed:", e);
     }
@@ -140,12 +143,7 @@
         thumbnailPath: null,
       });
       await scenes.load();
-      if (oldPath) {
-        try {
-          const abs = await invoke<string>("get_audio_absolute_path", { relativePath: oldPath });
-          if (abs) await remove(abs);
-        } catch { /* non-critical */ }
-      }
+      await deleteOldThumbnailFile(oldPath);
     } catch (e) {
       console.error("remove thumbnail failed:", e);
     }
@@ -595,7 +593,7 @@
           <ImageIcon class="size-3" />
           Image
         </button>
-        {#if scene?.thumbnail_path}
+        {#if scene.thumbnail_path}
           <button
             data-remove-thumbnail-btn
             class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
