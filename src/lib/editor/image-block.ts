@@ -151,7 +151,7 @@ export const ImageBlock = Image.extend({
 
 // ─── Insertion helpers ────────────────────────────────────────────────────────
 
-const IMAGE_MIME = /^image\/(jpeg|png|gif|webp|svg\+xml)$/;
+const IMAGE_MIME = /^image\/(jpeg|png|gif|webp)$/;
 
 export function isImageFile(file: File): boolean {
   return IMAGE_MIME.test(file.type);
@@ -163,7 +163,6 @@ function mimeToExt(type: string): string {
     "image/png": "png",
     "image/gif": "gif",
     "image/webp": "webp",
-    "image/svg+xml": "svg",
   };
   return map[type] ?? "png";
 }

@@ -19,7 +19,7 @@ fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-const SUPPORTED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "svg"];
+const SUPPORTED_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp"];
 
 fn validate_image_extension(path: &PathBuf) -> Result<(), String> {
     let ext = path
@@ -155,14 +155,14 @@ mod tests {
 
     #[test]
     fn test_validate_extension_valid() {
-        for ext in &["portrait.png", "photo.jpg", "icon.svg", "anim.gif", "img.webp"] {
+        for ext in &["portrait.png", "photo.jpg", "photo.jpeg", "anim.gif", "img.webp"] {
             assert!(validate_image_extension(&PathBuf::from(ext)).is_ok(), "Expected ok for {}", ext);
         }
     }
 
     #[test]
     fn test_validate_extension_invalid() {
-        for ext in &["virus.exe", "track.mp3", "doc.pdf"] {
+        for ext in &["icon.svg", "virus.exe", "track.mp3", "doc.pdf"] {
             assert!(validate_image_extension(&PathBuf::from(ext)).is_err(), "Expected err for {}", ext);
         }
     }
