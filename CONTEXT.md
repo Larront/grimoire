@@ -134,7 +134,7 @@ A single audio source within a scene. Sources are `local` (vault-relative audio 
 | Right rail in split view          | Follows focus                                             | Least surprising; no extra UI needed                                                |
 | Border radius base                | 6px structural / 8px elevated                             | "Restrained by default" — 10px reads too consumer-app                              |
 | Scene Player visibility           | Hidden until first scene exists                           | No placeholder noise; Scene Dashboard handles discoverability                       |
-| Vault media layout                | Note images → `vault/media/`; thumbnails → `vault/.grimoire/thumbnails/` | Split by intent: user content vs app metadata (see ADR-0001)         |
+| Vault image layout                | Note images → `vault/images/`; thumbnails → `vault/.grimoire/thumbnails/` | Split by intent: user content vs app metadata (see ADR-0001)        |
 | Scene thumbnail icon persistence  | Icon renders on image AND color backgrounds               | Icon is persistent scene identity, not a fallback (see ADR-0002)                    |
 | Fallback color derivation         | Hash of scene id → accent preset; nullable override column | Zero-friction default; user can override without uploading an image               |
 | Scene Dashboard routing           | Opens as tab in active pane (`scenes://dashboard`)        | Allows split-view with notes during prep; consistent with tab navigation model      |
@@ -147,3 +147,6 @@ A single audio source within a scene. Sources are `local` (vault-relative audio 
 | Add Scene affordance              | Header button above dashboard grid                        | Toolbar location; allows future search/sort controls alongside it                   |
 | Dashboard empty state             | Action-oriented prompt + decorative default thumbnail + CTA button | Passive "no scenes" label is not enough — prompt to create is part of discovery   |
 | Mini-player in Phase 2            | Unchanged                                                 | Its value is when scenes are out of focus (GM editing notes); dashboard covers the in-focus case |
+| Note image orphan cleanup         | None in Phase 4                                           | Building cross-note reference tracking bleeds Phase 9 (graph/backlinks) work in; defer until orphans are a real problem |
+| Image caption ↔ alt text          | Single field — `alt` renders as visible caption below the image when non-empty | One labeling field instead of two; matches how a GM labels a portrait (visible) and incidentally provides a11y |
+| SVG support in note images        | Dropped — `images/` allowlist is `jpg, jpeg, png, gif, webp` only | XML-based format with script / external-fetch attack surface; no compelling GM use-case (icons are already Lucide); re-enable later if needed with a sanitizer |

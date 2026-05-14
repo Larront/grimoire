@@ -30,7 +30,7 @@ All data lives in a local vault directory (a folder on disk). Content is stored 
 
 ## Phase Structure
 
-### Phase 1 — UI Shell ✦ Foundation
+### Phase 1 — UI Shell ✦ Foundation ✅ Complete
 
 Establishes the structural layout the rest of the app builds on. Nothing else proceeds until the shell is correct.
 
@@ -53,7 +53,7 @@ Establishes the structural layout the rest of the app builds on. Nothing else pr
 
 ---
 
-### Phase 2 — Scenes Redesign
+### Phase 2 — Scenes Redesign ✅ Complete
 
 Elevates scenes from a functional list to the command centre they deserve to be.
 
@@ -74,7 +74,7 @@ Elevates scenes from a functional list to the command centre they deserve to be.
 
 ---
 
-### Phase 3 — Test Infrastructure
+### Phase 3 — Test Infrastructure ✅ Complete
 
 Locks down the foundation before the feature-building phase.
 
@@ -92,18 +92,28 @@ Locks down the foundation before the feature-building phase.
 
 ---
 
-### Phase 4 — Images
+### Phase 4 — Images 🟢 Current
 
 **Deliverables:**
 
-- Insert images from the local filesystem into notes via TipTap
-- Images copied to vault `media/` directory on insert
+- Insert images from the local filesystem into notes via TipTap (slash command, drag-and-drop, paste)
+- Images copied to vault `images/` directory on insert
 - Inline image rendering in the editor
 - Relative paths stored in note content (vault-portable)
+- Alt text editable inline; renders as a visible caption below the image when non-empty
+- Per-image align (left/center/right) and width (percent) controls, persisted in markdown via `{align=X width=Y%}` syntax
+- Click-to-zoom lightbox: toolbar button opens the image at natural size in a fullscreen overlay, Esc/click-outside to close
+- Broken-image recovery: when the file behind `src` is missing, the node renders a "not found" state with a Replace action that opens the file picker and rewrites the node's `src` while preserving caption, align, and width
+
+**Out of scope (Phase 4):**
+
+- Dragging or pasting image URLs from a web browser (requires a server-side fetcher with allowlist, size caps, and content-sniffing — deferred to a dedicated future feature)
+- Orphan cleanup when an image is removed from a note (requires cross-note reference tracking; revisit after Phase 9 introduces a link index)
 
 **Success criteria:**
 
 - Drop an image into a note, it appears inline, vault remains portable
+- Caption appears below the image and survives a vault reload
 
 ---
 

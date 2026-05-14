@@ -126,8 +126,14 @@
     Note not found
   </div>
 {:else}
-  <div class="flex flex-1 flex-col overflow-y-auto">
-    <div class="w-full lg:max-w-[70%] mx-auto px-10 pt-10 pb-20">
+  <!-- Single scroll container: title scrolls with the editor; scrollbar sits at pane edge.
+       @container lets the inner content respond to the pane's own width, so split panes
+       get tighter margins than the wide single-pane layout. -->
+  <div
+    data-note-scroll
+    class="@container h-[calc(100svh_-_var(--tab-bar-h)_-_1px)] overflow-y-auto"
+  >
+    <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
       <input
         bind:this={titleInput}
         bind:value={draftTitle}

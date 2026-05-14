@@ -12,6 +12,7 @@
   import type { SceneWithCount } from "$lib/types/vault";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
+  import { toastError } from "$lib/toast";
 
   function cardBg(scene: SceneWithCount): string {
     return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
@@ -36,6 +37,7 @@
       tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
     } catch (e) {
       console.error("create scene failed:", e);
+      toastError("Failed to create scene.");
     }
   }
 
@@ -66,6 +68,7 @@
       await scenes.updateScene(sceneId, trimmed);
     } catch (e) {
       console.error("rename scene failed:", e);
+      toastError("Failed to rename scene.");
     } finally {
       renamingSceneId = null;
     }
@@ -81,6 +84,7 @@
       await scenes.deleteScene(id);
     } catch (e) {
       console.error("delete scene failed:", e);
+      toastError("Failed to delete scene.");
     }
   }
 
@@ -89,6 +93,7 @@
       await scenes.toggleFavorite(scene.id);
     } catch (e) {
       console.error("toggle favorite failed:", e);
+      toastError("Failed to update favorite.");
     }
   }
 
@@ -101,6 +106,7 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
+      toastError("Failed to update color.");
     } finally {
       colorPickerScene = null;
     }
@@ -112,6 +118,7 @@
       await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
+      toastError("Failed to update icon.");
     } finally {
       iconPickerScene = null;
     }
@@ -138,7 +145,7 @@
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
   <div class="mx-auto w-full max-w-5xl px-8 pt-8 pb-20">
     <div class="flex items-center justify-between">
-      <h1 class="font-heading text-3xl tracking-tight text-foreground">
+      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">
         All Scenes
       </h1>
       <Button size="sm" onclick={createScene}>
@@ -156,7 +163,7 @@
         class="mt-16 flex flex-col items-center justify-center py-20 text-center"
       >
         <div
-          class="flex size-20 items-center justify-center rounded-2xl"
+          class="flex size-20 items-center justify-center rounded-lg"
           style="background: {ACCENT_BG[0]}"
         >
           <Clapperboard
@@ -193,7 +200,7 @@
                 data-playing={isPlaying || undefined}
                 role="button"
                 tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:shadow-lg {isPlaying ? 'ring-2 ring-primary' : ''}"
+                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-all hover:ring-1 hover:ring-border {isPlaying ? 'ring-2 ring-primary' : ''}"
                 onclick={() => openScene(scene)}
                 onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
               >

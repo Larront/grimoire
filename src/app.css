@@ -318,6 +318,42 @@
   font-kerning: normal;
 }
 
+/* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
+[data-note-scroll] {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 150ms ease;
+}
+
+[data-note-scroll]:hover,
+[data-note-scroll]:focus-within {
+  scrollbar-color: var(--background-border) transparent;
+}
+
+[data-note-scroll]::-webkit-scrollbar {
+  width: 8px;
+}
+
+[data-note-scroll]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-note-scroll]::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 150ms ease;
+}
+
+[data-note-scroll]:hover::-webkit-scrollbar-thumb,
+[data-note-scroll]:focus-within::-webkit-scrollbar-thumb {
+  background: var(--background-border);
+}
+
+[data-note-scroll]::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-faint);
+}
+
 .tiptap:focus {
   outline: none;
 }

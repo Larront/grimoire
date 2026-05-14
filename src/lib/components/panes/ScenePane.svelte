@@ -27,6 +27,7 @@
     Palette,
     Image as ImageIcon,
     X,
+    ChevronLeft,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/vault";
   import {
@@ -35,6 +36,8 @@
   } from "$lib/utils/spotify-auth";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { toastError } from "$lib/toast";
 
   interface Props {
     sceneId: number;
@@ -72,6 +75,7 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
+      toastError("Failed to update color.");
     } finally {
       colorPickerOpen = false;
     }
@@ -83,6 +87,7 @@
       await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
+      toastError("Failed to update icon.");
     } finally {
       iconPickerOpen = false;
     }
@@ -117,6 +122,7 @@
     } catch (e) {
       console.error("name save failed:", e);
       draftName = scene.name;
+      toastError("Failed to save scene name.");
     } finally {
       isSavingName = false;
     }
@@ -221,6 +227,7 @@
       });
     } catch (err) {
       console.error("Failed to save volume:", err);
+      toastError("Failed to save volume.");
     }
   }
 
@@ -251,6 +258,7 @@
       });
     } catch (e) {
       console.error("Failed to toggle loop:", e);
+      toastError("Failed to update loop setting.");
     }
   }
 
@@ -266,6 +274,7 @@
       });
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
+      toastError("Failed to update shuffle setting.");
     }
   }
 
@@ -296,6 +305,7 @@
       });
     } catch (e) {
       console.error("Failed to rename slot:", e);
+      toastError("Failed to rename track.");
     } finally {
       renamingSlotId = null;
     }
@@ -310,6 +320,7 @@
       slots = await scenes.deleteSlot(scene.id, deleteSlotTarget.id);
     } catch (e) {
       console.error("Failed to delete slot:", e);
+      toastError("Failed to delete track.");
     } finally {
       deleteSlotTarget = null;
     }
@@ -346,6 +357,7 @@
       spotifyAuth = await connectSpotify();
     } catch (e) {
       console.error("Spotify connection failed:", e);
+      toastError("Failed to connect Spotify.");
     } finally {
       isSpotifyConnecting = false;
     }
@@ -464,6 +476,7 @@
       resetAddDialog();
     } catch (e) {
       console.error("Failed to add track:", e);
+      toastError("Failed to add track.");
     } finally {
       isAdding = false;
     }
@@ -509,7 +522,7 @@
       <div class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           data-edit-thumbnail-btn
-          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
           onclick={() => changeThumbnail(scene.id)}
         >
           <ImageIcon class="size-3" />
@@ -518,7 +531,7 @@
         {#if scene.thumbnail_path}
           <button
             data-remove-thumbnail-btn
-            class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
             onclick={() => removeThumbnail(scene.id)}
           >
             <X class="size-3" />
@@ -527,7 +540,7 @@
         {/if}
         <button
           data-edit-color-btn
-          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
           onclick={() => (colorPickerOpen = true)}
         >
           <Palette class="size-3" />
@@ -535,7 +548,7 @@
         </button>
         <button
           data-edit-icon-btn
-          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
           onclick={() => (iconPickerOpen = true)}
         >
           <HeroIcon class="size-3" />
@@ -561,6 +574,17 @@
     <div class="flex items-center justify-between border-b border-border/60 px-8 py-3">
       <!-- Playback controls -->
       <div class="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground"
+          aria-label="All Scenes"
+          onclick={() => tabs.openTab({ type: 'scenes', id: 0, title: 'All Scenes' })}
+        >
+          <ChevronLeft class="size-3.5" />
+          All Scenes
+        </Button>
+        <div class="h-4 w-px bg-border/60"></div>
         {#if isThisSceneLoading || audioEngine.isCrossfading}
           <Button variant="secondary" size="sm" disabled>
             <LoaderCircle class="size-3.5 animate-spin" />
@@ -628,11 +652,11 @@
           <!-- Empty state -->
           <div class="flex flex-col items-center justify-center py-20">
             <div
-              class="flex size-14 items-center justify-center rounded-xl bg-primary/10"
+              class="flex size-14 items-center justify-center rounded-lg bg-primary/10"
             >
               <Music2 class="size-7 text-primary/60" strokeWidth={1.5} />
             </div>
-            <h2 class="mt-5 font-heading text-lg text-foreground">
+            <h2 class="mt-5 font-sans text-lg font-semibold text-foreground">
               No tracks yet
             </h2>
             <p
@@ -705,16 +729,9 @@
                     </div>
 
                     <!-- Source indicator -->
-                    {#if slot.source === "spotify"}
-                      <span
-                        class="shrink-0 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[10px] font-medium text-green-400"
-                        >Spotify</span
-                      >
-                    {:else}
-                      <Music2
-                        class="size-3.5 shrink-0 text-muted-foreground/40"
-                      />
-                    {/if}
+                    <span
+                      class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
+                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span>
 
                     <!-- Label (renameable) -->
                     <div class="min-w-0 flex-1">
@@ -770,6 +787,7 @@
                       variant="ghost"
                       size="icon"
                       class="size-7 shrink-0"
+                      aria-label={slot.loop ? "Disable loop" : "Enable loop"}
                       onclick={() => toggleLoop(slot)}
                     >
                       <Repeat
@@ -784,6 +802,7 @@
                       variant="ghost"
                       size="icon"
                       class="size-7 shrink-0"
+                      aria-label={!!slot.shuffle ? "Disable shuffle" : "Enable shuffle"}
                       onclick={() => toggleShuffle(slot)}
                     >
                       <Shuffle
@@ -878,16 +897,16 @@
 </Dialog.Root>
 
 <!-- Add Track dialog -->
-<AlertDialog.Root
+<Dialog.Root
   open={addDialogOpen}
   onOpenChange={(o) => {
     if (!o) resetAddDialog();
   }}
 >
-  <AlertDialog.Content style="max-width: 28rem">
-    <AlertDialog.Header>
-      <AlertDialog.Title>Add Track</AlertDialog.Title>
-    </AlertDialog.Header>
+  <Dialog.Content style="max-width: 28rem">
+    <Dialog.Header>
+      <Dialog.Title>Add Track</Dialog.Title>
+    </Dialog.Header>
 
     <!-- Tab buttons -->
     <div class="flex border-b border-border">
@@ -945,7 +964,7 @@
           </div>
         {:else if !spotifyAuth?.is_connected}
           <div
-            class="flex flex-col items-center gap-3 rounded-xl bg-card/50 border border-border p-6 text-center"
+            class="flex flex-col items-center gap-3 rounded-lg bg-card/50 border border-border p-6 text-center"
           >
             <span class="text-sm text-foreground font-medium">
               Connect Spotify to add tracks
@@ -966,7 +985,7 @@
                 Connect Spotify
               {/if}
             </Button>
-            <span class="text-[10px] text-foreground-muted">
+            <span class="text-[10px] text-muted-foreground">
               Open Settings from the icon rail to manage integrations.
             </span>
           </div>
@@ -1010,17 +1029,19 @@
       </div>
     </div>
 
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel onclick={resetAddDialog}>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
+    <Dialog.Footer>
+      <Dialog.Close>
+        <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
+      </Dialog.Close>
+      <Button
         onclick={handleAddTrack}
         disabled={!canAdd || isAdding}
       >
         {#if isAdding}Adding...{:else}Add{/if}
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
 
 <!-- Delete slot confirmation -->
 <AlertDialog.Root
