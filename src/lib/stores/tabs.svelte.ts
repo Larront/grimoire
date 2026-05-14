@@ -1,7 +1,13 @@
 import { untrack } from "svelte";
 import { vault } from "./vault.svelte";
+import {
+  LocalStorageTabPersistence,
+  type TabPersistence,
+  type PersistedState,
+  type TabType,
+} from "./tab-persistence";
 
-export type TabType = "note" | "map" | "scene" | "scenes" | "empty";
+export type { TabType } from "./tab-persistence";
 
 export interface Tab {
   type: TabType;
@@ -15,69 +21,38 @@ export interface TabPane {
   activeIndex: number;
 }
 
-interface PersistedState {
-  left: TabPane;
-  right: TabPane | null;
-  focusedPane: "left" | "right";
-}
-
 function createTabsStore() {
   let left = $state<TabPane>({ tabs: [], activeIndex: 0 });
   let right = $state<TabPane | null>(null);
   let focusedPane = $state<"left" | "right">("left");
   let dragging = $state<{ pane: "left" | "right"; index: number } | null>(null);
   let _nextEmptyId = 0;
+  let persistence: TabPersistence | null = null;
 
-  function storageKey(vaultPath: string): string {
-    return `grimoire:tabs:${vaultPath}`;
+  function buildState(): PersistedState {
+    const serializeTabs = (tabs: Tab[]) =>
+      tabs
+        .filter((t) => t.type !== "empty")
+        .map((t) => ({ type: t.type, id: t.id, title: t.title }));
+    const leftTabs = serializeTabs(left.tabs);
+    const rightTabs = right ? serializeTabs(right.tabs) : null;
+    return {
+      left: {
+        tabs: leftTabs,
+        activeIndex: Math.min(left.activeIndex, Math.max(0, leftTabs.length - 1)),
+      },
+      right: right && rightTabs
+        ? {
+            tabs: rightTabs,
+            activeIndex: Math.min(right.activeIndex, Math.max(0, rightTabs.length - 1)),
+          }
+        : null,
+      focusedPane,
+    };
   }
 
   function persist() {
-    untrack(() => {
-      if (!vault.path) return;
-      const serializeTabs = (tabs: Tab[]) =>
-        tabs
-          .filter((t) => t.type !== "empty")
-          .map((t) => ({ type: t.type, id: t.id, title: t.title }));
-      const leftTabs = serializeTabs(left.tabs);
-      const rightTabs = right ? serializeTabs(right.tabs) : null;
-      const state: PersistedState = {
-        left: {
-          tabs: leftTabs,
-          activeIndex: Math.min(left.activeIndex, Math.max(0, leftTabs.length - 1)),
-        },
-        right: right && rightTabs
-          ? {
-              tabs: rightTabs,
-              activeIndex: Math.min(right.activeIndex, Math.max(0, rightTabs.length - 1)),
-            }
-          : null,
-        focusedPane,
-      };
-      try {
-        localStorage.setItem(storageKey(vault.path!), JSON.stringify(state));
-      } catch {}
-    });
-  }
-
-  function load(vaultPath: string) {
-    const raw = localStorage.getItem(storageKey(vaultPath));
-    if (!raw) {
-      left = { tabs: [], activeIndex: 0 };
-      right = null;
-      focusedPane = "left";
-      return;
-    }
-    try {
-      const data: PersistedState = JSON.parse(raw);
-      left = data.left ?? { tabs: [], activeIndex: 0 };
-      right = data.right ?? null;
-      focusedPane = data.focusedPane ?? "left";
-    } catch {
-      left = { tabs: [], activeIndex: 0 };
-      right = null;
-      focusedPane = "left";
-    }
+    untrack(() => persistence?.save(buildState()));
   }
 
   function reset() {
@@ -366,8 +341,17 @@ function createTabsStore() {
   $effect.root(() => {
     $effect(() => {
       if (vault.isOpen && vault.path) {
-        load(vault.path);
+        persistence = new LocalStorageTabPersistence(vault.path);
+        const saved = persistence.load();
+        if (saved) {
+          left = saved.left ?? { tabs: [], activeIndex: 0 };
+          right = saved.right ?? null;
+          focusedPane = saved.focusedPane ?? "left";
+        } else {
+          reset();
+        }
       } else {
+        persistence = null;
         reset();
       }
     });

@@ -1,8 +1,6 @@
 <script lang="ts">
   import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
-  import { remove } from "@tauri-apps/plugin-fs";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -13,6 +11,7 @@
   import * as Rename from "$lib/components/ui/rename";
   import type { SceneWithCount } from "$lib/types/vault";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
   function cardBg(scene: SceneWithCount): string {
     return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
@@ -33,10 +32,7 @@
 
   async function createScene() {
     try {
-      const scene = await invoke<SceneWithCount>("create_scene", {
-        name: "New Scene",
-      });
-      await scenes.load();
+      const scene = await scenes.createScene("New Scene");
       tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
     } catch (e) {
       console.error("create scene failed:", e);
@@ -67,8 +63,7 @@
       return;
     }
     try {
-      await invoke("update_scene", { id: sceneId, name: trimmed });
-      await scenes.load();
+      await scenes.updateScene(sceneId, trimmed);
     } catch (e) {
       console.error("rename scene failed:", e);
     } finally {
@@ -83,8 +78,7 @@
     const id = deleteSceneTarget.id;
     deleteSceneTarget = null;
     try {
-      await invoke("delete_scene", { id });
-      await scenes.load();
+      await scenes.deleteScene(id);
     } catch (e) {
       console.error("delete scene failed:", e);
     }
@@ -92,8 +86,7 @@
 
   async function toggleFavorite(scene: SceneWithCount) {
     try {
-      await invoke("toggle_scene_favorite", { id: scene.id });
-      await scenes.load();
+      await scenes.toggleFavorite(scene.id);
     } catch (e) {
       console.error("toggle favorite failed:", e);
     }
@@ -105,13 +98,7 @@
   async function applyColor(scene: SceneWithCount | null, color: string | null) {
     if (!scene) return;
     try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: scene.thumbnail_path,
-      });
-      await scenes.load();
+      await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
     } finally {
@@ -122,13 +109,7 @@
   async function applyIcon(scene: SceneWithCount | null, icon: string | null) {
     if (!scene) return;
     try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: icon,
-        thumbnailPath: scene.thumbnail_path,
-      });
-      await scenes.load();
+      await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
     } finally {
@@ -151,51 +132,7 @@
     }
   });
 
-  async function deleteOldThumbnailFile(path: string | null) {
-    if (!path) return;
-    try {
-      const abs = await invoke<string>("get_audio_absolute_path", { relativePath: path });
-      if (abs) await remove(abs);
-    } catch { /* non-critical */ }
-  }
 
-  async function changeThumbnail(scene: SceneWithCount) {
-    const picked = await open({
-      title: "Choose Thumbnail Image",
-      filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
-    });
-    if (!picked || typeof picked !== "string") return;
-    const oldPath = scene.thumbnail_path;
-    try {
-      const relativePath = await invoke<string>("copy_thumbnail_file", { absolutePath: picked });
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: relativePath,
-      });
-      await scenes.load();
-      await deleteOldThumbnailFile(oldPath);
-    } catch (e) {
-      console.error("change thumbnail failed:", e);
-    }
-  }
-
-  async function removeThumbnail(scene: SceneWithCount) {
-    const oldPath = scene.thumbnail_path;
-    try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: null,
-      });
-      await scenes.load();
-      await deleteOldThumbnailFile(oldPath);
-    } catch (e) {
-      console.error("remove thumbnail failed:", e);
-    }
-  }
 </script>
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
@@ -337,9 +274,9 @@
                   Customise
                 </ContextMenu.SubTrigger>
                 <ContextMenu.SubContent>
-                  <ContextMenu.Item onclick={() => changeThumbnail(scene)}>Change thumbnail</ContextMenu.Item>
+                  <ContextMenu.Item onclick={() => changeThumbnail(scene.id)}>Change thumbnail</ContextMenu.Item>
                   {#if scene.thumbnail_path}
-                    <ContextMenu.Item onclick={() => removeThumbnail(scene)}>Remove image</ContextMenu.Item>
+                    <ContextMenu.Item onclick={() => removeThumbnail(scene.id)}>Remove image</ContextMenu.Item>
                   {/if}
                   <ContextMenu.Item onclick={() => { colorPickerScene = scene; }}>Change color</ContextMenu.Item>
                   <ContextMenu.Item onclick={() => { iconPickerScene = scene; }}>Change icon</ContextMenu.Item>

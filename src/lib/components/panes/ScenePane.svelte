@@ -1,10 +1,8 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
-  import { remove } from "@tauri-apps/plugin-fs";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { audioEngine } from "$lib/stores/audio-engine.svelte";
+  import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
@@ -35,6 +33,7 @@
     getSpotifyStatus,
     connectSpotify,
   } from "$lib/utils/spotify-auth";
+  import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
 
   interface Props {
@@ -70,13 +69,7 @@
   async function applyColor(color: string | null) {
     if (!scene) return;
     try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: scene.thumbnail_path,
-      });
-      await scenes.load();
+      await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
     } finally {
@@ -87,65 +80,11 @@
   async function applyIcon(icon: string | null) {
     if (!scene) return;
     try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: icon,
-        thumbnailPath: scene.thumbnail_path,
-      });
-      await scenes.load();
+      await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
     } finally {
       iconPickerOpen = false;
-    }
-  }
-
-  async function deleteOldThumbnailFile(path: string | null) {
-    if (!path) return;
-    try {
-      const abs = await invoke<string>("get_audio_absolute_path", { relativePath: path });
-      if (abs) await remove(abs);
-    } catch { /* non-critical */ }
-  }
-
-  async function changeThumbnail() {
-    if (!scene) return;
-    const picked = await open({
-      title: "Choose Thumbnail Image",
-      filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
-    });
-    if (!picked || typeof picked !== "string") return;
-    const oldPath = scene.thumbnail_path;
-    try {
-      const relativePath = await invoke<string>("copy_thumbnail_file", { absolutePath: picked });
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: relativePath,
-      });
-      await scenes.load();
-      await deleteOldThumbnailFile(oldPath);
-    } catch (e) {
-      console.error("change thumbnail failed:", e);
-    }
-  }
-
-  async function removeThumbnail() {
-    if (!scene) return;
-    const oldPath = scene.thumbnail_path;
-    try {
-      await invoke("update_scene_thumbnail", {
-        id: scene.id,
-        thumbnailColor: scene.thumbnail_color,
-        thumbnailIcon: scene.thumbnail_icon,
-        thumbnailPath: null,
-      });
-      await scenes.load();
-      await deleteOldThumbnailFile(oldPath);
-    } catch (e) {
-      console.error("remove thumbnail failed:", e);
     }
   }
 
@@ -174,8 +113,7 @@
     }
     isSavingName = true;
     try {
-      await invoke("update_scene", { id: scene.id, name: trimmed });
-      await scenes.load();
+      await scenes.updateScene(scene.id, trimmed);
     } catch (e) {
       console.error("name save failed:", e);
       draftName = scene.name;
@@ -304,16 +242,13 @@
   async function toggleLoop(slot: SceneSlot) {
     if (!scene) return;
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
+      slots = await scenes.updateSlot(scene.id, slot.id, {
         label: slot.label,
         volume: slot.volume,
         loop: !slot.loop,
         slotOrder: slot.slot_order,
         shuffle: !!slot.shuffle,
       });
-      scenes.invalidateSlots(scene.id);
-      slots = await scenes.getSlots(scene.id);
     } catch (e) {
       console.error("Failed to toggle loop:", e);
     }
@@ -322,16 +257,13 @@
   async function toggleShuffle(slot: SceneSlot) {
     if (!scene) return;
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
+      slots = await scenes.updateSlot(scene.id, slot.id, {
         label: slot.label,
         volume: slot.volume,
         loop: slot.loop,
         slotOrder: slot.slot_order,
         shuffle: !slot.shuffle,
       });
-      scenes.invalidateSlots(scene.id);
-      slots = await scenes.getSlots(scene.id);
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
     }
@@ -355,16 +287,13 @@
     const slot = slots.find((s) => s.id === slotId);
     if (!slot || !scene) return;
     try {
-      await invoke("update_scene_slot", {
-        id: slotId,
+      slots = await scenes.updateSlot(scene.id, slotId, {
         label: trimmed,
         volume: slot.volume,
         loop: slot.loop,
         slotOrder: slot.slot_order,
         shuffle: !!slot.shuffle,
       });
-      scenes.invalidateSlots(scene.id);
-      slots = await scenes.getSlots(scene.id);
     } catch (e) {
       console.error("Failed to rename slot:", e);
     } finally {
@@ -378,10 +307,7 @@
   async function confirmDeleteSlot() {
     if (!deleteSlotTarget || !scene) return;
     try {
-      await invoke("delete_scene_slot", { id: deleteSlotTarget.id });
-      scenes.invalidateSlots(scene.id);
-      slots = await scenes.getSlots(scene.id);
-      await scenes.load();
+      slots = await scenes.deleteSlot(scene.id, deleteSlotTarget.id);
     } catch (e) {
       console.error("Failed to delete slot:", e);
     } finally {
@@ -526,8 +452,7 @@
           }
         }
       }
-      await invoke("create_scene_slot", {
-        sceneId: scene.id,
+      slots = await scenes.addSlot(scene.id, {
         source,
         sourceId,
         label: addLabel.trim() || "Untitled",
@@ -536,9 +461,6 @@
         slotOrder: slots.length,
         shuffle: addShuffle,
       });
-      scenes.invalidateSlots(scene.id);
-      slots = await scenes.getSlots(scene.id);
-      await scenes.load();
       resetAddDialog();
     } catch (e) {
       console.error("Failed to add track:", e);
@@ -588,7 +510,7 @@
         <button
           data-edit-thumbnail-btn
           class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-          onclick={changeThumbnail}
+          onclick={() => changeThumbnail(scene.id)}
         >
           <ImageIcon class="size-3" />
           Image
@@ -597,7 +519,7 @@
           <button
             data-remove-thumbnail-btn
             class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
-            onclick={removeThumbnail}
+            onclick={() => removeThumbnail(scene.id)}
           >
             <X class="size-3" />
             Remove
@@ -739,7 +661,7 @@
                   >
                     <!-- Playback group: skip-back · play/pause · skip-forward -->
                     <div class="flex shrink-0 items-center gap-1">
-                      {#if slot.source_id.startsWith("spotify:playlist:")}
+                      {#if isPlaylistSlot(slot)}
                         {#if isThisScenePlaying}
                           <Button data-slot-skip-controls variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipPrev()}>
                             <SkipBack class="size-3.5" />
@@ -767,7 +689,7 @@
                         </div>
                       {/if}
 
-                      {#if slot.source_id.startsWith("spotify:playlist:")}
+                      {#if isPlaylistSlot(slot)}
                         {#if isThisScenePlaying}
                           <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipNext()}>
                             <SkipForward class="size-3.5" />
