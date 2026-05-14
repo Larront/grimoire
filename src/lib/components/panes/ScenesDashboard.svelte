@@ -1,8 +1,5 @@
 <script lang="ts">
-  import {
-    Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2,
-    Skull, Flame, Shield, Wand2, Swords, Moon, Crown, Eye, ScrollText, BookOpen,
-  } from "@lucide/svelte";
+  import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
@@ -13,35 +10,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import type { SceneWithCount } from "$lib/types/vault";
-
-  const COLOR_PRESETS = [
-    { name: "crimson", label: "Crimson", bg: "rgba(194,72,61,0.18)", swatch: "#c2483d" },
-    { name: "arcane", label: "Arcane", bg: "rgba(155,107,191,0.18)", swatch: "#9b6bbf" },
-    { name: "verdant", label: "Verdant", bg: "rgba(92,158,110,0.18)", swatch: "#5c9e6e" },
-    { name: "ice", label: "Ice", bg: "rgba(91,158,201,0.18)", swatch: "#5b9ec9" },
-    { name: "amber", label: "Amber", bg: "rgba(196,154,60,0.18)", swatch: "#c49a3c" },
-  ];
-
-  // Derived from COLOR_PRESETS (same order: crimson, arcane, verdant, ice, amber)
-  const ACCENT_BG = COLOR_PRESETS.map((p) => p.bg);
-  const ACCENT_FG = COLOR_PRESETS.map((p) => p.swatch);
-
-  const ICON_OPTIONS = [
-    { name: "Skull", icon: Skull },
-    { name: "Flame", icon: Flame },
-    { name: "Shield", icon: Shield },
-    { name: "Wand2", icon: Wand2 },
-    { name: "Swords", icon: Swords },
-    { name: "Moon", icon: Moon },
-    { name: "Crown", icon: Crown },
-    { name: "Eye", icon: Eye },
-    { name: "ScrollText", icon: ScrollText },
-    { name: "BookOpen", icon: BookOpen },
-  ];
-
-  const ICON_MAP: Record<string, typeof Clapperboard> = Object.fromEntries(
-    ICON_OPTIONS.map(({ name, icon }) => [name, icon]),
-  );
+  import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
 
   function cardBg(scene: SceneWithCount): string {
     return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
