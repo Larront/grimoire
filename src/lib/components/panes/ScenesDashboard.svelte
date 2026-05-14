@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
+  import {
+    Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2,
+    Skull, Flame, Shield, Wand2, Swords, Moon, Crown, Eye, ScrollText, BookOpen,
+  } from "@lucide/svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
@@ -7,18 +10,38 @@
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import type { SceneWithCount } from "$lib/types/vault";
 
-  // Fallback accent colors keyed by scene.id % 5: crimson, arcane, verdant, ice, amber
-  const ACCENT_BG = [
-    "rgba(194,72,61,0.18)",
-    "rgba(155,107,191,0.18)",
-    "rgba(92,158,110,0.18)",
-    "rgba(91,158,201,0.18)",
-    "rgba(196,154,60,0.18)",
+  const COLOR_PRESETS = [
+    { name: "crimson", label: "Crimson", bg: "rgba(194,72,61,0.18)", swatch: "#c2483d" },
+    { name: "arcane", label: "Arcane", bg: "rgba(155,107,191,0.18)", swatch: "#9b6bbf" },
+    { name: "verdant", label: "Verdant", bg: "rgba(92,158,110,0.18)", swatch: "#5c9e6e" },
+    { name: "ice", label: "Ice", bg: "rgba(91,158,201,0.18)", swatch: "#5b9ec9" },
+    { name: "amber", label: "Amber", bg: "rgba(196,154,60,0.18)", swatch: "#c49a3c" },
   ];
-  const ACCENT_FG = ["#c2483d", "#9b6bbf", "#5c9e6e", "#5b9ec9", "#c49a3c"];
+
+  // Derived from COLOR_PRESETS (same order: crimson, arcane, verdant, ice, amber)
+  const ACCENT_BG = COLOR_PRESETS.map((p) => p.bg);
+  const ACCENT_FG = COLOR_PRESETS.map((p) => p.swatch);
+
+  const ICON_OPTIONS = [
+    { name: "Skull", icon: Skull },
+    { name: "Flame", icon: Flame },
+    { name: "Shield", icon: Shield },
+    { name: "Wand2", icon: Wand2 },
+    { name: "Swords", icon: Swords },
+    { name: "Moon", icon: Moon },
+    { name: "Crown", icon: Crown },
+    { name: "Eye", icon: Eye },
+    { name: "ScrollText", icon: ScrollText },
+    { name: "BookOpen", icon: BookOpen },
+  ];
+
+  const ICON_MAP: Record<string, typeof Clapperboard> = Object.fromEntries(
+    ICON_OPTIONS.map(({ name, icon }) => [name, icon]),
+  );
 
   function cardBg(scene: SceneWithCount): string {
     return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
@@ -104,6 +127,43 @@
       console.error("toggle favorite failed:", e);
     }
   }
+
+  let colorPickerScene = $state<SceneWithCount | null>(null);
+  let iconPickerScene = $state<SceneWithCount | null>(null);
+
+  async function applyColor(scene: SceneWithCount | null, color: string | null) {
+    if (!scene) return;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: scene.thumbnail_path,
+      });
+      await scenes.load();
+    } catch (e) {
+      console.error("update thumbnail color failed:", e);
+    } finally {
+      colorPickerScene = null;
+    }
+  }
+
+  async function applyIcon(scene: SceneWithCount | null, icon: string | null) {
+    if (!scene) return;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: icon,
+        thumbnailPath: scene.thumbnail_path,
+      });
+      await scenes.load();
+    } catch (e) {
+      console.error("update thumbnail icon failed:", e);
+    } finally {
+      iconPickerScene = null;
+    }
+  }
 </script>
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
@@ -155,6 +215,7 @@
       >
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
+          {@const ThumbnailIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) ?? Clapperboard}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
               <div
@@ -170,11 +231,13 @@
                   class="relative flex aspect-[4/3] items-center justify-center"
                   style="background: {cardBg(scene)}"
                 >
-                  <Clapperboard
-                    class="size-10 opacity-80"
-                    style="color: {cardFg(scene)}"
-                    strokeWidth={1.5}
-                  />
+                  <span data-thumbnail-icon={scene.thumbnail_icon ?? "Clapperboard"}>
+                    <ThumbnailIcon
+                      class="size-10 opacity-80"
+                      style="color: {cardFg(scene)}"
+                      strokeWidth={1.5}
+                    />
+                  </span>
 
                   {#if scene.favorited}
                     <div class="absolute top-2 left-2">
@@ -238,8 +301,8 @@
                 </ContextMenu.SubTrigger>
                 <ContextMenu.SubContent>
                   <ContextMenu.Item>Change thumbnail</ContextMenu.Item>
-                  <ContextMenu.Item>Change color</ContextMenu.Item>
-                  <ContextMenu.Item>Change icon</ContextMenu.Item>
+                  <ContextMenu.Item onclick={() => { colorPickerScene = scene; }}>Change color</ContextMenu.Item>
+                  <ContextMenu.Item onclick={() => { iconPickerScene = scene; }}>Change icon</ContextMenu.Item>
                 </ContextMenu.SubContent>
               </ContextMenu.Sub>
               <ContextMenu.Item onclick={() => startSceneRename(scene)}>
@@ -261,6 +324,61 @@
     {/if}
   </div>
 </div>
+
+<Dialog.Root
+  open={colorPickerScene !== null}
+  onOpenChange={(o) => { if (!o) colorPickerScene = null; }}
+>
+  <Dialog.Content style="max-width: 18rem">
+    <Dialog.Header>
+      <Dialog.Title>Choose color</Dialog.Title>
+    </Dialog.Header>
+    <div data-color-picker class="flex flex-col gap-3">
+      <div class="grid grid-cols-5 gap-2">
+        {#each COLOR_PRESETS as preset (preset.name)}
+          <button
+            data-color-swatch={preset.name}
+            aria-label={preset.label}
+            class="size-9 rounded-lg border-2 border-transparent transition-all hover:scale-110 hover:border-foreground/30"
+            style="background: {preset.swatch}"
+            onclick={() => applyColor(colorPickerScene, preset.bg)}
+          ></button>
+        {/each}
+      </div>
+      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyColor(colorPickerScene, null)}>
+        Reset to default
+      </Button>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root
+  open={iconPickerScene !== null}
+  onOpenChange={(o) => { if (!o) iconPickerScene = null; }}
+>
+  <Dialog.Content style="max-width: 22rem">
+    <Dialog.Header>
+      <Dialog.Title>Choose icon</Dialog.Title>
+    </Dialog.Header>
+    <div data-icon-picker class="flex flex-col gap-3">
+      <div class="grid grid-cols-5 gap-2">
+        {#each ICON_OPTIONS as { name, icon: Icon } (name)}
+          <button
+            data-icon-btn={name}
+            aria-label={name}
+            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-all hover:border-primary/30 hover:bg-muted"
+            onclick={() => applyIcon(iconPickerScene, name)}
+          >
+            <Icon class="size-5 text-foreground/70" />
+          </button>
+        {/each}
+      </div>
+      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyIcon(iconPickerScene, null)}>
+        Reset to default
+      </Button>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 
 <AlertDialog.Root
   open={deleteSceneTarget !== null}

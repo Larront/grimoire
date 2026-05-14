@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/svelte";
+import { render, waitFor, fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
 import type { Scene, SceneSlot } from "../lib/types/vault";
@@ -155,5 +155,57 @@ describe("ScenePane hero header", () => {
     await waitFor(() => {
       expect(container.querySelector("[data-slot-skip-controls]")).toBeNull();
     });
+  });
+});
+
+describe("ScenePane hero header — thumbnail pickers", () => {
+  beforeEach(() => {
+    mockScenes = [];
+    mockSlots = [];
+    vi.clearAllMocks();
+  });
+
+  it("hero header has a color picker button", () => {
+    mockScenes = [makeScene()];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector("[data-edit-color-btn]")).toBeTruthy();
+  });
+
+  it("hero header has an icon picker button", () => {
+    mockScenes = [makeScene()];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector("[data-edit-icon-btn]")).toBeTruthy();
+  });
+
+  it("clicking the color button opens a color picker", async () => {
+    mockScenes = [makeScene()];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const btn = container.querySelector("[data-edit-color-btn]") as HTMLElement;
+    await fireEvent.click(btn);
+    await waitFor(() => {
+      expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
+    });
+  });
+
+  it("clicking the icon button opens an icon picker", async () => {
+    mockScenes = [makeScene()];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const btn = container.querySelector("[data-edit-icon-btn]") as HTMLElement;
+    await fireEvent.click(btn);
+    await waitFor(() => {
+      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
+    });
+  });
+
+  it("hero icon reflects thumbnail_icon when set", () => {
+    mockScenes = [makeScene({ thumbnail_icon: "Skull" })];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector('[data-hero-icon][data-icon-name="Skull"]')).toBeTruthy();
+  });
+
+  it("hero icon defaults to Music2 when thumbnail_icon is null", () => {
+    mockScenes = [makeScene({ thumbnail_icon: null })];
+    const { container } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    expect(container.querySelector('[data-hero-icon][data-icon-name="Music2"]')).toBeTruthy();
   });
 });

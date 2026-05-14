@@ -8,6 +8,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import Input from "$lib/components/ui/input/input.svelte";
   import {
@@ -24,6 +25,8 @@
     LoaderCircle,
     SkipBack,
     SkipForward,
+    Palette,
+    Skull, Flame, Shield, Wand2, Swords, Moon, Crown, Eye, ScrollText, BookOpen,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/vault";
   import {
@@ -41,14 +44,33 @@
   let scene = $derived(scenes.scenes.find((s) => s.id === sceneId) ?? null);
 
   // ---- Hero header ----
-  const ACCENT_BG = [
-    "rgba(194,72,61,0.18)",
-    "rgba(155,107,191,0.18)",
-    "rgba(92,158,110,0.18)",
-    "rgba(91,158,201,0.18)",
-    "rgba(196,154,60,0.18)",
+  const COLOR_PRESETS = [
+    { name: "crimson", label: "Crimson", bg: "rgba(194,72,61,0.18)", swatch: "#c2483d" },
+    { name: "arcane", label: "Arcane", bg: "rgba(155,107,191,0.18)", swatch: "#9b6bbf" },
+    { name: "verdant", label: "Verdant", bg: "rgba(92,158,110,0.18)", swatch: "#5c9e6e" },
+    { name: "ice", label: "Ice", bg: "rgba(91,158,201,0.18)", swatch: "#5b9ec9" },
+    { name: "amber", label: "Amber", bg: "rgba(196,154,60,0.18)", swatch: "#c49a3c" },
   ];
-  const ACCENT_FG = ["#c2483d", "#9b6bbf", "#5c9e6e", "#5b9ec9", "#c49a3c"];
+
+  const ACCENT_BG = COLOR_PRESETS.map((p) => p.bg);
+  const ACCENT_FG = COLOR_PRESETS.map((p) => p.swatch);
+
+  const ICON_OPTIONS = [
+    { name: "Skull", icon: Skull },
+    { name: "Flame", icon: Flame },
+    { name: "Shield", icon: Shield },
+    { name: "Wand2", icon: Wand2 },
+    { name: "Swords", icon: Swords },
+    { name: "Moon", icon: Moon },
+    { name: "Crown", icon: Crown },
+    { name: "Eye", icon: Eye },
+    { name: "ScrollText", icon: ScrollText },
+    { name: "BookOpen", icon: BookOpen },
+  ];
+
+  const ICON_MAP: Record<string, typeof Music2> = Object.fromEntries(
+    ICON_OPTIONS.map(({ name, icon }) => [name, icon]),
+  );
 
   let heroColor = $derived(scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0]);
   let heroIconColor = $derived(scene ? ACCENT_FG[scene.id % 5] : ACCENT_FG[0]);
@@ -64,6 +86,44 @@
       thumbnailUrl = null;
     }
   });
+
+  // ---- Thumbnail pickers ----
+  let colorPickerOpen = $state(false);
+  let iconPickerOpen = $state(false);
+
+  async function applyColor(color: string | null) {
+    if (!scene) return;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: color,
+        thumbnailIcon: scene.thumbnail_icon,
+        thumbnailPath: scene.thumbnail_path,
+      });
+      await scenes.load();
+    } catch (e) {
+      console.error("update thumbnail color failed:", e);
+    } finally {
+      colorPickerOpen = false;
+    }
+  }
+
+  async function applyIcon(icon: string | null) {
+    if (!scene) return;
+    try {
+      await invoke("update_scene_thumbnail", {
+        id: scene.id,
+        thumbnailColor: scene.thumbnail_color,
+        thumbnailIcon: icon,
+        thumbnailPath: scene.thumbnail_path,
+      });
+      await scenes.load();
+    } catch (e) {
+      console.error("update thumbnail icon failed:", e);
+    } finally {
+      iconPickerOpen = false;
+    }
+  }
 
   // ---- Tab title sync ----
   $effect(() => {
@@ -477,21 +537,46 @@
     </div>
   {:else}
     <!-- HERO HEADER -->
+    {@const HeroIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) ?? Music2}
     <div
       data-hero-header
-      class="relative flex min-h-52 flex-col justify-end overflow-hidden"
+      class="group relative flex min-h-52 flex-col justify-end overflow-hidden"
       style="background-color: {heroColor}; {thumbnailUrl ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;` : ''}"
     >
       <!-- Gradient overlay for legibility (stronger on images) -->
       <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
 
       <!-- Icon — always rendered per ADR-0002 -->
-      <div data-hero-icon class="pointer-events-none absolute top-5 right-6">
-        <Music2
+      <div
+        data-hero-icon
+        data-icon-name={scene.thumbnail_icon ?? "Music2"}
+        class="pointer-events-none absolute top-5 right-6"
+      >
+        <HeroIcon
           class="size-14 opacity-70"
           strokeWidth={1.5}
           style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))' : ''}"
         />
+      </div>
+
+      <!-- Thumbnail edit buttons (visible on hover) -->
+      <div class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          data-edit-color-btn
+          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          onclick={() => (colorPickerOpen = true)}
+        >
+          <Palette class="size-3" />
+          Color
+        </button>
+        <button
+          data-edit-icon-btn
+          class="flex items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+          onclick={() => (iconPickerOpen = true)}
+        >
+          <HeroIcon class="size-3" />
+          Icon
+        </button>
       </div>
 
       <!-- Scene name (editable) -->
@@ -776,6 +861,57 @@
     </div>
   {/if}
 </div>
+
+<!-- Color picker dialog -->
+<Dialog.Root open={colorPickerOpen} onOpenChange={(o) => { colorPickerOpen = o; }}>
+  <Dialog.Content style="max-width: 18rem">
+    <Dialog.Header>
+      <Dialog.Title>Choose color</Dialog.Title>
+    </Dialog.Header>
+    <div data-color-picker class="flex flex-col gap-3">
+      <div class="grid grid-cols-5 gap-2">
+        {#each COLOR_PRESETS as preset (preset.name)}
+          <button
+            data-color-swatch={preset.name}
+            aria-label={preset.label}
+            class="size-9 rounded-lg border-2 border-transparent transition-all hover:scale-110 hover:border-foreground/30"
+            style="background: {preset.swatch}"
+            onclick={() => applyColor(preset.bg)}
+          ></button>
+        {/each}
+      </div>
+      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyColor(null)}>
+        Reset to default
+      </Button>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Icon picker dialog -->
+<Dialog.Root open={iconPickerOpen} onOpenChange={(o) => { iconPickerOpen = o; }}>
+  <Dialog.Content style="max-width: 22rem">
+    <Dialog.Header>
+      <Dialog.Title>Choose icon</Dialog.Title>
+    </Dialog.Header>
+    <div data-icon-picker class="flex flex-col gap-3">
+      <div class="grid grid-cols-5 gap-2">
+        {#each ICON_OPTIONS as { name, icon: Icon } (name)}
+          <button
+            data-icon-btn={name}
+            aria-label={name}
+            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-all hover:border-primary/30 hover:bg-muted"
+            onclick={() => applyIcon(name)}
+          >
+            <Icon class="size-5 text-foreground/70" />
+          </button>
+        {/each}
+      </div>
+      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyIcon(null)}>
+        Reset to default
+      </Button>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 
 <!-- Add Track dialog -->
 <AlertDialog.Root

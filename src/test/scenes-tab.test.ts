@@ -364,3 +364,140 @@ describe("ScenesDashboard — playing indicator", () => {
     expect(container.querySelector("[data-playing]")).toBeNull();
   });
 });
+
+// ── Thumbnail colour picker ───────────────────────────────────────────────────
+
+async function openCustomiseSubmenu(container: HTMLElement) {
+  await openCardContextMenu(container);
+  const subTrigger = await waitFor(() => {
+    const el = document.body.querySelector('[data-slot="context-menu-sub-trigger"]') as HTMLElement;
+    if (!el) throw new Error("Customise sub-trigger not found");
+    return el;
+  });
+  await fireEvent.click(subTrigger);
+  await waitFor(() => {
+    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
+    if (!items.some((el) => el.textContent?.includes("Change color")))
+      throw new Error("submenu not open");
+  });
+}
+
+describe("ScenesDashboard — color picker", () => {
+  it("Change color opens a color picker dialog", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change color");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
+    });
+  });
+
+  it("selecting a color swatch calls update_scene_thumbnail and reloads", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change color");
+    await fireEvent.click(item);
+    const swatch = await waitFor(() => {
+      const el = document.body.querySelector("[data-color-swatch]") as HTMLElement;
+      if (!el) throw new Error("color swatch not found");
+      return el;
+    });
+    await fireEvent.click(swatch);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1 }));
+      expect(scenes.load).toHaveBeenCalled();
+    });
+  });
+
+  it("Reset to default clears thumbnail_color", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change color");
+    await fireEvent.click(item);
+    await waitFor(() => document.body.querySelector("[data-color-picker]"));
+    const resetBtn = await waitFor(() => {
+      const btns = Array.from(document.body.querySelectorAll("button"));
+      const btn = btns.find((b) => b.textContent?.includes("Reset")) as HTMLElement | undefined;
+      if (!btn) throw new Error("Reset button not found");
+      return btn;
+    });
+    await fireEvent.click(resetBtn);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1, thumbnailColor: null }));
+    });
+  });
+});
+
+// ── Thumbnail icon picker ─────────────────────────────────────────────────────
+
+describe("ScenesDashboard — icon picker", () => {
+  it("Change icon opens an icon picker dialog", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change icon");
+    await fireEvent.click(item);
+    await waitFor(() => {
+      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
+    });
+  });
+
+  it("selecting an icon calls update_scene_thumbnail and reloads", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change icon");
+    await fireEvent.click(item);
+    const iconBtn = await waitFor(() => {
+      const el = document.body.querySelector("[data-icon-btn]") as HTMLElement;
+      if (!el) throw new Error("icon button not found");
+      return el;
+    });
+    await fireEvent.click(iconBtn);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1 }));
+      expect(scenes.load).toHaveBeenCalled();
+    });
+  });
+
+  it("Reset to default clears thumbnail_icon", async () => {
+    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await openCustomiseSubmenu(container);
+    const item = await clickMenuItem("Change icon");
+    await fireEvent.click(item);
+    await waitFor(() => document.body.querySelector("[data-icon-picker]"));
+    const resetBtn = await waitFor(() => {
+      const btns = Array.from(document.body.querySelectorAll("button"));
+      const btn = btns.find((b) => b.textContent?.includes("Reset")) as HTMLElement | undefined;
+      if (!btn) throw new Error("Reset button not found");
+      return btn;
+    });
+    await fireEvent.click(resetBtn);
+    await waitFor(() => {
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1, thumbnailIcon: null }));
+    });
+  });
+});
+
+// ── Thumbnail icon rendering ──────────────────────────────────────────────────
+
+describe("ScenesDashboard — thumbnail icon", () => {
+  it("shows default icon (Clapperboard) when thumbnail_icon is null", () => {
+    mockScenes = [makeScene(1, "Scene", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    const card = container.querySelector("[data-scene-card]");
+    expect(card?.querySelector("[data-thumbnail-icon='Clapperboard']")).toBeTruthy();
+  });
+
+  it("shows custom icon when thumbnail_icon is set", () => {
+    mockScenes = [{ ...makeScene(1, "Scene", false, "2024-01-01"), thumbnail_icon: "Skull" }];
+    const { container } = render(ScenesDashboard);
+    const card = container.querySelector("[data-scene-card]");
+    expect(card?.querySelector("[data-thumbnail-icon='Skull']")).toBeTruthy();
+  });
+});
