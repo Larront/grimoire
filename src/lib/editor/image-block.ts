@@ -34,6 +34,32 @@ export function preprocessImageAttrs(markdown: string): string {
   });
 }
 
+// ─── Markdown serializer ─────────────────────────────────────────────────────
+
+export function serializeImageNode(
+  state: {
+    write: (s: string) => void;
+    closeBlock: (n: unknown) => void;
+  },
+  node: {
+    attrs: {
+      src: string;
+      alt: string | null;
+      align: string;
+      width: string;
+    };
+  },
+) {
+  const { src, alt, align, width } = node.attrs;
+  let md = `![${alt ?? ""}](${src})`;
+  const parts: string[] = [];
+  if (align !== "center") parts.push(`align=${align}`);
+  if (width !== "100%") parts.push(`width=${width}`);
+  if (parts.length) md += `{${parts.join(" ")}}`;
+  state.write(md);
+  state.closeBlock(node);
+}
+
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const ImageBlock = Image.extend({
@@ -61,29 +87,7 @@ export const ImageBlock = Image.extend({
   addStorage() {
     return {
       markdown: {
-        serialize(
-          state: {
-            write: (s: string) => void;
-            closeBlock: (n: unknown) => void;
-          },
-          node: {
-            attrs: {
-              src: string;
-              alt: string | null;
-              align: string;
-              width: string;
-            };
-          },
-        ) {
-          const { src, alt, align, width } = node.attrs;
-          let md = `![${alt ?? ""}](${src})`;
-          const parts: string[] = [];
-          if (align !== "center") parts.push(`align=${align}`);
-          if (width !== "100%") parts.push(`width=${width}`);
-          if (parts.length) md += `{${parts.join(" ")}}`;
-          state.write(md);
-          state.closeBlock(node);
-        },
+        serialize: serializeImageNode,
       },
     };
   },
@@ -105,6 +109,17 @@ export const ImageBlock = Image.extend({
         });
       }
 
+      function handleCaptionUpdate(alt: string) {
+        const pos = (getPos as () => number | undefined)();
+        if (pos === undefined) return;
+        editor.commands.command(({ tr }) => {
+          const currentNode = tr.doc.nodeAt(pos);
+          if (!currentNode) return false;
+          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, alt });
+          return true;
+        });
+      }
+
       const raw = mount(ImageBlockView, {
         target: dom,
         props: {
@@ -113,6 +128,7 @@ export const ImageBlock = Image.extend({
           align: node.attrs.align ?? "center",
           width: node.attrs.width ?? "100%",
           onUpdate: handleUpdate,
+          onCaptionUpdate: handleCaptionUpdate,
         },
       });
       const component = raw as unknown as ImageBlockViewExports;

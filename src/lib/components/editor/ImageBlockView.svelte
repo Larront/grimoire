@@ -8,12 +8,14 @@
     align,
     width,
     onUpdate,
+    onCaptionUpdate,
   }: {
     src: string;
     alt: string;
     align: string;
     width: string;
     onUpdate: (attrs: { align: string; width: string }) => void;
+    onCaptionUpdate: (alt: string) => void;
   } = $props();
 
   // Internal mutable copies — NodeView calls setAttrs / setSelected to update these
@@ -105,8 +107,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="my-2 flex"
-  style="justify-content: {justifyMap[_align] ?? 'center'};"
+  class="my-2 flex flex-col"
+  style="align-items: {justifyMap[_align] ?? 'center'};"
 >
   <div
     bind:this={containerEl}
@@ -191,4 +193,30 @@
       ></div>
     {/if}
   </div>
+
+  {#if _selected}
+    <input
+      type="text"
+      value={_alt}
+      placeholder="Add caption…"
+      aria-label="Image caption"
+      data-caption-input
+      class="mt-1 w-full text-sm text-center font-sans
+             text-foreground bg-transparent border-b border-border/60
+             placeholder:text-muted-foreground/50 outline-none
+             focus:border-primary"
+      style="max-width: {_width};"
+      oninput={(e) => { _alt = (e.target as HTMLInputElement).value; }}
+      onblur={() => onCaptionUpdate(_alt)}
+      onmousedown={(e) => e.stopPropagation()}
+    />
+  {:else if _alt}
+    <p
+      class="mt-1 text-sm text-center font-sans text-muted-foreground"
+      style="max-width: {_width};"
+      data-caption
+    >
+      {_alt}
+    </p>
+  {/if}
 </div>

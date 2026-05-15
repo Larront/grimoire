@@ -82,32 +82,31 @@ pub fn copy_image_file(absolute_path: String, vault: State<AppVault>) -> Result<
     Ok(relative)
 }
 
-#[tauri::command]
-pub fn save_image_bytes(
-    bytes: Vec<u8>,
-    filename: String,
-    vault: State<AppVault>,
-) -> Result<String, String> {
-    let path = PathBuf::from(&filename);
+pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> Result<String, String> {
+    let path = PathBuf::from(filename);
     validate_image_extension(&path)?;
     let file_name = path
         .file_name()
         .ok_or("Invalid filename")?
         .to_string_lossy()
         .to_string();
-
-    let (dest, relative) = {
-        let state = vault.lock().map_err(|e| e.to_string())?;
-        let vault_path = state.path.as_ref().ok_or("No vault open")?;
-        let images_dir = vault_path.join("images");
-        std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
-        let dest = resolve_image_filename(&images_dir, &file_name);
-        let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
-        (dest, relative)
-    };
-
-    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(images_dir).map_err(|e| e.to_string())?;
+    let dest = resolve_image_filename(&images_dir.to_path_buf(), &file_name);
+    let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
+    std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(relative)
+}
+
+#[tauri::command]
+pub fn save_image_bytes(
+    bytes: Vec<u8>,
+    filename: String,
+    vault: State<AppVault>,
+) -> Result<String, String> {
+    let state = vault.lock().map_err(|e| e.to_string())?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    let images_dir = vault_path.join("images");
+    save_image_bytes_to(&images_dir, &filename, &bytes)
 }
 
 #[tauri::command]
@@ -165,5 +164,50 @@ mod tests {
         for ext in &["icon.svg", "virus.exe", "track.mp3", "doc.pdf"] {
             assert!(validate_image_extension(&PathBuf::from(ext)).is_err(), "Expected err for {}", ext);
         }
+    }
+
+    #[test]
+    fn test_save_image_bytes_end_to_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let images_dir = dir.path().join("images");
+        let fake_bytes = b"fake-png-data";
+        let result = save_image_bytes_to(&images_dir, "pasted-image.png", fake_bytes);
+        assert!(result.is_ok(), "Expected ok, got {:?}", result);
+        let rel = result.unwrap();
+        assert_eq!(rel, "images/pasted-image.png");
+        let written = fs::read(images_dir.join("pasted-image.png")).unwrap();
+        assert_eq!(written, fake_bytes);
+    }
+
+    #[test]
+    fn test_save_image_bytes_deduplicates_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let images_dir = dir.path().join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+        fs::write(images_dir.join("clip.png"), b"first").unwrap();
+        let result = save_image_bytes_to(&images_dir, "clip.png", b"second");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "images/clip 2.png");
+        assert_eq!(fs::read(images_dir.join("clip 2.png")).unwrap(), b"second");
+    }
+
+    #[test]
+    fn test_save_image_bytes_unicode_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let images_dir = dir.path().join("images");
+        let result = save_image_bytes_to(&images_dir, "人物.png", b"fake-png-data");
+        assert!(result.is_ok(), "Expected ok, got {:?}", result);
+        let rel = result.unwrap();
+        assert_eq!(rel, "images/人物.png");
+        assert!(images_dir.join("人物.png").exists());
+        assert_eq!(fs::read(images_dir.join("人物.png")).unwrap(), b"fake-png-data");
+    }
+
+    #[test]
+    fn test_save_image_bytes_rejects_unsupported_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let images_dir = dir.path().join("images");
+        let result = save_image_bytes_to(&images_dir, "script.svg", b"<svg/>");
+        assert!(result.is_err());
     }
 }
