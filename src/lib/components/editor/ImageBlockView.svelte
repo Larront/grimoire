@@ -1,12 +1,13 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { AlignLeft, AlignCenter, AlignRight } from "@lucide/svelte";
+  import { AlignLeft, AlignCenter, AlignRight, Maximize2, X } from "@lucide/svelte";
 
   let {
     src,
     alt,
     align,
     width,
+    selected = false,
     onUpdate,
     onCaptionUpdate,
   }: {
@@ -14,6 +15,7 @@
     alt: string;
     align: string;
     width: string;
+    selected?: boolean;
     onUpdate: (attrs: { align: string; width: string }) => void;
     onCaptionUpdate: (alt: string) => void;
   } = $props();
@@ -27,7 +29,9 @@
   let _src = $state(src);
   // svelte-ignore state_referenced_locally
   let _alt = $state(alt);
-  let _selected = $state(false);
+  // svelte-ignore state_referenced_locally
+  let _selected = $state(selected);
+  let _lightboxOpen = $state(false);
 
   let imageUrl = $state<string | null>(null);
   let loadError = $state(false);
@@ -61,6 +65,35 @@
     center: "center",
     right: "flex-end",
   };
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  function closeLightbox() {
+    _lightboxOpen = false;
+  }
+
+  function onBackdropClick(e: MouseEvent) {
+    if (e.target === e.currentTarget) closeLightbox();
+  }
+
+  $effect(() => {
+    if (!_lightboxOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeLightbox();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   // Resize state — tracked here AND in the extension's stopEvent closure
   // via a 'resizing' data attribute on the dom root
@@ -160,6 +193,19 @@
         >
           <AlignRight size={14} />
         </button>
+        <div class="w-px h-4 bg-border mx-0.5"></div>
+        <button
+          class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
+                 transition-colors"
+          aria-label="View full size"
+          data-lightbox-btn
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => {
+            _lightboxOpen = true;
+          }}
+        >
+          <Maximize2 size={14} />
+        </button>
       </div>
     {/if}
 
@@ -220,3 +266,43 @@
     </p>
   {/if}
 </div>
+
+{#if _lightboxOpen && imageUrl}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    use:portal
+    role="dialog"
+    aria-modal="true"
+    aria-label="Image viewer"
+    tabindex="-1"
+    data-image-lightbox
+    class="fixed inset-0 z-[10000] overflow-auto bg-black/80"
+    onclick={onBackdropClick}
+  >
+    <button
+      type="button"
+      class="fixed top-3 right-3 z-10 rounded-full bg-card/90 p-1.5 text-foreground
+             shadow-md hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      aria-label="Close image viewer"
+      data-lightbox-close
+      onclick={closeLightbox}
+    >
+      <X size={18} />
+    </button>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="min-h-full w-full flex items-center justify-center p-8"
+      onclick={onBackdropClick}
+    >
+      <img
+        src={imageUrl}
+        alt={_alt}
+        data-lightbox-img
+        class="max-w-none block"
+        draggable="false"
+      />
+    </div>
+  </div>
+{/if}
