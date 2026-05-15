@@ -1,6 +1,13 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { AlignLeft, AlignCenter, AlignRight, Maximize2, X } from "@lucide/svelte";
+  import {
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    Maximize2,
+    X,
+  } from "@lucide/svelte";
+  import { fade } from "svelte/transition";
 
   let {
     src,
@@ -39,7 +46,12 @@
   let loadError = $state(false);
   let containerEl: HTMLDivElement | undefined = $state();
 
-  export function setAttrs(newAlign: string, newWidth: string, newSrc: string, newAlt: string) {
+  export function setAttrs(
+    newAlign: string,
+    newWidth: string,
+    newSrc: string,
+    newAlt: string,
+  ) {
     _align = newAlign;
     _width = newWidth;
     _src = newSrc;
@@ -131,7 +143,9 @@
       ? parent.offsetWidth * (parseFloat(_width) / 100)
       : 200;
     // Signal to stopEvent in the extension that a resize is in progress
-    containerEl?.closest("[data-image-block]")?.setAttribute("data-resizing", "");
+    containerEl
+      ?.closest("[data-image-block]")
+      ?.setAttribute("data-resizing", "");
 
     function onMove(e: MouseEvent) {
       if (!isDragging || !containerEl?.parentElement) return;
@@ -164,16 +178,13 @@
   class="my-2 flex flex-col"
   style="align-items: {alignMap[_align] ?? 'center'};"
 >
-  <div
-    bind:this={containerEl}
-    class="relative"
-    style="width: {_width};"
-  >
+  <div bind:this={containerEl} class="relative" style="width: {_width};">
     {#if _selected}
-      <!-- Floating toolbar -->
+      <!-- Floating toolbar — bottom-center, overlaying the image -->
       <div
-        class="absolute -top-8 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5
-               rounded border border-border bg-card shadow-md px-1 py-0.5"
+        class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5
+               rounded border border-border bg-card/90 backdrop-blur-sm shadow-md px-1 py-0.5"
+        transition:fade={{ duration: 120 }}
       >
         <button
           class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
@@ -284,17 +295,22 @@
              placeholder:text-muted-foreground/50 outline-none
              focus:border-primary"
       style="max-width: {_width};"
-      oninput={(e) => { _alt = (e.target as HTMLInputElement).value; }}
+      oninput={(e) => {
+        _alt = (e.target as HTMLInputElement).value;
+      }}
       onblur={() => onCaptionUpdate(_alt)}
       onmousedown={(e) => e.stopPropagation()}
     />
-  {:else if _alt}
+  {:else}
+    <!-- Reserve the input's footprint (mt-1 + text-sm line-height + border-b)
+         so selecting an image doesn't shift surrounding text. -->
     <p
-      class="mt-1 text-sm text-center font-sans text-muted-foreground"
-      style="max-width: {_width};"
+      class="mt-1 w-full text-sm text-center font-sans border-b border-transparent text-muted-foreground"
+      style="max-width: {_width}; min-height: 1.25rem; margin-bottom: 0;"
       data-caption
+      aria-hidden={!_alt}
     >
-      {_alt}
+      {_alt || " "}
     </p>
   {/if}
 </div>

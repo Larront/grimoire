@@ -163,6 +163,7 @@
   bind:this={element}
   onkeydown={handleKeydown}
   onpaste={handlePaste}
+  ondragover={(e) => e.preventDefault()}
   ondrop={handleDrop}
   onclick={handleClick}
   onmouseover={handleMouseover}
