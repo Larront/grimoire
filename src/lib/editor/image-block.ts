@@ -118,6 +118,7 @@ export const ImageBlock = Image.extend({
           width: node.attrs.width ?? "100%",
           onUpdate: updateNodeAttrs,
           onCaptionUpdate: (alt) => updateNodeAttrs({ alt }),
+          onSrcReplace: (src) => updateNodeAttrs({ src }),
         },
       });
       const component = raw as unknown as ImageBlockViewExports;

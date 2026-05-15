@@ -58,28 +58,27 @@ pub fn resolve_image_filename(images_dir: &Path, file_name: &str) -> PathBuf {
     }
 }
 
-#[tauri::command]
-pub fn copy_image_file(absolute_path: String, vault: State<AppVault>) -> Result<String, String> {
-    let src = PathBuf::from(&absolute_path);
+pub fn copy_image_file_to(vault_path: Option<&Path>, absolute_path: &str) -> Result<String, String> {
+    let src = PathBuf::from(absolute_path);
     validate_image_extension(&src)?;
     let file_name = src
         .file_name()
         .ok_or("Invalid file path")?
         .to_string_lossy()
         .to_string();
-
-    let (dest, relative) = {
-        let state = vault.lock().map_err(|e| e.to_string())?;
-        let vault_path = state.path.as_ref().ok_or("No vault open")?;
-        let images_dir = vault_path.join("images");
-        std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
-        let dest = resolve_image_filename(&images_dir, &file_name);
-        let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
-        (dest, relative)
-    };
-
+    let vault_path = vault_path.ok_or("No vault open")?;
+    let images_dir = vault_path.join("images");
+    std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
+    let dest = resolve_image_filename(&images_dir, &file_name);
+    let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(relative)
+}
+
+#[tauri::command]
+pub fn copy_image_file(absolute_path: String, vault: State<AppVault>) -> Result<String, String> {
+    let state = vault.lock().map_err(|e| e.to_string())?;
+    copy_image_file_to(state.path.as_deref(), &absolute_path)
 }
 
 pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> Result<String, String> {
@@ -209,5 +208,65 @@ mod tests {
         let images_dir = dir.path().join("images");
         let result = save_image_bytes_to(&images_dir, "script.svg", b"<svg/>");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_copy_image_file_end_to_end() {
+        let outer = tempfile::tempdir().unwrap();
+        let vault = outer.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        let src = outer.path().join("portrait.png");
+        fs::write(&src, b"png-bytes").unwrap();
+
+        let rel = copy_image_file_to(Some(&vault), src.to_str().unwrap()).unwrap();
+        assert_eq!(rel, "images/portrait.png");
+        assert_eq!(fs::read(vault.join("images/portrait.png")).unwrap(), b"png-bytes");
+    }
+
+    #[test]
+    fn test_copy_image_file_no_vault_open_returns_graceful_error() {
+        let outer = tempfile::tempdir().unwrap();
+        let src = outer.path().join("portrait.png");
+        fs::write(&src, b"png-bytes").unwrap();
+
+        let result = copy_image_file_to(None, src.to_str().unwrap());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "No vault open");
+    }
+
+    #[test]
+    fn test_copy_image_file_rejects_unsupported_extension() {
+        let outer = tempfile::tempdir().unwrap();
+        let vault = outer.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        let src = outer.path().join("icon.svg");
+        fs::write(&src, b"<svg/>").unwrap();
+
+        let result = copy_image_file_to(Some(&vault), src.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(!vault.join("images").join("icon.svg").exists());
+    }
+
+    #[test]
+    fn test_validate_path_rejects_parent_escape() {
+        let outer = tempfile::tempdir().unwrap();
+        let vault = outer.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        fs::write(outer.path().join("escape.png"), b"x").unwrap();
+
+        let result = validate_path(&vault, "../escape.png");
+        assert!(result.is_err(), "expected ../escape.png to be rejected");
+    }
+
+    #[test]
+    fn test_validate_path_rejects_absolute_path() {
+        let outer = tempfile::tempdir().unwrap();
+        let vault = outer.path().join("vault");
+        std::fs::create_dir(&vault).unwrap();
+        let outside = outer.path().join("outside.png");
+        fs::write(&outside, b"x").unwrap();
+
+        let result = validate_path(&vault, outside.to_str().unwrap());
+        assert!(result.is_err(), "expected absolute outside path to be rejected");
     }
 }

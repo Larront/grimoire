@@ -10,6 +10,7 @@
     selected = false,
     onUpdate,
     onCaptionUpdate,
+    onSrcReplace,
   }: {
     src: string;
     alt: string;
@@ -18,6 +19,7 @@
     selected?: boolean;
     onUpdate: (attrs: { align: string; width: string }) => void;
     onCaptionUpdate: (alt: string) => void;
+    onSrcReplace?: (src: string) => void;
   } = $props();
 
   // Internal mutable copies — NodeView calls setAttrs / setSelected to update these
@@ -77,6 +79,25 @@
 
   function closeLightbox() {
     _lightboxOpen = false;
+  }
+
+  async function replaceImage() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
+      ],
+    });
+    if (typeof selected !== "string") return;
+    try {
+      const newSrc = await invoke<string>("copy_image_file", {
+        absolutePath: selected,
+      });
+      onSrcReplace?.(newSrc);
+    } catch {
+      // mirror other insertion routes: swallow; no node mutation
+    }
   }
 
   function onBackdropClick(e: MouseEvent) {
@@ -218,10 +239,21 @@
       />
     {:else if loadError}
       <div
-        class="flex items-center justify-center w-full h-20 rounded border border-border/60
-               bg-card text-muted-foreground/60 text-xs font-sans"
+        class="flex flex-col items-center justify-center gap-2 w-full min-h-20 py-3 rounded
+               border border-border/60 bg-card text-muted-foreground/60 text-xs font-sans"
       >
-        Image not found: {_src}
+        <span>Image not found: {_src}</span>
+        <button
+          type="button"
+          data-replace-btn
+          class="rounded border border-border/60 bg-background px-2 py-0.5 text-xs
+                 text-foreground hover:bg-muted focus:outline-none
+                 focus-visible:ring-2 focus-visible:ring-primary"
+          onmousedown={(e) => e.preventDefault()}
+          onclick={replaceImage}
+        >
+          Replace…
+        </button>
       </div>
     {:else}
       <div class="w-full h-20 rounded bg-card animate-pulse"></div>
