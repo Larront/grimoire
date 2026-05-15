@@ -98,24 +98,13 @@ export const ImageBlock = Image.extend({
       dom.setAttribute("contenteditable", "false");
       dom.setAttribute("data-image-block", "");
 
-      function handleUpdate(attrs: { align: string; width: string }) {
+      function updateNodeAttrs(partial: Record<string, unknown>) {
         const pos = (getPos as () => number | undefined)();
         if (pos === undefined) return;
         editor.commands.command(({ tr }) => {
           const currentNode = tr.doc.nodeAt(pos);
           if (!currentNode) return false;
-          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, ...attrs });
-          return true;
-        });
-      }
-
-      function handleCaptionUpdate(alt: string) {
-        const pos = (getPos as () => number | undefined)();
-        if (pos === undefined) return;
-        editor.commands.command(({ tr }) => {
-          const currentNode = tr.doc.nodeAt(pos);
-          if (!currentNode) return false;
-          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, alt });
+          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, ...partial });
           return true;
         });
       }
@@ -127,8 +116,8 @@ export const ImageBlock = Image.extend({
           alt: node.attrs.alt ?? "",
           align: node.attrs.align ?? "center",
           width: node.attrs.width ?? "100%",
-          onUpdate: handleUpdate,
-          onCaptionUpdate: handleCaptionUpdate,
+          onUpdate: updateNodeAttrs,
+          onCaptionUpdate: (alt) => updateNodeAttrs({ alt }),
         },
       });
       const component = raw as unknown as ImageBlockViewExports;

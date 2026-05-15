@@ -34,7 +34,7 @@ fn validate_image_extension(path: &PathBuf) -> Result<(), String> {
     }
 }
 
-pub fn resolve_image_filename(images_dir: &PathBuf, file_name: &str) -> PathBuf {
+pub fn resolve_image_filename(images_dir: &Path, file_name: &str) -> PathBuf {
     let stem = PathBuf::from(file_name)
         .file_stem()
         .unwrap_or_default()
@@ -91,7 +91,7 @@ pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> R
         .to_string_lossy()
         .to_string();
     std::fs::create_dir_all(images_dir).map_err(|e| e.to_string())?;
-    let dest = resolve_image_filename(&images_dir.to_path_buf(), &file_name);
+    let dest = resolve_image_filename(images_dir, &file_name);
     let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
     std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(relative)
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn test_no_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let result = resolve_image_filename(&dir.path().to_path_buf(), "portrait.png");
+        let result = resolve_image_filename(dir.path(), "portrait.png");
         assert_eq!(result, dir.path().join("portrait.png"));
     }
 
@@ -139,7 +139,7 @@ mod tests {
     fn test_one_conflict() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("portrait.png"), "").unwrap();
-        let result = resolve_image_filename(&dir.path().to_path_buf(), "portrait.png");
+        let result = resolve_image_filename(dir.path(), "portrait.png");
         assert_eq!(result, dir.path().join("portrait 2.png"));
     }
 
@@ -148,7 +148,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("portrait.png"), "").unwrap();
         fs::write(dir.path().join("portrait 2.png"), "").unwrap();
-        let result = resolve_image_filename(&dir.path().to_path_buf(), "portrait.png");
+        let result = resolve_image_filename(dir.path(), "portrait.png");
         assert_eq!(result, dir.path().join("portrait 3.png"));
     }
 

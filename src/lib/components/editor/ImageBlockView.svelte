@@ -56,7 +56,7 @@
       });
   });
 
-  const justifyMap: Record<string, string> = {
+  const alignMap: Record<string, string> = {
     left: "flex-start",
     center: "center",
     right: "flex-end",
@@ -108,7 +108,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="my-2 flex flex-col"
-  style="align-items: {justifyMap[_align] ?? 'center'};"
+  style="align-items: {alignMap[_align] ?? 'center'};"
 >
   <div
     bind:this={containerEl}
