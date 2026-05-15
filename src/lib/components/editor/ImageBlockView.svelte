@@ -83,16 +83,16 @@
 
   async function replaceImage() {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({
+    const picked = await open({
       multiple: false,
       filters: [
         { name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
       ],
     });
-    if (typeof selected !== "string") return;
+    if (typeof picked !== "string") return;
     try {
       const newSrc = await invoke<string>("copy_image_file", {
-        absolutePath: selected,
+        absolutePath: picked,
       });
       onSrcReplace?.(newSrc);
     } catch {
