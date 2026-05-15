@@ -13,20 +13,69 @@ let mockScenes: SceneWithCount[] = [];
 let mockActiveSceneId: number | null = null;
 let mockLoadingSceneId: number | null = null;
 
-vi.mock("../lib/stores/scenes.svelte", () => ({
-  scenes: {
-    get scenes() {
-      return mockScenes;
+// Mock mirrors the real scenes store mutation surface: each method dispatches
+// the same invoke() call the real store does, then calls load(). Tests assert
+// against invoke + scenes.load — keep this in sync with scenes.svelte.ts.
+vi.mock("../lib/stores/scenes.svelte", async () => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const load = vi.fn();
+  return {
+    scenes: {
+      get scenes() {
+        return mockScenes;
+      },
+      get isLoading() {
+        return false;
+      },
+      get error() {
+        return null;
+      },
+      load,
+      async deleteScene(id: number) {
+        await invoke("delete_scene", { id });
+        await load();
+      },
+      async updateScene(id: number, name: string) {
+        await invoke("update_scene", { id, name });
+        await load();
+      },
+      async toggleFavorite(id: number) {
+        await invoke("toggle_scene_favorite", { id });
+        await load();
+      },
+      async applyThumbnailColor(id: number, color: string | null) {
+        const scene = mockScenes.find((s) => s.id === id);
+        await invoke("update_scene_thumbnail", {
+          id,
+          thumbnailColor: color,
+          thumbnailIcon: scene?.thumbnail_icon ?? null,
+          thumbnailPath: scene?.thumbnail_path ?? null,
+        });
+        await load();
+      },
+      async applyThumbnailIcon(id: number, icon: string | null) {
+        const scene = mockScenes.find((s) => s.id === id);
+        await invoke("update_scene_thumbnail", {
+          id,
+          thumbnailColor: scene?.thumbnail_color ?? null,
+          thumbnailIcon: icon,
+          thumbnailPath: scene?.thumbnail_path ?? null,
+        });
+        await load();
+      },
+      async setThumbnailImage(id: number, path: string | null) {
+        const scene = mockScenes.find((s) => s.id === id);
+        await invoke("update_scene_thumbnail", {
+          id,
+          thumbnailColor: scene?.thumbnail_color ?? null,
+          thumbnailIcon: scene?.thumbnail_icon ?? null,
+          thumbnailPath: path,
+        });
+        await load();
+      },
     },
-    get isLoading() {
-      return false;
-    },
-    get error() {
-      return null;
-    },
-    load: vi.fn(),
-  },
-}));
+  };
+});
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: {

@@ -8,25 +8,42 @@ import type { Scene, SceneSlot } from "../lib/types/vault";
 let mockScenes: Scene[] = [];
 let mockSlots: SceneSlot[] = [];
 
-vi.mock("../lib/stores/scenes.svelte", () => ({
-  scenes: {
-    get scenes() {
-      return mockScenes;
+// Mock mirrors the real scenes store mutation surface: each method dispatches
+// the same invoke() call the real store does. Tests assert against invoke —
+// keep this in sync with scenes.svelte.ts.
+vi.mock("../lib/stores/scenes.svelte", async () => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return {
+    scenes: {
+      get scenes() {
+        return mockScenes;
+      },
+      get isLoading() {
+        return false;
+      },
+      getSlots: vi.fn(() => Promise.resolve(mockSlots)),
+      invalidateSlots: vi.fn(),
+      load: vi.fn(),
+      async setThumbnailImage(id: number, path: string | null) {
+        const scene = mockScenes.find((s) => s.id === id);
+        await invoke("update_scene_thumbnail", {
+          id,
+          thumbnailColor: scene?.thumbnail_color ?? null,
+          thumbnailIcon: scene?.thumbnail_icon ?? null,
+          thumbnailPath: path,
+        });
+      },
     },
-    get isLoading() {
-      return false;
-    },
-    getSlots: vi.fn(() => Promise.resolve(mockSlots)),
-    invalidateSlots: vi.fn(),
-    load: vi.fn(),
-  },
-}));
+  };
+});
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: { updateTabTitle: vi.fn() },
 }));
 
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
+  // Keep in sync with the named export in audio-engine.svelte.ts
+  isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
   audioEngine: {
     playScene: vi.fn(),
     stopAll: vi.fn(),
