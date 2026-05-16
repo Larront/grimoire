@@ -121,35 +121,73 @@ Locks down the foundation before the feature-building phase.
 
 **Deliverables:**
 
-- Tag notes from the editor or sidebar context menu
-- Tags persisted in SQLite
-- Tag list visible in the Files sidebar (below folder tree or as a filter section)
-- Click a tag to filter the file tree to tagged notes
-- Tag display on note detail / hover
+- Tag notes from the Details Pane (right rail) chip editor; app command palette as secondary entry point
+- Tag pins via the existing floating `PinDetailPanel` (tag chip editor added to the panel)
+- Pin Category selector added to `PinDetailPanel` alongside tag editing
+- Tags persisted in markdown frontmatter for notes (vault-portable); SQLite for pins (no markdown backing)
+- SQLite tag index regenerable from a vault scan
+- Tag autocomplete from vault-global tag list when editing chips
+- Details Pane content (notes only): Tags chip editor, Folder breadcrumb (display-only), Modified relative time
+
+**Out of scope (Phase 5):**
+
+- Tag list / facet in the Files sidebar — tags are discovered via Search (Phase 6) and the graph (Phase 9), not via a sidebar list
+- Click-a-tag-to-filter the file tree — no sidebar list, no filter affordance
+- Rail engagement on map and scene panes — Phase 5 Details Pane is notes-only
 
 **Success criteria:**
 
-- A GM can tag all "NPC" notes and filter to them in one click
+- A GM can tag a note in two clicks from the Details Pane
+- Closing and reopening the vault preserves tags (frontmatter round-trip)
+- Deleting `.grimoire/index.db` and reopening the vault recovers all tags
 
 ---
 
 ### Phase 6 — Search
 
-The Search rail slot is already reserved. This phase wires it up.
+Search is hosted in the existing command palette (`AppSearch.svelte`). Both the Search rail icon and Ctrl/⌘+K open it. The palette becomes the single canonical surface for vault search, tag discovery, and command execution.
 
 **Deliverables:**
 
-- Search rail opens a sidebar search panel (not a modal)
-- Full-text search across note titles and content
-- Results show file name + excerpt with match highlighted
-- Click result opens note in main content area (or focused pane)
-- Keyboard navigation through results (↑ ↓ Enter)
-- Ctrl+K / ⌘K as global shortcut to focus search
+- Tantivy-backed search engine (see [ADR-0004](./adr/0004-tantivy-search-engine.md)), single index over notes / maps / scenes; tags as a facet on notes
+- Command palette grouped into five fixed sections, in this order: **Commands → Tags → Notes → Maps → Scenes**
+- Search filter syntax: `tag:npc` filters by tag; multiple `tag:` filters compose with **OR**; free-text terms compose with `tag:` filters as **AND** (filter then search)
+- Selecting a Tag result rewrites the input to apply that tag as a filter (does not open a new view)
+- `tag:npc` alone (no free text) lists notes carrying that tag, MRU-ordered — the Phase 5 tag-discovery promise
+- Note rows render title (Metamorphous) + single excerpt (Nunito, ~120 chars centred on first body match, match span in `--primary`); a `N matches` chip appears when match count > 1
+- Frontmatter is not indexed and not used as excerpt source — tags are surfaced through the Tags group, not via excerpt text
+- Maps / Scenes / Commands render as single-line rows (no excerpts)
+- Per-group caps: Commands 3, Tags 5, Notes 6, Maps 3, Scenes 3, with a "Show N more in [group]" expand-in-place row when capped
+- When only one group matches, that group's cap relaxes (Notes ~15) before showing the expand row
+- Empty query state: a **Recent** section (cross-entity MRU, ~5 items) above the Commands section. Recent is the only place where grouping is mixed by entity type
+- Initial Commands set (append-only as later phases ship): *Create new note*, *Create new scene*, *Create new map*, *Add tag to current note*, *Open Settings*, *Toggle theme*, *Switch vault…*, *Rebuild search index*
+- Search fires from char 2 with 80ms debounce; perf target <150ms on 200+ note vaults
+- Fuzzy matching is on by default with tiered Levenshtein distance: 0 for queries < 4 chars, 1 for 4–7, 2 for 8+
+- Archived notes are excluded from results by default. Opt-in via `archived:true` (only archived) or `archived:any` (include archived)
+- Opening a result:
+  - **Plain Enter** — opens in the active pane; reuses an existing tab in either pane if the entity is already open
+  - **Ctrl/⌘+Enter** — forces a new tab in the active pane
+  - **Shift+Enter** — opens in the opposite pane (creates split if not yet split)
+- Opening a note from a query with free-text terms places the cursor on the matched span and plays a ~600ms highlight pulse on the matched text (`--primary-subtle`)
+- Section headers are skipped during keyboard navigation (↑ ↓ moves across group boundaries directly)
+- Tantivy index lives at `vault/.grimoire/search-index/`; updated incrementally on every note write; fully rebuildable via the *Rebuild search index* command and on vault open if missing or stale
+
+**Out of scope (Phase 6):**
+
+- Pins as search results — pins live inside maps; their natural discovery surface is the Phase 9 graph. Pin tag editing remains in the floating `PinDetailPanel`.
+- Folder results — folders are not standalone navigation targets; "reveal in Files sidebar" is a different gesture and not in scope
+- Search-results preview-on-hover in the pane behind the palette — surfaces too many edge cases (scroll state, dirty editor state) for the value
+- Per-group sort options (modified-date vs relevance) — BM25 is the only ranking; no user-facing sort toggle
+- Plugin / contextual / user-defined commands — Commands set is a fixed curated list; extensibility deferred
+- Tag rename and delete bulk operations — still deferred (Phase 5 boundary holds)
 
 **Success criteria:**
 
-- Type 3 characters, results appear within 200ms
-- Works across a vault with 200+ notes
+- Type 2 characters, results appear within 150ms on a 200+ note vault
+- "Captian Ash" (transposed typo) returns the *Captain Ash* note
+- `tag:npc` with no free text lists every NPC-tagged note, most-recently-modified first
+- Selecting the Search rail icon, pressing Ctrl/⌘+K, and clicking *Add tag to current note* in the palette all reach the same surface
+- Deleting `vault/.grimoire/` and reopening the vault recovers all search results from a vault scan
 
 ---
 
@@ -192,8 +230,9 @@ Depends on Phase 5 (Tags) being complete — the graph uses tags as a clustering
 
 **Deliverables:**
 
-- Note detail panel (toggled sidebar or bottom panel): shows all inbound wikilinks to the current note
-- Tags displayed in the detail panel
+- Details Pane gains a Backlinks section: all inbound wikilinks to the current note
+- Outbound links section in the Details Pane
+- Note aliases — alternative names usable in wikilink resolution, edited in the Details Pane, stored in frontmatter
 - `/graph` route: force-directed graph of all notes
   - Nodes: notes and maps
   - Edges: wikilinks between notes
