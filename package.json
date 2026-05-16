@@ -11,10 +11,12 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sandcastle": "bunx tsx .sandcastle/main.ts"
   },
   "license": "MIT",
   "dependencies": {
+    "@ai-hero/sandcastle": "^0.5.10",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
