@@ -5,6 +5,7 @@
   import { tabs } from '$lib/stores/tabs.svelte';
   import { notes } from '$lib/stores/notes.svelte';
   import TagChipEditor from './TagChipEditor.svelte';
+  import { formatBreadcrumb, formatRelativeTime } from '$lib/utils/note-meta';
 
   const { rail }: { rail: RightRailState } = $props();
 
@@ -54,7 +55,8 @@
     if (!note) return;
     try {
       await invoke('write_note_tags', { notePath: note.path, tags: next });
-      // Newly-created tags become available to the next note immediately.
+      // Refresh notes so modified_at updates in the Details Pane.
+      notes.load();
       refreshAllTags();
     } catch (e) {
       console.error('write_note_tags failed:', e);
@@ -72,6 +74,21 @@
         <section data-section="tags" class="space-y-2">
           <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tags</div>
           <TagChipEditor bind:tags suggestions={allTags} onchange={persistTags} />
+        </section>
+        <section data-section="folder" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
+          <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Folder</div>
+          <div
+            class="font-mono text-[10px] leading-relaxed text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap"
+            title={activeNote.path}
+          >
+            {formatBreadcrumb(activeNote.path)}
+          </div>
+        </section>
+        <section data-section="modified" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
+          <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Modified</div>
+          <div class="font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {formatRelativeTime(activeNote.modified_at)}
+          </div>
         </section>
       {/if}
     </div>
