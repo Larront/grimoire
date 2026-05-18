@@ -560,6 +560,18 @@ input[type="range"]:disabled {
   cursor: pointer;
 }
 
+/* ── Search-match pulse ───────────────────────────────────────── */
+
+@keyframes search-match-pulse {
+  0% { background-color: var(--primary-subtle); }
+  100% { background-color: transparent; }
+}
+
+[data-search-pulse="1"] ::selection {
+  background-color: var(--primary);
+  animation: search-match-pulse 600ms ease-out forwards;
+}
+
 /* ── Splash screen animations ─────────────────────────────────── */
 
 @keyframes splash-fade-in {

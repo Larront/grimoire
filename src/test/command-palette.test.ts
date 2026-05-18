@@ -360,3 +360,174 @@ describe("command palette – Notes search", () => {
     ).toBeNull();
   });
 });
+
+// ── Body excerpt + match chip (issue #33) ─────────────────────────────────────
+
+describe("command palette – excerpt and match chip", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    searchPalette.activeQuery = "";
+    vi.useRealTimers();
+  });
+
+  it("shows excerpt below title when result has a body match", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "the harbor is beautiful at dusk",
+            match_count: 1,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("ha");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="note-excerpt"]'),
+    ).toBeTruthy();
+  });
+
+  it("does not show excerpt when excerpt is null (title-only match)", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: null,
+            match_count: 0,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("ha");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="note-excerpt"]'),
+    ).toBeNull();
+  });
+
+  it("shows N matches chip when match_count > 1", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "harbor here and harbor there",
+            match_count: 3,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("ha");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const chip = document.body.querySelector('[data-testid="match-count-chip"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toContain("3");
+  });
+
+  it("does not show chip when match_count is 1", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "the harbor is beautiful",
+            match_count: 1,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("ha");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="match-count-chip"]'),
+    ).toBeNull();
+  });
+
+  it("excerpt contains a highlighted span for the matched term", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "the harbor is beautiful",
+            match_count: 1,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("harbor");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
+    expect(excerpt).toBeTruthy();
+    // The matched word should be inside a styled span
+    const matchSpan = excerpt?.querySelector("span.text-primary");
+    expect(matchSpan).toBeTruthy();
+    expect(matchSpan?.textContent).toBe("harbor");
+  });
+
+  it("sets searchPalette.activeQuery when opening a note result", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          {
+            id: 4,
+            title: "The Harbor",
+            path: "harbor.md",
+            excerpt: "the harbor shines",
+            match_count: 1,
+          },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("harbor");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const result = document.body.querySelector(
+      '[data-testid="cmd-note-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(searchPalette.activeQuery).toBe("harbor");
+  });
+});

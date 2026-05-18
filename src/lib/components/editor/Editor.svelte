@@ -27,9 +27,10 @@
   interface Props {
     initialContent: string;
     onSave: (markdown: string) => Promise<void>;
+    highlightQuery?: string;
   }
 
-  let { initialContent, onSave }: Props = $props();
+  let { initialContent, onSave, highlightQuery = "" }: Props = $props();
 
   let element = $state<HTMLDivElement>();
   let editor = $state<Editor | null>(null);
@@ -46,6 +47,42 @@
     y: number;
   } | null>(null);
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function scrollToFirstMatch(editorInstance: Editor, query: string) {
+    const terms = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
+    if (!terms.length) return;
+
+    let foundFrom = -1;
+    let foundTo = -1;
+
+    editorInstance.state.doc.descendants((node, pos) => {
+      if (foundFrom !== -1) return false;
+      if (node.isText && node.text) {
+        for (const term of terms) {
+          const idx = node.text.toLowerCase().indexOf(term);
+          if (idx !== -1) {
+            foundFrom = pos + idx;
+            foundTo = foundFrom + term.length;
+            return false;
+          }
+        }
+      }
+    });
+
+    if (foundFrom === -1) return;
+
+    editorInstance.commands.setTextSelection({ from: foundFrom, to: foundTo });
+    editorInstance.commands.scrollIntoView();
+
+    // Brief pulse on the editor element to draw attention to the selection
+    const el = editorInstance.view.dom as HTMLElement;
+    el.dataset.searchPulse = "1";
+    setTimeout(() => delete el.dataset.searchPulse, 600);
+  }
 
   onMount(() => {
     const preprocessed = preprocessWikiLinks(preprocessImageAttrs(initialContent));
@@ -75,6 +112,11 @@
         saveTimer = setTimeout(save, 500);
       },
     });
+
+    if (highlightQuery) {
+      // Allow the editor to finish its initial render before searching
+      setTimeout(() => scrollToFirstMatch(editor!, highlightQuery), 150);
+    }
   });
 
   onDestroy(() => {

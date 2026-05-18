@@ -111,7 +111,7 @@ pub fn create_note(
         .map_err(|e| e.to_string())?;
 
     if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &created);
+        let _ = crate::search::index_note(index, &created, "");
     }
 
     Ok(created)
@@ -150,8 +150,13 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
+    let body_text = std::fs::read_to_string(vault_path.join(&updated.path))
+        .ok()
+        .map(|c| crate::search::extract_plain_text(&c))
+        .unwrap_or_default();
+
     if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &updated);
+        let _ = crate::search::index_note(index, &updated, &body_text);
     }
 
     Ok(updated)
@@ -196,10 +201,24 @@ pub fn write_note_content(
     content: String,
     vault: State<AppVault>,
 ) -> Result<(), String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
     let full_path = validate_parent_path(&vault_path, &note_path)?;
-    fs::write(&full_path, content).map_err(|e| e.to_string())
+    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
+
+    // Re-index with updated body text
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let maybe_note = notes
+        .filter(path.eq(&note_path))
+        .first::<Note>(conn)
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
+        let body_text = crate::search::extract_plain_text(&content);
+        let _ = crate::search::index_note(index, &note, &body_text);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -230,8 +249,9 @@ pub fn write_note_tags(
 #[tauri::command]
 pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSearchResult>, String> {
     let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
     match &state.search_index {
-        Some(index) => crate::search::search_notes_in_index(index, &query, 10),
+        Some(index) => crate::search::search_notes_in_index(index, &vault_path, &query, 10),
         None => Ok(vec![]),
     }
 }

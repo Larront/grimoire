@@ -12,6 +12,8 @@
     id: number;
     title: string;
     path: string;
+    excerpt: string | null;
+    match_count: number;
   }
 
   let addTagOpen = $state(false);
@@ -47,8 +49,42 @@
   }
 
   function openNote(result: NoteSearchResult) {
+    searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
     tabs.openTab({ type: "note", id: result.id, title: result.title });
+  }
+
+  /**
+   * Split excerpt text into segments, marking the first query-term occurrence
+   * so the caller can style it differently.
+   */
+  function splitExcerpt(
+    text: string,
+    query: string,
+  ): Array<{ text: string; isMatch: boolean }> {
+    const terms = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
+    if (!terms.length) return [{ text, isMatch: false }];
+
+    const lower = text.toLowerCase();
+    let firstMatch: { start: number; end: number } | null = null;
+    for (const term of terms) {
+      const idx = lower.indexOf(term);
+      if (idx !== -1 && (!firstMatch || idx < firstMatch.start)) {
+        firstMatch = { start: idx, end: idx + term.length };
+      }
+    }
+
+    if (!firstMatch) return [{ text, isMatch: false }];
+
+    return [
+      { text: text.slice(0, firstMatch.start), isMatch: false },
+      { text: text.slice(firstMatch.start, firstMatch.end), isMatch: true },
+      { text: text.slice(firstMatch.end), isMatch: false },
+    ].filter((p) => p.text.length > 0);
   }
 
   $effect(() => {
@@ -144,9 +180,34 @@
             data-testid="cmd-note-result"
             value={result.title}
             onSelect={() => openNote(result)}
+            class="flex items-start gap-2 py-2"
           >
-            <FileText class="size-4 shrink-0 text-muted-foreground" />
-            {result.title}
+            <FileText class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div class="min-w-0 flex-1">
+              <div class="font-heading text-sm">{result.title}</div>
+              {#if result.excerpt}
+                <div
+                  data-testid="note-excerpt"
+                  class="mt-0.5 truncate text-xs text-muted-foreground"
+                >
+                  {#each splitExcerpt(result.excerpt, searchQuery) as part}
+                    {#if part.isMatch}
+                      <span class="font-medium text-primary">{part.text}</span>
+                    {:else}
+                      {part.text}
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            {#if result.match_count > 1}
+              <span
+                data-testid="match-count-chip"
+                class="ml-auto shrink-0 text-xs text-muted-foreground"
+              >
+                {result.match_count} matches
+              </span>
+            {/if}
           </Command.Item>
         {/each}
       </Command.Group>

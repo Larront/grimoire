@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
   import { LoaderCircle } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import Editor from "$lib/components/editor/Editor.svelte";
@@ -21,12 +22,16 @@
   let body = $state<string | null>(null);
   let lastMarkdown = $state<string | null>(null);
   let lastFetchedId = $state<number | null>(null);
+  let highlightQuery = $state("");
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
       const targetId = note.id;
       lastFetchedId = targetId;
       body = null;
+      // Capture and consume the pending search query for scroll-to-match
+      highlightQuery = searchPalette.activeQuery;
+      searchPalette.activeQuery = "";
       invoke<string>("read_note_content", { notePath: note.path }).then((c) => {
         if (lastFetchedId !== targetId) return;
         const parsed = parseFrontmatter(c);
@@ -148,7 +153,7 @@
         class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"
       ></div>
       {#if body !== null}
-        <Editor initialContent={body} onSave={handleSave} />
+        <Editor initialContent={body} onSave={handleSave} {highlightQuery} />
       {/if}
     </div>
   </div>
