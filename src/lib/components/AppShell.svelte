@@ -8,6 +8,7 @@
   import * as Sidebar from "./ui/sidebar";
   import { RightRailState } from "$lib/stores/right-rail.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
 
   const rail = new RightRailState();
@@ -33,6 +34,7 @@
     <IconRail
       onFilesClick={() => {}}
       onScenesClick={() => {}}
+      onSearchClick={() => (searchPalette.open = true)}
       onSettingsClick={() => (settingsOpen = true)}
     />
     <SettingsDialog bind:open={settingsOpen} />

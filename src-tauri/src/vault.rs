@@ -1,10 +1,12 @@
 use std::{path::PathBuf, sync::Mutex};
 
 use diesel::SqliteConnection;
+use tantivy::Index;
 
 pub struct VaultState {
     pub path: Option<PathBuf>,
     pub connection: Option<SqliteConnection>,
+    pub search_index: Option<Index>,
     pub spotify_client_id: String,
     pub pending_spotify_verifier: Option<String>,
     pub pending_spotify_state: Option<String>,
@@ -15,6 +17,7 @@ impl VaultState {
         VaultState {
             path: None,
             connection: None,
+            search_index: None,
             spotify_client_id,
             pending_spotify_verifier: None,
             pending_spotify_state: None,

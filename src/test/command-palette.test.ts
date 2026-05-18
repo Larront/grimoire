@@ -1,9 +1,10 @@
 import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import AppSearch from "$lib/components/AppSearch.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { notes } from "$lib/stores/notes.svelte";
+import { searchPalette } from "$lib/stores/search.svelte";
 
 const testNote = {
   id: 1,
@@ -170,5 +171,192 @@ describe("command palette – Add tag flow", () => {
     await fireEvent.keyDown(input, { key: "Enter" });
     await flush();
     expect(invoke).not.toHaveBeenCalledWith("open_right_rail", expect.anything());
+  });
+});
+
+// ── Notes search ─────────────────────────────────────────────────────────────
+
+function getSearchInput(): HTMLInputElement {
+  return document.body.querySelector(
+    'input[placeholder="Type a command or search..."]',
+  ) as HTMLInputElement;
+}
+
+async function typeQuery(query: string) {
+  const input = getSearchInput();
+  input.value = query;
+  await fireEvent.input(input);
+  await flush();
+}
+
+describe("command palette – Notes search", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  it("does not call search_notes when fewer than 2 chars are typed", async () => {
+    vi.mocked(invoke).mockResolvedValue(null);
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("a");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+    expect(invoke).not.toHaveBeenCalledWith("search_notes", expect.anything());
+  });
+
+  it("calls search_notes with the query after 80ms debounce", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Dr");
+    expect(invoke).not.toHaveBeenCalledWith("search_notes", expect.anything());
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("search_notes", { query: "Dr" });
+  });
+
+  it("shows Notes group with results after query fires", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          { id: 2, title: "Dragon", path: "dragon.md" },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Dr");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-note-result"]'),
+    ).toBeTruthy();
+  });
+
+  it("no Notes group when query returns empty results", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("zzz");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-note-result"]'),
+    ).toBeNull();
+  });
+
+  it("clicking a Note result calls tabs.openTab with the matching note", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          { id: 3, title: "Aldric", path: "characters/aldric.md" },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Al");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const result = document.body.querySelector(
+      '[data-testid="cmd-note-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("note");
+    expect(tabs.activeTab?.id).toBe(3);
+  });
+
+  it("if the note is already open, selecting it focuses the existing tab (no duplicate)", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          { id: 1, title: "My Note", path: "notes/my-note.md" },
+        ]);
+      return Promise.resolve(null);
+    });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("My");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const result = document.body.querySelector(
+      '[data-testid="cmd-note-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    const noteTabs = tabs.left.tabs.filter(
+      (t) => t.type === "note" && t.id === 1,
+    );
+    expect(noteTabs.length).toBe(1);
+  });
+
+  it("palette closes after selecting a note result", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          { id: 3, title: "Aldric", path: "characters/aldric.md" },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Al");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const result = document.body.querySelector(
+      '[data-testid="cmd-note-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("search results are cleared when palette closes", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_notes")
+        return Promise.resolve([
+          { id: 2, title: "Dragon", path: "dragon.md" },
+        ]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Dr");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-note-result"]'),
+    ).toBeTruthy();
+
+    // Close and reopen — no stale results
+    searchPalette.open = false;
+    await flush();
+    searchPalette.open = true;
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-note-result"]'),
+    ).toBeNull();
   });
 });

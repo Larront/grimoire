@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+pub use crate::search::NoteSearchResult;
+
 /// Validates that `relative` resolves to a path inside `vault_root`.
 /// Use for reading/deleting existing files — the file must exist for canonicalize().
 /// Both sides are canonicalized so the starts_with check works correctly on Windows
@@ -102,11 +104,17 @@ pub fn create_note(
         parent_path: note_parent_path.as_deref(),
     };
 
-    diesel::insert_into(notes)
+    let created: Note = diesel::insert_into(notes)
         .values(&new_note)
         .returning(Note::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_note(index, &created);
+    }
+
+    Ok(created)
 }
 
 #[tauri::command]
@@ -136,11 +144,17 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
             .map_err(|e| e.to_string())?;
     }
 
-    diesel::update(notes.find(note.id))
+    let updated: Note = diesel::update(notes.find(note.id))
         .set(&note)
         .returning(Note::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_note(index, &updated);
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -157,9 +171,15 @@ pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String
 
     upsert_note_tags(conn, &note.path, &[])?;
 
-    diesel::delete(notes.find(note_id))
+    let deleted = diesel::delete(notes.find(note_id))
         .execute(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::remove_note(index, note_id);
+    }
+
+    Ok(deleted)
 }
 
 #[tauri::command]
@@ -207,34 +227,24 @@ pub fn write_note_tags(
     upsert_note_tags(conn, &note_path, &tags)
 }
 
-#[derive(Serialize, Debug)]
-pub struct NoteSearchResult {
-    pub id: i32,
-    pub title: String,
-    pub path: String,
+#[tauri::command]
+pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSearchResult>, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    match &state.search_index {
+        Some(index) => crate::search::search_notes_in_index(index, &query, 10),
+        None => Ok(vec![]),
+    }
 }
 
 #[tauri::command]
-pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSearchResult>, String> {
+pub fn rebuild_search_index(vault: State<AppVault>) -> Result<(), String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.clone().ok_or("No vault open")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    let pattern = format!("%{}%", query);
-    notes
-        .filter(title.like(&pattern).or(path.like(&pattern)))
-        .order(title.asc())
-        .limit(10)
-        .select((id, title, path))
-        .load::<(i32, String, String)>(conn)
-        .map(|rows| {
-            rows.into_iter()
-                .map(|(note_id, note_title, note_path)| NoteSearchResult {
-                    id: note_id,
-                    title: note_title,
-                    path: note_path,
-                })
-                .collect()
-        })
-        .map_err(|e| e.to_string())
+    let all_notes: Vec<Note> = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
+    let index = crate::search::rebuild_index(&vault_path, &all_notes)?;
+    state.search_index = Some(index);
+    Ok(())
 }
 
 #[derive(Serialize, Debug)]

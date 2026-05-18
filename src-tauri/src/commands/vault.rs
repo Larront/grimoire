@@ -1,6 +1,6 @@
 use crate::commands::tags::rebuild_note_tags_from_vault;
 use crate::db::establish_connection;
-use crate::db::models::NewPinCategory;
+use crate::db::models::{NewPinCategory, Note};
 use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::vault::AppVault;
 use diesel::prelude::*;
@@ -60,6 +60,11 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
     // previous session crashed mid-write or `.grimoire/` was wiped.
     rebuild_note_tags_from_vault(&vault_path, &mut conn)?;
 
+    // Rebuild the Tantivy search index. Non-fatal: a failure just leaves
+    // search unavailable until the next manual rebuild or vault reopen.
+    let all_notes: Vec<Note> = notes::table.load::<Note>(&mut conn).unwrap_or_default();
+    let search_index = crate::search::rebuild_index(&vault_path, &all_notes).ok();
+
     let note_count: i64 = notes::table
         .count()
         .get_result(&mut conn)
@@ -76,6 +81,7 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     state.path = Some(vault_path);
     state.connection = Some(conn);
+    state.search_index = search_index;
 
     Ok(OpenVaultResult {
         path,
@@ -94,8 +100,9 @@ pub fn get_vault_path(vault: State<AppVault>) -> Option<String> {
 #[tauri::command]
 pub fn close_vault(vault: State<AppVault>) -> Result<(), String> {
     let mut state = vault.lock().map_err(|e| e.to_string())?;
-    state.connection = None;  // drops SqliteConnection, closes the file handle
+    state.connection = None;
     state.path = None;
+    state.search_index = None;
     state.pending_spotify_verifier = None;
     state.pending_spotify_state = None;
     // spotify_client_id is intentionally kept — it is app-level config, not vault-specific

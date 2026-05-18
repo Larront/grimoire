@@ -1,17 +1,26 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { Search, Tag } from "@lucide/svelte";
+  import { Search, Tag, FileText } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
   import TagChipEditor from "./TagChipEditor.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
 
-  let open = $state(false);
+  interface NoteSearchResult {
+    id: number;
+    title: string;
+    path: string;
+  }
+
   let addTagOpen = $state(false);
   let tags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
+  let searchQuery = $state("");
+  let searchResults = $state<NoteSearchResult[]>([]);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const isMac = $derived(
     typeof navigator !== "undefined" && /mac/i.test(navigator.platform),
@@ -28,15 +37,56 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "k" && (isMac ? e.metaKey : e.ctrlKey)) {
       e.preventDefault();
-      open = true;
+      searchPalette.open = true;
     }
   }
 
   function openAddTag() {
-    open = false;
+    searchPalette.open = false;
     addTagOpen = true;
   }
 
+  function openNote(result: NoteSearchResult) {
+    searchPalette.open = false;
+    tabs.openTab({ type: "note", id: result.id, title: result.title });
+  }
+
+  // Debounced title search — fires from 2 chars with 80ms delay.
+  $effect(() => {
+    const q = searchQuery;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (q.length < 2) {
+      searchResults = [];
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const res = await invoke<NoteSearchResult[]>("search_notes", {
+          query: q,
+        });
+        searchResults = res ?? [];
+      } catch {
+        searchResults = [];
+      }
+    }, 80);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  });
+
+  // Reset search state when the palette closes.
+  $effect(() => {
+    if (!searchPalette.open) {
+      searchQuery = "";
+      searchResults = [];
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+    }
+  });
+
+  // Tag picker load effect.
   $effect(() => {
     if (!addTagOpen) {
       loadedForPath = null;
@@ -78,8 +128,8 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<Command.Dialog bind:open>
-  <Command.Input placeholder="Type a command or search..." />
+<Command.Dialog bind:open={searchPalette.open}>
+  <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
     {#if activeTabIsNote}
@@ -88,6 +138,20 @@
           <Tag class="size-4 shrink-0 text-muted-foreground" />
           Add tag
         </Command.Item>
+      </Command.Group>
+    {/if}
+    {#if searchResults.length > 0}
+      <Command.Group heading="Notes">
+        {#each searchResults as result (result.id)}
+          <Command.Item
+            data-testid="cmd-note-result"
+            value={result.title}
+            onSelect={() => openNote(result)}
+          >
+            <FileText class="size-4 shrink-0 text-muted-foreground" />
+            {result.title}
+          </Command.Item>
+        {/each}
       </Command.Group>
     {/if}
   </Command.List>
@@ -110,10 +174,15 @@
 
 <div
   data-testid="app-search-bar"
+  role="button"
+  tabindex="0"
+  aria-label="Open search"
   class="relative flex items-center justify-between gap-3 mx-3 mb-1 mt-2 h-(--row-h) px-(--pad-x)
          bg-muted text-muted-foreground rounded-lg text-(--font-ui) font-normal
          cursor-pointer whitespace-nowrap select-none
          hover:bg-sidebar-accent hover:text-foreground transition-colors duration-100"
+  onclick={() => (searchPalette.open = true)}
+  onkeydown={(e) => e.key === "Enter" && (searchPalette.open = true)}
 >
   <span class="flex items-center gap-1.5">
     <Search class="w-3.5 h-3.5 shrink-0" />
