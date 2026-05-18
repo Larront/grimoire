@@ -4,7 +4,6 @@ use std::path::Path;
 use tantivy::{
     collector::TopDocs,
     directory::MmapDirectory,
-    query::QueryParser,
     schema::{DateOptions, NumericOptions, OwnedValue, Schema, STORED, STRING, TEXT},
     DateTime as TantivyDateTime,
     Index, IndexWriter, TantivyDocument,
@@ -120,7 +119,70 @@ pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     Ok(())
 }
 
+/// Escape a string for use as a literal prefix in a Tantivy RegexQuery pattern.
+fn regex_escape(s: &str) -> String {
+    s.chars()
+        .flat_map(|c| match c {
+            '.' | '*' | '+' | '?' | '^' | '$' | '{'
+            | '}' | '|' | '(' | ')' | '[' | ']' | '\\' => vec!['\\', c],
+            _ => vec![c],
+        })
+        .collect()
+}
+
+/// Build a prefix-aware title query.
+///
+/// All words except the last get an exact TermQuery; the last word becomes a
+/// RegexQuery (prefix match) so "upp" finds notes containing "upper". Words
+/// shorter than 2 chars are skipped (below the tokenizer min-length).
+fn build_title_query(
+    _index: &Index,
+    title_f: tantivy::schema::Field,
+    query: &str,
+) -> Result<Box<dyn tantivy::query::Query>, String> {
+    use tantivy::query::{BooleanQuery, Occur, RegexQuery, TermQuery};
+    use tantivy::schema::IndexRecordOption;
+
+    let lower = query.trim().to_lowercase();
+    let words: Vec<&str> = lower
+        .split_whitespace()
+        .filter(|w| w.len() >= 2)
+        .collect();
+
+    if words.is_empty() {
+        return Err("Query too short".to_string());
+    }
+
+    let (last, rest) = words.split_last().unwrap();
+
+    let prefix_q: Box<dyn tantivy::query::Query> = Box::new(
+        RegexQuery::from_pattern(&format!("{}.*", regex_escape(last)), title_f)
+            .map_err(|e| e.to_string())?,
+    );
+
+    if rest.is_empty() {
+        return Ok(prefix_q);
+    }
+
+    let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = rest
+        .iter()
+        .map(|&w| {
+            let term = tantivy::Term::from_field_text(title_f, w);
+            let q: Box<dyn tantivy::query::Query> =
+                Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+            (Occur::Must, q)
+        })
+        .collect();
+    clauses.push((Occur::Must, prefix_q));
+
+    Ok(Box::new(BooleanQuery::new(clauses)))
+}
+
 /// Search the index for notes matching the given query string (title field).
+///
+/// Prefix matching: the last typed word matches any term that starts with it,
+/// so "upp" finds "The Upper Citadel". Earlier words require an exact token.
+/// Typo tolerance (fuzzy Levenshtein) is deferred to the fuzzy slice.
 pub fn search_notes_in_index(
     index: &Index,
     query: &str,
@@ -134,13 +196,13 @@ pub fn search_notes_in_index(
     let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
     let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
 
-    let query_parser = QueryParser::for_index(index, vec![title_f]);
-    let parsed = query_parser
-        .parse_query(query)
-        .map_err(|e| e.to_string())?;
+    let parsed = match build_title_query(index, title_f, query) {
+        Ok(q) => q,
+        Err(_) => return Ok(vec![]),
+    };
 
     let top_docs = searcher
-        .search(&parsed, &TopDocs::with_limit(limit))
+        .search(parsed.as_ref(), &TopDocs::with_limit(limit))
         .map_err(|e| e.to_string())?;
 
     let mut results = Vec::with_capacity(top_docs.len());
@@ -203,6 +265,22 @@ mod tests {
         assert_eq!(results[0].id, 1);
         assert_eq!(results[0].title, "Aldric the Wizard");
         assert_eq!(results[0].path, "npcs/aldric.md");
+    }
+
+    #[test]
+    fn search_finds_note_by_partial_word_prefix() {
+        let dir = TempDir::new().unwrap();
+        let notes = [make_note(1, "The Upper Citadel", "places/citadel.md")];
+        let index = rebuild_index(dir.path(), &notes).unwrap();
+
+        // "upp" is a prefix of "upper" — should match
+        let results = search_notes_in_index(&index, "upp", 10).unwrap();
+        assert_eq!(results.len(), 1, "prefix 'upp' should match 'upper'");
+        assert_eq!(results[0].title, "The Upper Citadel");
+
+        // Multi-word partial: "The Upper Cit" — last word is a prefix
+        let results2 = search_notes_in_index(&index, "The Upper Cit", 10).unwrap();
+        assert_eq!(results2.len(), 1, "partial last word should match");
     }
 
     #[test]
