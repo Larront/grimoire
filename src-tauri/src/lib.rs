@@ -43,6 +43,8 @@ pub fn run() {
             delete_note,
             search_notes,
             get_note_by_path,
+            read_note_tags,
+            write_note_tags,
             get_file_tree,
             create_folder,
             delete_folder,

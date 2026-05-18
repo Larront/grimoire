@@ -1,3 +1,4 @@
+use crate::commands::frontmatter;
 use crate::db::models::{NewNote, Note};
 use crate::db::schema::notes::dsl::*;
 use crate::vault::AppVault;
@@ -170,6 +171,29 @@ pub fn write_note_content(
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
     let full_path = validate_parent_path(&vault_path, &note_path)?;
     fs::write(&full_path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_note_tags(note_path: String, vault: State<AppVault>) -> Result<Vec<String>, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+    let full_path = validate_path(&vault_path, &note_path)?;
+    let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
+    Ok(frontmatter::read_tags(&content))
+}
+
+#[tauri::command]
+pub fn write_note_tags(
+    note_path: String,
+    tags: Vec<String>,
+    vault: State<AppVault>,
+) -> Result<(), String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+    let full_path = validate_path(&vault_path, &note_path)?;
+    let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
+    let new_content = frontmatter::apply_tags(&content, &tags);
+    fs::write(&full_path, new_content).map_err(|e| e.to_string())
 }
 
 #[derive(Serialize, Debug)]

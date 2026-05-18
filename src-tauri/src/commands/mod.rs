@@ -1,3 +1,4 @@
+pub mod frontmatter;
 pub mod maps;
 pub mod preferences;
 pub mod media;
