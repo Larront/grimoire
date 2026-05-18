@@ -27,6 +27,13 @@ async function openPalette() {
   await flush();
 }
 
+async function openTagPicker() {
+  await openPalette();
+  const item = document.body.querySelector('[data-testid="cmd-add-tag"]') as HTMLElement;
+  await fireEvent.click(item);
+  await flush();
+}
+
 async function setupNote() {
   vi.mocked(invoke).mockImplementation((cmd: string) => {
     if (cmd === "get_notes") return Promise.resolve([testNote]);
@@ -96,12 +103,7 @@ describe("command palette – Add tag flow", () => {
   it("selecting 'Add tag' opens the tag picker dialog", async () => {
     await setupNote();
     render(AppSearch);
-    await openPalette();
-    const item = document.body.querySelector(
-      '[data-testid="cmd-add-tag"]',
-    ) as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
+    await openTagPicker();
     expect(
       document.body.querySelector('[data-testid="add-tag-picker"]'),
     ).toBeTruthy();
@@ -117,12 +119,7 @@ describe("command palette – Add tag flow", () => {
     await notes.load();
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     render(AppSearch);
-    await openPalette();
-    const item = document.body.querySelector(
-      '[data-testid="cmd-add-tag"]',
-    ) as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
+    await openTagPicker();
     const chips = document.body.querySelectorAll('[data-slot="tag-chip"]');
     expect(chips.length).toBe(2);
   });
@@ -130,12 +127,7 @@ describe("command palette – Add tag flow", () => {
   it("attaching a tag calls write_note_tags with the note path and new tags", async () => {
     await setupNote();
     render(AppSearch);
-    await openPalette();
-    const item = document.body.querySelector(
-      '[data-testid="cmd-add-tag"]',
-    ) as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
+    await openTagPicker();
     const input = document.body.querySelector(
       '[data-testid="add-tag-picker"] [data-slot="tag-chip-input"]',
     ) as HTMLInputElement;
@@ -153,12 +145,7 @@ describe("command palette – Add tag flow", () => {
   it("tag picker closes after attaching a tag", async () => {
     await setupNote();
     render(AppSearch);
-    await openPalette();
-    const item = document.body.querySelector(
-      '[data-testid="cmd-add-tag"]',
-    ) as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
+    await openTagPicker();
     const input = document.body.querySelector(
       '[data-testid="add-tag-picker"] [data-slot="tag-chip-input"]',
     ) as HTMLInputElement;
@@ -174,12 +161,7 @@ describe("command palette – Add tag flow", () => {
   it("right rail open state is not changed when a tag is added via the palette", async () => {
     await setupNote();
     render(AppSearch);
-    await openPalette();
-    const item = document.body.querySelector(
-      '[data-testid="cmd-add-tag"]',
-    ) as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
+    await openTagPicker();
     const input = document.body.querySelector(
       '[data-testid="add-tag-picker"] [data-slot="tag-chip-input"]',
     ) as HTMLInputElement;
@@ -187,7 +169,6 @@ describe("command palette – Add tag flow", () => {
     await fireEvent.input(input);
     await fireEvent.keyDown(input, { key: "Enter" });
     await flush();
-    // Verify the right-rail trigger invocation was NOT called
     expect(invoke).not.toHaveBeenCalledWith("open_right_rail", expect.anything());
   });
 });
