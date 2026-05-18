@@ -78,7 +78,7 @@
         <section data-section="folder" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
           <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Folder</div>
           <div
-            class="font-mono text-[10px] leading-relaxed text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap"
+            class="font-mono text-[10px] leading-relaxed text-muted-foreground truncate"
             title={activeNote.path}
           >
             {formatBreadcrumb(activeNote.path)}
