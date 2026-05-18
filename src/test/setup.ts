@@ -44,6 +44,9 @@ global.ResizeObserver = class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
+// bits-ui Command calls scrollIntoView on DOM elements during keyboard navigation
+Element.prototype.scrollIntoView = vi.fn();
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue(null),
   convertFileSrc: vi.fn().mockImplementation((url: string) => url),
