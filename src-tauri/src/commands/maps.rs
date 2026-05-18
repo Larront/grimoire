@@ -291,6 +291,30 @@ pub fn get_pin_categories(vault: State<AppVault>) -> Result<Vec<PinCategory>, St
         .map_err(|e| e.to_string())
 }
 
+pub fn get_pin_categories_for_map_from_conn(
+    map_id: i32,
+    conn: &mut diesel::SqliteConnection,
+) -> Result<Vec<PinCategory>, String> {
+    pin_categories::table
+        .filter(
+            pin_categories::map_id
+                .eq(map_id)
+                .or(pin_categories::map_id.is_null()),
+        )
+        .load::<PinCategory>(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_pin_categories_for_map(
+    map_id: i32,
+    vault: State<AppVault>,
+) -> Result<Vec<PinCategory>, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    get_pin_categories_for_map_from_conn(map_id, conn)
+}
+
 #[tauri::command]
 pub fn create_pin_category(
     map_id: Option<i32>,
@@ -411,8 +435,66 @@ pub fn delete_annotation(annotation_id: i32, vault: State<AppVault>) -> Result<u
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_map_filename;
+    use super::{get_pin_categories_for_map_from_conn, resolve_map_filename};
+    use diesel::connection::SimpleConnection;
+    use diesel::{Connection, SqliteConnection};
     use std::fs;
+
+    fn cat_test_conn() -> SqliteConnection {
+        let mut conn =
+            SqliteConnection::establish(":memory:").expect("in-memory db");
+        conn.batch_execute(
+            "PRAGMA foreign_keys = ON;
+            CREATE TABLE pin_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                map_id INTEGER,
+                name TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT 'star',
+                color TEXT NOT NULL DEFAULT '#ffffff',
+                shape TEXT NOT NULL DEFAULT 'circle'
+            );",
+        )
+        .expect("create pin_categories table");
+        conn
+    }
+
+    #[test]
+    fn get_pin_categories_for_map_returns_map_specific_and_global() {
+        let mut conn = cat_test_conn();
+        conn.batch_execute(
+            "INSERT INTO pin_categories (map_id, name) VALUES
+                (5, 'Town'), (NULL, 'Global'), (99, 'Other');",
+        )
+        .unwrap();
+        let cats = get_pin_categories_for_map_from_conn(5, &mut conn).unwrap();
+        let names: Vec<&str> = cats.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"Town"), "map-specific category missing");
+        assert!(names.contains(&"Global"), "global category missing");
+        assert!(!names.contains(&"Other"), "other-map category should be excluded");
+    }
+
+    #[test]
+    fn get_pin_categories_for_map_returns_only_global_when_no_map_specific() {
+        let mut conn = cat_test_conn();
+        conn.batch_execute(
+            "INSERT INTO pin_categories (map_id, name) VALUES (NULL, 'Global'), (99, 'Other');",
+        )
+        .unwrap();
+        let cats = get_pin_categories_for_map_from_conn(5, &mut conn).unwrap();
+        assert_eq!(cats.len(), 1);
+        assert_eq!(cats[0].name, "Global");
+    }
+
+    #[test]
+    fn get_pin_categories_for_map_returns_empty_when_no_matching_categories() {
+        let mut conn = cat_test_conn();
+        conn.batch_execute(
+            "INSERT INTO pin_categories (map_id, name) VALUES (99, 'Other');",
+        )
+        .unwrap();
+        let cats = get_pin_categories_for_map_from_conn(5, &mut conn).unwrap();
+        assert!(cats.is_empty());
+    }
 
     #[test]
     fn no_conflict_returns_original_name() {

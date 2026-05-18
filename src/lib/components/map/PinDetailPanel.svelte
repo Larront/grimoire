@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { notes } from "$lib/stores/notes.svelte";
-  import type { Note, Pin, PinShape } from "$lib/types/vault";
+  import type { Note, Pin, PinCategory, PinShape } from "$lib/types/vault";
   import { ExternalLink, ChevronDown, Lock, LockOpen } from "@lucide/svelte";
   import { invoke } from "@tauri-apps/api/core";
   import {
@@ -29,6 +29,7 @@
   let appearanceOpen = $state(false);
   let pinTags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
+  let categories = $state<PinCategory[]>([]);
 
   $effect(() => {
     draftTitle = pin.title;
@@ -51,6 +52,13 @@
   }
 
   $effect(() => { refreshAllTags(); });
+
+  $effect(() => {
+    const mapId = pin.map_id;
+    invoke<PinCategory[]>("get_pin_categories_for_map", { mapId })
+      .then((cats) => { categories = cats; })
+      .catch(() => { categories = []; });
+  });
 
   async function savePinTags(tags: string[]) {
     await invoke("set_pin_tags", { pinId: pin.id, tags });
@@ -232,6 +240,27 @@
       suggestions={allTags}
       onchange={savePinTags}
     />
+  </div>
+
+  <!-- Pin Category -->
+  <div class="flex flex-col gap-2" data-slot="pin-category-section">
+    <span class="font-sans text-xs text-foreground-faint uppercase tracking-wider">Category</span>
+    <select
+      data-slot="pin-category-select"
+      value={pin.category_id?.toString() ?? ""}
+      onchange={(e) => {
+        const val = (e.target as HTMLSelectElement).value;
+        const id = val === "" ? null : parseInt(val, 10);
+        save({ category_id: id });
+      }}
+      class="bg-canvas border border-border rounded-lg px-3 py-1.5 font-sans text-sm
+             text-foreground outline-none focus:border-accent cursor-pointer"
+    >
+      <option value="">Uncategorized</option>
+      {#each categories as cat (cat.id)}
+        <option value={cat.id.toString()}>{cat.name}</option>
+      {/each}
+    </select>
   </div>
 
   <!-- Description -->

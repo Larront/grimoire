@@ -65,6 +65,7 @@ pub fn run() {
             update_pin,
             delete_pin,
             get_pin_categories,
+            get_pin_categories_for_map,
             create_pin_category,
             update_pin_category,
             delete_pin_category,
