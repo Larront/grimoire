@@ -119,16 +119,8 @@ pub fn list_all_tags(vault: State<AppVault>) -> Result<Vec<String>, String> {
         .load::<String>(conn)
         .map_err(|e| e.to_string())?;
     all.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-    let mut out: Vec<String> = Vec::new();
-    let mut last_norm: Option<String> = None;
-    for t in all {
-        let norm = t.to_lowercase();
-        if last_norm.as_deref() != Some(norm.as_str()) {
-            last_norm = Some(norm);
-            out.push(t);
-        }
-    }
-    Ok(out)
+    all.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
+    Ok(all)
 }
 
 #[cfg(test)]
