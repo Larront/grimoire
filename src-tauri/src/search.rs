@@ -224,9 +224,9 @@ fn parse_modified_at(s: &str) -> i64 {
 }
 
 fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
-    let kind = schema.get_field("kind").unwrap();
+    let kind_f = schema.get_field("kind").unwrap();
     let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id = schema.get_field("entity_id").unwrap();
+    let entity_id_f = schema.get_field("entity_id").unwrap();
     let path_f = schema.get_field("path").unwrap();
     let title_f = schema.get_field("title").unwrap();
     let body_f = schema.get_field("body").unwrap();
@@ -236,9 +236,9 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
 
     let mut doc = TantivyDocument::default();
-    doc.add_text(kind, "note");
+    doc.add_text(kind_f, "note");
     doc.add_text(doc_key_f, &format!("note:{}", note.id));
-    doc.add_i64(entity_id, note.id as i64);
+    doc.add_i64(entity_id_f, note.id as i64);
     doc.add_text(path_f, &note.path);
     doc.add_text(title_f, &note.title);
     doc.add_text(body_f, body_text);
@@ -247,9 +247,9 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
 }
 
 fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
-    let kind = schema.get_field("kind").unwrap();
+    let kind_f = schema.get_field("kind").unwrap();
     let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id = schema.get_field("entity_id").unwrap();
+    let entity_id_f = schema.get_field("entity_id").unwrap();
     let path_f = schema.get_field("path").unwrap();
     let title_f = schema.get_field("title").unwrap();
     let modified_at_f = schema.get_field("modified_at").unwrap();
@@ -258,9 +258,9 @@ fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
 
     let mut doc = TantivyDocument::default();
-    doc.add_text(kind, "map");
+    doc.add_text(kind_f, "map");
     doc.add_text(doc_key_f, &format!("map:{}", map.id));
-    doc.add_i64(entity_id, map.id as i64);
+    doc.add_i64(entity_id_f, map.id as i64);
     doc.add_text(path_f, "");
     doc.add_text(title_f, &map.title);
     doc.add_date(modified_at_f, tantivy_dt);
@@ -268,9 +268,9 @@ fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
 }
 
 fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
-    let kind = schema.get_field("kind").unwrap();
+    let kind_f = schema.get_field("kind").unwrap();
     let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id = schema.get_field("entity_id").unwrap();
+    let entity_id_f = schema.get_field("entity_id").unwrap();
     let path_f = schema.get_field("path").unwrap();
     let title_f = schema.get_field("title").unwrap();
     let modified_at_f = schema.get_field("modified_at").unwrap();
@@ -279,9 +279,9 @@ fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
 
     let mut doc = TantivyDocument::default();
-    doc.add_text(kind, "scene");
+    doc.add_text(kind_f, "scene");
     doc.add_text(doc_key_f, &format!("scene:{}", scene.id));
-    doc.add_i64(entity_id, scene.id as i64);
+    doc.add_i64(entity_id_f, scene.id as i64);
     doc.add_text(path_f, "");
     // Scene name is stored in the title field per ADR-0004
     doc.add_text(title_f, &scene.name);
@@ -332,73 +332,50 @@ pub fn rebuild_index(
     Ok(index)
 }
 
-pub fn index_note(index: &Index, note: &Note, body_text: &str) -> Result<(), String> {
+fn upsert_doc(index: &Index, doc_key: &str, doc: TantivyDocument) -> Result<(), String> {
     let schema = index.schema();
     let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
     let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("note:{}", note.id)));
-    writer
-        .add_document(note_doc(&schema, note, body_text))
-        .map_err(|e| e.to_string())?;
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, doc_key));
+    writer.add_document(doc).map_err(|e| e.to_string())?;
     writer.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
-pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
+fn remove_doc(index: &Index, doc_key: &str) -> Result<(), String> {
     let schema = index.schema();
     let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
     let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("note:{}", entity_id)));
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, doc_key));
     writer.commit().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn index_note(index: &Index, note: &Note, body_text: &str) -> Result<(), String> {
+    let schema = index.schema();
+    upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text))
+}
+
+pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
+    remove_doc(index, &format!("note:{}", entity_id))
 }
 
 pub fn index_map(index: &Index, map: &Map) -> Result<(), String> {
     let schema = index.schema();
-    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
-    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("map:{}", map.id)));
-    writer
-        .add_document(map_doc(&schema, map))
-        .map_err(|e| e.to_string())?;
-    writer.commit().map_err(|e| e.to_string())?;
-    Ok(())
+    upsert_doc(index, &format!("map:{}", map.id), map_doc(&schema, map))
 }
 
 pub fn remove_map(index: &Index, map_id: i32) -> Result<(), String> {
-    let schema = index.schema();
-    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
-    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("map:{}", map_id)));
-    writer.commit().map_err(|e| e.to_string())?;
-    Ok(())
+    remove_doc(index, &format!("map:{}", map_id))
 }
 
 pub fn index_scene(index: &Index, scene: &Scene) -> Result<(), String> {
     let schema = index.schema();
-    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
-    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("scene:{}", scene.id)));
-    writer
-        .add_document(scene_doc(&schema, scene))
-        .map_err(|e| e.to_string())?;
-    writer.commit().map_err(|e| e.to_string())?;
-    Ok(())
+    upsert_doc(index, &format!("scene:{}", scene.id), scene_doc(&schema, scene))
 }
 
 pub fn remove_scene(index: &Index, scene_id: i32) -> Result<(), String> {
-    let schema = index.schema();
-    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
-
-    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("scene:{}", scene_id)));
-    writer.commit().map_err(|e| e.to_string())?;
-    Ok(())
+    remove_doc(index, &format!("scene:{}", scene_id))
 }
 
 fn regex_escape(s: &str) -> String {
@@ -481,7 +458,6 @@ fn build_query(
     Ok(Box::new(BooleanQuery::new(clauses)))
 }
 
-/// Wrap a text query with a kind filter so only docs of the given kind match.
 fn build_kind_query(
     kind_f: tantivy::schema::Field,
     title_f: tantivy::schema::Field,
@@ -505,11 +481,8 @@ fn build_kind_query(
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
-/// Search the index for notes matching the query (title and body fields).
-///
-/// Results include an excerpt centred on the first body match and a count of
-/// total body-word occurrences. When the match is title-only, excerpt is None
-/// and match_count is 0.
+/// Excerpt is centred on the first body match; match_count counts body occurrences only.
+/// Title-only matches return `excerpt: None` and `match_count: 0`.
 pub fn search_notes_in_index(
     index: &Index,
     vault_path: &Path,
