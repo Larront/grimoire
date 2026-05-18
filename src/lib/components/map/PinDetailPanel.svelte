@@ -42,15 +42,19 @@
       .catch(() => { pinTags = []; });
   });
 
-  $effect(() => {
-    invoke<string[]>("list_all_tags")
-      .then((t) => { allTags = t; })
-      .catch(() => { allTags = []; });
-  });
+  async function refreshAllTags() {
+    try {
+      allTags = await invoke<string[]>("list_all_tags");
+    } catch {
+      allTags = [];
+    }
+  }
+
+  $effect(() => { refreshAllTags(); });
 
   async function savePinTags(tags: string[]) {
     await invoke("set_pin_tags", { pinId: pin.id, tags });
-    allTags = await invoke<string[]>("list_all_tags");
+    await refreshAllTags();
   }
 
   $effect(() => {

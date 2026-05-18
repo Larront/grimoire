@@ -132,7 +132,7 @@ pub fn list_all_tags_from_conn(conn: &mut SqliteConnection) -> Result<Vec<String
     Ok(all)
 }
 
-/// Replace all tag rows for the given pin. Called from `set_pin_tags`.
+/// Replace all tag rows for the given pin.
 pub fn upsert_pin_tags(
     conn: &mut SqliteConnection,
     pin_id: i32,
