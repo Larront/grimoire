@@ -67,7 +67,6 @@ fn note_doc(schema: &Schema, note: &Note) -> TantivyDocument {
     doc
 }
 
-/// Wipe and rebuild the index from the given note list.
 pub fn rebuild_index(vault_path: &Path, notes: &[Note]) -> Result<Index, String> {
     let dir_path = index_dir(vault_path);
     if dir_path.exists() {
@@ -90,7 +89,6 @@ pub fn rebuild_index(vault_path: &Path, notes: &[Note]) -> Result<Index, String>
     Ok(index)
 }
 
-/// Upsert a note into the index (delete by entity_id, then add).
 pub fn index_note(index: &Index, note: &Note) -> Result<(), String> {
     let schema = index.schema();
     let entity_id_f = schema
@@ -106,7 +104,6 @@ pub fn index_note(index: &Index, note: &Note) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove a note from the index by its SQLite row id.
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     let schema = index.schema();
     let entity_id_f = schema
@@ -119,7 +116,6 @@ pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     Ok(())
 }
 
-/// Escape a string for use as a literal prefix in a Tantivy RegexQuery pattern.
 fn regex_escape(s: &str) -> String {
     s.chars()
         .flat_map(|c| match c {

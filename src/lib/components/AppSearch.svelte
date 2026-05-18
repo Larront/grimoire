@@ -51,7 +51,6 @@
     tabs.openTab({ type: "note", id: result.id, title: result.title });
   }
 
-  // Debounced title search — fires from 2 chars with 80ms delay.
   $effect(() => {
     const q = searchQuery;
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -74,7 +73,6 @@
     };
   });
 
-  // Reset search state when the palette closes.
   $effect(() => {
     if (!searchPalette.open) {
       searchQuery = "";
@@ -86,7 +84,6 @@
     }
   });
 
-  // Tag picker load effect.
   $effect(() => {
     if (!addTagOpen) {
       loadedForPath = null;
