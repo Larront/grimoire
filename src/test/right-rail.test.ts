@@ -1,8 +1,9 @@
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
+import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import { overlay } from "../lib/stores/overlay.svelte";
+import { tabs } from "../lib/stores/tabs.svelte";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -29,6 +30,8 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 afterEach(async () => {
   cleanup();
   overlay.active = null;
+  tabs.closeAll("right");
+  tabs.closeAll("left");
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: desktopMatchMedia,
@@ -52,7 +55,8 @@ describe("right rail responsive behaviour", () => {
     expect(dockedRail).toBeTruthy();
   });
 
-  it("right rail trigger renders in the header", () => {
+  it("right rail trigger renders in the header when active tab is a note", () => {
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
     expect(getByTestId("right-rail-trigger")).toBeTruthy();
   });
@@ -62,6 +66,7 @@ describe("right rail responsive behaviour", () => {
       writable: true,
       value: desktopMatchMedia,
     });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container, getByTestId } = render(AppShell);
 
     const rail = container.querySelector(
@@ -81,6 +86,7 @@ describe("right rail responsive behaviour", () => {
       writable: true,
       value: mobileMatchMedia,
     });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
 
     await fireEvent.click(getByTestId("right-rail-trigger"));
@@ -100,6 +106,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
       writable: true,
       value: mobileMatchMedia,
     });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
 
     // Open sidebar overlay first (Ctrl+\)
@@ -131,6 +138,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
       writable: true,
       value: mobileMatchMedia,
     });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
 
     // Open right rail overlay first
@@ -171,5 +179,120 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
 
     expect(sidebar).toBeTruthy();
     expect(rail).toBeTruthy();
+  });
+});
+
+// ── Rail visibility rule on non-note panes ────────────────────────────────────
+
+describe("rail visibility on non-note panes", () => {
+  it("toggle is hidden when active tab is a map pane", () => {
+    tabs.openTab({ type: "map", id: 1, title: "World Map" });
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+
+  it("toggle is hidden when active tab is a scene pane", () => {
+    tabs.openTab({ type: "scene", id: 1, title: "Chapter 1" });
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+
+  it("toggle is hidden when active tab is a scenes dashboard", () => {
+    tabs.openTab({ type: "scenes", id: 0, title: "Scenes" });
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+
+  it("toggle is hidden when there are no tabs", () => {
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+
+  it("toggle is visible when active tab is a note", () => {
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).not.toBeNull();
+  });
+
+  it("desktop rail has data-state=closed on a map pane", () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: desktopMatchMedia,
+    });
+    tabs.openTab({ type: "map", id: 1, title: "World Map" });
+    const { container } = render(AppShell);
+    const rail = container.querySelector(
+      '[data-slot="right-rail"][data-mobile="false"]',
+    )!;
+    expect(rail.getAttribute("data-state")).toBe("closed");
+  });
+
+  it("desktop rail collapses when switching from note to map pane", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: desktopMatchMedia,
+    });
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    const { container, getByTestId } = render(AppShell);
+
+    await fireEvent.click(getByTestId("right-rail-trigger"));
+    const rail = container.querySelector(
+      '[data-slot="right-rail"][data-mobile="false"]',
+    )!;
+    expect(rail.getAttribute("data-state")).toBe("open");
+
+    await act(() => {
+      tabs.openTab({ type: "map", id: 2, title: "Map" });
+    });
+    expect(rail.getAttribute("data-state")).toBe("closed");
+  });
+
+  it("desktop rail re-opens when switching back to note pane", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: desktopMatchMedia,
+    });
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    const { container, getByTestId } = render(AppShell);
+
+    await fireEvent.click(getByTestId("right-rail-trigger"));
+
+    await act(() => {
+      tabs.openTab({ type: "map", id: 2, title: "Map" });
+    });
+    await act(() => {
+      tabs.openTab({ type: "note", id: 1, title: "Note" });
+    });
+
+    const rail = container.querySelector(
+      '[data-slot="right-rail"][data-mobile="false"]',
+    )!;
+    expect(rail.getAttribute("data-state")).toBe("open");
+  });
+
+  it("in split view, toggle is hidden when focused pane is map", () => {
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    tabs.openTab({ type: "map", id: 1, title: "Map" }, "right");
+    // After opening right pane with map, focusedPane = "right"
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+
+  it("in split view, toggle is shown when focused pane is note", () => {
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    tabs.openTab({ type: "map", id: 1, title: "Map" }, "right");
+    tabs.setFocusedPane("left"); // focus the note pane
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).not.toBeNull();
+  });
+
+  it("mobile toggle is absent on a non-note pane (rail cannot be opened)", () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: mobileMatchMedia,
+    });
+    tabs.openTab({ type: "map", id: 1, title: "World Map" });
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 });

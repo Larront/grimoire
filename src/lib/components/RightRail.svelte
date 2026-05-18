@@ -7,7 +7,11 @@
   import TagChipEditor from './TagChipEditor.svelte';
   import { formatBreadcrumb, formatRelativeTime } from '$lib/utils/note-meta';
 
-  const { rail }: { rail: RightRailState } = $props();
+  const { rail, visible = false }: { rail: RightRailState; visible: boolean } = $props();
+
+  $effect(() => {
+    if (!visible) rail.setOpenMobile(false);
+  });
 
   const activeNote = $derived.by(() => {
     const t = tabs.activeTab;
@@ -117,7 +121,7 @@
   <aside
     data-slot="right-rail"
     data-mobile="false"
-    data-state={rail.open ? 'open' : 'closed'}
+    data-state={rail.open && visible ? 'open' : 'closed'}
     class="hidden w-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-linear data-[state=open]:w-[300px] lg:flex lg:flex-col"
   >
     <div class="flex h-full w-[300px] flex-col border-l border-sidebar-border bg-sidebar">

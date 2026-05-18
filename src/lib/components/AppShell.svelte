@@ -12,6 +12,7 @@
 
   const rail = new RightRailState();
   let settingsOpen = $state(false);
+  const focusedPaneIsNote = $derived(tabs.activeTab?.type === 'note');
 </script>
 
 <!--
@@ -51,7 +52,7 @@
                   <Sidebar.Trigger class="-ml-1" />
                 </div>
                 <TabBar pane="left" />
-                {#if tabs.focusedPane === 'left'}
+                {#if tabs.focusedPane === 'left' && focusedPaneIsNote}
                   <div class="ml-auto shrink-0 px-2">
                     <button
                       data-testid="right-rail-trigger"
@@ -92,7 +93,7 @@
               <div class="flex flex-col flex-1 min-w-0 min-h-0" role="none">
                 <div class="flex items-center border-b border-sidebar-border">
                   <TabBar pane="right" />
-                  {#if tabs.focusedPane === 'right'}
+                  {#if tabs.focusedPane === 'right' && focusedPaneIsNote}
                     <div class="ml-auto shrink-0 px-2">
                       <button
                         data-testid="right-rail-trigger"
@@ -111,7 +112,7 @@
           </div>
         </Sidebar.Inset>
       </main>
-      <RightRail {rail} />
+      <RightRail {rail} visible={focusedPaneIsNote} />
     </div>
   </Sidebar.Provider>
 </div>
