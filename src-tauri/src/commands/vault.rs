@@ -1,3 +1,4 @@
+use crate::commands::tags::rebuild_note_tags_from_vault;
 use crate::db::establish_connection;
 use crate::db::models::NewPinCategory;
 use crate::db::schema::{maps, notes, pin_categories, scenes};
@@ -54,6 +55,10 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
 
     let mut conn = establish_connection(&vault_path)?;
     seed_default_categories(&mut conn)?;
+    // Rebuild the tag index from a fresh frontmatter scan. Cheap for typical
+    // vault sizes; guarantees the index stays in sync with disk even if a
+    // previous session crashed mid-write or `.grimoire/` was wiped.
+    rebuild_note_tags_from_vault(&vault_path, &mut conn)?;
 
     let note_count: i64 = notes::table
         .count()

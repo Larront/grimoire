@@ -15,7 +15,17 @@
   });
 
   let tags = $state<string[]>([]);
+  let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
+
+  async function refreshAllTags() {
+    try {
+      allTags = (await invoke<string[]>('list_all_tags')) ?? [];
+    } catch (e) {
+      console.error('list_all_tags failed:', e);
+      allTags = [];
+    }
+  }
 
   $effect(() => {
     const note = activeNote;
@@ -36,6 +46,7 @@
         console.error('read_note_tags failed:', e);
         tags = [];
       });
+    refreshAllTags();
   });
 
   async function persistTags(next: string[]) {
@@ -43,6 +54,8 @@
     if (!note) return;
     try {
       await invoke('write_note_tags', { notePath: note.path, tags: next });
+      // Newly-created tags become available to the next note immediately.
+      refreshAllTags();
     } catch (e) {
       console.error('write_note_tags failed:', e);
     }
@@ -58,7 +71,7 @@
       {#if activeNote}
         <section data-section="tags" class="space-y-2">
           <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tags</div>
-          <TagChipEditor bind:tags onchange={persistTags} />
+          <TagChipEditor bind:tags suggestions={allTags} onchange={persistTags} />
         </section>
       {/if}
     </div>

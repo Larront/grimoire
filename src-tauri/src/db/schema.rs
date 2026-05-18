@@ -33,6 +33,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    note_tags (note_path, tag) {
+        note_path -> Text,
+        tag -> Text,
+    }
+}
+
+diesel::table! {
     notes (id) {
         id -> Integer,
         path -> Text,
@@ -118,6 +125,7 @@ diesel::joinable!(scene_slots -> scenes (scene_id));
 diesel::allow_tables_to_appear_in_same_query!(
     map_annotations,
     maps,
+    note_tags,
     notes,
     pin_categories,
     pins,

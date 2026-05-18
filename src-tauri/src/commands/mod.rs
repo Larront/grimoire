@@ -6,5 +6,6 @@ pub mod notes;
 pub mod recent_vaults;
 pub mod scenes;
 pub mod spotify;
+pub mod tags;
 pub mod tree;
 pub mod vault;

@@ -9,6 +9,7 @@ use commands::preferences::*;
 use commands::recent_vaults::*;
 use commands::scenes::*;
 use commands::spotify::*;
+use commands::tags::*;
 use commands::tree::*;
 use commands::vault::*;
 
@@ -45,6 +46,7 @@ pub fn run() {
             get_note_by_path,
             read_note_tags,
             write_note_tags,
+            list_all_tags,
             get_file_tree,
             create_folder,
             delete_folder,

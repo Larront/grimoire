@@ -133,4 +133,130 @@ describe("TagChipEditor", () => {
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).toHaveBeenCalledWith(["loc/town-01_inn"]);
   });
+
+  // ── Autocomplete dropdown ──────────────────────────────────────────────
+
+  it("does not show the dropdown when the draft is empty", async () => {
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: ["npc", "allied"] },
+    });
+    expect(
+      container.querySelector('[data-slot="tag-chip-dropdown"]'),
+    ).toBeNull();
+  });
+
+  it("shows matching suggestions ordered alphabetically while typing", async () => {
+    const { container } = render(TagChipEditor, {
+      props: {
+        tags: [],
+        suggestions: ["arcane", "allied", "ancient", "npc"],
+      },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "a");
+    const items = container.querySelectorAll(
+      '[data-slot="tag-chip-suggestion"]',
+    );
+    // allied, ancient, arcane — alphabetical
+    expect(items.length).toBe(3);
+    expect(items[0].textContent).toContain("allied");
+    expect(items[1].textContent).toContain("ancient");
+    expect(items[2].textContent).toContain("arcane");
+  });
+
+  it("filters out tags already attached to the note from suggestions", async () => {
+    const { container } = render(TagChipEditor, {
+      props: { tags: ["allied"], suggestions: ["allied", "ancient"] },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "a");
+    const items = container.querySelectorAll(
+      '[data-slot="tag-chip-suggestion"]',
+    );
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toContain("ancient");
+  });
+
+  it("clicking an existing suggestion attaches it to the note", async () => {
+    const onchange = vi.fn();
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: ["npc", "allied"], onchange },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "n");
+    const items = container.querySelectorAll(
+      '[data-slot="tag-chip-suggestion"]',
+    );
+    await fireEvent.mouseDown(items[0]);
+    expect(onchange).toHaveBeenCalledWith(["npc"]);
+    const chips = container.querySelectorAll('[data-slot="tag-chip"]');
+    expect(chips.length).toBe(1);
+    expect(chips[0].textContent).toContain("npc");
+  });
+
+  it("shows a 'Create new tag' row when the draft does not exactly match any suggestion", async () => {
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: ["npc", "allied"] },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "ancient");
+    const createRow = container.querySelector(
+      '[data-slot="tag-chip-create-new"]',
+    );
+    expect(createRow).toBeTruthy();
+    expect(createRow!.textContent).toContain("ancient");
+  });
+
+  it("does not show 'Create new tag' when the draft exact-matches an existing suggestion (case-insensitive)", async () => {
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: ["NPC", "Allied"] },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "npc");
+    const createRow = container.querySelector(
+      '[data-slot="tag-chip-create-new"]',
+    );
+    expect(createRow).toBeNull();
+  });
+
+  it("clicking the 'Create new tag' row attaches the new tag", async () => {
+    const onchange = vi.fn();
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: ["npc"], onchange },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    await typeInto(input, "ancient");
+    const createRow = container.querySelector(
+      '[data-slot="tag-chip-create-new"]',
+    ) as HTMLElement;
+    await fireEvent.mouseDown(createRow);
+    expect(onchange).toHaveBeenCalledWith(["ancient"]);
+  });
+
+  it("does not show the 'Create new tag' row when the draft fails the allowlist", async () => {
+    const { container } = render(TagChipEditor, {
+      props: { tags: [], suggestions: [] },
+    });
+    const input = container.querySelector(
+      '[data-slot="tag-chip-input"]',
+    ) as HTMLInputElement;
+    // Programmatically set an invalid draft (spaces).
+    await typeInto(input, "bad value");
+    const createRow = container.querySelector(
+      '[data-slot="tag-chip-create-new"]',
+    );
+    expect(createRow).toBeNull();
+  });
 });

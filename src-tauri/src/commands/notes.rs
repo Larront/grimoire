@@ -1,4 +1,5 @@
 use crate::commands::frontmatter;
+use crate::commands::tags::upsert_note_tags;
 use crate::db::models::{NewNote, Note};
 use crate::db::schema::notes::dsl::*;
 use crate::vault::AppVault;
@@ -127,6 +128,12 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
         }
+        // Re-key tag-index rows to the new path (folder rename has its own bulk handler).
+        diesel::sql_query("UPDATE note_tags SET note_path = ? WHERE note_path = ?")
+            .bind::<diesel::sql_types::Text, _>(&note.path)
+            .bind::<diesel::sql_types::Text, _>(&old_note.path)
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
     }
 
     diesel::update(notes.find(note.id))
@@ -147,6 +154,8 @@ pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String
     if full_path.exists() {
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
+
+    upsert_note_tags(conn, &note.path, &[])?;
 
     diesel::delete(notes.find(note_id))
         .execute(conn)
@@ -188,12 +197,14 @@ pub fn write_note_tags(
     tags: Vec<String>,
     vault: State<AppVault>,
 ) -> Result<(), String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
     let full_path = validate_path(&vault_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
-    fs::write(&full_path, new_content).map_err(|e| e.to_string())
+    fs::write(&full_path, new_content).map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    upsert_note_tags(conn, &note_path, &tags)
 }
 
 #[derive(Serialize, Debug)]
