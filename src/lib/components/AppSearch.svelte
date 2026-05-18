@@ -54,10 +54,6 @@
     tabs.openTab({ type: "note", id: result.id, title: result.title });
   }
 
-  /**
-   * Split excerpt text into segments, marking the first query-term occurrence
-   * so the caller can style it differently.
-   */
   function splitExcerpt(
     text: string,
     query: string,

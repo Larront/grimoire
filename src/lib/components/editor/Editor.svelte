@@ -56,26 +56,24 @@
       .filter((t) => t.length >= 2);
     if (!terms.length) return;
 
-    let foundFrom = -1;
-    let foundTo = -1;
+    let found: { from: number; to: number } | null = null;
 
     editorInstance.state.doc.descendants((node, pos) => {
-      if (foundFrom !== -1) return false;
+      if (found) return false;
       if (node.isText && node.text) {
         for (const term of terms) {
           const idx = node.text.toLowerCase().indexOf(term);
           if (idx !== -1) {
-            foundFrom = pos + idx;
-            foundTo = foundFrom + term.length;
+            found = { from: pos + idx, to: pos + idx + term.length };
             return false;
           }
         }
       }
     });
 
-    if (foundFrom === -1) return;
+    if (!found) return;
 
-    editorInstance.commands.setTextSelection({ from: foundFrom, to: foundTo });
+    editorInstance.commands.setTextSelection(found);
     editorInstance.commands.scrollIntoView();
 
     // Brief pulse on the editor element to draw attention to the selection
