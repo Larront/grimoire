@@ -1,7 +1,7 @@
 use crate::commands::frontmatter;
 use crate::commands::tags::upsert_note_tags;
-use crate::db::models::{NewNote, Note};
-use crate::db::schema::notes::dsl::*;
+use crate::db::models::{Map, NewNote, Note, Scene};
+use crate::db::schema::{maps, notes::dsl::*, scenes};
 use crate::vault::AppVault;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-pub use crate::search::NoteSearchResult;
+pub use crate::search::{NoteSearchResult, SearchAllResult};
 
 /// Validates that `relative` resolves to a path inside `vault_root`.
 /// Use for reading/deleting existing files — the file must exist for canonicalize().
@@ -257,12 +257,24 @@ pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSea
 }
 
 #[tauri::command]
+pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResult, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+    match &state.search_index {
+        Some(index) => crate::search::search_all_in_index(index, &vault_path, &query, 10),
+        None => Ok(SearchAllResult { notes: vec![], maps: vec![], scenes: vec![] }),
+    }
+}
+
+#[tauri::command]
 pub fn rebuild_search_index(vault: State<AppVault>) -> Result<(), String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.clone().ok_or("No vault open")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     let all_notes: Vec<Note> = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
-    let index = crate::search::rebuild_index(&vault_path, &all_notes)?;
+    let all_maps: Vec<Map> = maps::table.load::<Map>(conn).map_err(|e| e.to_string())?;
+    let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(conn).map_err(|e| e.to_string())?;
+    let index = crate::search::rebuild_index(&vault_path, &all_notes, &all_maps, &all_scenes)?;
     state.search_index = Some(index);
     Ok(())
 }

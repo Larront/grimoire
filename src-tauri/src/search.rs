@@ -1,4 +1,4 @@
-use crate::db::models::Note;
+use crate::db::models::{Map, Note, Scene};
 use serde::Serialize;
 use std::path::Path;
 use tantivy::{
@@ -16,6 +16,25 @@ pub struct NoteSearchResult {
     pub path: String,
     pub excerpt: Option<String>,
     pub match_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct MapSearchResult {
+    pub id: i32,
+    pub title: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SceneSearchResult {
+    pub id: i32,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SearchAllResult {
+    pub notes: Vec<NoteSearchResult>,
+    pub maps: Vec<MapSearchResult>,
+    pub scenes: Vec<SceneSearchResult>,
 }
 
 // ── Plain-text extraction ─────────────────────────────────────────────────────
@@ -173,6 +192,9 @@ fn make_excerpt(body_text: &str, query: &str) -> Option<(String, usize)> {
 fn make_schema() -> Schema {
     let mut builder = tantivy::schema::SchemaBuilder::default();
     builder.add_text_field("kind", STRING | STORED);
+    // doc_key is a composite deletion key: "{kind}:{id}" (e.g. "note:1", "map:3")
+    // Prevents id collisions across entity types during upsert/delete.
+    builder.add_text_field("doc_key", STRING | STORED);
     builder.add_i64_field(
         "entity_id",
         NumericOptions::default()
@@ -203,6 +225,7 @@ fn parse_modified_at(s: &str) -> i64 {
 
 fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
     let kind = schema.get_field("kind").unwrap();
+    let doc_key_f = schema.get_field("doc_key").unwrap();
     let entity_id = schema.get_field("entity_id").unwrap();
     let path_f = schema.get_field("path").unwrap();
     let title_f = schema.get_field("title").unwrap();
@@ -214,6 +237,7 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
 
     let mut doc = TantivyDocument::default();
     doc.add_text(kind, "note");
+    doc.add_text(doc_key_f, &format!("note:{}", note.id));
     doc.add_i64(entity_id, note.id as i64);
     doc.add_text(path_f, &note.path);
     doc.add_text(title_f, &note.title);
@@ -222,9 +246,57 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
     doc
 }
 
+fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
+    let kind = schema.get_field("kind").unwrap();
+    let doc_key_f = schema.get_field("doc_key").unwrap();
+    let entity_id = schema.get_field("entity_id").unwrap();
+    let path_f = schema.get_field("path").unwrap();
+    let title_f = schema.get_field("title").unwrap();
+    let modified_at_f = schema.get_field("modified_at").unwrap();
+
+    let ts = parse_modified_at(&map.modified_at);
+    let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
+
+    let mut doc = TantivyDocument::default();
+    doc.add_text(kind, "map");
+    doc.add_text(doc_key_f, &format!("map:{}", map.id));
+    doc.add_i64(entity_id, map.id as i64);
+    doc.add_text(path_f, "");
+    doc.add_text(title_f, &map.title);
+    doc.add_date(modified_at_f, tantivy_dt);
+    doc
+}
+
+fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
+    let kind = schema.get_field("kind").unwrap();
+    let doc_key_f = schema.get_field("doc_key").unwrap();
+    let entity_id = schema.get_field("entity_id").unwrap();
+    let path_f = schema.get_field("path").unwrap();
+    let title_f = schema.get_field("title").unwrap();
+    let modified_at_f = schema.get_field("modified_at").unwrap();
+
+    let ts = parse_modified_at(&scene.created_at);
+    let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
+
+    let mut doc = TantivyDocument::default();
+    doc.add_text(kind, "scene");
+    doc.add_text(doc_key_f, &format!("scene:{}", scene.id));
+    doc.add_i64(entity_id, scene.id as i64);
+    doc.add_text(path_f, "");
+    // Scene name is stored in the title field per ADR-0004
+    doc.add_text(title_f, &scene.name);
+    doc.add_date(modified_at_f, tantivy_dt);
+    doc
+}
+
 // ── Index lifecycle ───────────────────────────────────────────────────────────
 
-pub fn rebuild_index(vault_path: &Path, notes: &[Note]) -> Result<Index, String> {
+pub fn rebuild_index(
+    vault_path: &Path,
+    notes: &[Note],
+    maps: &[Map],
+    scenes: &[Scene],
+) -> Result<Index, String> {
     let dir_path = index_dir(vault_path);
     if dir_path.exists() {
         std::fs::remove_dir_all(&dir_path).map_err(|e| e.to_string())?;
@@ -245,6 +317,16 @@ pub fn rebuild_index(vault_path: &Path, notes: &[Note]) -> Result<Index, String>
             .add_document(note_doc(&schema, note, &body_text))
             .map_err(|e| e.to_string())?;
     }
+    for map in maps {
+        writer
+            .add_document(map_doc(&schema, map))
+            .map_err(|e| e.to_string())?;
+    }
+    for scene in scenes {
+        writer
+            .add_document(scene_doc(&schema, scene))
+            .map_err(|e| e.to_string())?;
+    }
     writer.commit().map_err(|e| e.to_string())?;
 
     Ok(index)
@@ -252,12 +334,10 @@ pub fn rebuild_index(vault_path: &Path, notes: &[Note]) -> Result<Index, String>
 
 pub fn index_note(index: &Index, note: &Note, body_text: &str) -> Result<(), String> {
     let schema = index.schema();
-    let entity_id_f = schema
-        .get_field("entity_id")
-        .map_err(|e| e.to_string())?;
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
 
     let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_i64(entity_id_f, note.id as i64));
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("note:{}", note.id)));
     writer
         .add_document(note_doc(&schema, note, body_text))
         .map_err(|e| e.to_string())?;
@@ -267,12 +347,56 @@ pub fn index_note(index: &Index, note: &Note, body_text: &str) -> Result<(), Str
 
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     let schema = index.schema();
-    let entity_id_f = schema
-        .get_field("entity_id")
-        .map_err(|e| e.to_string())?;
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
 
     let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
-    writer.delete_term(tantivy::Term::from_field_i64(entity_id_f, entity_id as i64));
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("note:{}", entity_id)));
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn index_map(index: &Index, map: &Map) -> Result<(), String> {
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+
+    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("map:{}", map.id)));
+    writer
+        .add_document(map_doc(&schema, map))
+        .map_err(|e| e.to_string())?;
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn remove_map(index: &Index, map_id: i32) -> Result<(), String> {
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+
+    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("map:{}", map_id)));
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn index_scene(index: &Index, scene: &Scene) -> Result<(), String> {
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+
+    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("scene:{}", scene.id)));
+    writer
+        .add_document(scene_doc(&schema, scene))
+        .map_err(|e| e.to_string())?;
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn remove_scene(index: &Index, scene_id: i32) -> Result<(), String> {
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+
+    let mut writer: IndexWriter = index.writer(15_000_000).map_err(|e| e.to_string())?;
+    writer.delete_term(tantivy::Term::from_field_text(doc_key_f, &format!("scene:{}", scene_id)));
     writer.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -357,6 +481,28 @@ fn build_query(
     Ok(Box::new(BooleanQuery::new(clauses)))
 }
 
+/// Wrap a text query with a kind filter so only docs of the given kind match.
+fn build_kind_query(
+    kind_f: tantivy::schema::Field,
+    title_f: tantivy::schema::Field,
+    body_f: tantivy::schema::Field,
+    kind: &str,
+    query: &str,
+) -> Result<Box<dyn tantivy::query::Query>, String> {
+    use tantivy::query::{BooleanQuery, Occur, TermQuery};
+    use tantivy::schema::IndexRecordOption;
+
+    let text_query = build_query(title_f, body_f, query)?;
+    let kind_term: Box<dyn tantivy::query::Query> = Box::new(TermQuery::new(
+        tantivy::Term::from_field_text(kind_f, kind),
+        IndexRecordOption::Basic,
+    ));
+    Ok(Box::new(BooleanQuery::new(vec![
+        (Occur::Must, kind_term),
+        (Occur::Must, text_query),
+    ])))
+}
+
 // ── Search ────────────────────────────────────────────────────────────────────
 
 /// Search the index for notes matching the query (title and body fields).
@@ -374,12 +520,13 @@ pub fn search_notes_in_index(
     let searcher = reader.searcher();
     let schema = index.schema();
 
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
     let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
     let body_f = schema.get_field("body").map_err(|e| e.to_string())?;
     let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
     let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
 
-    let parsed = match build_query(title_f, body_f, query) {
+    let parsed = match build_kind_query(kind_f, title_f, body_f, "note", query) {
         Ok(q) => q,
         Err(_) => return Ok(vec![]),
     };
@@ -423,6 +570,102 @@ pub fn search_notes_in_index(
     Ok(results)
 }
 
+fn search_maps_in_index(
+    index: &Index,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<MapSearchResult>, String> {
+    let reader = index.reader().map_err(|e| e.to_string())?;
+    let searcher = reader.searcher();
+    let schema = index.schema();
+
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
+    let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
+    let body_f = schema.get_field("body").map_err(|e| e.to_string())?;
+    let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
+
+    let parsed = match build_kind_query(kind_f, title_f, body_f, "map", query) {
+        Ok(q) => q,
+        Err(_) => return Ok(vec![]),
+    };
+
+    let top_docs = searcher
+        .search(parsed.as_ref(), &TopDocs::with_limit(limit))
+        .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::with_capacity(top_docs.len());
+    for (_score, addr) in top_docs {
+        let doc: TantivyDocument = searcher.doc(addr).map_err(|e| e.to_string())?;
+
+        let id = match doc.get_first(entity_id_f) {
+            Some(OwnedValue::I64(n)) => *n as i32,
+            _ => continue,
+        };
+        let title = match doc.get_first(title_f) {
+            Some(OwnedValue::Str(s)) => s.clone(),
+            _ => continue,
+        };
+
+        results.push(MapSearchResult { id, title });
+    }
+
+    Ok(results)
+}
+
+fn search_scenes_in_index(
+    index: &Index,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<SceneSearchResult>, String> {
+    let reader = index.reader().map_err(|e| e.to_string())?;
+    let searcher = reader.searcher();
+    let schema = index.schema();
+
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
+    let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
+    let body_f = schema.get_field("body").map_err(|e| e.to_string())?;
+    let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
+
+    let parsed = match build_kind_query(kind_f, title_f, body_f, "scene", query) {
+        Ok(q) => q,
+        Err(_) => return Ok(vec![]),
+    };
+
+    let top_docs = searcher
+        .search(parsed.as_ref(), &TopDocs::with_limit(limit))
+        .map_err(|e| e.to_string())?;
+
+    let mut results = Vec::with_capacity(top_docs.len());
+    for (_score, addr) in top_docs {
+        let doc: TantivyDocument = searcher.doc(addr).map_err(|e| e.to_string())?;
+
+        let id = match doc.get_first(entity_id_f) {
+            Some(OwnedValue::I64(n)) => *n as i32,
+            _ => continue,
+        };
+        let name = match doc.get_first(title_f) {
+            Some(OwnedValue::Str(s)) => s.clone(),
+            _ => continue,
+        };
+
+        results.push(SceneSearchResult { id, name });
+    }
+
+    Ok(results)
+}
+
+pub fn search_all_in_index(
+    index: &Index,
+    vault_path: &Path,
+    query: &str,
+    limit: usize,
+) -> Result<SearchAllResult, String> {
+    let notes = search_notes_in_index(index, vault_path, query, limit)?;
+    let maps = search_maps_in_index(index, query, limit)?;
+    let scenes = search_scenes_in_index(index, query, limit)?;
+    Ok(SearchAllResult { notes, maps, scenes })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,6 +681,30 @@ mod tests {
             parent_path: None,
             archived: false,
             modified_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    fn make_map(id: i32, title: &str) -> Map {
+        Map {
+            id,
+            title: title.to_string(),
+            image_path: None,
+            image_width: None,
+            image_height: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            modified_at: "2026-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    fn make_scene(id: i32, name: &str) -> Scene {
+        Scene {
+            id,
+            name: name.to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            favorited: 0,
+            thumbnail_path: None,
+            thumbnail_color: None,
+            thumbnail_icon: None,
         }
     }
 
@@ -502,7 +769,7 @@ mod tests {
         let content = "![Harbor view](harbor.png)\n\nThe bay is calm.";
         std::fs::write(dir.path().join("bay.md"), content).unwrap();
 
-        let index = rebuild_index(dir.path(), &[note]).unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
         assert!(results.is_empty(), "'harbor' in image path must not match");
     }
@@ -515,7 +782,7 @@ mod tests {
         let note = make_note(1, "The Bay Area", "bay.md");
         std::fs::write(dir.path().join("bay.md"), "The harbor is beautiful.").unwrap();
 
-        let index = rebuild_index(dir.path(), &[note]).unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
         assert_eq!(results.len(), 1);
         let r = &results[0];
@@ -535,7 +802,7 @@ mod tests {
         let body = format!("{prefix}harbor {suffix}");
         std::fs::write(dir.path().join("log.md"), &body).unwrap();
 
-        let index = rebuild_index(dir.path(), &[note]).unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
         assert_eq!(results.len(), 1);
         let excerpt = results[0].excerpt.as_ref().unwrap();
@@ -549,7 +816,7 @@ mod tests {
         let note = make_note(1, "Log", "log.md");
         std::fs::write(dir.path().join("log.md"), "harbor one, harbor two, harbor three").unwrap();
 
-        let index = rebuild_index(dir.path(), &[note]).unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].match_count, 3);
@@ -562,19 +829,19 @@ mod tests {
         // body has no "harbor"
         std::fs::write(dir.path().join("harbor.md"), "The sea was calm.").unwrap();
 
-        let index = rebuild_index(dir.path(), &[note]).unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0].excerpt.is_none(), "title-only match must have no excerpt");
         assert_eq!(results[0].match_count, 0);
     }
 
-    // ── Existing title-search tests (updated to pass vault_path) ──────────
+    // ── Notes title tests ──────────────────────────────────────────────────
 
     #[test]
     fn rebuild_empty_index_returns_no_results() {
         let dir = TempDir::new().unwrap();
-        let index = rebuild_index(dir.path(), &[]).unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "anything", 10).unwrap();
         assert!(results.is_empty());
     }
@@ -583,7 +850,7 @@ mod tests {
     fn search_finds_note_by_exact_title_word() {
         let dir = TempDir::new().unwrap();
         let notes = [make_note(1, "Aldric the Wizard", "npcs/aldric.md")];
-        let index = rebuild_index(dir.path(), &notes).unwrap();
+        let index = rebuild_index(dir.path(), &notes, &[], &[]).unwrap();
 
         let results = search_notes_in_index(&index, dir.path(), "Aldric", 10).unwrap();
         assert_eq!(results.len(), 1);
@@ -596,7 +863,7 @@ mod tests {
     fn search_finds_note_by_partial_word_prefix() {
         let dir = TempDir::new().unwrap();
         let notes = [make_note(1, "The Upper Citadel", "places/citadel.md")];
-        let index = rebuild_index(dir.path(), &notes).unwrap();
+        let index = rebuild_index(dir.path(), &notes, &[], &[]).unwrap();
 
         let results = search_notes_in_index(&index, dir.path(), "upp", 10).unwrap();
         assert_eq!(results.len(), 1, "prefix 'upp' should match 'upper'");
@@ -610,7 +877,7 @@ mod tests {
     fn search_returns_empty_for_no_match() {
         let dir = TempDir::new().unwrap();
         let notes = [make_note(1, "Aldric the Wizard", "npcs/aldric.md")];
-        let index = rebuild_index(dir.path(), &notes).unwrap();
+        let index = rebuild_index(dir.path(), &notes, &[], &[]).unwrap();
 
         let results = search_notes_in_index(&index, dir.path(), "nonexistent", 10).unwrap();
         assert!(results.is_empty());
@@ -619,7 +886,7 @@ mod tests {
     #[test]
     fn incremental_index_adds_new_note() {
         let dir = TempDir::new().unwrap();
-        let index = rebuild_index(dir.path(), &[]).unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
 
         let note = make_note(1, "Captain Ash", "characters/ash.md");
         index_note(&index, &note, "").unwrap();
@@ -633,7 +900,7 @@ mod tests {
     fn incremental_remove_deletes_note() {
         let dir = TempDir::new().unwrap();
         let notes = [make_note(1, "Captain Ash", "characters/ash.md")];
-        let index = rebuild_index(dir.path(), &notes).unwrap();
+        let index = rebuild_index(dir.path(), &notes, &[], &[]).unwrap();
 
         let before = search_notes_in_index(&index, dir.path(), "Captain", 10).unwrap();
         assert_eq!(before.len(), 1);
@@ -648,10 +915,10 @@ mod tests {
     fn rebuild_replaces_all_previous_documents() {
         let dir = TempDir::new().unwrap();
         let first = [make_note(1, "Old Note", "old.md")];
-        rebuild_index(dir.path(), &first).unwrap();
+        rebuild_index(dir.path(), &first, &[], &[]).unwrap();
 
         let second = [make_note(2, "New Note", "new.md")];
-        let index = rebuild_index(dir.path(), &second).unwrap();
+        let index = rebuild_index(dir.path(), &second, &[], &[]).unwrap();
 
         let old = search_notes_in_index(&index, dir.path(), "Old", 10).unwrap();
         assert!(old.is_empty(), "stale document should be gone after rebuild");
@@ -664,7 +931,7 @@ mod tests {
     fn incremental_upsert_updates_existing_note() {
         let dir = TempDir::new().unwrap();
         let note_v1 = make_note(1, "Dragon Lair", "dragon.md");
-        let index = rebuild_index(dir.path(), &[note_v1]).unwrap();
+        let index = rebuild_index(dir.path(), &[note_v1], &[], &[]).unwrap();
 
         let note_v2 = make_note(1, "Dragon Cave", "dragon.md");
         index_note(&index, &note_v2, "").unwrap();
@@ -675,5 +942,193 @@ mod tests {
         let cave = search_notes_in_index(&index, dir.path(), "Cave", 10).unwrap();
         assert_eq!(cave.len(), 1);
         assert_eq!(cave[0].title, "Dragon Cave");
+    }
+
+    // ── Map indexing ───────────────────────────────────────────────────────
+
+    #[test]
+    fn map_is_indexed_and_searchable() {
+        let dir = TempDir::new().unwrap();
+        let map = make_map(1, "World Map");
+        let index = rebuild_index(dir.path(), &[], &[map], &[]).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "World", 10).unwrap();
+        assert_eq!(result.maps.len(), 1);
+        assert_eq!(result.maps[0].id, 1);
+        assert_eq!(result.maps[0].title, "World Map");
+        assert!(result.notes.is_empty());
+        assert!(result.scenes.is_empty());
+    }
+
+    #[test]
+    fn map_prefix_search_works() {
+        let dir = TempDir::new().unwrap();
+        let map = make_map(2, "Dungeon Level Two");
+        let index = rebuild_index(dir.path(), &[], &[map], &[]).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Dung", 10).unwrap();
+        assert_eq!(result.maps.len(), 1);
+        assert_eq!(result.maps[0].title, "Dungeon Level Two");
+    }
+
+    #[test]
+    fn incremental_index_map_upsert() {
+        let dir = TempDir::new().unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let map = make_map(1, "Overworld");
+        index_map(&index, &map).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Overworld", 10).unwrap();
+        assert_eq!(result.maps.len(), 1);
+        assert_eq!(result.maps[0].title, "Overworld");
+
+        // Rename the map
+        let renamed = make_map(1, "Underworld");
+        index_map(&index, &renamed).unwrap();
+
+        let old = search_all_in_index(&index, dir.path(), "Overworld", 10).unwrap();
+        assert!(old.maps.is_empty(), "old title should no longer match");
+
+        let new = search_all_in_index(&index, dir.path(), "Underworld", 10).unwrap();
+        assert_eq!(new.maps.len(), 1);
+    }
+
+    #[test]
+    fn incremental_remove_map() {
+        let dir = TempDir::new().unwrap();
+        let map = make_map(1, "The Keep");
+        let index = rebuild_index(dir.path(), &[], &[map], &[]).unwrap();
+
+        remove_map(&index, 1).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Keep", 10).unwrap();
+        assert!(result.maps.is_empty());
+    }
+
+    // ── Scene indexing ─────────────────────────────────────────────────────
+
+    #[test]
+    fn scene_is_indexed_and_searchable() {
+        let dir = TempDir::new().unwrap();
+        let scene = make_scene(1, "Tavern Brawl");
+        let index = rebuild_index(dir.path(), &[], &[], &[scene]).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Tavern", 10).unwrap();
+        assert_eq!(result.scenes.len(), 1);
+        assert_eq!(result.scenes[0].id, 1);
+        assert_eq!(result.scenes[0].name, "Tavern Brawl");
+        assert!(result.notes.is_empty());
+        assert!(result.maps.is_empty());
+    }
+
+    #[test]
+    fn scene_prefix_search_works() {
+        let dir = TempDir::new().unwrap();
+        let scene = make_scene(3, "Throne Room Ambush");
+        let index = rebuild_index(dir.path(), &[], &[], &[scene]).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Thr", 10).unwrap();
+        assert_eq!(result.scenes.len(), 1);
+        assert_eq!(result.scenes[0].name, "Throne Room Ambush");
+    }
+
+    #[test]
+    fn incremental_index_scene_upsert() {
+        let dir = TempDir::new().unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let scene = make_scene(1, "Forest Encounter");
+        index_scene(&index, &scene).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Forest", 10).unwrap();
+        assert_eq!(result.scenes.len(), 1);
+
+        // Rename the scene
+        let renamed = make_scene(1, "Cave Encounter");
+        index_scene(&index, &renamed).unwrap();
+
+        let old = search_all_in_index(&index, dir.path(), "Forest", 10).unwrap();
+        assert!(old.scenes.is_empty(), "old name should no longer match");
+
+        let new = search_all_in_index(&index, dir.path(), "Cave", 10).unwrap();
+        assert_eq!(new.scenes.len(), 1);
+    }
+
+    #[test]
+    fn incremental_remove_scene() {
+        let dir = TempDir::new().unwrap();
+        let scene = make_scene(1, "Dragon Fight");
+        let index = rebuild_index(dir.path(), &[], &[], &[scene]).unwrap();
+
+        remove_scene(&index, 1).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Dragon", 10).unwrap();
+        assert!(result.scenes.is_empty());
+    }
+
+    // ── Kind isolation ─────────────────────────────────────────────────────
+
+    #[test]
+    fn note_search_does_not_return_maps_or_scenes() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Dragon Note", "dragon.md");
+        let map = make_map(1, "Dragon Map");
+        let scene = make_scene(1, "Dragon Scene");
+        let index = rebuild_index(dir.path(), &[note], &[map], &[scene]).unwrap();
+
+        let notes = search_notes_in_index(&index, dir.path(), "Dragon", 10).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].title, "Dragon Note");
+    }
+
+    #[test]
+    fn all_three_kinds_returned_by_search_all() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Crimson Keep", "crimson.md");
+        let map = make_map(1, "Crimson Map");
+        let scene = make_scene(1, "Crimson Scene");
+        let index = rebuild_index(dir.path(), &[note], &[map], &[scene]).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "Crimson", 10).unwrap();
+        assert_eq!(result.notes.len(), 1);
+        assert_eq!(result.maps.len(), 1);
+        assert_eq!(result.scenes.len(), 1);
+    }
+
+    #[test]
+    fn id_collision_between_kinds_is_safe() {
+        let dir = TempDir::new().unwrap();
+        // note id=1, map id=1, scene id=1 — all same numeric id, different kinds
+        let note = make_note(1, "Note One", "note1.md");
+        let map = make_map(1, "Map One");
+        let scene = make_scene(1, "Scene One");
+        let index = rebuild_index(dir.path(), &[note], &[map], &[scene]).unwrap();
+
+        // Deleting the map must not affect the note or scene
+        remove_map(&index, 1).unwrap();
+
+        let result = search_all_in_index(&index, dir.path(), "One", 10).unwrap();
+        assert_eq!(result.notes.len(), 1, "note must survive map deletion");
+        assert!(result.maps.is_empty(), "map must be deleted");
+        assert_eq!(result.scenes.len(), 1, "scene must survive map deletion");
+    }
+
+    #[test]
+    fn rebuild_index_includes_maps_and_scenes() {
+        let dir = TempDir::new().unwrap();
+        let notes = [make_note(1, "Note Alpha", "alpha.md")];
+        let maps = [make_map(2, "Map Beta")];
+        let scenes = [make_scene(3, "Scene Gamma")];
+        let index = rebuild_index(dir.path(), &notes, &maps, &scenes).unwrap();
+
+        let r_note = search_all_in_index(&index, dir.path(), "Alpha", 10).unwrap();
+        assert_eq!(r_note.notes.len(), 1);
+
+        let r_map = search_all_in_index(&index, dir.path(), "Beta", 10).unwrap();
+        assert_eq!(r_map.maps.len(), 1);
+
+        let r_scene = search_all_in_index(&index, dir.path(), "Gamma", 10).unwrap();
+        assert_eq!(r_scene.scenes.len(), 1);
     }
 }

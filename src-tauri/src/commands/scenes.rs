@@ -39,22 +39,34 @@ pub fn get_scenes(vault: State<AppVault>) -> Result<Vec<Scene>, String> {
 pub fn create_scene(name: String, vault: State<AppVault>) -> Result<Scene, String> {
     let mut state = vault.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    diesel::insert_into(scenes::table)
+    let created: Scene = diesel::insert_into(scenes::table)
         .values(NewScene { name })
         .returning(Scene::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_scene(index, &created);
+    }
+
+    Ok(created)
 }
 
 #[tauri::command]
 pub fn update_scene(id: i32, name: String, vault: State<AppVault>) -> Result<Scene, String> {
     let mut state = vault.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    diesel::update(scenes::table.find(id))
+    let updated: Scene = diesel::update(scenes::table.find(id))
         .set(UpdateScene { name })
         .returning(Scene::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_scene(index, &updated);
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -63,8 +75,13 @@ pub fn delete_scene(id: i32, vault: State<AppVault>) -> Result<(), String> {
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     diesel::delete(scenes::table.find(id))
         .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::remove_scene(index, id);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

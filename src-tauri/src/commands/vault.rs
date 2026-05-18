@@ -1,6 +1,6 @@
 use crate::commands::tags::rebuild_note_tags_from_vault;
 use crate::db::establish_connection;
-use crate::db::models::{NewPinCategory, Note};
+use crate::db::models::{Map, NewPinCategory, Note, Scene};
 use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::vault::AppVault;
 use diesel::prelude::*;
@@ -63,7 +63,9 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
     // Rebuild the Tantivy search index. Non-fatal: a failure just leaves
     // search unavailable until the next manual rebuild or vault reopen.
     let all_notes: Vec<Note> = notes::table.load::<Note>(&mut conn).unwrap_or_default();
-    let search_index = crate::search::rebuild_index(&vault_path, &all_notes).ok();
+    let all_maps: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap_or_default();
+    let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(&mut conn).unwrap_or_default();
+    let search_index = crate::search::rebuild_index(&vault_path, &all_notes, &all_maps, &all_scenes).ok();
 
     let note_count: i64 = notes::table
         .count()

@@ -44,6 +44,7 @@ pub fn run() {
             write_note_content,
             delete_note,
             search_notes,
+            search_all,
             rebuild_search_index,
             get_note_by_path,
             read_note_tags,

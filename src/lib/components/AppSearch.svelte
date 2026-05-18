@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { Search, Tag, FileText } from "@lucide/svelte";
+  import { Search, Tag, FileText, Map, Clapperboard } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
   import TagChipEditor from "./TagChipEditor.svelte";
@@ -16,12 +16,30 @@
     match_count: number;
   }
 
+  interface MapSearchResult {
+    id: number;
+    title: string;
+  }
+
+  interface SceneSearchResult {
+    id: number;
+    name: string;
+  }
+
+  interface SearchAllResult {
+    notes: NoteSearchResult[];
+    maps: MapSearchResult[];
+    scenes: SceneSearchResult[];
+  }
+
   let addTagOpen = $state(false);
   let tags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
   let searchQuery = $state("");
-  let searchResults = $state<NoteSearchResult[]>([]);
+  let noteResults = $state<NoteSearchResult[]>([]);
+  let mapResults = $state<MapSearchResult[]>([]);
+  let sceneResults = $state<SceneSearchResult[]>([]);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const isMac = $derived(
@@ -52,6 +70,16 @@
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
     tabs.openTab({ type: "note", id: result.id, title: result.title });
+  }
+
+  function openMap(result: MapSearchResult) {
+    searchPalette.open = false;
+    tabs.openTab({ type: "map", id: result.id, title: result.title });
+  }
+
+  function openScene(result: SceneSearchResult) {
+    searchPalette.open = false;
+    tabs.openTab({ type: "scene", id: result.id, title: result.name });
   }
 
   function splitExcerpt(
@@ -87,17 +115,21 @@
     const q = searchQuery;
     if (debounceTimer) clearTimeout(debounceTimer);
     if (q.length < 2) {
-      searchResults = [];
+      noteResults = [];
+      mapResults = [];
+      sceneResults = [];
       return;
     }
     debounceTimer = setTimeout(async () => {
       try {
-        const res = await invoke<NoteSearchResult[]>("search_notes", {
-          query: q,
-        });
-        searchResults = res ?? [];
+        const res = await invoke<SearchAllResult>("search_all", { query: q });
+        noteResults = res?.notes ?? [];
+        mapResults = res?.maps ?? [];
+        sceneResults = res?.scenes ?? [];
       } catch {
-        searchResults = [];
+        noteResults = [];
+        mapResults = [];
+        sceneResults = [];
       }
     }, 80);
     return () => {
@@ -108,7 +140,9 @@
   $effect(() => {
     if (!searchPalette.open) {
       searchQuery = "";
-      searchResults = [];
+      noteResults = [];
+      mapResults = [];
+      sceneResults = [];
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
@@ -169,9 +203,9 @@
         </Command.Item>
       </Command.Group>
     {/if}
-    {#if searchResults.length > 0}
+    {#if noteResults.length > 0}
       <Command.Group heading="Notes">
-        {#each searchResults as result (result.id)}
+        {#each noteResults as result (result.id)}
           <Command.Item
             data-testid="cmd-note-result"
             value={result.title}
@@ -204,6 +238,36 @@
                 {result.match_count} matches
               </span>
             {/if}
+          </Command.Item>
+        {/each}
+      </Command.Group>
+    {/if}
+    {#if mapResults.length > 0}
+      <Command.Group heading="Maps">
+        {#each mapResults as result (result.id)}
+          <Command.Item
+            data-testid="cmd-map-result"
+            value={result.title}
+            onSelect={() => openMap(result)}
+            class="flex items-center gap-2"
+          >
+            <Map class="size-4 shrink-0 text-muted-foreground" />
+            <span class="font-heading text-sm">{result.title}</span>
+          </Command.Item>
+        {/each}
+      </Command.Group>
+    {/if}
+    {#if sceneResults.length > 0}
+      <Command.Group heading="Scenes">
+        {#each sceneResults as result (result.id)}
+          <Command.Item
+            data-testid="cmd-scene-result"
+            value={result.name}
+            onSelect={() => openScene(result)}
+            class="flex items-center gap-2"
+          >
+            <Clapperboard class="size-4 shrink-0 text-muted-foreground" />
+            <span class="font-heading text-sm">{result.name}</span>
           </Command.Item>
         {/each}
       </Command.Group>

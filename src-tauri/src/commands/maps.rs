@@ -67,11 +67,17 @@ pub fn create_map(
         image_height: Some(img_height as i32),
     };
 
-    diesel::insert_into(maps::table)
+    let created: Map = diesel::insert_into(maps::table)
         .values(&new_map)
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_map(index, &created);
+    }
+
+    Ok(created)
 }
 
 #[tauri::command]
@@ -86,11 +92,17 @@ pub fn create_map_empty(title: String, vault: State<AppVault>) -> Result<Map, St
         image_height: None,
     };
 
-    diesel::insert_into(maps::table)
+    let created: Map = diesel::insert_into(maps::table)
         .values(&new_map)
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_map(index, &created);
+    }
+
+    Ok(created)
 }
 
 #[tauri::command]
@@ -168,11 +180,17 @@ pub fn get_maps(vault: State<AppVault>) -> Result<Vec<Map>, String> {
 pub fn update_map(map: Map, vault: State<AppVault>) -> Result<Map, String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    diesel::update(maps::table.find(map.id))
+    let updated: Map = diesel::update(maps::table.find(map.id))
         .set(&map)
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_map(index, &updated);
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -188,9 +206,15 @@ pub fn delete_map(map_id: i32, vault: State<AppVault>) -> Result<usize, String> 
             fs::remove_file(&full_path).map_err(|e| e.to_string())?;
         }
     }
-    diesel::delete(maps::table.find(map_id))
+    let deleted = diesel::delete(maps::table.find(map_id))
         .execute(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::remove_map(index, map_id);
+    }
+
+    Ok(deleted)
 }
 
 #[tauri::command]
