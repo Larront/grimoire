@@ -47,6 +47,8 @@ pub fn run() {
             read_note_tags,
             write_note_tags,
             list_all_tags,
+            get_pin_tags,
+            set_pin_tags,
             get_file_tree,
             create_folder,
             delete_folder,

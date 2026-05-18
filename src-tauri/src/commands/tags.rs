@@ -11,6 +11,7 @@
 
 use crate::commands::frontmatter;
 use crate::db::schema::note_tags::dsl as nt;
+use crate::db::schema::pin_tags::dsl as pt;
 use crate::vault::AppVault;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
@@ -113,14 +114,65 @@ pub fn upsert_note_tags(
 pub fn list_all_tags(vault: State<AppVault>) -> Result<Vec<String>, String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    // Pick one display casing per normalized tag (lowest sort order for stability).
-    let mut all: Vec<String> = nt::note_tags
+    list_all_tags_from_conn(conn)
+}
+
+pub fn list_all_tags_from_conn(conn: &mut SqliteConnection) -> Result<Vec<String>, String> {
+    let note: Vec<String> = nt::note_tags
         .select(nt::tag)
         .load::<String>(conn)
         .map_err(|e| e.to_string())?;
+    let pin: Vec<String> = pt::pin_tags
+        .select(pt::tag)
+        .load::<String>(conn)
+        .map_err(|e| e.to_string())?;
+    let mut all: Vec<String> = note.into_iter().chain(pin).collect();
     all.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
     all.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
     Ok(all)
+}
+
+/// Replace all tag rows for the given pin. Called from `set_pin_tags`.
+pub fn upsert_pin_tags(
+    conn: &mut SqliteConnection,
+    pin_id: i32,
+    tags: &[String],
+) -> Result<(), String> {
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        diesel::delete(pt::pin_tags.filter(pt::pin_id.eq(pin_id))).execute(c)?;
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for t in tags {
+            if seen.insert(t.to_lowercase()) {
+                diesel::insert_into(pt::pin_tags)
+                    .values((pt::pin_id.eq(pin_id), pt::tag.eq(t)))
+                    .execute(c)?;
+            }
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_pin_tags(pin_id: i32, vault: State<AppVault>) -> Result<Vec<String>, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    pt::pin_tags
+        .filter(pt::pin_id.eq(pin_id))
+        .select(pt::tag)
+        .load::<String>(conn)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_pin_tags(
+    pin_id: i32,
+    tags: Vec<String>,
+    vault: State<AppVault>,
+) -> Result<(), String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    upsert_pin_tags(conn, pin_id, &tags)
 }
 
 #[cfg(test)]
@@ -135,13 +187,33 @@ mod tests {
         let mut conn =
             SqliteConnection::establish(":memory:").expect("failed to open in-memory db");
         conn.batch_execute(
-            "CREATE TABLE note_tags (
+            "PRAGMA foreign_keys = ON;
+            CREATE TABLE note_tags (
                 note_path TEXT NOT NULL,
                 tag TEXT NOT NULL,
                 PRIMARY KEY (note_path, tag)
+            );
+            CREATE TABLE pins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                map_id INTEGER NOT NULL,
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                category_id INTEGER,
+                note_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                shape TEXT,
+                icon TEXT,
+                color TEXT
+            );
+            CREATE TABLE pin_tags (
+                pin_id INTEGER NOT NULL REFERENCES pins(id) ON DELETE CASCADE,
+                tag TEXT NOT NULL,
+                PRIMARY KEY (pin_id, tag)
             );",
         )
-        .expect("create note_tags");
+        .expect("create tables");
         conn
     }
 
@@ -291,5 +363,106 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert_eq!(rows, vec!["keep".to_string()]);
+    }
+
+    // ── pin_tags tests ───────────────────────────────────────────────────────
+
+    fn insert_pin(conn: &mut SqliteConnection, id: i32) {
+        conn.batch_execute(&format!(
+            "INSERT INTO pins (id, map_id, x, y, title, created_at) \
+             VALUES ({id}, 1, 0.0, 0.0, 'Pin {id}', '2026-01-01')"
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn upsert_pin_tags_replaces_rows_for_one_pin_only() {
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        insert_pin(&mut conn, 2);
+
+        upsert_pin_tags(&mut conn, 1, &["one".to_string(), "two".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 2, &["three".to_string()]).unwrap();
+        // Replace pin 1's set; pin 2 should be untouched.
+        upsert_pin_tags(&mut conn, 1, &["four".to_string()]).unwrap();
+
+        let mut rows: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        rows.sort();
+        assert_eq!(
+            rows,
+            vec![
+                (1, "four".to_string()),
+                (2, "three".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn upsert_pin_tags_to_empty_set_clears_rows() {
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["one".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 1, &[]).unwrap();
+        let rows: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn upsert_pin_tags_deduplicates_case_insensitively() {
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(
+            &mut conn,
+            1,
+            &["NPC".to_string(), "npc".to_string(), "Allied".to_string()],
+        )
+        .unwrap();
+        let mut rows: Vec<String> = pt::pin_tags.select(pt::tag).load(&mut conn).unwrap();
+        rows.sort();
+        assert_eq!(rows, vec!["Allied".to_string(), "NPC".to_string()]);
+    }
+
+    #[test]
+    fn deleting_a_pin_cascades_to_delete_its_tag_rows() {
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["creature".to_string(), "fire".to_string()]).unwrap();
+
+        // Verify rows exist before delete.
+        let before: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        assert_eq!(before.len(), 2);
+
+        conn.batch_execute("DELETE FROM pins WHERE id = 1").unwrap();
+
+        let after: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        assert!(after.is_empty(), "cascade delete should have removed pin_tags rows");
+    }
+
+    #[test]
+    fn list_all_tags_includes_pin_only_tags() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---\ntags: [note-tag]\n---\n").unwrap();
+        let mut conn = test_conn();
+        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["pin-only".to_string()]).unwrap();
+
+        let all = list_all_tags_from_conn(&mut conn).unwrap();
+        assert!(all.contains(&"note-tag".to_string()), "note tag missing: {all:?}");
+        assert!(all.contains(&"pin-only".to_string()), "pin-only tag missing: {all:?}");
+    }
+
+    #[test]
+    fn list_all_tags_deduplicates_across_note_and_pin_sources() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---\ntags: [shared]\n---\n").unwrap();
+        let mut conn = test_conn();
+        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["shared".to_string()]).unwrap();
+
+        let all = list_all_tags_from_conn(&mut conn).unwrap();
+        let count = all.iter().filter(|t| t.to_lowercase() == "shared").count();
+        assert_eq!(count, 1, "shared tag should appear exactly once: {all:?}");
     }
 }

@@ -10,6 +10,7 @@
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
   import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
+  import TagChipEditor from "$lib/components/TagChipEditor.svelte";
 
   interface Props {
     pin: Pin;
@@ -26,11 +27,31 @@
   let notePreview = $state<string | null>(null);
   let noteSearchQuery = $state("");
   let appearanceOpen = $state(false);
+  let pinTags = $state<string[]>([]);
+  let allTags = $state<string[]>([]);
 
   $effect(() => {
     draftTitle = pin.title;
     draftDescription = pin.description ?? "";
   });
+
+  $effect(() => {
+    const id = pin.id;
+    invoke<string[]>("get_pin_tags", { pinId: id })
+      .then((t) => { pinTags = t; })
+      .catch(() => { pinTags = []; });
+  });
+
+  $effect(() => {
+    invoke<string[]>("list_all_tags")
+      .then((t) => { allTags = t; })
+      .catch(() => { allTags = []; });
+  });
+
+  async function savePinTags(tags: string[]) {
+    await invoke("set_pin_tags", { pinId: pin.id, tags });
+    allTags = await invoke<string[]>("list_all_tags");
+  }
 
   $effect(() => {
     const linked = linkedNote;
@@ -197,6 +218,16 @@
         {/if}
       </div>
     {/if}
+  </div>
+
+  <!-- Tags -->
+  <div class="flex flex-col gap-2">
+    <span class="font-sans text-xs text-foreground-faint uppercase tracking-wider">Tags</span>
+    <TagChipEditor
+      bind:tags={pinTags}
+      suggestions={allTags}
+      onchange={savePinTags}
+    />
   </div>
 
   <!-- Description -->

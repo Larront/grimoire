@@ -53,6 +53,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    pin_tags (pin_id, tag) {
+        pin_id -> Integer,
+        tag -> Text,
+    }
+}
+
+diesel::table! {
     pin_categories (id) {
         id -> Integer,
         map_id -> Nullable<Integer>,
@@ -117,6 +124,7 @@ diesel::table! {
 
 diesel::joinable!(map_annotations -> maps (map_id));
 diesel::joinable!(pin_categories -> maps (map_id));
+diesel::joinable!(pin_tags -> pins (pin_id));
 diesel::joinable!(pins -> maps (map_id));
 diesel::joinable!(pins -> notes (note_id));
 diesel::joinable!(pins -> pin_categories (category_id));
@@ -128,6 +136,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     note_tags,
     notes,
     pin_categories,
+    pin_tags,
     pins,
     scene_slots,
     scenes,
