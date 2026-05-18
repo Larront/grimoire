@@ -73,10 +73,9 @@ pub fn apply_tags(content: &str, new_tags: &[String]) -> String {
     let mut lines: Vec<String> = block_str.lines().map(String::from).collect();
     let (_, tag_indices) = find_tag_lines(&lines);
 
+    // find_tag_lines walks lines sequentially, so indices are already ascending.
     let insert_at = tag_indices.first().copied().unwrap_or(0);
-    let mut sorted = tag_indices.clone();
-    sorted.sort_unstable();
-    for idx in sorted.into_iter().rev() {
+    for idx in tag_indices.into_iter().rev() {
         lines.remove(idx);
     }
 

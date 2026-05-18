@@ -1,5 +1,6 @@
 <script lang="ts" module>
-  // Allowlist: lowercase letters, digits, hyphen, underscore, slash.
+  // Allowlist: letters, digits, hyphen, underscore, slash. Case is preserved
+  // for display; duplicate detection lowercases via normalizeTag.
   // Whitespace and any other punctuation is rejected at the input boundary.
   export const TAG_ALLOWED = /^[a-z0-9\-_/]+$/i;
 
