@@ -54,6 +54,13 @@
     tags?: TagFacet[];
   }
 
+  interface RecentEntityResult {
+    entity_kind: string;
+    entity_id: number;
+    title: string;
+    accessed_at: string;
+  }
+
   let addTagOpen = $state(false);
   let tags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
@@ -63,6 +70,7 @@
   let mapResults = $state<MapSearchResult[]>([]);
   let sceneResults = $state<SceneSearchResult[]>([]);
   let tagResults = $state<TagFacet[]>([]);
+  let recentEntities = $state<RecentEntityResult[]>([]);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingModifier = $state<"ctrl" | "shift" | null>(null);
 
@@ -208,6 +216,24 @@
     { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },
   ];
 
+  const visibleRecent = $derived(searchQuery.length === 0 ? recentEntities.slice(0, 5) : []);
+
+  function relativeTime(isoString: string): string {
+    const now = new Date();
+    const then = new Date(isoString);
+    const diffMs = now.getTime() - then.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 60) {
+      return diffMin <= 0 ? "just now" : `${diffMin}m ago`;
+    }
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    const thenDate = new Date(then.getFullYear(), then.getMonth(), then.getDate());
+    if (thenDate.getTime() === today.getTime()) return "today";
+    if (thenDate.getTime() === yesterday.getTime()) return "yesterday";
+    return `${Math.floor(diffMs / 86400000)}d ago`;
+  }
+
   const visibleCommands = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
@@ -222,6 +248,7 @@
   function openNote(result: NoteSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
+    invoke("record_recent", { kind: "note", id: result.id, title: result.title }).catch(() => {});
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
     const tab = { type: "note" as const, id: result.id, title: result.title };
@@ -233,6 +260,7 @@
   function openMap(result: MapSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
+    invoke("record_recent", { kind: "map", id: result.id, title: result.title }).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "map" as const, id: result.id, title: result.title };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
@@ -243,8 +271,24 @@
   function openScene(result: SceneSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
+    invoke("record_recent", { kind: "scene", id: result.id, title: result.name }).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "scene" as const, id: result.id, title: result.name };
+    if (mod === "ctrl") tabs.openTabForceNew(tab);
+    else if (mod === "shift") tabs.openTabOpposite(tab);
+    else tabs.openTab(tab);
+  }
+
+  function openRecent(entity: RecentEntityResult) {
+    const mod = pendingModifier;
+    pendingModifier = null;
+    invoke("record_recent", { kind: entity.entity_kind, id: entity.entity_id, title: entity.title }).catch(() => {});
+    searchPalette.open = false;
+    const tab = {
+      type: entity.entity_kind as "note" | "map" | "scene",
+      id: entity.entity_id,
+      title: entity.title,
+    };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
     else if (mod === "shift") tabs.openTabOpposite(tab);
     else tabs.openTab(tab);
@@ -325,11 +369,20 @@
       mapResults = [];
       sceneResults = [];
       tagResults = [];
+      recentEntities = [];
       pendingModifier = null;
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
       }
+    }
+  });
+
+  $effect(() => {
+    if (searchPalette.open) {
+      invoke<RecentEntityResult[]>("get_recent_entities")
+        .then((res) => { recentEntities = res ?? []; })
+        .catch(() => { recentEntities = []; });
     }
   });
 
@@ -378,6 +431,30 @@
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
+    {#if visibleRecent.length > 0}
+      <Command.Group heading="Recent">
+        {#each visibleRecent as entity (entity.entity_kind + ":" + entity.entity_id)}
+          {@const Icon = entity.entity_kind === "note" ? FileText : entity.entity_kind === "map" ? Map : Clapperboard}
+          <Command.Item
+            data-testid="cmd-recent-result"
+            value={entity.entity_kind + ":" + entity.entity_id}
+            onSelect={() => openRecent(entity)}
+            class="flex items-center gap-2"
+          >
+            <Icon class="size-4 shrink-0 text-muted-foreground" />
+            <span class="font-heading text-sm flex-1 truncate">{entity.title}</span>
+            <span
+              data-testid="recent-time-hint"
+              class="shrink-0 text-xs text-muted-foreground"
+            >{relativeTime(entity.accessed_at)}</span>
+            <span
+              data-testid="recent-kind-chip"
+              class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground"
+            >{entity.entity_kind}</span>
+          </Command.Item>
+        {/each}
+      </Command.Group>
+    {/if}
     {#if visibleCommands.length > 0}
       <Command.Group heading="Commands">
         {#each visibleCommands as cmd (cmd.testid)}

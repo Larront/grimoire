@@ -1,8 +1,9 @@
 pub mod frontmatter;
 pub mod maps;
-pub mod preferences;
 pub mod media;
 pub mod notes;
+pub mod preferences;
+pub mod recent;
 pub mod recent_vaults;
 pub mod scenes;
 pub mod spotify;

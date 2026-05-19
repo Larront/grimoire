@@ -7,6 +7,7 @@ use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
 use commands::preferences::*;
+use commands::recent::*;
 use commands::recent_vaults::*;
 use commands::scenes::*;
 use commands::spotify::*;
@@ -96,6 +97,9 @@ pub fn run() {
             get_image_absolute_path,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
+            // Recent entities
+            record_recent,
+            get_recent_entities,
             // Spotify
             spotify_get_auth_status,
             spotify_start_auth_flow,

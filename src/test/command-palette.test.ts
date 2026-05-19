@@ -1612,3 +1612,233 @@ describe("command palette – modifier-based open semantics", () => {
     expect(searchPalette.open).toBe(false);
   });
 });
+
+// ── Recent section (issue #39) ────────────────────────────────────────────────
+
+describe("command palette – Recent section", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+  });
+
+  function setupRecent(
+    entries: Array<{ entity_kind: string; entity_id: number; title: string; accessed_at: string }>,
+  ) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_recent_entities") return Promise.resolve(entries);
+      return Promise.resolve(null);
+    });
+  }
+
+  it("get_recent_entities is called when palette opens", async () => {
+    vi.mocked(invoke).mockResolvedValue(null);
+    render(AppSearch);
+    await openPalette();
+    expect(invoke).toHaveBeenCalledWith("get_recent_entities");
+  });
+
+  it("renders Recent group above Commands when input is empty", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const recentItem = document.body.querySelector('[data-testid="cmd-recent-result"]');
+    const cmdItem = document.body.querySelector('[data-testid^="cmd-create"]');
+    expect(recentItem).toBeTruthy();
+    expect(cmdItem).toBeTruthy();
+    expect(
+      recentItem!.compareDocumentPosition(cmdItem!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("no Recent group when get_recent_entities returns empty list", async () => {
+    setupRecent([]);
+    render(AppSearch);
+    await openPalette();
+    expect(document.body.querySelector('[data-testid="cmd-recent-result"]')).toBeNull();
+  });
+
+  it("Recent group disappears the moment user types", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+    expect(document.body.querySelector('[data-testid="cmd-recent-result"]')).toBeTruthy();
+
+    const input = getSearchInput();
+    input.value = "x";
+    await fireEvent.input(input);
+    await flush();
+
+    expect(document.body.querySelector('[data-testid="cmd-recent-result"]')).toBeNull();
+  });
+
+  it("shows at most 5 entries even when more are returned", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "N1", accessed_at: "2026-05-19T10:06:00.000Z" },
+      { entity_kind: "note", entity_id: 2, title: "N2", accessed_at: "2026-05-19T10:05:00.000Z" },
+      { entity_kind: "map", entity_id: 1, title: "M1", accessed_at: "2026-05-19T10:04:00.000Z" },
+      { entity_kind: "scene", entity_id: 1, title: "S1", accessed_at: "2026-05-19T10:03:00.000Z" },
+      { entity_kind: "note", entity_id: 3, title: "N3", accessed_at: "2026-05-19T10:02:00.000Z" },
+      { entity_kind: "note", entity_id: 4, title: "N4", accessed_at: "2026-05-19T10:01:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+    const items = document.body.querySelectorAll('[data-testid="cmd-recent-result"]');
+    expect(items.length).toBe(5);
+  });
+
+  it("each row shows a type chip with the entity kind", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const chip = document.body.querySelector('[data-testid="recent-kind-chip"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toBe("note");
+  });
+
+  it("each row shows a relative-time hint", async () => {
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: twoMinutesAgo },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const hint = document.body.querySelector('[data-testid="recent-time-hint"]');
+    expect(hint).toBeTruthy();
+    expect(hint?.textContent).toMatch(/2m ago/);
+  });
+
+  it("clicking a Recent note row opens the note tab and closes palette", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 3, title: "Harbor", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("note");
+    expect(tabs.activeTab?.id).toBe(3);
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("clicking a Recent map row opens the map tab", async () => {
+    setupRecent([
+      { entity_kind: "map", entity_id: 5, title: "World Map", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("map");
+    expect(tabs.activeTab?.id).toBe(5);
+  });
+
+  it("clicking a Recent scene row opens the scene tab", async () => {
+    setupRecent([
+      { entity_kind: "scene", entity_id: 7, title: "Battle", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("scene");
+    expect(tabs.activeTab?.id).toBe(7);
+  });
+
+  it("opening a Recent row calls record_recent to update the timestamp", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    render(AppSearch);
+    await openPalette();
+
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("record_recent", {
+      kind: "note",
+      id: 1,
+      title: "My Note",
+    });
+  });
+
+  it("opening a note from search results calls record_recent", async () => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{ id: 3, title: "Aldric", path: "aldric.md", excerpt: null, match_count: 0 }],
+          maps: [],
+          scenes: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("Al");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("record_recent", {
+      kind: "note",
+      id: 3,
+      title: "Aldric",
+    });
+    vi.useRealTimers();
+  });
+
+  it("Ctrl+Enter on a Recent row opens a new tab without reuse", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+    render(AppSearch);
+    await openPalette();
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    const noteTabs = tabs.left.tabs.filter((t) => t.type === "note" && t.id === 1);
+    expect(noteTabs.length).toBe(2);
+  });
+
+  it("Shift+Enter on a Recent row opens in opposite pane", async () => {
+    setupRecent([
+      { entity_kind: "note", entity_id: 5, title: "Target", accessed_at: "2026-05-19T10:00:00.000Z" },
+    ]);
+    tabs.openTab({ type: "note", id: 99, title: "Existing" });
+    render(AppSearch);
+    await openPalette();
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const item = document.body.querySelector('[data-testid="cmd-recent-result"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(tabs.right?.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
+  });
+});

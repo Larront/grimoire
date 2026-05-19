@@ -1,6 +1,15 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    recent_entities (entity_kind, entity_id) {
+        entity_kind -> Text,
+        entity_id -> Integer,
+        title -> Text,
+        accessed_at -> Text,
+    }
+}
+
+diesel::table! {
     map_annotations (id) {
         id -> Integer,
         map_id -> Integer,
@@ -138,6 +147,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     pin_categories,
     pin_tags,
     pins,
+    recent_entities,
     scene_slots,
     scenes,
     spotify_auth,
