@@ -474,6 +474,19 @@
 
 <svelte:window onkeydown={onKeydown} />
 
+{#snippet showMoreRow(group: string, count: number)}
+  {#if count > 0}
+    <Command.Item
+      data-testid="cmd-show-more-{group}"
+      value="__show-more-{group}__"
+      onSelect={() => expandGroup(group)}
+      class="flex items-center gap-2 text-xs text-muted-foreground"
+    >
+      Show {count} more in {group[0].toUpperCase() + group.slice(1)}
+    </Command.Item>
+  {/if}
+{/snippet}
+
 <Command.Dialog bind:open={searchPalette.open} shouldFilter={false}>
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
@@ -516,16 +529,7 @@
             <span class="font-heading text-sm">{cmd.label}</span>
           </Command.Item>
         {/each}
-        {#if commandsShowMore > 0}
-          <Command.Item
-            data-testid="cmd-show-more-commands"
-            value="__show-more-commands__"
-            onSelect={() => expandGroup("commands")}
-            class="flex items-center gap-2 text-xs text-muted-foreground"
-          >
-            Show {commandsShowMore} more in Commands
-          </Command.Item>
-        {/if}
+        {@render showMoreRow("commands", commandsShowMore)}
       </Command.Group>
     {/if}
     {#if visibleTagResults.length > 0}
@@ -547,16 +551,7 @@
             </span>
           </Command.Item>
         {/each}
-        {#if tagsShowMore > 0}
-          <Command.Item
-            data-testid="cmd-show-more-tags"
-            value="__show-more-tags__"
-            onSelect={() => expandGroup("tags")}
-            class="flex items-center gap-2 text-xs text-muted-foreground"
-          >
-            Show {tagsShowMore} more in Tags
-          </Command.Item>
-        {/if}
+        {@render showMoreRow("tags", tagsShowMore)}
       </Command.Group>
     {/if}
     {#if noteResults.length > 0}
@@ -596,16 +591,7 @@
             {/if}
           </Command.Item>
         {/each}
-        {#if notesShowMore > 0}
-          <Command.Item
-            data-testid="cmd-show-more-notes"
-            value="__show-more-notes__"
-            onSelect={() => expandGroup("notes")}
-            class="flex items-center gap-2 text-xs text-muted-foreground"
-          >
-            Show {notesShowMore} more in Notes
-          </Command.Item>
-        {/if}
+        {@render showMoreRow("notes", notesShowMore)}
       </Command.Group>
     {/if}
     {#if mapResults.length > 0}
@@ -621,16 +607,7 @@
             <span class="font-heading text-sm">{result.title}</span>
           </Command.Item>
         {/each}
-        {#if mapsShowMore > 0}
-          <Command.Item
-            data-testid="cmd-show-more-maps"
-            value="__show-more-maps__"
-            onSelect={() => expandGroup("maps")}
-            class="flex items-center gap-2 text-xs text-muted-foreground"
-          >
-            Show {mapsShowMore} more in Maps
-          </Command.Item>
-        {/if}
+        {@render showMoreRow("maps", mapsShowMore)}
       </Command.Group>
     {/if}
     {#if sceneResults.length > 0}
@@ -646,16 +623,7 @@
             <span class="font-heading text-sm">{result.name}</span>
           </Command.Item>
         {/each}
-        {#if scenesShowMore > 0}
-          <Command.Item
-            data-testid="cmd-show-more-scenes"
-            value="__show-more-scenes__"
-            onSelect={() => expandGroup("scenes")}
-            class="flex items-center gap-2 text-xs text-muted-foreground"
-          >
-            Show {scenesShowMore} more in Scenes
-          </Command.Item>
-        {/if}
+        {@render showMoreRow("scenes", scenesShowMore)}
       </Command.Group>
     {/if}
   </Command.List>
