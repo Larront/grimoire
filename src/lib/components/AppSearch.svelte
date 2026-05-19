@@ -91,29 +91,6 @@
     return notes.notes.find((n) => n.id === t.id) ?? null;
   });
 
-  // ── Commands ──────────────────────────────────────────────────────
-
-  const ALL_COMMANDS = [
-    { label: "Create new note", testid: "cmd-create-note", noteOnly: false },
-    { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false },
-    // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
-    { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true },
-    { label: "Create new map", testid: "cmd-create-map", noteOnly: false },
-    { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false },
-    { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false },
-    { label: "Switch vault…", testid: "cmd-switch-vault", noteOnly: false },
-    { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false },
-  ] as const;
-
-  const visibleCommands = $derived.by(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
-    const matched = q
-      ? eligible.filter((c) => c.label.toLowerCase().includes(q))
-      : eligible;
-    return matched.slice(0, 3);
-  });
-
   // ── Command actions ───────────────────────────────────────────────
 
   function onKeydown(e: KeyboardEvent) {
@@ -176,8 +153,9 @@
 
   function cmdToggleTheme() {
     const cur = userPrefersMode.current;
-    const next = cur === "light" ? "dark" : cur === "dark" ? "system" : "light";
-    setMode(next);
+    if (cur === "light") setMode("dark");
+    else if (cur === "dark") setMode("system");
+    else setMode("light");
     searchPalette.open = false;
   }
 
@@ -195,33 +173,28 @@
     }
   }
 
-  function getCommandAction(testid: string): () => void | Promise<void> {
-    switch (testid) {
-      case "cmd-create-note": return cmdCreateNote;
-      case "cmd-create-scene": return cmdCreateScene;
-      case "cmd-create-map": return cmdCreateMap;
-      case "cmd-add-tag": return openAddTag;
-      case "cmd-open-settings": return cmdOpenSettings;
-      case "cmd-toggle-theme": return cmdToggleTheme;
-      case "cmd-switch-vault": return cmdSwitchVault;
-      case "cmd-rebuild-index": return cmdRebuildIndex;
-      default: return () => {};
-    }
-  }
+  // ── Commands ──────────────────────────────────────────────────────
 
-  function getCommandIcon(testid: string) {
-    switch (testid) {
-      case "cmd-create-note": return FilePlus;
-      case "cmd-create-scene": return Clapperboard;
-      case "cmd-create-map": return Map;
-      case "cmd-add-tag": return Tag;
-      case "cmd-open-settings": return Settings;
-      case "cmd-toggle-theme": return Sun;
-      case "cmd-switch-vault": return FolderOpen;
-      case "cmd-rebuild-index": return RefreshCw;
-      default: return Settings;
-    }
-  }
+  const ALL_COMMANDS = [
+    { label: "Create new note", testid: "cmd-create-note", noteOnly: false, icon: FilePlus, action: cmdCreateNote },
+    { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false, icon: Clapperboard, action: cmdCreateScene },
+    // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
+    { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
+    { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
+    { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
+    { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
+    { label: "Switch vault…", testid: "cmd-switch-vault", noteOnly: false, icon: FolderOpen, action: cmdSwitchVault },
+    { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },
+  ];
+
+  const visibleCommands = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
+    const matched = q
+      ? eligible.filter((c) => c.label.toLowerCase().includes(q))
+      : eligible;
+    return matched.slice(0, 3);
+  });
 
   // ── Search ────────────────────────────────────────────────────────
 
@@ -369,11 +342,11 @@
     {#if visibleCommands.length > 0}
       <Command.Group heading="Commands">
         {#each visibleCommands as cmd (cmd.testid)}
-          {@const Icon = getCommandIcon(cmd.testid)}
+          {@const Icon = cmd.icon}
           <Command.Item
             data-testid={cmd.testid}
             value={cmd.label}
-            onSelect={getCommandAction(cmd.testid)}
+            onSelect={cmd.action}
             class="flex items-center gap-2"
           >
             <Icon class="size-4 shrink-0 text-muted-foreground" />
