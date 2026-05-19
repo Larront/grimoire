@@ -92,6 +92,14 @@
       .map((t) => t.slice(4).toLowerCase()),
   );
 
+  const freeSearchText = $derived(
+    searchQuery
+      .trim()
+      .split(/\s+/)
+      .filter((t) => !(t.startsWith("tag:") && t.length > 4))
+      .join(" "),
+  );
+
   const visibleTagResults = $derived(
     tagResults.filter(
       (t) => !activeTagFilters.includes(t.name.toLowerCase()),
@@ -243,12 +251,15 @@
   }
 
   function onSelectTag(tag: string) {
-    // Keep existing tag: tokens, drop free text, append the new tag filter
-    const existingTagTokens = searchQuery
-      .trim()
-      .split(/\s+/)
-      .filter((t) => t.startsWith("tag:") && t.length > 4);
-    searchQuery = [...existingTagTokens, `tag:${tag}`].join(" ");
+    const tokens = searchQuery.trim().split(/\s+/).filter((t) => t.length > 0);
+    const tagTokens = tokens.filter((t) => t.startsWith("tag:") && t.length > 4);
+    const freeTokens = tokens.filter((t) => !(t.startsWith("tag:") && t.length > 4));
+    if (tagTokens.length > 0) {
+      // Existing tag filters: preserve tag tokens + free text, append new tag
+      searchQuery = [...tagTokens, `tag:${tag}`, ...freeTokens].join(" ");
+    } else {
+      searchQuery = `tag:${tag}`;
+    }
   }
 
   function splitExcerpt(
@@ -364,7 +375,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<Command.Dialog bind:open={searchPalette.open}>
+<Command.Dialog bind:open={searchPalette.open} shouldFilter={false}>
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
@@ -422,7 +433,7 @@
                   data-testid="note-excerpt"
                   class="mt-0.5 truncate text-xs text-muted-foreground"
                 >
-                  {#each splitExcerpt(result.excerpt, searchQuery) as part}
+                  {#each splitExcerpt(result.excerpt, freeSearchText) as part}
                     {#if part.isMatch}
                       <span class="font-medium text-primary">{part.text}</span>
                     {:else}

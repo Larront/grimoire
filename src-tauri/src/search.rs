@@ -1403,6 +1403,38 @@ mod tests {
     }
 
     #[test]
+    fn multi_tag_with_freetext_or_composition() {
+        let dir = TempDir::new().unwrap();
+        let note1 = make_note(1, "Dragon Wizard", "wizard.md");
+        let note2 = make_note(2, "Dragon Fighter", "fighter.md");
+        let note3 = make_note(3, "Unrelated Note", "other.md");
+        std::fs::write(dir.path().join("wizard.md"), "---\ntags: [npc]\n---\nThe harbor shines.").unwrap();
+        std::fs::write(dir.path().join("fighter.md"), "---\ntags: [allied]\n---\nThe harbor glows.").unwrap();
+        std::fs::write(dir.path().join("other.md"), "---\ntags: [creature]\n---\nThe harbor is calm.").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note1, note2, note3], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc tag:allied harbor", 10).unwrap();
+        assert_eq!(results.len(), 2, "notes with (npc OR allied) AND harbor in body");
+        let ids: Vec<i32> = results.iter().map(|r| r.id).collect();
+        assert!(ids.contains(&1), "npc+harbor note must be in results");
+        assert!(ids.contains(&2), "allied+harbor note must be in results");
+        assert!(!ids.contains(&3), "creature tag note must be excluded");
+    }
+
+    #[test]
+    fn tag_only_query_excerpt_is_none() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric", "aldric.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npc]\n---\nBody text here.").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].excerpt.is_none(), "tag-only query must return no excerpt");
+        assert_eq!(results[0].match_count, 0, "tag-only query must have zero match count");
+    }
+
+    #[test]
     fn maps_not_returned_for_tag_only_query() {
         let dir = TempDir::new().unwrap();
         let note = make_note(1, "Aldric", "aldric.md");

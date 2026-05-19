@@ -553,6 +553,66 @@ describe("command palette – excerpt and match chip", () => {
 
     expect(searchPalette.activeQuery).toBe("harbor");
   });
+
+  it("shows excerpt when query has a tag filter plus a free-text term", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "the harbor is beautiful",
+            match_count: 1,
+          }],
+          maps: [],
+          scenes: [],
+          tags: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("tag:npc harbor");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(document.body.querySelector('[data-testid="note-excerpt"]')).toBeTruthy();
+  });
+
+  it("excerpt highlighting uses only the free-text term, not the tag: filter", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{
+            id: 2,
+            title: "Harbor Tale",
+            path: "harbor.md",
+            excerpt: "the harbor is beautiful",
+            match_count: 1,
+          }],
+          maps: [],
+          scenes: [],
+          tags: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("tag:npc harbor");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
+    expect(excerpt).toBeTruthy();
+    const matchSpan = excerpt?.querySelector("span.text-primary");
+    expect(matchSpan).toBeTruthy();
+    expect(matchSpan?.textContent).toBe("harbor");
+    // tag:npc must never appear as a highlighted span
+    const allSpans = excerpt?.querySelectorAll("span.text-primary") ?? [];
+    const spanTexts = Array.from(allSpans).map((s) => s.textContent);
+    expect(spanTexts.every((t) => t !== "tag:npc")).toBe(true);
+  });
 });
 
 // ── Maps and Scenes groups (issue #34) ────────────────────────────────────────
@@ -953,6 +1013,38 @@ describe("command palette – Tags group", () => {
     expect(
       document.body.querySelector('[data-testid="cmd-tag-result"]'),
     ).toBeNull();
+  });
+
+  it("selecting tag when existing filter plus free text appends tag and preserves free text", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "villain", note_count: 1 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    // Start with existing tag filter and free text
+    const input = getSearchInput();
+    input.value = "tag:npc allied";
+    await fireEvent.input(input);
+    await flush();
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const villainTag = document.body.querySelector(
+      '[data-testid="cmd-tag-result"]',
+    ) as HTMLElement;
+    expect(villainTag).toBeTruthy();
+    await fireEvent.click(villainTag);
+    await flush();
+
+    // tag:npc kept, tag:villain appended, free text "allied" preserved
+    expect(getSearchInput().value).toBe("tag:npc tag:villain allied");
   });
 
   it("selecting tag keeps existing tag: tokens and appends new one", async () => {
