@@ -218,6 +218,12 @@
 
   const visibleRecent = $derived(searchQuery.length === 0 ? recentEntities.slice(0, 5) : []);
 
+  function iconForKind(kind: string) {
+    if (kind === "note") return FileText;
+    if (kind === "map") return Map;
+    return Clapperboard;
+  }
+
   function relativeTime(isoString: string): string {
     const now = new Date();
     const then = new Date(isoString);
@@ -434,7 +440,7 @@
     {#if visibleRecent.length > 0}
       <Command.Group heading="Recent">
         {#each visibleRecent as entity (entity.entity_kind + ":" + entity.entity_id)}
-          {@const Icon = entity.entity_kind === "note" ? FileText : entity.entity_kind === "map" ? Map : Clapperboard}
+          {@const Icon = iconForKind(entity.entity_kind)}
           <Command.Item
             data-testid="cmd-recent-result"
             value={entity.entity_kind + ":" + entity.entity_id}
