@@ -26,10 +26,16 @@
     name: string;
   }
 
+  interface TagFacet {
+    name: string;
+    note_count: number;
+  }
+
   interface SearchAllResult {
     notes: NoteSearchResult[];
     maps: MapSearchResult[];
     scenes: SceneSearchResult[];
+    tags?: TagFacet[];
   }
 
   let addTagOpen = $state(false);
@@ -40,6 +46,7 @@
   let noteResults = $state<NoteSearchResult[]>([]);
   let mapResults = $state<MapSearchResult[]>([]);
   let sceneResults = $state<SceneSearchResult[]>([]);
+  let tagResults = $state<TagFacet[]>([]);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const isMac = $derived(
@@ -47,6 +54,22 @@
   );
 
   const activeTabIsNote = $derived(tabs.activeTab?.type === "note");
+
+  // Tags already active in the query (e.g. "tag:npc" → ["npc"])
+  const activeTagFilters = $derived(
+    searchQuery
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.startsWith("tag:") && t.length > 4)
+      .map((t) => t.slice(4).toLowerCase()),
+  );
+
+  // Only show tags that aren't already filtering the results
+  const visibleTagResults = $derived(
+    tagResults.filter(
+      (t) => !activeTagFilters.includes(t.name.toLowerCase()),
+    ),
+  );
 
   const activeNote = $derived.by(() => {
     const t = tabs.activeTab;
@@ -80,6 +103,15 @@
   function openScene(result: SceneSearchResult) {
     searchPalette.open = false;
     tabs.openTab({ type: "scene", id: result.id, title: result.name });
+  }
+
+  function onSelectTag(tag: string) {
+    // Keep existing tag: tokens, drop free text, append the new tag filter
+    const existingTagTokens = searchQuery
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.startsWith("tag:") && t.length > 4);
+    searchQuery = [...existingTagTokens, `tag:${tag}`].join(" ");
   }
 
   function splitExcerpt(
@@ -126,10 +158,12 @@
         noteResults = res?.notes ?? [];
         mapResults = res?.maps ?? [];
         sceneResults = res?.scenes ?? [];
+        tagResults = res?.tags ?? [];
       } catch {
         noteResults = [];
         mapResults = [];
         sceneResults = [];
+        tagResults = [];
       }
     }, 80);
     return () => {
@@ -143,6 +177,7 @@
       noteResults = [];
       mapResults = [];
       sceneResults = [];
+      tagResults = [];
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
@@ -201,6 +236,27 @@
           <Tag class="size-4 shrink-0 text-muted-foreground" />
           Add tag
         </Command.Item>
+      </Command.Group>
+    {/if}
+    {#if visibleTagResults.length > 0}
+      <Command.Group heading="Tags">
+        {#each visibleTagResults as tag (tag.name)}
+          <Command.Item
+            data-testid="cmd-tag-result"
+            value={tag.name}
+            onSelect={() => onSelectTag(tag.name)}
+            class="flex items-center gap-2"
+          >
+            <Tag class="size-4 shrink-0 text-muted-foreground" />
+            <span class="font-heading text-sm">{tag.name}</span>
+            <span
+              data-testid="tag-count-chip"
+              class="ml-auto shrink-0 text-xs text-muted-foreground"
+            >
+              {tag.note_count} notes
+            </span>
+          </Command.Item>
+        {/each}
       </Command.Group>
     {/if}
     {#if noteResults.length > 0}

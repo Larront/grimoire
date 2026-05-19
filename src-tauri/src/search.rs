@@ -1,3 +1,4 @@
+use crate::commands::frontmatter;
 use crate::db::models::{Map, Note, Scene};
 use serde::Serialize;
 use std::path::Path;
@@ -31,10 +32,17 @@ pub struct SceneSearchResult {
 }
 
 #[derive(Debug, Serialize, Clone)]
+pub struct TagFacet {
+    pub name: String,
+    pub note_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct SearchAllResult {
     pub notes: Vec<NoteSearchResult>,
     pub maps: Vec<MapSearchResult>,
     pub scenes: Vec<SceneSearchResult>,
+    pub tags: Vec<TagFacet>,
 }
 
 // ── Plain-text extraction ─────────────────────────────────────────────────────
@@ -205,6 +213,7 @@ fn make_schema() -> Schema {
     builder.add_text_field("path", STORED);
     builder.add_text_field("title", TEXT | STORED);
     builder.add_text_field("body", TEXT); // indexed but not stored
+    builder.add_text_field("tags", TEXT); // multi-value; indexed but not stored; lowercased at index time
     builder.add_date_field("modified_at", DateOptions::default().set_stored().set_fast());
     builder.build()
 }
@@ -223,13 +232,14 @@ fn parse_modified_at(s: &str) -> i64 {
     0
 }
 
-fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
+fn note_doc(schema: &Schema, note: &Note, body_text: &str, tags: &[String]) -> TantivyDocument {
     let kind_f = schema.get_field("kind").unwrap();
     let doc_key_f = schema.get_field("doc_key").unwrap();
     let entity_id_f = schema.get_field("entity_id").unwrap();
     let path_f = schema.get_field("path").unwrap();
     let title_f = schema.get_field("title").unwrap();
     let body_f = schema.get_field("body").unwrap();
+    let tags_f = schema.get_field("tags").unwrap();
     let modified_at_f = schema.get_field("modified_at").unwrap();
 
     let ts = parse_modified_at(&note.modified_at);
@@ -242,6 +252,9 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str) -> TantivyDocument {
     doc.add_text(path_f, &note.path);
     doc.add_text(title_f, &note.title);
     doc.add_text(body_f, body_text);
+    for tag in tags {
+        doc.add_text(tags_f, &tag.to_lowercase());
+    }
     doc.add_date(modified_at_f, tantivy_dt);
     doc
 }
@@ -309,12 +322,13 @@ pub fn rebuild_index(
 
     let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
     for note in notes {
-        let body_text = std::fs::read_to_string(vault_path.join(&note.path))
+        let content = std::fs::read_to_string(vault_path.join(&note.path))
             .ok()
-            .map(|c| extract_plain_text(&c))
             .unwrap_or_default();
+        let body_text = extract_plain_text(&content);
+        let tags = frontmatter::read_tags(&content);
         writer
-            .add_document(note_doc(&schema, note, &body_text))
+            .add_document(note_doc(&schema, note, &body_text, &tags))
             .map_err(|e| e.to_string())?;
     }
     for map in maps {
@@ -351,9 +365,9 @@ fn remove_doc(index: &Index, doc_key: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn index_note(index: &Index, note: &Note, body_text: &str) -> Result<(), String> {
+pub fn index_note(index: &Index, note: &Note, body_text: &str, tags: &[String]) -> Result<(), String> {
     let schema = index.schema();
-    upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text))
+    upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text, tags))
 }
 
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
@@ -386,6 +400,66 @@ fn regex_escape(s: &str) -> String {
             _ => vec![c],
         })
         .collect()
+}
+
+// ── Tag filter helpers ────────────────────────────────────────────────────────
+
+/// Extracts `tag:foo` tokens from a query string, returning lowercase tag names.
+pub fn parse_tag_filters(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .filter_map(|token| token.strip_prefix("tag:"))
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_lowercase())
+        .collect()
+}
+
+/// Removes `tag:foo` tokens from a query string, returning remaining free text.
+pub fn strip_tag_tokens(query: &str) -> String {
+    query
+        .split_whitespace()
+        .filter(|token| !token.starts_with("tag:"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn build_tag_filter_query(
+    tags_f: tantivy::schema::Field,
+    tag_filters: &[String],
+) -> Box<dyn tantivy::query::Query> {
+    use tantivy::query::{BooleanQuery, Occur, TermQuery};
+    use tantivy::schema::IndexRecordOption;
+
+    let clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = tag_filters
+        .iter()
+        .map(|t| {
+            let q: Box<dyn tantivy::query::Query> = Box::new(TermQuery::new(
+                tantivy::Term::from_field_text(tags_f, t.as_str()),
+                IndexRecordOption::Basic,
+            ));
+            (Occur::Should, q)
+        })
+        .collect();
+    Box::new(BooleanQuery::new(clauses))
+}
+
+fn build_note_tag_query(
+    kind_f: tantivy::schema::Field,
+    tags_f: tantivy::schema::Field,
+    tag_filters: &[String],
+) -> Box<dyn tantivy::query::Query> {
+    use tantivy::query::{BooleanQuery, Occur, TermQuery};
+    use tantivy::schema::IndexRecordOption;
+
+    let kind_term: Box<dyn tantivy::query::Query> = Box::new(TermQuery::new(
+        tantivy::Term::from_field_text(kind_f, "note"),
+        IndexRecordOption::Basic,
+    ));
+    let tag_q = build_tag_filter_query(tags_f, tag_filters);
+    Box::new(BooleanQuery::new(vec![
+        (Occur::Must, kind_term),
+        (Occur::Must, tag_q),
+    ]))
 }
 
 // ── Query builder ─────────────────────────────────────────────────────────────
@@ -483,6 +557,8 @@ fn build_kind_query(
 
 /// Excerpt is centred on the first body match; match_count counts body occurrences only.
 /// Title-only matches return `excerpt: None` and `match_count: 0`.
+/// Supports `tag:foo` filter syntax: tag-only queries return results MRU-ordered by modified_at;
+/// text+tag queries use BM25 ranking filtered by the tag constraint.
 pub fn search_notes_in_index(
     index: &Index,
     vault_path: &Path,
@@ -498,17 +574,51 @@ pub fn search_notes_in_index(
     let body_f = schema.get_field("body").map_err(|e| e.to_string())?;
     let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
     let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
+    let tags_f = schema.get_field("tags").map_err(|e| e.to_string())?;
+    let modified_at_f = schema.get_field("modified_at").map_err(|e| e.to_string())?;
 
-    let parsed = match build_kind_query(kind_f, title_f, body_f, "note", query) {
-        Ok(q) => q,
-        Err(_) => return Ok(vec![]),
+    let tag_filters = parse_tag_filters(query);
+    let free_text = strip_tag_tokens(query);
+    let has_free_text = free_text.split_whitespace().any(|w| w.len() >= 2);
+
+    let search_query: Box<dyn tantivy::query::Query> = if tag_filters.is_empty() {
+        // Pure text search — existing BM25 behaviour
+        match build_kind_query(kind_f, title_f, body_f, "note", query) {
+            Ok(q) => q,
+            Err(_) => return Ok(vec![]),
+        }
+    } else if !has_free_text {
+        // Tag-only: return all notes matching any tag filter, ordered MRU
+        build_note_tag_query(kind_f, tags_f, &tag_filters)
+    } else {
+        // Text + tag: BM25 ranking, filtered to notes that carry any of the tags
+        use tantivy::query::{BooleanQuery, Occur};
+        let text_q = match build_kind_query(kind_f, title_f, body_f, "note", &free_text) {
+            Ok(q) => q,
+            Err(_) => return Ok(vec![]),
+        };
+        let tag_q = build_tag_filter_query(tags_f, &tag_filters);
+        Box::new(BooleanQuery::new(vec![
+            (Occur::Must, text_q),
+            (Occur::Must, tag_q),
+        ]))
+    };
+
+    // For tag-only queries, fetch more than the limit so MRU sort can trim correctly
+    let fetch_limit = if !tag_filters.is_empty() && !has_free_text {
+        limit * 2 + 10
+    } else {
+        limit
     };
 
     let top_docs = searcher
-        .search(parsed.as_ref(), &TopDocs::with_limit(limit))
+        .search(search_query.as_ref(), &TopDocs::with_limit(fetch_limit))
         .map_err(|e| e.to_string())?;
 
-    let mut results = Vec::with_capacity(top_docs.len());
+    // Excerpt uses the free-text portion of the query (no tag: tokens)
+    let excerpt_q = if tag_filters.is_empty() { query } else { free_text.as_str() };
+
+    let mut with_ts: Vec<(i64, NoteSearchResult)> = Vec::with_capacity(top_docs.len());
     for (_score, addr) in top_docs {
         let doc: TantivyDocument = searcher.doc(addr).map_err(|e| e.to_string())?;
 
@@ -524,23 +634,32 @@ pub fn search_notes_in_index(
             Some(OwnedValue::Str(s)) => s.clone(),
             _ => String::new(),
         };
+        let ts = match doc.get_first(modified_at_f) {
+            Some(OwnedValue::Date(dt)) => dt.into_timestamp_micros(),
+            _ => 0,
+        };
 
-        let (excerpt, match_count) = if !path.is_empty() {
+        let (excerpt, match_count) = if !path.is_empty() && !excerpt_q.trim().is_empty() {
             let body_text = std::fs::read_to_string(vault_path.join(&path))
                 .ok()
                 .map(|c| extract_plain_text(&c))
                 .unwrap_or_default();
-            make_excerpt(&body_text, query)
+            make_excerpt(&body_text, excerpt_q)
                 .map(|(e, c)| (Some(e), c))
                 .unwrap_or((None, 0))
         } else {
             (None, 0)
         };
 
-        results.push(NoteSearchResult { id, title, path, excerpt, match_count });
+        with_ts.push((ts, NoteSearchResult { id, title, path, excerpt, match_count }));
     }
 
-    Ok(results)
+    // For tag-only queries, sort by modified_at descending (most-recently-updated first)
+    if !tag_filters.is_empty() && !has_free_text {
+        with_ts.sort_by(|a, b| b.0.cmp(&a.0));
+    }
+
+    Ok(with_ts.into_iter().take(limit).map(|(_, r)| r).collect())
 }
 
 fn search_maps_in_index(
@@ -634,9 +753,19 @@ pub fn search_all_in_index(
     limit: usize,
 ) -> Result<SearchAllResult, String> {
     let notes = search_notes_in_index(index, vault_path, query, limit)?;
-    let maps = search_maps_in_index(index, query, limit)?;
-    let scenes = search_scenes_in_index(index, query, limit)?;
-    Ok(SearchAllResult { notes, maps, scenes })
+    // Maps and scenes are not filtered by tag: tokens; strip them before querying
+    let free_text = strip_tag_tokens(query);
+    let maps = if free_text.split_whitespace().any(|w| w.len() >= 2) {
+        search_maps_in_index(index, &free_text, limit)?
+    } else {
+        vec![]
+    };
+    let scenes = if free_text.split_whitespace().any(|w| w.len() >= 2) {
+        search_scenes_in_index(index, &free_text, limit)?
+    } else {
+        vec![]
+    };
+    Ok(SearchAllResult { notes, maps, scenes, tags: vec![] })
 }
 
 #[cfg(test)]
@@ -862,7 +991,7 @@ mod tests {
         let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
 
         let note = make_note(1, "Captain Ash", "characters/ash.md");
-        index_note(&index, &note, "").unwrap();
+        index_note(&index, &note, "", &[]).unwrap();
 
         let results = search_notes_in_index(&index, dir.path(), "Captain", 10).unwrap();
         assert_eq!(results.len(), 1);
@@ -907,7 +1036,7 @@ mod tests {
         let index = rebuild_index(dir.path(), &[note_v1], &[], &[]).unwrap();
 
         let note_v2 = make_note(1, "Dragon Cave", "dragon.md");
-        index_note(&index, &note_v2, "").unwrap();
+        index_note(&index, &note_v2, "", &[]).unwrap();
 
         let lair = search_notes_in_index(&index, dir.path(), "Lair", 10).unwrap();
         assert!(lair.is_empty(), "old title should no longer match");
@@ -1103,5 +1232,193 @@ mod tests {
 
         let r_scene = search_all_in_index(&index, dir.path(), "Gamma", 10).unwrap();
         assert_eq!(r_scene.scenes.len(), 1);
+    }
+
+    // ── parse_tag_filters / strip_tag_tokens ───────────────────────────────
+
+    #[test]
+    fn parse_tag_filters_extracts_tag_tokens() {
+        let filters = parse_tag_filters("dragon tag:npc tag:allied");
+        assert_eq!(filters, vec!["npc", "allied"]);
+    }
+
+    #[test]
+    fn parse_tag_filters_lowercases() {
+        let filters = parse_tag_filters("tag:NPC");
+        assert_eq!(filters, vec!["npc"]);
+    }
+
+    #[test]
+    fn parse_tag_filters_empty_for_no_tags() {
+        assert!(parse_tag_filters("dragon wizard").is_empty());
+    }
+
+    #[test]
+    fn parse_tag_filters_skips_empty_tag_colon() {
+        assert!(parse_tag_filters("tag:").is_empty());
+    }
+
+    #[test]
+    fn strip_tag_tokens_removes_tag_prefix() {
+        assert_eq!(strip_tag_tokens("dragon tag:npc tag:allied"), "dragon");
+    }
+
+    #[test]
+    fn strip_tag_tokens_empty_when_only_tags() {
+        assert_eq!(strip_tag_tokens("tag:npc tag:allied").trim(), "");
+    }
+
+    #[test]
+    fn strip_tag_tokens_passthrough_no_tags() {
+        assert_eq!(strip_tag_tokens("dragon wizard"), "dragon wizard");
+    }
+
+    // ── Tags indexing and filtering ────────────────────────────────────────
+
+    #[test]
+    fn tags_are_indexed_from_frontmatter_in_rebuild() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric the Wizard", "aldric.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npc, wizard]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Aldric the Wizard");
+    }
+
+    #[test]
+    fn tag_filter_excludes_notes_without_tag() {
+        let dir = TempDir::new().unwrap();
+        let note1 = make_note(1, "Aldric", "aldric.md");
+        let note2 = make_note(2, "Dragon", "dragon.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+        std::fs::write(dir.path().join("dragon.md"), "---\ntags: [creature]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note1, note2], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 1);
+    }
+
+    #[test]
+    fn tag_filter_or_composition() {
+        let dir = TempDir::new().unwrap();
+        let note1 = make_note(1, "Aldric", "aldric.md");
+        let note2 = make_note(2, "Allied Knight", "knight.md");
+        let note3 = make_note(3, "Dragon", "dragon.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+        std::fs::write(dir.path().join("knight.md"), "---\ntags: [allied]\n---\nBody").unwrap();
+        std::fs::write(dir.path().join("dragon.md"), "---\ntags: [creature]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note1, note2, note3], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc tag:allied", 10).unwrap();
+        assert_eq!(results.len(), 2, "should return notes with npc OR allied tag");
+        let ids: Vec<i32> = results.iter().map(|r| r.id).collect();
+        assert!(ids.contains(&1), "npc note must be in results");
+        assert!(ids.contains(&2), "allied note must be in results");
+    }
+
+    #[test]
+    fn tag_filter_with_freetext_filters_by_both() {
+        let dir = TempDir::new().unwrap();
+        let note1 = make_note(1, "Dragon Wizard", "wizard.md");
+        let note2 = make_note(2, "Dragon Fighter", "fighter.md");
+        std::fs::write(dir.path().join("wizard.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+        std::fs::write(dir.path().join("fighter.md"), "---\ntags: [villain]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note1, note2], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "Dragon tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1, "only notes matching Dragon AND tagged npc");
+        assert_eq!(results[0].id, 1);
+    }
+
+    #[test]
+    fn tag_only_query_returns_mru_order() {
+        let dir = TempDir::new().unwrap();
+        let note_old = Note {
+            id: 1,
+            path: "old.md".to_string(),
+            title: "Old Note".to_string(),
+            icon: None,
+            cover_image: None,
+            parent_path: None,
+            archived: false,
+            modified_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let note_new = Note {
+            id: 2,
+            path: "new.md".to_string(),
+            title: "New Note".to_string(),
+            icon: None,
+            cover_image: None,
+            parent_path: None,
+            archived: false,
+            modified_at: "2026-06-01T00:00:00Z".to_string(),
+        };
+        std::fs::write(dir.path().join("old.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+        std::fs::write(dir.path().join("new.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note_old, note_new], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id, 2, "newer note must be first (MRU)");
+        assert_eq!(results[1].id, 1, "older note must be second");
+    }
+
+    #[test]
+    fn incremental_index_note_with_tags() {
+        let dir = TempDir::new().unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let note = make_note(1, "Aldric", "aldric.md");
+        index_note(&index, &note, "", &["npc".to_string()]).unwrap();
+
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Aldric");
+    }
+
+    #[test]
+    fn incremental_upsert_updates_tags() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric", "aldric.md");
+        let index = rebuild_index(dir.path(), &[note.clone()], &[], &[]).unwrap();
+
+        // Update with new tags
+        index_note(&index, &note, "", &["villain".to_string()]).unwrap();
+
+        // npc tag no longer present
+        let npc_results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert!(npc_results.is_empty(), "old tag must not match after update");
+
+        // villain tag now present
+        let villain_results = search_notes_in_index(&index, dir.path(), "tag:villain", 10).unwrap();
+        assert_eq!(villain_results.len(), 1);
+    }
+
+    #[test]
+    fn tag_filter_case_insensitive_match() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric", "aldric.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [NPC]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        // Query with lowercase; tags stored uppercase in frontmatter but lowercased in index
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn maps_not_returned_for_tag_only_query() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric", "aldric.md");
+        let map = make_map(1, "Dragon Map");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[map], &[]).unwrap();
+        let result = search_all_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(result.notes.len(), 1);
+        assert!(result.maps.is_empty(), "maps must not appear for tag-only queries");
     }
 }

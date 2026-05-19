@@ -781,3 +781,208 @@ describe("command palette – Scenes group", () => {
     ).toBeTruthy();
   });
 });
+
+// ── Tags group (issue #35) ────────────────────────────────────────────────────
+
+describe("command palette – Tags group", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  it("shows Tags group when tags are returned", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 3 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-tag-result"]'),
+    ).toBeTruthy();
+  });
+
+  it("no Tags group when tags array is empty", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({ notes: [], maps: [], scenes: [], tags: [] });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("zzz");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-tag-result"]'),
+    ).toBeNull();
+  });
+
+  it("shows count chip with note_count value", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 7 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const chip = document.body.querySelector('[data-testid="tag-count-chip"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent).toContain("7");
+  });
+
+  it("selecting a Tag row rewrites search input to tag:foo", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 2 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const tagItem = document.body.querySelector(
+      '[data-testid="cmd-tag-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(tagItem);
+    await flush();
+
+    const input = getSearchInput();
+    expect(input.value).toBe("tag:npc");
+  });
+
+  it("tag already in active filter is hidden from Tags group", async () => {
+    // Return "npc" tag in results — but query already has tag:npc active
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 2 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    // Manually set query to include tag:npc
+    const input = getSearchInput();
+    input.value = "tag:npc";
+    await fireEvent.input(input);
+    await flush();
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    // "npc" should be hidden since tag:npc is already active
+    expect(
+      document.body.querySelector('[data-testid="cmd-tag-result"]'),
+    ).toBeNull();
+  });
+
+  it("Tags group renders before Notes group in the DOM", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{ id: 1, title: "NPC Note", path: "npc.md", excerpt: null, match_count: 0 }],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 3 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const tagResult = document.body.querySelector('[data-testid="cmd-tag-result"]');
+    const noteResult = document.body.querySelector('[data-testid="cmd-note-result"]');
+    expect(tagResult).toBeTruthy();
+    expect(noteResult).toBeTruthy();
+    // Tag result must appear before note result in document order
+    expect(
+      tagResult!.compareDocumentPosition(noteResult!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("no Tags group when search_all returns no tags field (backward compat)", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({ notes: [], maps: [], scenes: [] });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-tag-result"]'),
+    ).toBeNull();
+  });
+
+  it("selecting tag keeps existing tag: tokens and appends new one", async () => {
+    let callCount = 0;
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all") {
+        callCount++;
+        // Second call (after tag:npc is in input) returns allied tag
+        const tags =
+          callCount <= 1
+            ? [{ name: "npc", note_count: 2 }]
+            : [{ name: "allied", note_count: 1 }];
+        return Promise.resolve({ notes: [], maps: [], scenes: [], tags });
+      }
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("np");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    // Select npc tag → input becomes "tag:npc"
+    const npcTag = document.body.querySelector(
+      '[data-testid="cmd-tag-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(npcTag);
+    await flush();
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    expect(getSearchInput().value).toBe("tag:npc");
+  });
+});

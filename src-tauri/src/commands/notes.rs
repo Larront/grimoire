@@ -111,7 +111,7 @@ pub fn create_note(
         .map_err(|e| e.to_string())?;
 
     if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &created, "");
+        let _ = crate::search::index_note(index, &created, "", &[]);
     }
 
     Ok(created)
@@ -150,13 +150,13 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let body_text = std::fs::read_to_string(vault_path.join(&updated.path))
-        .ok()
-        .map(|c| crate::search::extract_plain_text(&c))
+    let raw_content = std::fs::read_to_string(vault_path.join(&updated.path))
         .unwrap_or_default();
+    let body_text = crate::search::extract_plain_text(&raw_content);
+    let tags = frontmatter::read_tags(&raw_content);
 
     if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &updated, &body_text);
+        let _ = crate::search::index_note(index, &updated, &body_text, &tags);
     }
 
     Ok(updated)
@@ -215,7 +215,8 @@ pub fn write_note_content(
         .map_err(|e| e.to_string())?;
     if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
         let body_text = crate::search::extract_plain_text(&content);
-        let _ = crate::search::index_note(index, &note, &body_text);
+        let tags = frontmatter::read_tags(&content);
+        let _ = crate::search::index_note(index, &note, &body_text, &tags);
     }
 
     Ok(())
@@ -241,9 +242,20 @@ pub fn write_note_tags(
     let full_path = validate_path(&vault_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
-    fs::write(&full_path, new_content).map_err(|e| e.to_string())?;
+    fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    upsert_note_tags(conn, &note_path, &tags)
+    upsert_note_tags(conn, &note_path, &tags)?;
+    // Re-index in Tantivy so tag: filters reflect the updated tags immediately
+    let maybe_note = notes
+        .filter(path.eq(&note_path))
+        .first::<Note>(conn)
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
+        let body_text = crate::search::extract_plain_text(&new_content);
+        let _ = crate::search::index_note(index, &note, &body_text, &tags);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -258,11 +270,48 @@ pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSea
 
 #[tauri::command]
 pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResult, String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    use crate::db::schema::note_tags::dsl as nt;
+    use crate::search::{parse_tag_filters, strip_tag_tokens, TagFacet};
+
+    let active_tag_filters = parse_tag_filters(&query);
+    let free_text = strip_tag_tokens(&query);
+    let free_text_lower = free_text.to_lowercase();
+
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+
+    // Collect tag facets from SQLite note_tags
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let all_tag_rows: Vec<String> = nt::note_tags
+        .select(nt::tag)
+        .load::<String>(conn)
+        .map_err(|e| e.to_string())?;
+
+    // Count occurrences per lowercase tag, filter by free-text prefix, exclude active filters
+    let mut counts: std::collections::HashMap<String, (String, usize)> = std::collections::HashMap::new();
+    for tag in &all_tag_rows {
+        let lower = tag.to_lowercase();
+        if free_text_lower.is_empty() || lower.contains(&free_text_lower) {
+            let entry = counts.entry(lower.clone()).or_insert_with(|| (tag.clone(), 0));
+            entry.1 += 1;
+        }
+    }
+    let mut tag_facets: Vec<TagFacet> = counts
+        .into_iter()
+        .filter(|(lower, _)| !active_tag_filters.iter().any(|f| f == lower.as_str()))
+        .map(|(_, (name, cnt))| TagFacet { name, note_count: cnt })
+        .collect();
+    tag_facets.sort_by(|a, b| b.note_count.cmp(&a.note_count).then(a.name.cmp(&b.name)));
+    tag_facets.truncate(5);
+
+    // Tantivy search
     match &state.search_index {
-        Some(index) => crate::search::search_all_in_index(index, &vault_path, &query, 10),
-        None => Ok(SearchAllResult { notes: vec![], maps: vec![], scenes: vec![] }),
+        Some(index) => {
+            let mut result = crate::search::search_all_in_index(index, &vault_path, &query, 10)?;
+            result.tags = tag_facets;
+            Ok(result)
+        }
+        None => Ok(SearchAllResult { notes: vec![], maps: vec![], scenes: vec![], tags: tag_facets }),
     }
 }
 
