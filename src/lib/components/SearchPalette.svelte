@@ -122,8 +122,6 @@
     return notes.notes.find((n) => n.id === t.id) ?? null;
   });
 
-  // ── Command actions ───────────────────────────────────────────────
-
   function openAddTag() {
     searchPalette.open = false;
     addTagOpen = true;
@@ -196,8 +194,6 @@
       console.error("rebuild_search_index failed:", e);
     }
   }
-
-  // ── Commands ──────────────────────────────────────────────────────
 
   const ALL_COMMANDS = [
     { label: "Create new note", testid: "cmd-create-note", noteOnly: false, icon: FilePlus, action: cmdCreateNote },
@@ -284,8 +280,6 @@
   const scenesCap = $derived(expandedGroups.has("scenes") ? Infinity : DEFAULT_CAPS.scenes);
   const visibleScenes = $derived(sceneResults.slice(0, scenesCap));
   const scenesShowMore = $derived(sceneResults.length - visibleScenes.length);
-
-  // ── Search ────────────────────────────────────────────────────────
 
   function openNote(result: NoteSearchResult) {
     const mod = pendingModifier;
