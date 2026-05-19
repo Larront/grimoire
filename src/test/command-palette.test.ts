@@ -1842,3 +1842,227 @@ describe("command palette – Recent section", () => {
     expect(tabs.focusedPane).toBe("left");
   });
 });
+
+// ── Per-group caps + Show more (issue #41) ────────────────────────────────────
+
+describe("command palette – per-group caps", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  function makeNotes(count: number) {
+    return Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      title: `Note ${i + 1}`,
+      path: `note-${i + 1}.md`,
+      excerpt: null,
+      match_count: 0,
+    }));
+  }
+
+  function makeTags(count: number) {
+    return Array.from({ length: count }, (_, i) => ({ name: `tag${i + 1}`, note_count: 1 }));
+  }
+
+  function makeMaps(count: number) {
+    return Array.from({ length: count }, (_, i) => ({ id: i + 1, title: `Map ${i + 1}` }));
+  }
+
+  function makeScenes(count: number) {
+    return Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `Scene ${i + 1}` }));
+  }
+
+  async function searchWithResults(results: Record<string, unknown>) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all") return Promise.resolve(results);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("xx");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+  }
+
+  // ── Default caps ─────────────────────────────────────────────────────────────
+
+  it("Notes group renders at most 6 results by default", async () => {
+    // Include a map so activeGroupCount > 1, preventing single-group relaxation
+    await searchWithResults({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
+    const items = document.body.querySelectorAll('[data-testid="cmd-note-result"]');
+    expect(items.length).toBe(6);
+  });
+
+  it("Tags group renders at most 5 results by default", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(8) });
+    const items = document.body.querySelectorAll('[data-testid="cmd-tag-result"]');
+    expect(items.length).toBe(5);
+  });
+
+  it("Maps group renders at most 3 results by default", async () => {
+    await searchWithResults({ notes: [], maps: makeMaps(6), scenes: [] });
+    const items = document.body.querySelectorAll('[data-testid="cmd-map-result"]');
+    expect(items.length).toBe(3);
+  });
+
+  it("Scenes group renders at most 3 results by default", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: makeScenes(6) });
+    const items = document.body.querySelectorAll('[data-testid="cmd-scene-result"]');
+    expect(items.length).toBe(3);
+  });
+
+  it("Commands group renders at most 3 commands when many match", async () => {
+    // No note tab → 7 eligible commands; empty query matches all → cap at 3
+    render(AppSearch);
+    await openPalette();
+    const cmds = document.body.querySelectorAll(
+      '[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-vault"], [data-testid="cmd-rebuild-index"]',
+    );
+    expect(cmds.length).toBeLessThanOrEqual(3);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-commands"]')).toBeTruthy();
+  });
+
+  // ── Show more rows ────────────────────────────────────────────────────────────
+
+  it("shows 'Show N more in Notes' row when notes exceed cap", async () => {
+    // Include a map so activeGroupCount > 1, preventing single-group relaxation
+    await searchWithResults({ notes: makeNotes(8), maps: [{ id: 1, title: "Map" }], scenes: [] });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]');
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain("2");
+    expect(showMore?.textContent).toContain("Notes");
+  });
+
+  it("no Show more row when notes are within cap", async () => {
+    await searchWithResults({ notes: makeNotes(6), maps: [], scenes: [] });
+    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
+  });
+
+  it("shows Show more row for Tags when tags exceed cap", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(7) });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-tags"]');
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain("2");
+    expect(showMore?.textContent).toContain("Tags");
+  });
+
+  it("shows Show more row for Maps when maps exceed cap", async () => {
+    await searchWithResults({ notes: [], maps: makeMaps(5), scenes: [] });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-maps"]');
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain("Maps");
+  });
+
+  it("shows Show more row for Scenes when scenes exceed cap", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: makeScenes(5) });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-scenes"]');
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain("Scenes");
+  });
+
+  // ── Expand in place ───────────────────────────────────────────────────────────
+
+  it("clicking Show more in Notes reveals all results and removes the row", async () => {
+    // Include a map so activeGroupCount > 1, preventing single-group relaxation (cap stays 6)
+    await searchWithResults({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    await fireEvent.click(showMore);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
+  });
+
+  it("clicking Show more in Maps reveals all map results", async () => {
+    await searchWithResults({ notes: [], maps: makeMaps(5), scenes: [] });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-maps"]') as HTMLElement;
+    await fireEvent.click(showMore);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-map-result"]').length).toBe(5);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-maps"]')).toBeNull();
+  });
+
+  it("clicking Show more in Tags reveals all tag results", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(7) });
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-tags"]') as HTMLElement;
+    await fireEvent.click(showMore);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(7);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeNull();
+  });
+
+  it("expanding one group does not expand other groups", async () => {
+    await searchWithResults({ notes: makeNotes(10), maps: [], scenes: [], tags: makeTags(8) });
+    const showMoreNotes = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    await fireEvent.click(showMoreNotes);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
+    expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(5);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeTruthy();
+  });
+
+  // ── Single-group cap relaxation ───────────────────────────────────────────────
+
+  it("Notes cap relaxes to 15 when notes is the only group with results", async () => {
+    await searchWithResults({ notes: makeNotes(15), maps: [], scenes: [], tags: [] });
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
+  });
+
+  it("Show more still appears for Notes when single-group count exceeds 15", async () => {
+    await searchWithResults({ notes: makeNotes(17), maps: [], scenes: [], tags: [] });
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]');
+    expect(showMore).toBeTruthy();
+    expect(showMore?.textContent).toContain("2");
+  });
+
+  it("Notes cap stays at 6 when multiple groups have results", async () => {
+    await searchWithResults({
+      notes: makeNotes(10),
+      maps: [{ id: 1, title: "World Map" }],
+      scenes: [],
+    });
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(6);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeTruthy();
+  });
+
+  it("Tags cap stays at 5 in single-group case (only Notes relaxes)", async () => {
+    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(8) });
+    expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(5);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeTruthy();
+  });
+
+  // ── Reset on query change ─────────────────────────────────────────────────────
+
+  it("editing the query collapses expanded sections back to defaults", async () => {
+    // Include a map so activeGroupCount > 1, preventing single-group relaxation (cap stays 6)
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("xx");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    await fireEvent.click(showMore);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
+
+    // Type a new query — should reset expansion
+    await typeQuery("yy");
+    await flush();
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(6);
+    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeTruthy();
+  });
+});

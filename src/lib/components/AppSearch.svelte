@@ -240,14 +240,55 @@
     return `${Math.floor(diffMs / 86400000)}d ago`;
   }
 
-  const visibleCommands = $derived.by(() => {
+  const allMatchedCommands = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
-    const matched = q
-      ? eligible.filter((c) => c.label.toLowerCase().includes(q))
-      : eligible;
-    return matched.slice(0, 3);
+    return q ? eligible.filter((c) => c.label.toLowerCase().includes(q)) : eligible;
   });
+
+  const DEFAULT_CAPS = { commands: 3, tags: 5, notes: 6, maps: 3, scenes: 3 } as const;
+
+  let expandedGroups = $state(new Set<string>());
+
+  $effect(() => {
+    const _q = searchQuery;
+    expandedGroups = new Set();
+  });
+
+  function expandGroup(group: string) {
+    expandedGroups = new Set([...expandedGroups, group]);
+  }
+
+  const activeGroupCount = $derived(
+    (visibleTagResults.length > 0 ? 1 : 0) +
+    (noteResults.length > 0 ? 1 : 0) +
+    (mapResults.length > 0 ? 1 : 0) +
+    (sceneResults.length > 0 ? 1 : 0),
+  );
+
+  const commandsCap = $derived(expandedGroups.has("commands") ? Infinity : DEFAULT_CAPS.commands);
+  const visibleCommands = $derived(allMatchedCommands.slice(0, commandsCap));
+  const commandsShowMore = $derived(allMatchedCommands.length - visibleCommands.length);
+
+  const tagsCap = $derived(expandedGroups.has("tags") ? Infinity : DEFAULT_CAPS.tags);
+  const visibleTags = $derived(visibleTagResults.slice(0, tagsCap));
+  const tagsShowMore = $derived(visibleTagResults.length - visibleTags.length);
+
+  const notesCap = $derived.by(() => {
+    if (expandedGroups.has("notes")) return Infinity;
+    if (activeGroupCount === 1 && noteResults.length > 0) return 15;
+    return DEFAULT_CAPS.notes;
+  });
+  const visibleNotes = $derived(noteResults.slice(0, notesCap));
+  const notesShowMore = $derived(noteResults.length - visibleNotes.length);
+
+  const mapsCap = $derived(expandedGroups.has("maps") ? Infinity : DEFAULT_CAPS.maps);
+  const visibleMaps = $derived(mapResults.slice(0, mapsCap));
+  const mapsShowMore = $derived(mapResults.length - visibleMaps.length);
+
+  const scenesCap = $derived(expandedGroups.has("scenes") ? Infinity : DEFAULT_CAPS.scenes);
+  const visibleScenes = $derived(sceneResults.slice(0, scenesCap));
+  const scenesShowMore = $derived(sceneResults.length - visibleScenes.length);
 
   // ── Search ────────────────────────────────────────────────────────
 
@@ -475,11 +516,21 @@
             <span class="font-heading text-sm">{cmd.label}</span>
           </Command.Item>
         {/each}
+        {#if commandsShowMore > 0}
+          <Command.Item
+            data-testid="cmd-show-more-commands"
+            value="__show-more-commands__"
+            onSelect={() => expandGroup("commands")}
+            class="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Show {commandsShowMore} more in Commands
+          </Command.Item>
+        {/if}
       </Command.Group>
     {/if}
     {#if visibleTagResults.length > 0}
       <Command.Group heading="Tags">
-        {#each visibleTagResults as tag (tag.name)}
+        {#each visibleTags as tag (tag.name)}
           <Command.Item
             data-testid="cmd-tag-result"
             value={tag.name}
@@ -496,11 +547,21 @@
             </span>
           </Command.Item>
         {/each}
+        {#if tagsShowMore > 0}
+          <Command.Item
+            data-testid="cmd-show-more-tags"
+            value="__show-more-tags__"
+            onSelect={() => expandGroup("tags")}
+            class="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Show {tagsShowMore} more in Tags
+          </Command.Item>
+        {/if}
       </Command.Group>
     {/if}
     {#if noteResults.length > 0}
       <Command.Group heading="Notes">
-        {#each noteResults as result (result.id)}
+        {#each visibleNotes as result (result.id)}
           <Command.Item
             data-testid="cmd-note-result"
             value={result.title}
@@ -535,11 +596,21 @@
             {/if}
           </Command.Item>
         {/each}
+        {#if notesShowMore > 0}
+          <Command.Item
+            data-testid="cmd-show-more-notes"
+            value="__show-more-notes__"
+            onSelect={() => expandGroup("notes")}
+            class="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Show {notesShowMore} more in Notes
+          </Command.Item>
+        {/if}
       </Command.Group>
     {/if}
     {#if mapResults.length > 0}
       <Command.Group heading="Maps">
-        {#each mapResults as result (result.id)}
+        {#each visibleMaps as result (result.id)}
           <Command.Item
             data-testid="cmd-map-result"
             value={result.title}
@@ -550,11 +621,21 @@
             <span class="font-heading text-sm">{result.title}</span>
           </Command.Item>
         {/each}
+        {#if mapsShowMore > 0}
+          <Command.Item
+            data-testid="cmd-show-more-maps"
+            value="__show-more-maps__"
+            onSelect={() => expandGroup("maps")}
+            class="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Show {mapsShowMore} more in Maps
+          </Command.Item>
+        {/if}
       </Command.Group>
     {/if}
     {#if sceneResults.length > 0}
       <Command.Group heading="Scenes">
-        {#each sceneResults as result (result.id)}
+        {#each visibleScenes as result (result.id)}
           <Command.Item
             data-testid="cmd-scene-result"
             value={result.name}
@@ -565,6 +646,16 @@
             <span class="font-heading text-sm">{result.name}</span>
           </Command.Item>
         {/each}
+        {#if scenesShowMore > 0}
+          <Command.Item
+            data-testid="cmd-show-more-scenes"
+            value="__show-more-scenes__"
+            onSelect={() => expandGroup("scenes")}
+            class="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Show {scenesShowMore} more in Scenes
+          </Command.Item>
+        {/if}
       </Command.Group>
     {/if}
   </Command.List>
