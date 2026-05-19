@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { setMode, userPrefersMode } from "mode-watcher";
+  import { toastError, toastSuccess } from "$lib/toast";
   import {
     Tag,
     FileText,
@@ -190,8 +191,10 @@
     searchPalette.open = false;
     try {
       await invoke("rebuild_search_index");
+      toastSuccess("Search index rebuilt");
     } catch (e) {
       console.error("rebuild_search_index failed:", e);
+      toastError("Failed to rebuild search index");
     }
   }
 
@@ -498,7 +501,7 @@
             >{relativeTime(entity.accessed_at)}</span>
             <span
               data-testid="recent-kind-chip"
-              class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground"
+              class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground capitalize"
             >{entity.entity_kind}</span>
           </Command.Item>
         {/each}
@@ -515,7 +518,7 @@
             class="flex items-center gap-2"
           >
             <Icon class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-heading text-sm">{cmd.label}</span>
+            <span class="text-sm font-medium">{cmd.label}</span>
           </Command.Item>
         {/each}
         {@render showMoreRow("commands", commandsShowMore)}
@@ -531,7 +534,7 @@
             class="flex items-center gap-2"
           >
             <Tag class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-heading text-sm">{tag.name}</span>
+            <span class="font-mono text-xs">{tag.name}</span>
             <span
               data-testid="tag-count-chip"
               class="ml-auto shrink-0 text-xs text-muted-foreground"
