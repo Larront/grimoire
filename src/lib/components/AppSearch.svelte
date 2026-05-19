@@ -69,7 +69,9 @@
   $effect(() => {
     function captureEnterModifier(e: KeyboardEvent) {
       if (e.key === "Enter" && searchPalette.open) {
-        pendingModifier = e.ctrlKey || e.metaKey ? "ctrl" : e.shiftKey ? "shift" : null;
+        if (e.ctrlKey || e.metaKey) pendingModifier = "ctrl";
+        else if (e.shiftKey) pendingModifier = "shift";
+        else pendingModifier = null;
       }
     }
     window.addEventListener("keydown", captureEnterModifier, { capture: true });

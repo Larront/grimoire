@@ -336,18 +336,11 @@ function createTabsStore() {
     const dest = targetPane ?? focusedPane;
     const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename };
     if (dest === "right") {
-      if (!right) {
-        right = { tabs: [newTab], activeIndex: 0 };
-      } else {
-        right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
-      }
+      const existing = right?.tabs ?? [];
+      right = { tabs: [...existing, newTab], activeIndex: existing.length };
       focusedPane = "right";
     } else {
-      if (left.tabs.length === 0) {
-        left = { tabs: [newTab], activeIndex: 0 };
-      } else {
-        left = { tabs: [...left.tabs, newTab], activeIndex: left.tabs.length };
-      }
+      left = { tabs: [...left.tabs, newTab], activeIndex: left.tabs.length };
       focusedPane = "left";
     }
     persist();
@@ -367,7 +360,6 @@ function createTabsStore() {
           right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
         }
       }
-      // focusedPane stays "left"
     } else {
       const idx = left.tabs.findIndex((t) => t.type === tab.type && t.id === tab.id);
       if (idx !== -1) {
@@ -375,7 +367,6 @@ function createTabsStore() {
       } else {
         left = { tabs: [...left.tabs, newTab], activeIndex: left.tabs.length };
       }
-      // focusedPane stays "right"
     }
     persist();
   }
