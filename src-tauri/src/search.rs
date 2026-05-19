@@ -485,17 +485,15 @@ fn register_tokenizer(index: &Index) {
 /// 4–7  → 1
 /// ≥ 8  → 2
 pub fn fuzzy_distance(len: usize) -> u8 {
-    if len < 4 { 0 } else if len <= 7 { 1 } else { 2 }
+    match len {
+        ..4 => 0,
+        4..=7 => 1,
+        _ => 2,
+    }
 }
 
 // ── Query builder ─────────────────────────────────────────────────────────────
 
-/// Per-field component of a term clause.
-///
-/// - dist 0 + last word → RegexQuery prefix (type-ahead)
-/// - dist 0 + non-last  → TermQuery exact
-/// - dist > 0 + last    → FuzzyTermQuery::new_prefix (prefix + fuzzy combined)
-/// - dist > 0 + non-last → FuzzyTermQuery::new
 fn field_word_query(
     field: tantivy::schema::Field,
     word: &str,
@@ -504,29 +502,16 @@ fn field_word_query(
     use tantivy::query::{FuzzyTermQuery, RegexQuery, TermQuery};
     use tantivy::schema::IndexRecordOption;
 
+    let term = tantivy::Term::from_field_text(field, word);
     let dist = fuzzy_distance(word.len());
-    if dist == 0 && is_last {
-        Ok(Box::new(
+    match (dist, is_last) {
+        (0, true) => Ok(Box::new(
             RegexQuery::from_pattern(&format!("{}.*", regex_escape(word)), field)
                 .map_err(|e| e.to_string())?,
-        ))
-    } else if dist == 0 {
-        Ok(Box::new(TermQuery::new(
-            tantivy::Term::from_field_text(field, word),
-            IndexRecordOption::Basic,
-        )))
-    } else if is_last {
-        Ok(Box::new(FuzzyTermQuery::new_prefix(
-            tantivy::Term::from_field_text(field, word),
-            dist,
-            true,
-        )))
-    } else {
-        Ok(Box::new(FuzzyTermQuery::new(
-            tantivy::Term::from_field_text(field, word),
-            dist,
-            true,
-        )))
+        )),
+        (0, false) => Ok(Box::new(TermQuery::new(term, IndexRecordOption::Basic))),
+        (_, true) => Ok(Box::new(FuzzyTermQuery::new_prefix(term, dist, true))),
+        (_, false) => Ok(Box::new(FuzzyTermQuery::new(term, dist, true))),
     }
 }
 
