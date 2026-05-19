@@ -119,11 +119,12 @@
           if (renamingPath === node.path) return;
           if (node.note_id !== null) {
             tabs.openTab({ type: 'note', id: node.note_id, title: node.name });
-            sidebar?.setOpenMobile(false);
           } else if (node.map_id !== null) {
             tabs.openTab({ type: 'map', id: node.map_id, title: node.name });
-            sidebar?.setOpenMobile(false);
+          } else {
+            return;
           }
+          sidebar?.setOpenMobile(false);
         }}
       >
         {#if node.map_id !== null}
