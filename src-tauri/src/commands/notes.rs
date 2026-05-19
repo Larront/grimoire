@@ -280,14 +280,12 @@ pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResu
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
 
-    // Collect tag facets from SQLite note_tags
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     let all_tag_rows: Vec<String> = nt::note_tags
         .select(nt::tag)
         .load::<String>(conn)
         .map_err(|e| e.to_string())?;
 
-    // Count occurrences per lowercase tag, filter by free-text prefix, exclude active filters
     let mut counts: std::collections::HashMap<String, (String, usize)> = std::collections::HashMap::new();
     for tag in &all_tag_rows {
         let lower = tag.to_lowercase();
@@ -304,7 +302,6 @@ pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResu
     tag_facets.sort_by(|a, b| b.note_count.cmp(&a.note_count).then(a.name.cmp(&b.name)));
     tag_facets.truncate(5);
 
-    // Tantivy search
     match &state.search_index {
         Some(index) => {
             let mut result = crate::search::search_all_in_index(index, &vault_path, &query, 10)?;

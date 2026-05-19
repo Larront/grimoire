@@ -55,7 +55,6 @@
 
   const activeTabIsNote = $derived(tabs.activeTab?.type === "note");
 
-  // Tags already active in the query (e.g. "tag:npc" → ["npc"])
   const activeTagFilters = $derived(
     searchQuery
       .trim()
@@ -64,7 +63,6 @@
       .map((t) => t.slice(4).toLowerCase()),
   );
 
-  // Only show tags that aren't already filtering the results
   const visibleTagResults = $derived(
     tagResults.filter(
       (t) => !activeTagFilters.includes(t.name.toLowerCase()),

@@ -755,16 +755,9 @@ pub fn search_all_in_index(
     let notes = search_notes_in_index(index, vault_path, query, limit)?;
     // Maps and scenes are not filtered by tag: tokens; strip them before querying
     let free_text = strip_tag_tokens(query);
-    let maps = if free_text.split_whitespace().any(|w| w.len() >= 2) {
-        search_maps_in_index(index, &free_text, limit)?
-    } else {
-        vec![]
-    };
-    let scenes = if free_text.split_whitespace().any(|w| w.len() >= 2) {
-        search_scenes_in_index(index, &free_text, limit)?
-    } else {
-        vec![]
-    };
+    let has_free_text = free_text.split_whitespace().any(|w| w.len() >= 2);
+    let maps = if has_free_text { search_maps_in_index(index, &free_text, limit)? } else { vec![] };
+    let scenes = if has_free_text { search_scenes_in_index(index, &free_text, limit)? } else { vec![] };
     Ok(SearchAllResult { notes, maps, scenes, tags: vec![] })
 }
 
