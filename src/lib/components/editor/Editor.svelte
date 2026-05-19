@@ -3,7 +3,6 @@
   import { Editor } from "@tiptap/core";
   import { StarterKit } from "@tiptap/starter-kit";
   import { Markdown } from "@tiptap/markdown";
-  import { goto } from "$app/navigation";
   import { invoke } from "@tauri-apps/api/core";
 
   import {
@@ -22,6 +21,7 @@
   import WikiLinkSuggestion from "./WikiLinkSuggestion.svelte";
   import WikiLinkPreview from "./WikiLinkPreview.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { parseFrontmatter } from "$lib/utils";
 
   interface Props {
@@ -161,7 +161,7 @@
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
     const note = notes.notes.find((n) => n.path === link.dataset.path);
-    if (note) goto(`/note/${note.id}`);
+    if (note) tabs.navigate({ type: "note", id: note.id, title: note.title });
   }
 
   function handleMouseover(e: MouseEvent) {

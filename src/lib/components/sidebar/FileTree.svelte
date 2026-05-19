@@ -118,9 +118,9 @@
         onclick={() => {
           if (renamingPath === node.path) return;
           if (node.note_id !== null) {
-            tabs.openTab({ type: 'note', id: node.note_id, title: node.name });
+            tabs.navigateOpen({ type: 'note', id: node.note_id, title: node.name });
           } else if (node.map_id !== null) {
-            tabs.openTab({ type: 'map', id: node.map_id, title: node.name });
+            tabs.navigateOpen({ type: 'map', id: node.map_id, title: node.name });
           } else {
             return;
           }
@@ -215,7 +215,7 @@
           Delete Folder
         </ContextMenu.Item>
       {:else if node.map_id !== null}
-        <ContextMenu.Item onSelect={() => tabs.openTab({ type: 'map', id: node.map_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'map', id: node.map_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item
           variant="destructive"
@@ -224,7 +224,7 @@
           Delete Map
         </ContextMenu.Item>
       {:else}
-        <ContextMenu.Item onSelect={() => tabs.openTab({ type: 'note', id: node.note_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'note', id: node.note_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
         <ContextMenu.Item onSelect={() => tabs.openTabWithRename('note', node.note_id!, node.name)}>Rename</ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item

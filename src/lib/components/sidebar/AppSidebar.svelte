@@ -289,7 +289,7 @@
                     <Sidebar.MenuItem>
                       <Sidebar.MenuButton>
                         {#snippet child({ props })}
-                          <button type="button" {...props} onclick={() => tabs.openTab({ type: 'scenes', id: 0, title: 'All Scenes' })}>
+                          <button type="button" {...props} onclick={() => tabs.navigateOpen({ type: 'scenes', id: 0, title: 'All Scenes' })}>
                             <LayoutList class="size-4" />
                             All Scenes
                           </button>
@@ -305,7 +305,7 @@
                               type="button"
                               {...props}
                               data-scene-playing={isPlaying || undefined}
-                              onclick={() => tabs.openTab({ type: 'scene', id: scene.id, title: scene.name })}
+                              onclick={() => tabs.navigateOpen({ type: 'scene', id: scene.id, title: scene.name })}
                             >
                               {#if isPlaying}
                                 <Volume2 class="size-4 text-primary" />

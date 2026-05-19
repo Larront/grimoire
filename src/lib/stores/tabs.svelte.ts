@@ -19,6 +19,8 @@ export interface Tab {
 export interface TabPane {
   tabs: Tab[];
   activeIndex: number;
+  backStack?: Tab[];
+  forwardStack?: Tab[];
 }
 
 function createTabsStore() {
@@ -371,6 +373,81 @@ function createTabsStore() {
     persist();
   }
 
+  function pushNavHistory(pane: "left" | "right") {
+    const current = pane === "left" ? left : right;
+    if (!current) return;
+    const currentTab = current.tabs[current.activeIndex];
+    if (!currentTab || currentTab.type === "empty") return;
+    const backStack = [...(current.backStack ?? []), currentTab];
+    if (pane === "right") {
+      right = { ...current, backStack, forwardStack: [] };
+    } else {
+      left = { ...current, backStack, forwardStack: [] };
+    }
+  }
+
+  function navigate(tab: Tab) {
+    const pane = focusedPane;
+    const current = pane === "right" && right ? right : left;
+    const currentTab = current.tabs[current.activeIndex];
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title };
+    const newTabs = [...current.tabs];
+    newTabs[current.activeIndex] = newTab;
+    const backStack = currentTab && currentTab.type !== "empty"
+      ? [...(current.backStack ?? []), currentTab]
+      : (current.backStack ?? []);
+    if (pane === "right" && right) {
+      right = { ...right, tabs: newTabs, backStack, forwardStack: [] };
+    } else {
+      left = { ...left, tabs: newTabs, backStack, forwardStack: [] };
+    }
+    persist();
+  }
+
+  function navigateOpen(tab: Tab, targetPane?: "left" | "right") {
+    pushNavHistory(targetPane ?? focusedPane);
+    openTab(tab, targetPane);
+  }
+
+  function applyHistoryEntry(pane: "left" | "right", entry: Tab, currentTab: Tab, backStack: Tab[], forwardStack: Tab[]) {
+    const current = pane === "left" ? left : right;
+    if (!current) return;
+    const existingIdx = current.tabs.findIndex((t) => t.type === entry.type && t.id === entry.id);
+    const newTabs = [...current.tabs];
+    const newActiveIndex = existingIdx !== -1 ? existingIdx : current.activeIndex;
+    if (existingIdx === -1) newTabs[current.activeIndex] = entry;
+    if (pane === "right") {
+      right = { ...current, tabs: newTabs, activeIndex: newActiveIndex, backStack, forwardStack };
+    } else {
+      left = { ...current, tabs: newTabs, activeIndex: newActiveIndex, backStack, forwardStack };
+    }
+    persist();
+  }
+
+  function navigateBack(pane: "left" | "right") {
+    const current = pane === "left" ? left : right;
+    if (!current || !(current.backStack ?? []).length) return;
+    const backStack = [...(current.backStack ?? [])];
+    const prev = backStack.pop()!;
+    const currentTab = current.tabs[current.activeIndex];
+    const forwardStack = currentTab
+      ? [currentTab, ...(current.forwardStack ?? [])]
+      : (current.forwardStack ?? []);
+    applyHistoryEntry(pane, prev, currentTab, backStack, forwardStack);
+  }
+
+  function navigateForward(pane: "left" | "right") {
+    const current = pane === "left" ? left : right;
+    if (!current || !(current.forwardStack ?? []).length) return;
+    const forwardStack = [...(current.forwardStack ?? [])];
+    const next = forwardStack.shift()!;
+    const currentTab = current.tabs[current.activeIndex];
+    const backStack = currentTab
+      ? [...(current.backStack ?? []), currentTab]
+      : (current.backStack ?? []);
+    applyHistoryEntry(pane, next, currentTab, backStack, forwardStack);
+  }
+
   function setDragging(
     value: { pane: "left" | "right"; index: number } | null,
   ) {
@@ -422,6 +499,14 @@ function createTabsStore() {
           ? (right.tabs[right.activeIndex] ?? null)
           : null;
     },
+    canGoBack(pane: "left" | "right") {
+      const current = pane === "left" ? left : right;
+      return (current?.backStack?.length ?? 0) > 0;
+    },
+    canGoForward(pane: "left" | "right") {
+      const current = pane === "left" ? left : right;
+      return (current?.forwardStack?.length ?? 0) > 0;
+    },
     openTab,
     addEmptyTab,
     openTabWithRename,
@@ -440,6 +525,10 @@ function createTabsStore() {
     setDragging,
     openTabForceNew,
     openTabOpposite,
+    navigate,
+    navigateOpen,
+    navigateBack,
+    navigateForward,
   };
 }
 

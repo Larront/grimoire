@@ -11,6 +11,8 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
+  import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
+  import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 
   const rail = new RightRailState();
   const focusedPaneIsNote = $derived(tabs.activeTab?.type === 'note');
@@ -54,6 +56,24 @@
                 <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />
                 </div>
+                <div class="flex items-center shrink-0 gap-0.5 px-1">
+                  <button
+                    onclick={() => tabs.navigateBack('left')}
+                    disabled={!tabs.canGoBack('left')}
+                    class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                    aria-label="Go back"
+                  >
+                    <ArrowLeftIcon class="size-3.5" />
+                  </button>
+                  <button
+                    onclick={() => tabs.navigateForward('left')}
+                    disabled={!tabs.canGoForward('left')}
+                    class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                    aria-label="Go forward"
+                  >
+                    <ArrowRightIcon class="size-3.5" />
+                  </button>
+                </div>
                 <TabBar pane="left" />
                 {#if tabs.focusedPane === 'left' && focusedPaneIsNote}
                   <div class="ml-auto shrink-0 px-2">
@@ -95,6 +115,24 @@
               <div class="w-px bg-sidebar-border shrink-0"></div>
               <div class="flex flex-col flex-1 min-w-0 min-h-0" role="none">
                 <div class="flex items-center border-b border-sidebar-border">
+                  <div class="flex items-center shrink-0 gap-0.5 px-1">
+                    <button
+                      onclick={() => tabs.navigateBack('right')}
+                      disabled={!tabs.canGoBack('right')}
+                      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Go back"
+                    >
+                      <ArrowLeftIcon class="size-3.5" />
+                    </button>
+                    <button
+                      onclick={() => tabs.navigateForward('right')}
+                      disabled={!tabs.canGoForward('right')}
+                      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Go forward"
+                    >
+                      <ArrowRightIcon class="size-3.5" />
+                    </button>
+                  </div>
                   <TabBar pane="right" />
                   {#if tabs.focusedPane === 'right' && focusedPaneIsNote}
                     <div class="ml-auto shrink-0 px-2">
