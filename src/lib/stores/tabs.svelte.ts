@@ -409,7 +409,7 @@ function createTabsStore() {
     openTab(tab, targetPane);
   }
 
-  function applyHistoryEntry(pane: "left" | "right", entry: Tab, currentTab: Tab, backStack: Tab[], forwardStack: Tab[]) {
+  function applyHistoryEntry(pane: "left" | "right", entry: Tab, backStack: Tab[], forwardStack: Tab[]) {
     const current = pane === "left" ? left : right;
     if (!current) return;
     const existingIdx = current.tabs.findIndex((t) => t.type === entry.type && t.id === entry.id);
@@ -433,7 +433,7 @@ function createTabsStore() {
     const forwardStack = currentTab
       ? [currentTab, ...(current.forwardStack ?? [])]
       : (current.forwardStack ?? []);
-    applyHistoryEntry(pane, prev, currentTab, backStack, forwardStack);
+    applyHistoryEntry(pane, prev, backStack, forwardStack);
   }
 
   function navigateForward(pane: "left" | "right") {
@@ -445,7 +445,7 @@ function createTabsStore() {
     const backStack = currentTab
       ? [...(current.backStack ?? []), currentTab]
       : (current.backStack ?? []);
-    applyHistoryEntry(pane, next, currentTab, backStack, forwardStack);
+    applyHistoryEntry(pane, next, backStack, forwardStack);
   }
 
   function setDragging(

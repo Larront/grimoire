@@ -16,6 +16,7 @@ vi.mock("$lib/stores/tabs.svelte", () => ({
   tabs: {
     get activeTab() { return null; },
     openTab: vi.fn(),
+    navigateOpen: vi.fn(),
     closeTabByTypeAndId: vi.fn(),
     openTabWithRename: vi.fn(),
   },

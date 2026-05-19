@@ -38,7 +38,9 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
     get right() { return null; },
     get focusedPane() { return "left"; },
     get dragging() { return null; },
+    get activeTab() { return null; },
     openTab: vi.fn(),
+    navigateOpen: vi.fn(),
     closeActiveTab: vi.fn(),
     closeTab: vi.fn(),
     setActiveIndex: vi.fn(),
@@ -47,6 +49,10 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
     moveTab: vi.fn(),
     focusPane: vi.fn(),
     updateTabTitle: vi.fn(),
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => false),
+    navigateBack: vi.fn(),
+    navigateForward: vi.fn(),
   },
 }));
 
