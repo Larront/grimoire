@@ -12,7 +12,6 @@
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
 
   const rail = new RightRailState();
-  let settingsOpen = $state(false);
   const focusedPaneIsNote = $derived(tabs.activeTab?.type === 'note');
 </script>
 
@@ -35,9 +34,9 @@
       onFilesClick={() => {}}
       onScenesClick={() => {}}
       onSearchClick={() => (searchPalette.open = true)}
-      onSettingsClick={() => (settingsOpen = true)}
+      onSettingsClick={() => (searchPalette.settingsOpen = true)}
     />
-    <SettingsDialog bind:open={settingsOpen} />
+    <SettingsDialog bind:open={searchPalette.settingsOpen} />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar />
       <main class="flex min-w-0 flex-1 flex-col">

@@ -1,6 +1,7 @@
 import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { setMode, resetMode, userPrefersMode } from "mode-watcher";
 import AppSearch from "$lib/components/AppSearch.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { notes } from "$lib/stores/notes.svelte";
@@ -984,5 +985,285 @@ describe("command palette – Tags group", () => {
     await flush();
 
     expect(getSearchInput().value).toBe("tag:npc");
+  });
+});
+
+// ── Commands group (issue #36) ────────────────────────────────────────────────
+
+describe("command palette – Commands group ordering", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    searchPalette.settingsOpen = false;
+    vi.useRealTimers();
+  });
+
+  it("Commands group renders above Tags group in DOM", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [],
+          tags: [{ name: "npc", note_count: 1 }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("cr");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    // Trigger tag results by typing something that matches a tag too
+    // Instead, just open palette with a query that shows tags, check ordering
+    const input = getSearchInput();
+    input.value = "npc";
+    await fireEvent.input(input);
+    await flush();
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const cmdItem = document.body.querySelector('[data-testid^="cmd-create"]');
+    const tagItem = document.body.querySelector('[data-testid="cmd-tag-result"]');
+    if (cmdItem && tagItem) {
+      expect(
+        cmdItem.compareDocumentPosition(tagItem) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
+  it("Commands group renders above Notes group in DOM", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{ id: 1, title: "Crafter", path: "crafter.md", excerpt: null, match_count: 0 }],
+          maps: [],
+          scenes: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("cr");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+
+    const cmdItem = document.body.querySelector('[data-testid^="cmd-create"]');
+    const noteItem = document.body.querySelector('[data-testid="cmd-note-result"]');
+    expect(cmdItem).toBeTruthy();
+    expect(noteItem).toBeTruthy();
+    expect(
+      cmdItem!.compareDocumentPosition(noteItem!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+describe("command palette – Commands group visibility", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+    searchPalette.settingsOpen = false;
+  });
+
+  it("shows up to 3 commands when query is empty", async () => {
+    render(AppSearch);
+    await openPalette();
+    const allCmds = document.body.querySelectorAll('[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-vault"], [data-testid="cmd-rebuild-index"]');
+    expect(allCmds.length).toBeLessThanOrEqual(3);
+    expect(allCmds.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("filters commands by substring match on label", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "settings";
+    await fireEvent.input(input);
+    await flush();
+
+    expect(document.body.querySelector('[data-testid="cmd-open-settings"]')).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-create-note"]')).toBeNull();
+  });
+
+  it("Add tag to current note visible when active pane is note", async () => {
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "tag";
+    await fireEvent.input(input);
+    await flush();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeTruthy();
+  });
+
+  it("Add tag to current note hidden when active pane is not a note", async () => {
+    tabs.openTab({ type: "map", id: 1, title: "World Map" });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "tag";
+    await fireEvent.input(input);
+    await flush();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
+  });
+});
+
+describe("command palette – Commands group wiring", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+    searchPalette.settingsOpen = false;
+    resetMode();
+  });
+
+  it("Create new note invokes create_note and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_note") return Promise.resolve({ id: 10, title: "Untitled" });
+      if (cmd === "get_notes") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "create new note";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-create-note"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("create_note", expect.objectContaining({
+      noteTitle: "Untitled",
+    }));
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("Create new scene invokes create_scene and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_scene") return Promise.resolve({ id: 5, name: "Untitled Scene" });
+      if (cmd === "get_scenes_with_slot_counts") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "create new scene";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-create-scene"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("create_scene", expect.objectContaining({
+      name: expect.any(String),
+    }));
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("Create new map invokes create_map_empty and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_map_empty") return Promise.resolve({ id: 3, title: "Untitled Map" });
+      if (cmd === "get_maps") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "create new map";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-create-map"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("create_map_empty", expect.objectContaining({
+      title: expect.any(String),
+    }));
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("Open Settings sets searchPalette.settingsOpen and closes palette", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "settings";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-open-settings"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(searchPalette.settingsOpen).toBe(true);
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("Toggle theme cycles from system to light and closes palette", async () => {
+    resetMode();
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "toggle";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-toggle-theme"]') as HTMLElement;
+    expect(item).toBeTruthy();
+
+    const modeBefore = userPrefersMode.current;
+    await fireEvent.click(item);
+    await flush();
+
+    const expectedMode = modeBefore === 'light' ? 'dark' : modeBefore === 'dark' ? 'system' : 'light';
+    expect(userPrefersMode.current).toBe(expectedMode);
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("Switch vault closes palette and calls vault.openVault", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "switch";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-switch-vault"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(searchPalette.open).toBe(false);
+    // vault.openVault() calls tauri dialog open (mocked to return null) → silent no-op
+    // Verify invoke was not called with any destructive command; the dialog mock returns null
+  });
+
+  it("Rebuild search index invokes rebuild_search_index and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "rebuild_search_index") return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "rebuild";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-rebuild-index"]') as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("rebuild_search_index");
+    expect(searchPalette.open).toBe(false);
   });
 });

@@ -1,12 +1,28 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { Search, Tag, FileText, Map, Clapperboard } from "@lucide/svelte";
+  import { setMode, userPrefersMode } from "mode-watcher";
+  import {
+    Search,
+    Tag,
+    FileText,
+    Map,
+    Clapperboard,
+    FilePlus,
+    Settings,
+    Sun,
+    FolderOpen,
+    RefreshCw,
+  } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
   import TagChipEditor from "./TagChipEditor.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { maps } from "$lib/stores/maps.svelte";
+  import { scenes } from "$lib/stores/scenes.svelte";
+  import { vault } from "$lib/stores/vault.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import type { Note, Map as VaultMap } from "$lib/types/vault";
 
   interface NoteSearchResult {
     id: number;
@@ -75,6 +91,31 @@
     return notes.notes.find((n) => n.id === t.id) ?? null;
   });
 
+  // ── Commands ──────────────────────────────────────────────────────
+
+  const ALL_COMMANDS = [
+    { label: "Create new note", testid: "cmd-create-note", noteOnly: false },
+    { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false },
+    // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
+    { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true },
+    { label: "Create new map", testid: "cmd-create-map", noteOnly: false },
+    { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false },
+    { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false },
+    { label: "Switch vault…", testid: "cmd-switch-vault", noteOnly: false },
+    { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false },
+  ] as const;
+
+  const visibleCommands = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
+    const matched = q
+      ? eligible.filter((c) => c.label.toLowerCase().includes(q))
+      : eligible;
+    return matched.slice(0, 3);
+  });
+
+  // ── Command actions ───────────────────────────────────────────────
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "k" && (isMac ? e.metaKey : e.ctrlKey)) {
       e.preventDefault();
@@ -86,6 +127,103 @@
     searchPalette.open = false;
     addTagOpen = true;
   }
+
+  async function cmdCreateNote() {
+    searchPalette.open = false;
+    try {
+      const newNote = await invoke<Note>("create_note", {
+        noteTitle: "Untitled",
+        notePath: "Untitled.md",
+        noteParentPath: null,
+      });
+      await notes.load();
+      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
+    } catch (e) {
+      console.error("create_note failed:", e);
+    }
+  }
+
+  async function cmdCreateScene() {
+    searchPalette.open = false;
+    try {
+      const newScene = await invoke<{ id: number; name: string }>("create_scene", {
+        name: "Untitled Scene",
+      });
+      await scenes.load();
+      tabs.openTab({ type: "scene", id: newScene.id, title: newScene.name });
+    } catch (e) {
+      console.error("create_scene failed:", e);
+    }
+  }
+
+  async function cmdCreateMap() {
+    searchPalette.open = false;
+    try {
+      const newMap = await invoke<VaultMap>("create_map_empty", {
+        title: "Untitled Map",
+      });
+      await maps.load();
+      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map" });
+    } catch (e) {
+      console.error("create_map_empty failed:", e);
+    }
+  }
+
+  function cmdOpenSettings() {
+    searchPalette.open = false;
+    searchPalette.settingsOpen = true;
+  }
+
+  function cmdToggleTheme() {
+    const cur = userPrefersMode.current;
+    const next = cur === "light" ? "dark" : cur === "dark" ? "system" : "light";
+    setMode(next);
+    searchPalette.open = false;
+  }
+
+  function cmdSwitchVault() {
+    searchPalette.open = false;
+    vault.openVault();
+  }
+
+  async function cmdRebuildIndex() {
+    searchPalette.open = false;
+    try {
+      await invoke("rebuild_search_index");
+    } catch (e) {
+      console.error("rebuild_search_index failed:", e);
+    }
+  }
+
+  function getCommandAction(testid: string): () => void | Promise<void> {
+    switch (testid) {
+      case "cmd-create-note": return cmdCreateNote;
+      case "cmd-create-scene": return cmdCreateScene;
+      case "cmd-create-map": return cmdCreateMap;
+      case "cmd-add-tag": return openAddTag;
+      case "cmd-open-settings": return cmdOpenSettings;
+      case "cmd-toggle-theme": return cmdToggleTheme;
+      case "cmd-switch-vault": return cmdSwitchVault;
+      case "cmd-rebuild-index": return cmdRebuildIndex;
+      default: return () => {};
+    }
+  }
+
+  function getCommandIcon(testid: string) {
+    switch (testid) {
+      case "cmd-create-note": return FilePlus;
+      case "cmd-create-scene": return Clapperboard;
+      case "cmd-create-map": return Map;
+      case "cmd-add-tag": return Tag;
+      case "cmd-open-settings": return Settings;
+      case "cmd-toggle-theme": return Sun;
+      case "cmd-switch-vault": return FolderOpen;
+      case "cmd-rebuild-index": return RefreshCw;
+      default: return Settings;
+    }
+  }
+
+  // ── Search ────────────────────────────────────────────────────────
 
   function openNote(result: NoteSearchResult) {
     searchPalette.activeQuery = searchQuery;
@@ -228,12 +366,20 @@
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
-    {#if activeTabIsNote}
-      <Command.Group heading="Actions">
-        <Command.Item data-testid="cmd-add-tag" onSelect={openAddTag}>
-          <Tag class="size-4 shrink-0 text-muted-foreground" />
-          Add tag
-        </Command.Item>
+    {#if visibleCommands.length > 0}
+      <Command.Group heading="Commands">
+        {#each visibleCommands as cmd (cmd.testid)}
+          {@const Icon = getCommandIcon(cmd.testid)}
+          <Command.Item
+            data-testid={cmd.testid}
+            value={cmd.label}
+            onSelect={getCommandAction(cmd.testid)}
+            class="flex items-center gap-2"
+          >
+            <Icon class="size-4 shrink-0 text-muted-foreground" />
+            <span class="font-heading text-sm">{cmd.label}</span>
+          </Command.Item>
+        {/each}
       </Command.Group>
     {/if}
     {#if visibleTagResults.length > 0}

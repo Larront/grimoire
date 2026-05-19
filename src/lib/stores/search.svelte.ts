@@ -1,1 +1,1 @@
-export const searchPalette = $state({ open: false, activeQuery: '' });
+export const searchPalette = $state({ open: false, activeQuery: '', settingsOpen: false });
