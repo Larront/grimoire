@@ -332,6 +332,54 @@ function createTabsStore() {
     );
   }
 
+  function openTabForceNew(tab: Tab, targetPane?: "left" | "right") {
+    const dest = targetPane ?? focusedPane;
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename };
+    if (dest === "right") {
+      if (!right) {
+        right = { tabs: [newTab], activeIndex: 0 };
+      } else {
+        right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
+      }
+      focusedPane = "right";
+    } else {
+      if (left.tabs.length === 0) {
+        left = { tabs: [newTab], activeIndex: 0 };
+      } else {
+        left = { tabs: [...left.tabs, newTab], activeIndex: left.tabs.length };
+      }
+      focusedPane = "left";
+    }
+    persist();
+  }
+
+  function openTabOpposite(tab: Tab) {
+    const opposite: "left" | "right" = focusedPane === "left" ? "right" : "left";
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename };
+    if (opposite === "right") {
+      if (!right) {
+        right = { tabs: [newTab], activeIndex: 0 };
+      } else {
+        const idx = right.tabs.findIndex((t) => t.type === tab.type && t.id === tab.id);
+        if (idx !== -1) {
+          right = { ...right, activeIndex: idx };
+        } else {
+          right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
+        }
+      }
+      // focusedPane stays "left"
+    } else {
+      const idx = left.tabs.findIndex((t) => t.type === tab.type && t.id === tab.id);
+      if (idx !== -1) {
+        left = { ...left, activeIndex: idx };
+      } else {
+        left = { tabs: [...left.tabs, newTab], activeIndex: left.tabs.length };
+      }
+      // focusedPane stays "right"
+    }
+    persist();
+  }
+
   function setDragging(
     value: { pane: "left" | "right"; index: number } | null,
   ) {
@@ -399,6 +447,8 @@ function createTabsStore() {
     setFocusedPane,
     isTabOpen,
     setDragging,
+    openTabForceNew,
+    openTabOpposite,
   };
 }
 

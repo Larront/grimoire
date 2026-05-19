@@ -1267,3 +1267,256 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 });
+
+// ── Modifier-based open semantics (issue #37) ─────────────────────────────────
+
+describe("command palette – modifier-based open semantics", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  async function openNoteResult(id: number, title: string, path: string) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [{ id, title, path, excerpt: null, match_count: 0 }],
+          maps: [],
+          scenes: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("no");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+  }
+
+  async function openMapResult(id: number, mapTitle: string) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [{ id, title: mapTitle }],
+          scenes: [],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("ma");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+  }
+
+  async function openSceneResult(id: number, name: string) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "search_all")
+        return Promise.resolve({
+          notes: [],
+          maps: [],
+          scenes: [{ id, name }],
+        });
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("sc");
+    await vi.advanceTimersByTimeAsync(80);
+    await flush();
+  }
+
+  // ── Ctrl+Enter (force new tab) ───────────────────────────────────────────────
+
+  it("Ctrl+Enter on note (not yet open) opens a new tab in the active pane", async () => {
+    tabs.openTab({ type: "note", id: 99, title: "Existing" }); // left pane occupied
+    await openNoteResult(5, "Target Note", "target.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.left.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
+    expect(tabs.left.tabs.length).toBe(2); // appended, not replaced
+  });
+
+  it("Ctrl+Enter on note already open in active pane creates a second tab (no reuse)", async () => {
+    tabs.openTab({ type: "note", id: 1, title: "My Note" }); // left pane, note:1
+    await openNoteResult(1, "My Note", "my-note.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    const noteTabs = tabs.left.tabs.filter((t) => t.type === "note" && t.id === 1);
+    expect(noteTabs.length).toBe(2); // second tab created
+  });
+
+  it("Ctrl+Enter on note already open in opposite pane opens new tab in focused pane (no reuse)", async () => {
+    // left has note:2, right has note:1, focused=left
+    tabs.openTab({ type: "note", id: 2, title: "Other" });
+    tabs.openTab({ type: "note", id: 1, title: "My Note" }, "right");
+    tabs.setFocusedPane("left");
+
+    await openNoteResult(1, "My Note", "my-note.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    // New tab appended to left pane (not reusing right pane tab)
+    expect(tabs.left.tabs.some((t) => t.type === "note" && t.id === 1)).toBe(true);
+    expect(tabs.left.tabs.length).toBe(2);
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  it("Ctrl+Enter on map opens a new tab without reuse", async () => {
+    tabs.openTab({ type: "map", id: 1, title: "Existing Map" }); // left pane, map:1
+    await openMapResult(1, "Existing Map");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-map-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    const mapTabs = tabs.left.tabs.filter((t) => t.type === "map" && t.id === 1);
+    expect(mapTabs.length).toBe(2);
+  });
+
+  it("Ctrl+Enter on scene opens a new tab without reuse", async () => {
+    tabs.openTab({ type: "scene", id: 1, title: "Existing Scene" });
+    await openSceneResult(1, "Existing Scene");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-scene-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    const sceneTabs = tabs.left.tabs.filter((t) => t.type === "scene" && t.id === 1);
+    expect(sceneTabs.length).toBe(2);
+  });
+
+  // ── Shift+Enter (open in opposite pane) ─────────────────────────────────────
+
+  it("Shift+Enter on note with no split creates split and opens in right pane", async () => {
+    tabs.openTab({ type: "note", id: 99, title: "Existing" }); // left only, focusedPane=left
+    expect(tabs.right).toBeNull();
+
+    await openNoteResult(5, "Target Note", "target.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.right).not.toBeNull();
+    expect(tabs.right?.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
+  });
+
+  it("Shift+Enter does not change the focused pane", async () => {
+    tabs.openTab({ type: "note", id: 99, title: "Existing" }); // left, focusedPane=left
+    await openNoteResult(5, "Target Note", "target.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  it("Shift+Enter on note with split opens in opposite pane (not focused)", async () => {
+    // Setup: left has note:2, right has note:3, focused=left
+    tabs.openTab({ type: "note", id: 2, title: "Left Note" });
+    tabs.openTab({ type: "note", id: 3, title: "Right Note" }, "right");
+    tabs.setFocusedPane("left");
+
+    await openNoteResult(5, "Target Note", "target.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.right?.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  it("Shift+Enter reuses an existing tab in the opposite pane if already open there", async () => {
+    // left has note:2, right has [note:3, note:1], focused=left
+    tabs.openTab({ type: "note", id: 2, title: "Left Note" });
+    tabs.openTab({ type: "note", id: 3, title: "Right A" }, "right");
+    tabs.openTabForceNew({ type: "note", id: 1, title: "My Note" }, "right");
+    tabs.setFocusedPane("left");
+
+    await openNoteResult(1, "My Note", "my-note.md");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    // Right pane should not have added a third tab (reused existing)
+    const rightNoteTabs = tabs.right?.tabs.filter((t) => t.type === "note" && t.id === 1) ?? [];
+    expect(rightNoteTabs.length).toBe(1);
+    expect(tabs.right?.activeIndex).toBe(1); // focused on the reused note:1 tab
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  it("Shift+Enter on map creates split and opens in right pane", async () => {
+    tabs.openTab({ type: "note", id: 1, title: "Note" }); // left only
+    await openMapResult(7, "World Map");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-map-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.right?.tabs.some((t) => t.type === "map" && t.id === 7)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  it("Shift+Enter on scene creates split and opens in right pane", async () => {
+    tabs.openTab({ type: "note", id: 1, title: "Note" }); // left only
+    await openSceneResult(4, "Battle Scene");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    const result = document.body.querySelector('[data-testid="cmd-scene-result"]') as HTMLElement;
+    await fireEvent.click(result);
+    await flush();
+
+    expect(tabs.right?.tabs.some((t) => t.type === "scene" && t.id === 4)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
+  });
+
+  // ── Commands: modifiers have no effect ──────────────────────────────────────
+
+  it("Ctrl+Enter on a Command row fires the action (same as plain Enter)", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "rebuild_search_index") return Promise.resolve(null);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "rebuild";
+    await fireEvent.input(input);
+    await flush();
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    const item = document.body.querySelector('[data-testid="cmd-rebuild-index"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("rebuild_search_index");
+    expect(searchPalette.open).toBe(false);
+  });
+});

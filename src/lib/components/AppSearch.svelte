@@ -64,6 +64,17 @@
   let sceneResults = $state<SceneSearchResult[]>([]);
   let tagResults = $state<TagFacet[]>([]);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingModifier = $state<"ctrl" | "shift" | null>(null);
+
+  $effect(() => {
+    function captureEnterModifier(e: KeyboardEvent) {
+      if (e.key === "Enter" && searchPalette.open) {
+        pendingModifier = e.ctrlKey || e.metaKey ? "ctrl" : e.shiftKey ? "shift" : null;
+      }
+    }
+    window.addEventListener("keydown", captureEnterModifier, { capture: true });
+    return () => window.removeEventListener("keydown", captureEnterModifier, { capture: true });
+  });
 
   const isMac = $derived(
     typeof navigator !== "undefined" && /mac/i.test(navigator.platform),
@@ -199,19 +210,34 @@
   // ── Search ────────────────────────────────────────────────────────
 
   function openNote(result: NoteSearchResult) {
+    const mod = pendingModifier;
+    pendingModifier = null;
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
-    tabs.openTab({ type: "note", id: result.id, title: result.title });
+    const tab = { type: "note" as const, id: result.id, title: result.title };
+    if (mod === "ctrl") tabs.openTabForceNew(tab);
+    else if (mod === "shift") tabs.openTabOpposite(tab);
+    else tabs.openTab(tab);
   }
 
   function openMap(result: MapSearchResult) {
+    const mod = pendingModifier;
+    pendingModifier = null;
     searchPalette.open = false;
-    tabs.openTab({ type: "map", id: result.id, title: result.title });
+    const tab = { type: "map" as const, id: result.id, title: result.title };
+    if (mod === "ctrl") tabs.openTabForceNew(tab);
+    else if (mod === "shift") tabs.openTabOpposite(tab);
+    else tabs.openTab(tab);
   }
 
   function openScene(result: SceneSearchResult) {
+    const mod = pendingModifier;
+    pendingModifier = null;
     searchPalette.open = false;
-    tabs.openTab({ type: "scene", id: result.id, title: result.name });
+    const tab = { type: "scene" as const, id: result.id, title: result.name };
+    if (mod === "ctrl") tabs.openTabForceNew(tab);
+    else if (mod === "shift") tabs.openTabOpposite(tab);
+    else tabs.openTab(tab);
   }
 
   function onSelectTag(tag: string) {
@@ -287,6 +313,7 @@
       mapResults = [];
       sceneResults = [];
       tagResults = [];
+      pendingModifier = null;
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
