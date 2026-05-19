@@ -17,7 +17,10 @@
     Folder,
   } from "@lucide/svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
+
+  const sidebar = useSidebar();
 
   interface Props {
     node: FileNode;
@@ -114,8 +117,13 @@
         {isActive}
         onclick={() => {
           if (renamingPath === node.path) return;
-          if (node.note_id !== null) tabs.openTab({ type: 'note', id: node.note_id, title: node.name });
-          else if (node.map_id !== null) tabs.openTab({ type: 'map', id: node.map_id, title: node.name });
+          if (node.note_id !== null) {
+            tabs.openTab({ type: 'note', id: node.note_id, title: node.name });
+            sidebar?.setOpenMobile(false);
+          } else if (node.map_id !== null) {
+            tabs.openTab({ type: 'map', id: node.map_id, title: node.name });
+            sidebar?.setOpenMobile(false);
+          }
         }}
       >
         {#if node.map_id !== null}

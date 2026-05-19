@@ -50,6 +50,9 @@
 			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"
 			{side}
 			onOpenAutoFocus={(e) => e.preventDefault()}
+			onInteractOutside={(e) => {
+				if (ref?.contains(e.target as Node)) e.preventDefault();
+			}}
 		>
 			<Sheet.Header class="sr-only">
 				<Sheet.Title>Sidebar</Sheet.Title>
