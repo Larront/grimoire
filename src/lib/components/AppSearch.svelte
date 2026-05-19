@@ -255,7 +255,6 @@
     const tagTokens = tokens.filter((t) => t.startsWith("tag:") && t.length > 4);
     const freeTokens = tokens.filter((t) => !(t.startsWith("tag:") && t.length > 4));
     if (tagTokens.length > 0) {
-      // Existing tag filters: preserve tag tokens + free text, append new tag
       searchQuery = [...tagTokens, `tag:${tag}`, ...freeTokens].join(" ");
     } else {
       searchQuery = `tag:${tag}`;
