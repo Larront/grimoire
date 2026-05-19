@@ -6,6 +6,7 @@ use tantivy::{
     collector::TopDocs,
     directory::MmapDirectory,
     schema::{DateOptions, NumericOptions, OwnedValue, Schema, STORED, STRING, TEXT},
+    tokenizer::{AsciiFoldingFilter, LowerCaser, RemoveLongFilter, SimpleTokenizer, TextAnalyzer},
     DateTime as TantivyDateTime,
     Index, IndexWriter, TantivyDocument,
 };
@@ -319,6 +320,7 @@ pub fn rebuild_index(
     let schema = make_schema();
     let dir = MmapDirectory::open(&dir_path).map_err(|e| e.to_string())?;
     let index = Index::open_or_create(dir, schema.clone()).map_err(|e| e.to_string())?;
+    register_tokenizer(&index);
 
     let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
     for note in notes {
@@ -462,73 +464,138 @@ fn build_note_tag_query(
     ]))
 }
 
+// ── Tokenizer ─────────────────────────────────────────────────────────────────
+
+fn make_word_analyzer() -> TextAnalyzer {
+    TextAnalyzer::builder(SimpleTokenizer::default())
+        .filter(LowerCaser)
+        .filter(AsciiFoldingFilter)
+        .filter(RemoveLongFilter::limit(40))
+        .build()
+}
+
+fn register_tokenizer(index: &Index) {
+    index.tokenizers().register("default", make_word_analyzer());
+}
+
+// ── Fuzzy distance ────────────────────────────────────────────────────────────
+
+/// Levenshtein distance tier based on term byte-length:
+/// < 4  → 0 (exact; prefix wildcard still applied for the last query word)
+/// 4–7  → 1
+/// ≥ 8  → 2
+pub fn fuzzy_distance(len: usize) -> u8 {
+    if len < 4 { 0 } else if len <= 7 { 1 } else { 2 }
+}
+
 // ── Query builder ─────────────────────────────────────────────────────────────
 
-/// Build a prefix-aware query across both `title` and `body` fields.
+/// Per-field component of a term clause.
 ///
-/// All words except the last require an exact token in title OR body.
-/// The last word is a prefix match (regex `last.*`) on title OR body, so
-/// "upp" finds notes containing "upper" in either field. Words shorter than
-/// 2 chars are skipped (below the tokenizer min-length).
+/// - dist 0 + last word → RegexQuery prefix (type-ahead)
+/// - dist 0 + non-last  → TermQuery exact
+/// - dist > 0 + last    → FuzzyTermQuery::new_prefix (prefix + fuzzy combined)
+/// - dist > 0 + non-last → FuzzyTermQuery::new
+fn field_word_query(
+    field: tantivy::schema::Field,
+    word: &str,
+    is_last: bool,
+) -> Result<Box<dyn tantivy::query::Query>, String> {
+    use tantivy::query::{FuzzyTermQuery, RegexQuery, TermQuery};
+    use tantivy::schema::IndexRecordOption;
+
+    let dist = fuzzy_distance(word.len());
+    if dist == 0 && is_last {
+        Ok(Box::new(
+            RegexQuery::from_pattern(&format!("{}.*", regex_escape(word)), field)
+                .map_err(|e| e.to_string())?,
+        ))
+    } else if dist == 0 {
+        Ok(Box::new(TermQuery::new(
+            tantivy::Term::from_field_text(field, word),
+            IndexRecordOption::Basic,
+        )))
+    } else if is_last {
+        Ok(Box::new(FuzzyTermQuery::new_prefix(
+            tantivy::Term::from_field_text(field, word),
+            dist,
+            true,
+        )))
+    } else {
+        Ok(Box::new(FuzzyTermQuery::new(
+            tantivy::Term::from_field_text(field, word),
+            dist,
+            true,
+        )))
+    }
+}
+
+/// OR(title × 2.0, body) clause for a single normalised word.
+///
+/// The 2× boost on the title field preserves the ADR intent that title matches
+/// outrank body matches regardless of BM25 field-length differences.
+fn make_word_clause(
+    title_f: tantivy::schema::Field,
+    body_f: tantivy::schema::Field,
+    word: &str,
+    is_last: bool,
+) -> Result<Box<dyn tantivy::query::Query>, String> {
+    use tantivy::query::{BooleanQuery, BoostQuery, Occur};
+    let title_q: Box<dyn tantivy::query::Query> =
+        Box::new(BoostQuery::new(field_word_query(title_f, word, is_last)?, 2.0));
+    Ok(Box::new(BooleanQuery::new(vec![
+        (Occur::Should, title_q),
+        (Occur::Should, field_word_query(body_f, word, is_last)?),
+    ])))
+}
+
+/// Build a prefix-aware, fuzzy query across both `title` and `body` fields.
+///
+/// Each whitespace-separated word is normalised through the same
+/// lowercase + ASCII-fold + remove-long pipeline as the index tokenizer.
+/// Levenshtein distance is tiered by word length (0 / 1 / 2 for < 4 / 4–7 / ≥ 8).
+/// The last word also receives a prefix match for live type-ahead.
 fn build_query(
     title_f: tantivy::schema::Field,
     body_f: tantivy::schema::Field,
     query: &str,
 ) -> Result<Box<dyn tantivy::query::Query>, String> {
-    use tantivy::query::{BooleanQuery, Occur, RegexQuery, TermQuery};
-    use tantivy::schema::IndexRecordOption;
+    use tantivy::query::{BooleanQuery, Occur};
 
     let lower = query.trim().to_lowercase();
-    let words: Vec<&str> = lower
-        .split_whitespace()
-        .filter(|w| w.len() >= 2)
-        .collect();
+    let raw: Vec<&str> = lower.split_whitespace().filter(|w| w.len() >= 2).collect();
+
+    // Normalise through the same pipeline as the index tokenizer so that
+    // ASCII-folded query terms match ASCII-folded index terms (e.g. naïve → naive).
+    let mut analyzer = make_word_analyzer();
+    let mut words: Vec<String> = Vec::new();
+    for w in raw {
+        let mut stream = analyzer.token_stream(w);
+        while stream.advance() {
+            let tok = stream.token().text.clone();
+            if tok.len() >= 2 {
+                words.push(tok);
+            }
+        }
+    }
 
     if words.is_empty() {
         return Err("Query too short".to_string());
     }
 
-    let (last, rest) = words.split_last().unwrap();
+    let wv: Vec<&str> = words.iter().map(String::as_str).collect();
+    let (last, rest) = wv.split_last().unwrap();
 
-    // Last word: prefix match on title OR body
-    let title_prefix: Box<dyn tantivy::query::Query> = Box::new(
-        RegexQuery::from_pattern(&format!("{}.*", regex_escape(last)), title_f)
-            .map_err(|e| e.to_string())?,
-    );
-    let body_prefix: Box<dyn tantivy::query::Query> = Box::new(
-        RegexQuery::from_pattern(&format!("{}.*", regex_escape(last)), body_f)
-            .map_err(|e| e.to_string())?,
-    );
-    let last_clause: Box<dyn tantivy::query::Query> = Box::new(BooleanQuery::new(vec![
-        (Occur::Should, title_prefix),
-        (Occur::Should, body_prefix),
-    ]));
-
+    let last_clause = make_word_clause(title_f, body_f, last, true)?;
     if rest.is_empty() {
         return Ok(last_clause);
     }
 
-    let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = rest
-        .iter()
-        .map(|&w| {
-            let title_term: Box<dyn tantivy::query::Query> = Box::new(TermQuery::new(
-                tantivy::Term::from_field_text(title_f, w),
-                IndexRecordOption::Basic,
-            ));
-            let body_term: Box<dyn tantivy::query::Query> = Box::new(TermQuery::new(
-                tantivy::Term::from_field_text(body_f, w),
-                IndexRecordOption::Basic,
-            ));
-            let or_clause: Box<dyn tantivy::query::Query> =
-                Box::new(BooleanQuery::new(vec![
-                    (Occur::Should, title_term),
-                    (Occur::Should, body_term),
-                ]));
-            (Occur::Must, or_clause)
-        })
-        .collect();
+    let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+    for &w in rest {
+        clauses.push((Occur::Must, make_word_clause(title_f, body_f, w, false)?));
+    }
     clauses.push((Occur::Must, last_clause));
-
     Ok(Box::new(BooleanQuery::new(clauses)))
 }
 
@@ -1445,5 +1512,88 @@ mod tests {
         let result = search_all_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
         assert_eq!(result.notes.len(), 1);
         assert!(result.maps.is_empty(), "maps must not appear for tag-only queries");
+    }
+
+    // ── Fuzzy matching ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn fuzzy_distance_tiers_are_correct() {
+        assert_eq!(fuzzy_distance(1), 0, "len 1 → dist 0");
+        assert_eq!(fuzzy_distance(2), 0, "len 2 → dist 0");
+        assert_eq!(fuzzy_distance(3), 0, "len 3 → dist 0");
+        assert_eq!(fuzzy_distance(4), 1, "len 4 → dist 1");
+        assert_eq!(fuzzy_distance(5), 1, "len 5 → dist 1");
+        assert_eq!(fuzzy_distance(7), 1, "len 7 → dist 1");
+        assert_eq!(fuzzy_distance(8), 2, "len 8 → dist 2");
+        assert_eq!(fuzzy_distance(10), 2, "len 10 → dist 2");
+    }
+
+    #[test]
+    fn fuzzy_typo_captian_finds_captain_ash() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Captain Ash", "characters/ash.md");
+        std::fs::create_dir_all(dir.path().join("characters")).unwrap();
+        std::fs::write(dir.path().join("characters/ash.md"), "").unwrap();
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+
+        let results = search_notes_in_index(&index, dir.path(), "Captian Ash", 10).unwrap();
+        assert_eq!(results.len(), 1, "'Captian Ash' must find 'Captain Ash' via fuzzy dist 1");
+        assert_eq!(results[0].title, "Captain Ash");
+    }
+
+    #[test]
+    fn fuzzy_short_term_no_match_cap_vs_cup() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Cup of Tea", "cup.md");
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+
+        // "Cap" is 3 chars → distance 0; must not fuzzy-match "cup"
+        let results = search_notes_in_index(&index, dir.path(), "Cap", 10).unwrap();
+        assert!(results.is_empty(), "'Cap' (dist 0) must not fuzzy-match 'cup'");
+    }
+
+    #[test]
+    fn fuzzy_ascii_folding_naive_query_finds_plain() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "naive approach", "naive.md");
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+
+        // ASCII folding folds "naïve" → "naive" on both index and query side
+        let results = search_notes_in_index(&index, dir.path(), "naïve", 10).unwrap();
+        assert_eq!(results.len(), 1, "'naïve' must match 'naive' via ASCII folding");
+        assert_eq!(results[0].title, "naive approach");
+    }
+
+    #[test]
+    fn fuzzy_title_match_ranks_above_body_match() {
+        let dir = TempDir::new().unwrap();
+        let note_title = make_note(1, "Harbor Tale", "harbor_title.md");
+        let note_body = make_note(2, "Seaside Story", "harbor_body.md");
+        std::fs::write(dir.path().join("harbor_title.md"), "A story of the sea.").unwrap();
+        // Long body so BM25 body-field score stays below the short title-field score
+        let long_body = format!("The harbor is peaceful. {}", "Waves and wind. ".repeat(20));
+        std::fs::write(dir.path().join("harbor_body.md"), long_body.as_str()).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note_title, note_body], &[], &[]).unwrap();
+
+        let results = search_notes_in_index(&index, dir.path(), "Harbor", 10).unwrap();
+        assert_eq!(results.len(), 2, "both notes must match 'Harbor'");
+        assert_eq!(results[0].id, 1, "title match must rank above body match");
+    }
+
+    #[test]
+    fn fuzzy_tag_filter_values_matched_exactly() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Aldric", "aldric.md");
+        std::fs::write(dir.path().join("aldric.md"), "---\ntags: [npcs]\n---\nBody").unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+
+        // "tag:npc" must NOT fuzzy-match tag "npcs" — tag filters are exact
+        let results = search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert!(results.is_empty(), "tag filter must be exact, not fuzzy");
+
+        let results2 = search_notes_in_index(&index, dir.path(), "tag:npcs", 10).unwrap();
+        assert_eq!(results2.len(), 1, "exact tag match must work");
     }
 }
