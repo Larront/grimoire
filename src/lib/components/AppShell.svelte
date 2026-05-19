@@ -3,6 +3,7 @@
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import RightRail from "./RightRail.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import SearchPalette from "./SearchPalette.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
   import * as Sidebar from "./ui/sidebar";
@@ -37,6 +38,7 @@
       onSettingsClick={() => (searchPalette.settingsOpen = true)}
     />
     <SettingsDialog bind:open={searchPalette.settingsOpen} />
+    <SearchPalette />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar />
       <main class="flex min-w-0 flex-1 flex-col">

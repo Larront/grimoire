@@ -2,7 +2,7 @@ import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { setMode, resetMode, userPrefersMode } from "mode-watcher";
-import AppSearch from "$lib/components/AppSearch.svelte";
+import AppSearch from "$lib/components/SearchPalette.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { notes } from "$lib/stores/notes.svelte";
 import { searchPalette } from "$lib/stores/search.svelte";
