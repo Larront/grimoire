@@ -12,6 +12,7 @@ use commands::recent_vaults::*;
 use commands::scenes::*;
 use commands::spotify::*;
 use commands::tags::*;
+use commands::templates::*;
 use commands::tree::*;
 use commands::vault::*;
 
@@ -111,6 +112,8 @@ pub fn run() {
             spotify_resume,
             spotify_skip_next,
             spotify_skip_prev,
+            // Templates
+            list_templates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

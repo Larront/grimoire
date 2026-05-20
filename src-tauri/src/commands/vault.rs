@@ -1,4 +1,5 @@
 use crate::commands::tags::rebuild_note_tags_from_vault;
+use crate::commands::templates::inject_builtin_templates;
 use crate::db::establish_connection;
 use crate::db::models::{Map, NewPinCategory, Note, Scene};
 use crate::db::schema::{maps, notes, pin_categories, scenes};
@@ -52,6 +53,8 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
         std::fs::create_dir_all(&vault_path)
             .map_err(|e| format!("Failed to create vault directory: {}", e))?;
     }
+
+    inject_builtin_templates(&vault_path)?;
 
     let mut conn = establish_connection(&vault_path)?;
     seed_default_categories(&mut conn)?;
