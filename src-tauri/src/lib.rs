@@ -40,6 +40,7 @@ pub fn run() {
             add_recent_vault,
             remove_recent_vault,
             create_note,
+            create_note_from_template,
             get_notes,
             read_note_content,
             update_note,

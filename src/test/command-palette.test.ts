@@ -1360,6 +1360,162 @@ describe("command palette – Commands group wiring", () => {
   });
 });
 
+// ── Create note from template – inline template picker (issue #47) ───────────
+
+describe("command palette – Create note from template", () => {
+  const fakeTemplates = [
+    { display_name: "NPC", path: ".grimoire/templates/NPC.md" },
+    { display_name: "Location", path: ".grimoire/templates/Location.md" },
+  ];
+
+  afterEach(() => {
+    searchPalette.open = false;
+  });
+
+  it("appears in Commands group when searching 'template'", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-create-note-from-template"]'),
+    ).toBeTruthy();
+  });
+
+  it("selecting it calls list_templates and keeps palette open", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("list_templates");
+    expect(searchPalette.open).toBe(true);
+  });
+
+  it("template picker shows one item per template returned", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    const results = document.body.querySelectorAll('[data-testid="cmd-template-result"]');
+    expect(results.length).toBe(2);
+  });
+
+  it("selecting a template invokes create_note_from_template and closes palette", async () => {
+    const fakeNote = { id: 99, title: "Untitled" };
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      if (cmd === "create_note_from_template") return Promise.resolve(fakeNote);
+      if (cmd === "get_notes") return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const cmdItem = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(cmdItem);
+    await flush();
+
+    const templateItem = document.body.querySelector(
+      '[data-testid="cmd-template-result"]',
+    ) as HTMLElement;
+    await fireEvent.click(templateItem);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith(
+      "create_note_from_template",
+      expect.objectContaining({ templatePath: ".grimoire/templates/NPC.md" }),
+    );
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("commands group is hidden while in template picker mode", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-create-note-from-template"]'),
+    ).toBeNull();
+  });
+
+  it("template picker mode resets when palette is closed", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    searchPalette.open = false;
+    await flush();
+
+    searchPalette.open = true;
+    await flush();
+
+    expect(
+      document.body.querySelector('[data-testid="cmd-template-result"]'),
+    ).toBeNull();
+  });
+});
+
 // ── Modifier-based open semantics (issue #37) ─────────────────────────────────
 
 describe("command palette – modifier-based open semantics", () => {

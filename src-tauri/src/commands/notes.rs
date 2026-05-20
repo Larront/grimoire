@@ -32,7 +32,7 @@ fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
 /// Validates that the PARENT of `relative` resolves inside `vault_root`.
 /// Use for creating/writing new files — the file itself may not exist yet.
 /// Both sides are canonicalized so the starts_with check works correctly on Windows.
-fn validate_parent_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
+pub(crate) fn validate_parent_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
     let canonical_root = vault_root
         .canonicalize()
         .map_err(|e| format!("Invalid vault root: {e}"))?;
@@ -48,7 +48,7 @@ fn validate_parent_path(vault_root: &Path, relative: &str) -> Result<PathBuf, St
     Ok(joined) // parent is validated; return the full (not yet existing) file path
 }
 
-fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Path) -> (String, std::path::PathBuf) {
+pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Path) -> (String, std::path::PathBuf) {
     let mut resolved_title = base_title.to_string();
     let mut counter = 2u32;
     loop {
@@ -112,6 +112,57 @@ pub fn create_note(
 
     if let Some(index) = &state.search_index {
         let _ = crate::search::index_note(index, &created, "", &[]);
+    }
+
+    Ok(created)
+}
+
+#[tauri::command]
+pub fn create_note_from_template(
+    template_path: String,
+    note_parent_path: Option<String>,
+    vault: State<AppVault>,
+) -> Result<Note, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.clone().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+
+    let content = crate::commands::templates::read_template_content(&vault_path, &template_path)?;
+
+    let note_path = match &note_parent_path {
+        Some(parent) => format!("{}/Untitled.md", parent.trim_end_matches('/')),
+        None => "Untitled.md".to_string(),
+    };
+
+    let initial_full_path = validate_parent_path(&vault_path, &note_path)?;
+    let parent_dir = initial_full_path
+        .parent()
+        .ok_or("Cannot determine parent directory")?;
+
+    let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir);
+
+    let resolved_path = full_path
+        .strip_prefix(&vault_path)
+        .map_err(|e| e.to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
+
+    let new_note = NewNote {
+        path: &resolved_path,
+        title: &resolved_title,
+        parent_path: note_parent_path.as_deref(),
+    };
+
+    let created: Note = diesel::insert_into(notes)
+        .values(&new_note)
+        .returning(Note::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_note(index, &created, &content, &[]);
     }
 
     Ok(created)

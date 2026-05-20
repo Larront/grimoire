@@ -106,7 +106,7 @@ pub fn list_templates(vault: State<AppVault>) -> Result<Vec<TemplateEntry>, Stri
     list_templates_for_vault(vault_path)
 }
 
-fn resolve_template_path(vault_path: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn resolve_template_path(vault_path: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let canonical_file = vault_path
         .join(path)
         .canonicalize()
@@ -144,6 +144,12 @@ pub fn rename_template_for_vault(
 
     std::fs::rename(&canonical_file, &new_path)
         .map_err(|e| format!("Failed to rename template: {e}"))
+}
+
+pub(crate) fn read_template_content(vault_path: &Path, template_path: &str) -> Result<String, String> {
+    let (canonical_file, _) = resolve_template_path(vault_path, template_path)?;
+    std::fs::read_to_string(&canonical_file)
+        .map_err(|e| format!("Failed to read template: {e}"))
 }
 
 #[tauri::command]
@@ -310,5 +316,24 @@ mod tests {
         std::fs::write(tmp.path().join("secret.md"), "secret").unwrap();
         let result = delete_template_for_vault(tmp.path(), "secret.md");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn read_template_content_returns_full_file_body() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let content = read_template_content(tmp.path(), ".grimoire/templates/NPC.md").unwrap();
+        assert!(content.contains("tags: [npc]"), "should include frontmatter");
+        assert!(content.contains("## Personality"), "should include section headings");
+    }
+
+    #[test]
+    fn read_template_content_rejects_path_outside_templates_dir() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        std::fs::write(tmp.path().join("secret.md"), "secret data").unwrap();
+        let result = read_template_content(tmp.path(), "secret.md");
+        assert!(result.is_err(), "path outside templates dir must be rejected");
     }
 }

@@ -12,12 +12,14 @@
     Sun,
     FolderOpen,
     RefreshCw,
+    BookTemplate,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
   import TagChipEditor from "./TagChipEditor.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import type { TemplateEntry } from "$lib/types/vault";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { vault } from "$lib/stores/vault.svelte";
@@ -66,6 +68,8 @@
   let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
   let searchQuery = $state("");
+  let templatePickerMode = $state(false);
+  let templateList = $state<TemplateEntry[]>([]);
   let noteResults = $state<NoteSearchResult[]>([]);
   let mapResults = $state<MapSearchResult[]>([]);
   let sceneResults = $state<SceneSearchResult[]>([]);
@@ -198,11 +202,38 @@
     }
   }
 
+  async function cmdCreateNoteFromTemplate() {
+    try {
+      const list = await invoke<TemplateEntry[]>("list_templates");
+      templateList = list ?? [];
+      templatePickerMode = true;
+      searchQuery = "";
+    } catch (e) {
+      console.error("list_templates failed:", e);
+    }
+  }
+
+  async function selectTemplate(template: TemplateEntry) {
+    templatePickerMode = false;
+    searchPalette.open = false;
+    try {
+      const newNote = await invoke<Note>("create_note_from_template", {
+        templatePath: template.path,
+        noteParentPath: null,
+      });
+      await notes.load();
+      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
+    } catch (e) {
+      console.error("create_note_from_template failed:", e);
+    }
+  }
+
   const ALL_COMMANDS = [
     { label: "Create new note", testid: "cmd-create-note", noteOnly: false, icon: FilePlus, action: cmdCreateNote },
     { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false, icon: Clapperboard, action: cmdCreateScene },
     // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
     { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
+    { label: "Create note from template", testid: "cmd-create-note-from-template", noteOnly: false, icon: BookTemplate, action: cmdCreateNoteFromTemplate },
     { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
     { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
@@ -410,6 +441,8 @@
       tagResults = [];
       recentEntities = [];
       pendingModifier = null;
+      templatePickerMode = false;
+      templateList = [];
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
@@ -483,6 +516,21 @@
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
+    {#if templatePickerMode}
+      <Command.Group heading="Choose a template">
+        {#each templateList as template (template.path)}
+          <Command.Item
+            data-testid="cmd-template-result"
+            value={template.display_name}
+            onSelect={() => selectTemplate(template)}
+            class="flex items-center gap-2"
+          >
+            <BookTemplate class="size-4 shrink-0 text-muted-foreground" />
+            <span class="text-sm font-medium">{template.display_name}</span>
+          </Command.Item>
+        {/each}
+      </Command.Group>
+    {:else}
     {#if visibleRecent.length > 0}
       <Command.Group heading="Recent">
         {#each visibleRecent as entity (entity.entity_kind + ":" + entity.entity_id)}
@@ -617,6 +665,7 @@
         {/each}
         {@render showMoreRow("scenes", scenesShowMore)}
       </Command.Group>
+    {/if}
     {/if}
   </Command.List>
 </Command.Dialog>
