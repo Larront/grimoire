@@ -8,12 +8,9 @@
   interface Props {
     templatePath: string;
     templateTitle: string;
-    pane: "left" | "right";
-    tabIndex: number;
   }
-  let { templatePath, templateTitle, pane, tabIndex }: Props = $props();
+  let { templatePath, templateTitle }: Props = $props();
 
-  // ── Content loading ──────────────────────────────────────────────────────
   let body = $state<string | null>(null);
   let lastFetchedPath = $state<string | null>(null);
   let isLoading = $state(false);
@@ -36,17 +33,13 @@
     }
   });
 
-  // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
-  let titleInput: HTMLInputElement | undefined = $state();
   let isSavingTitle = $state(false);
 
-  // Keep draftTitle in sync when navigating to a different template
   $effect(() => {
     if (!isSavingTitle) draftTitle = templateTitle;
   });
 
-  // Keep tab title in sync when templateTitle prop changes
   $effect(() => {
     const title = templateTitle;
     untrack(() => tabs.updateTabTitle("template", 0, title));
@@ -105,7 +98,6 @@
   >
     <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
       <input
-        bind:this={titleInput}
         bind:value={draftTitle}
         class="w-full bg-transparent border-none outline-none p-0
                font-heading text-4xl leading-tight tracking-tight

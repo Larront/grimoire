@@ -54,8 +54,6 @@
 			<TemplatePane
 				templatePath={activeTab.templatePath}
 				templateTitle={activeTab.title}
-				{pane}
-				tabIndex={activeIndex}
 			/>
 		{/key}
 	{/if}

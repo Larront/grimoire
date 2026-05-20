@@ -124,7 +124,7 @@
 
   async function handleCreateTemplate() {
     try {
-      const entry = await invoke<import("$lib/types/vault").TemplateEntry>("create_template");
+      const entry = await invoke<TemplateEntry>("create_template");
       await templates.load();
       tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
     } catch (e) {

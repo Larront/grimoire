@@ -91,14 +91,7 @@ function createTabsStore() {
     }
 
     const dest = targetPane ?? focusedPane;
-    const newTab: Tab = {
-      type: tab.type,
-      id: tab.id,
-      title: tab.title,
-      rename: tab.rename,
-      badge: tab.badge,
-      templatePath: tab.templatePath,
-    };
+    const newTab: Tab = { ...tab };
 
     if (dest === "right") {
       if (!right || right.tabs.length === 0) {
@@ -341,7 +334,7 @@ function createTabsStore() {
 
   function openTabForceNew(tab: Tab, targetPane?: "left" | "right") {
     const dest = targetPane ?? focusedPane;
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename, badge: tab.badge, templatePath: tab.templatePath };
+    const newTab: Tab = { ...tab };
     if (dest === "right") {
       const existing = right?.tabs ?? [];
       right = { tabs: [...existing, newTab], activeIndex: existing.length };
@@ -355,7 +348,7 @@ function createTabsStore() {
 
   function openTabOpposite(tab: Tab) {
     const opposite: "left" | "right" = focusedPane === "left" ? "right" : "left";
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename, badge: tab.badge, templatePath: tab.templatePath };
+    const newTab: Tab = { ...tab };
     if (opposite === "right") {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };
