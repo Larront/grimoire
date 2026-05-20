@@ -363,7 +363,6 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
-    <!-- Templates section -->
     <Collapsible.Root open class="group/collapsible">
       <Sidebar.Group>
         <Sidebar.GroupLabel>

@@ -106,6 +106,22 @@ pub fn list_templates(vault: State<AppVault>) -> Result<Vec<TemplateEntry>, Stri
     list_templates_for_vault(vault_path)
 }
 
+fn resolve_template_path(vault_path: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let canonical_file = vault_path
+        .join(path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_dir = templates_dir(vault_path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid templates dir: {e}"))?;
+
+    if !canonical_file.starts_with(&canonical_dir) {
+        return Err("Path escapes templates directory".to_string());
+    }
+
+    Ok((canonical_file, canonical_dir))
+}
+
 pub fn rename_template_for_vault(
     vault_path: &Path,
     path: &str,
@@ -119,20 +135,8 @@ pub fn rename_template_for_vault(
         return Err("Invalid template name".to_string());
     }
 
-    let full_path = vault_path.join(path);
-    let canonical_file = full_path
-        .canonicalize()
-        .map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_dir = templates_dir(vault_path)
-        .canonicalize()
-        .map_err(|e| format!("Invalid templates dir: {e}"))?;
-
-    if !canonical_file.starts_with(&canonical_dir) {
-        return Err("Path escapes templates directory".to_string());
-    }
-
-    let new_filename = format!("{new_name}.md");
-    let new_path = canonical_dir.join(&new_filename);
+    let (canonical_file, canonical_dir) = resolve_template_path(vault_path, path)?;
+    let new_path = canonical_dir.join(format!("{new_name}.md"));
 
     if new_path.exists() && new_path != canonical_file {
         return Err(format!("A template named '{new_name}' already exists"));
@@ -154,18 +158,7 @@ pub fn rename_template(
 }
 
 pub fn delete_template_for_vault(vault_path: &Path, path: &str) -> Result<(), String> {
-    let full_path = vault_path.join(path);
-    let canonical_file = full_path
-        .canonicalize()
-        .map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_dir = templates_dir(vault_path)
-        .canonicalize()
-        .map_err(|e| format!("Invalid templates dir: {e}"))?;
-
-    if !canonical_file.starts_with(&canonical_dir) {
-        return Err("Path escapes templates directory".to_string());
-    }
-
+    let (canonical_file, _) = resolve_template_path(vault_path, path)?;
     std::fs::remove_file(&canonical_file)
         .map_err(|e| format!("Failed to delete template: {e}"))
 }
@@ -314,7 +307,6 @@ mod tests {
     #[test]
     fn delete_template_rejects_path_outside_templates_dir() {
         let tmp = tempdir().unwrap();
-        // Create a file outside the templates dir
         std::fs::write(tmp.path().join("secret.md"), "secret").unwrap();
         let result = delete_template_for_vault(tmp.path(), "secret.md");
         assert!(result.is_err());
