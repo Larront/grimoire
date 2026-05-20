@@ -176,6 +176,12 @@
 					>
 						<Icon class="size-3.5 shrink-0" />
 						<span class="truncate text-sm flex-1">{tab.title}</span>
+						{#if tab.badge}
+							<span
+								data-testid="tab-badge"
+								class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[10px] text-primary/80 leading-tight py-0.5"
+							>{tab.badge}</span>
+						{/if}
 						<button
 							type="button"
 							class="opacity-0 group-hover:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded hover:bg-destructive/20 hover:text-destructive transition-opacity"

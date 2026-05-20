@@ -1,9 +1,10 @@
-export type TabType = "note" | "map" | "scene" | "scenes" | "empty";
+export type TabType = "note" | "map" | "scene" | "scenes" | "empty" | "template";
 
 export interface PersistedTab {
   type: TabType;
   id: number;
   title: string;
+  templatePath?: string;
 }
 
 export interface PersistedPane {

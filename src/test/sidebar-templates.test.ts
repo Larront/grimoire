@@ -1,6 +1,8 @@
 import { render, fireEvent, waitFor, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
+import { tabs } from "../lib/stores/tabs.svelte";
 import type { TemplateEntry } from "../lib/types/vault";
 
 let mockTemplates: TemplateEntry[] = [];
@@ -106,7 +108,10 @@ function makeTemplate(displayName: string, path: string): TemplateEntry {
 
 afterEach(() => {
   cleanup();
+  tabs.closeAll("left");
+  tabs.closeAll("right");
   vi.clearAllMocks();
+  vi.mocked(invoke).mockResolvedValue(null);
 });
 
 async function flush() {
@@ -173,6 +178,43 @@ describe("AppSidebar — Templates section", () => {
     expect(toastUndo).toHaveBeenCalledWith(
       expect.stringContaining("NPC"),
       expect.any(Function),
+    );
+  });
+
+  it("clicking '+' button invokes create_template and opens template tab with badge", async () => {
+    const fakeEntry = { display_name: "Untitled", path: ".grimoire/templates/Untitled.md" };
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_template") return Promise.resolve(fakeEntry);
+      return Promise.resolve(null);
+    });
+    const { container } = render(AppShell);
+    await flush();
+
+    const addBtn = container.querySelector("[data-testid='new-template-btn']") as HTMLElement;
+    await fireEvent.click(addBtn);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("create_template");
+    expect(tabs.openTab).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "template", badge: "Template", templatePath: fakeEntry.path }),
+    );
+  });
+
+  it("clicking a template row calls openTab with badge 'Template'", async () => {
+    mockTemplates = [makeTemplate("NPC", ".grimoire/templates/NPC.md")];
+    const { container } = render(AppShell);
+    await flush();
+
+    const row = container.querySelector("[data-testid='template-row-NPC']") as HTMLElement;
+    await fireEvent.click(row);
+    await flush();
+
+    expect(tabs.openTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "template",
+        badge: "Template",
+        templatePath: ".grimoire/templates/NPC.md",
+      }),
     );
   });
 });

@@ -13,12 +13,14 @@
     FolderOpen,
     RefreshCw,
     BookTemplate,
+    LayoutTemplate,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
   import TagChipEditor from "./TagChipEditor.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { templates } from "$lib/stores/templates.svelte";
   import type { TemplateEntry } from "$lib/types/vault";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -202,6 +204,17 @@
     }
   }
 
+  async function cmdCreateTemplate() {
+    searchPalette.open = false;
+    try {
+      const entry = await invoke<TemplateEntry>("create_template");
+      await templates.load();
+      tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
+    } catch (e) {
+      console.error("create_template failed:", e);
+    }
+  }
+
   async function cmdCreateNoteFromTemplate() {
     try {
       const list = await invoke<TemplateEntry[]>("list_templates");
@@ -234,6 +247,7 @@
     // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
     { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
     { label: "Create note from template", testid: "cmd-create-note-from-template", noteOnly: false, icon: BookTemplate, action: cmdCreateNoteFromTemplate },
+    { label: "Create new template", testid: "cmd-create-template", noteOnly: false, icon: LayoutTemplate, action: cmdCreateTemplate },
     { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
     { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },

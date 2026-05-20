@@ -122,6 +122,20 @@
     }
   }
 
+  async function handleCreateTemplate() {
+    try {
+      const entry = await invoke<import("$lib/types/vault").TemplateEntry>("create_template");
+      await templates.load();
+      tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
+    } catch (e) {
+      console.error("create_template failed:", e);
+    }
+  }
+
+  function openTemplate(tmpl: TemplateEntry) {
+    tabs.openTab({ type: "template", id: 0, title: tmpl.display_name, badge: "Template", templatePath: tmpl.path });
+  }
+
   let renamingTemplatePath = $state<string | null>(null);
   let renameTemplateValue = $state("");
 
@@ -379,7 +393,7 @@
           title="New Template"
           aria-label="New Template"
           data-testid="new-template-btn"
-          onclick={() => {}}
+          onclick={handleCreateTemplate}
         >
           <Plus strokeWidth={1.5} />
         </Sidebar.GroupAction>
@@ -398,7 +412,7 @@
                       {#each templates.templates as tmpl (tmpl.path)}
                         <ContextMenu.Root>
                           <ContextMenu.Trigger>
-                            <Sidebar.MenuButton data-testid="template-row-{tmpl.display_name}">
+                            <Sidebar.MenuButton data-testid="template-row-{tmpl.display_name}" onclick={() => openTemplate(tmpl)}>
                               <LayoutTemplate class="size-4 shrink-0 text-muted-foreground" />
                               <Rename.Root
                                 this="span"

@@ -2222,3 +2222,67 @@ describe("command palette – per-group caps", () => {
     expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeTruthy();
   });
 });
+
+// ── Create new template (issue #48) ──────────────────────────────────────────
+
+describe("command palette – Create new template", () => {
+  const fakeEntry = { display_name: "Untitled", path: ".grimoire/templates/Untitled.md" };
+
+  afterEach(() => {
+    searchPalette.open = false;
+  });
+
+  it("appears in Commands group when searching 'template'", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-create-template"]'),
+    ).toBeTruthy();
+  });
+
+  it("selecting it invokes create_template and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_template") return Promise.resolve(fakeEntry);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-create-template"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("create_template");
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("selecting it opens a template tab with badge 'Template'", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "create_template") return Promise.resolve(fakeEntry);
+      return Promise.resolve(null);
+    });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector('[data-testid="cmd-create-template"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    const activeTab = tabs.activeTab;
+    expect(activeTab?.type).toBe("template");
+    expect(activeTab?.badge).toBe("Template");
+    expect((activeTab as any)?.templatePath).toBe(fakeEntry.path);
+  });
+});

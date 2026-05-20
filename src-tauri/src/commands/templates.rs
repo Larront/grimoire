@@ -152,6 +152,51 @@ pub(crate) fn read_template_content(vault_path: &Path, template_path: &str) -> R
         .map_err(|e| format!("Failed to read template: {e}"))
 }
 
+pub fn create_template_for_vault(vault_path: &Path) -> Result<TemplateEntry, String> {
+    let dir = templates_dir(vault_path);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create templates directory: {e}"))?;
+
+    let mut resolved_name = "Untitled".to_string();
+    let mut counter = 2u32;
+    loop {
+        let candidate = dir.join(format!("{resolved_name}.md"));
+        if !candidate.exists() {
+            std::fs::write(&candidate, "")
+                .map_err(|e| format!("Failed to create template: {e}"))?;
+
+            let canonical_vault = vault_path
+                .canonicalize()
+                .map_err(|e| format!("Invalid vault root: {e}"))?;
+            let canonical_file = candidate
+                .canonicalize()
+                .map_err(|e| format!("Cannot resolve new template path: {e}"))?;
+            let relative = canonical_file
+                .strip_prefix(&canonical_vault)
+                .map_err(|_| "Template path escapes vault root".to_string())?
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            return Ok(TemplateEntry {
+                display_name: resolved_name,
+                path: relative,
+            });
+        }
+        resolved_name = format!("Untitled {counter}");
+        counter += 1;
+    }
+}
+
+pub fn write_template_content_for_vault(
+    vault_path: &Path,
+    path: &str,
+    content: &str,
+) -> Result<(), String> {
+    let (canonical_file, _) = resolve_template_path(vault_path, path)?;
+    std::fs::write(&canonical_file, content)
+        .map_err(|e| format!("Failed to write template: {e}"))
+}
+
 #[tauri::command]
 pub fn rename_template(
     path: String,
@@ -167,6 +212,27 @@ pub fn delete_template_for_vault(vault_path: &Path, path: &str) -> Result<(), St
     let (canonical_file, _) = resolve_template_path(vault_path, path)?;
     std::fs::remove_file(&canonical_file)
         .map_err(|e| format!("Failed to delete template: {e}"))
+}
+
+#[tauri::command]
+pub fn create_template(vault: State<AppVault>) -> Result<TemplateEntry, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    create_template_for_vault(vault_path)
+}
+
+#[tauri::command]
+pub fn read_template(path: String, vault: State<AppVault>) -> Result<String, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    read_template_content(vault_path, &path)
+}
+
+#[tauri::command]
+pub fn write_template(path: String, content: String, vault: State<AppVault>) -> Result<(), String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    write_template_content_for_vault(vault_path, &path, &content)
 }
 
 #[tauri::command]
@@ -335,5 +401,53 @@ mod tests {
         std::fs::write(tmp.path().join("secret.md"), "secret data").unwrap();
         let result = read_template_content(tmp.path(), "secret.md");
         assert!(result.is_err(), "path outside templates dir must be rejected");
+    }
+
+    #[test]
+    fn create_template_creates_file_in_templates_dir() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        let entry = create_template_for_vault(tmp.path()).unwrap();
+        let dir = templates_dir(tmp.path());
+        assert!(dir.join(format!("{}.md", entry.display_name)).exists());
+        assert_eq!(entry.display_name, "Untitled");
+    }
+
+    #[test]
+    fn create_template_resolves_conflicts() {
+        let tmp = tempdir().unwrap();
+        let dir = templates_dir(tmp.path());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Untitled.md"), "").unwrap();
+        let entry = create_template_for_vault(tmp.path()).unwrap();
+        assert_eq!(entry.display_name, "Untitled 2");
+        assert!(dir.join("Untitled 2.md").exists());
+    }
+
+    #[test]
+    fn create_template_creates_templates_dir_if_missing() {
+        let tmp = tempdir().unwrap();
+        let entry = create_template_for_vault(tmp.path()).unwrap();
+        let dir = templates_dir(tmp.path());
+        assert!(dir.exists());
+        assert!(dir.join(format!("{}.md", entry.display_name)).exists());
+    }
+
+    #[test]
+    fn write_template_content_updates_file() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        write_template_content_for_vault(tmp.path(), ".grimoire/templates/NPC.md", "new content").unwrap();
+        let content = std::fs::read_to_string(templates_dir(tmp.path()).join("NPC.md")).unwrap();
+        assert_eq!(content, "new content");
+    }
+
+    #[test]
+    fn write_template_content_rejects_path_outside_templates_dir() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        std::fs::write(tmp.path().join("secret.md"), "").unwrap();
+        let result = write_template_content_for_vault(tmp.path(), "secret.md", "pwned");
+        assert!(result.is_err());
     }
 }

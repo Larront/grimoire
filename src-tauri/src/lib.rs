@@ -117,6 +117,9 @@ pub fn run() {
             list_templates,
             rename_template,
             delete_template,
+            create_template,
+            read_template,
+            write_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

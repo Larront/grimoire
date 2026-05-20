@@ -4,6 +4,7 @@
 	import MapPane from './panes/MapPane.svelte';
 	import ScenePane from './panes/ScenePane.svelte';
 	import ScenesDashboard from './panes/ScenesDashboard.svelte';
+	import TemplatePane from './panes/TemplatePane.svelte';
 
 	interface Props {
 		pane: 'left' | 'right';
@@ -47,6 +48,15 @@
 	{:else if activeTab.type === 'scene'}
 		{#key activeTab.id}
 			<ScenePane sceneId={activeTab.id} {pane} />
+		{/key}
+	{:else if activeTab.type === 'template' && activeTab.templatePath}
+		{#key activeTab.templatePath}
+			<TemplatePane
+				templatePath={activeTab.templatePath}
+				templateTitle={activeTab.title}
+				{pane}
+				tabIndex={activeIndex}
+			/>
 		{/key}
 	{/if}
 

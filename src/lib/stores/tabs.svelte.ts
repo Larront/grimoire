@@ -14,6 +14,8 @@ export interface Tab {
   id: number;
   title: string;
   rename?: boolean;
+  badge?: string;
+  templatePath?: string;
 }
 
 export interface TabPane {
@@ -64,11 +66,14 @@ function createTabsStore() {
     dragging = null;
   }
 
+  function tabMatches(t: Tab, tab: Tab): boolean {
+    if (tab.type === "template") return t.type === "template" && t.templatePath === tab.templatePath;
+    return t.type === tab.type && t.id === tab.id;
+  }
+
   function openTab(tab: Tab, targetPane?: "left" | "right") {
     // Switch to existing tab if already open
-    const leftIdx = left.tabs.findIndex(
-      (t) => t.type === tab.type && t.id === tab.id,
-    );
+    const leftIdx = left.tabs.findIndex((t) => tabMatches(t, tab));
     if (leftIdx !== -1) {
       left = { ...left, activeIndex: leftIdx };
       focusedPane = "left";
@@ -76,9 +81,7 @@ function createTabsStore() {
       return;
     }
     if (right) {
-      const rightIdx = right.tabs.findIndex(
-        (t) => t.type === tab.type && t.id === tab.id,
-      );
+      const rightIdx = right.tabs.findIndex((t) => tabMatches(t, tab));
       if (rightIdx !== -1) {
         right = { ...right, activeIndex: rightIdx };
         focusedPane = "right";
@@ -93,6 +96,8 @@ function createTabsStore() {
       id: tab.id,
       title: tab.title,
       rename: tab.rename,
+      badge: tab.badge,
+      templatePath: tab.templatePath,
     };
 
     if (dest === "right") {
@@ -336,7 +341,7 @@ function createTabsStore() {
 
   function openTabForceNew(tab: Tab, targetPane?: "left" | "right") {
     const dest = targetPane ?? focusedPane;
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename };
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename, badge: tab.badge, templatePath: tab.templatePath };
     if (dest === "right") {
       const existing = right?.tabs ?? [];
       right = { tabs: [...existing, newTab], activeIndex: existing.length };
@@ -350,7 +355,7 @@ function createTabsStore() {
 
   function openTabOpposite(tab: Tab) {
     const opposite: "left" | "right" = focusedPane === "left" ? "right" : "left";
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename };
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, rename: tab.rename, badge: tab.badge, templatePath: tab.templatePath };
     if (opposite === "right") {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };
@@ -390,7 +395,7 @@ function createTabsStore() {
     const pane = focusedPane;
     const current = pane === "right" && right ? right : left;
     const currentTab = current.tabs[current.activeIndex];
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title };
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath };
     const newTabs = [...current.tabs];
     newTabs[current.activeIndex] = newTab;
     const backStack = currentTab && currentTab.type !== "empty"
