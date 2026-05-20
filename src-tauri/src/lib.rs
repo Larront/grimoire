@@ -114,6 +114,8 @@ pub fn run() {
             spotify_skip_prev,
             // Templates
             list_templates,
+            rename_template,
+            delete_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

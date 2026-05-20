@@ -135,3 +135,8 @@ export interface SpotifyAuthStatus {
   is_connected: boolean;
   expires_at: string;
 }
+
+export interface TemplateEntry {
+  display_name: string;
+  path: string;
+}

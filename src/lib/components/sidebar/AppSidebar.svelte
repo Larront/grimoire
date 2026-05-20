@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as Rename from "$lib/components/ui/rename";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { setContext, type ComponentProps } from "svelte";
@@ -11,18 +13,22 @@
     MapPinPlus,
     ChevronDown,
     LayoutList,
+    LayoutTemplate,
+    Plus,
     Star,
     Music2,
     Volume2,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
-  import type { FileNode, Note, Map as VaultMap } from "$lib/types/vault";
+  import type { FileNode, Note, Map as VaultMap, TemplateEntry } from "$lib/types/vault";
   import { vault } from "$lib/stores/vault.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { templates } from "$lib/stores/templates.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
+  import { toastUndo } from "$lib/toast";
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
@@ -114,6 +120,37 @@
     } catch (e) {
       console.error("create folder failed:", e);
     }
+  }
+
+  let renamingTemplatePath = $state<string | null>(null);
+  let renameTemplateValue = $state("");
+
+  function startRenameTemplate(tmpl: TemplateEntry) {
+    renameTemplateValue = tmpl.display_name;
+    renamingTemplatePath = tmpl.path;
+  }
+
+  async function handleRenameTemplate(tmpl: TemplateEntry, newName: string): Promise<boolean> {
+    if (!newName.trim() || newName === tmpl.display_name) {
+      renamingTemplatePath = null;
+      return false;
+    }
+    try {
+      await invoke("rename_template", { path: tmpl.path, newName: newName.trim() });
+      await templates.load();
+      renamingTemplatePath = null;
+      return true;
+    } catch (e) {
+      console.error("rename template failed:", e);
+      return false;
+    }
+  }
+
+  function deleteTemplate(tmpl: TemplateEntry) {
+    toastUndo(`"${tmpl.display_name}" deleted`, async () => {
+      await invoke("delete_template", { path: tmpl.path });
+      await templates.load();
+    });
   }
 </script>
 
@@ -319,6 +356,94 @@
                       </Sidebar.MenuItem>
                     {/each}
                   </Sidebar.Menu>
+                </Sidebar.GroupContent>
+              </div>
+            {/if}
+          {/snippet}
+        </Collapsible.Content>
+      </Sidebar.Group>
+    </Collapsible.Root>
+    <!-- Templates section -->
+    <Collapsible.Root open class="group/collapsible">
+      <Sidebar.Group>
+        <Sidebar.GroupLabel>
+          {#snippet child({ props })}
+            <Collapsible.Trigger {...props}>
+              Templates
+              <ChevronDown
+                class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
+              />
+            </Collapsible.Trigger>
+          {/snippet}
+        </Sidebar.GroupLabel>
+        <Sidebar.GroupAction
+          title="New Template"
+          aria-label="New Template"
+          data-testid="new-template-btn"
+          onclick={() => {}}
+        >
+          <Plus strokeWidth={1.5} />
+        </Sidebar.GroupAction>
+        <Collapsible.Content forceMount>
+          {#snippet child({ props, open })}
+            {#if open}
+              <div {...props} transition:slide>
+                <Sidebar.GroupContent>
+                  {#if templates.isLoading && templates.templates.length === 0}
+                    <div class="space-y-1 px-2">
+                      <Sidebar.MenuSkeleton showIcon />
+                      <Sidebar.MenuSkeleton showIcon />
+                    </div>
+                  {:else if templates.templates.length > 0}
+                    <Sidebar.Menu>
+                      {#each templates.templates as tmpl (tmpl.path)}
+                        <ContextMenu.Root>
+                          <ContextMenu.Trigger>
+                            <Sidebar.MenuButton data-testid="template-row-{tmpl.display_name}">
+                              <LayoutTemplate class="size-4 shrink-0 text-muted-foreground" />
+                              <Rename.Root
+                                this="span"
+                                class="flex-1 truncate text-sm"
+                                bind:value={
+                                  () => renamingTemplatePath === tmpl.path ? renameTemplateValue : tmpl.display_name,
+                                  (val) => { renameTemplateValue = val; }
+                                }
+                                bind:mode={
+                                  () => (renamingTemplatePath === tmpl.path ? "edit" : "view"),
+                                  (val) => { if (val === "view") renamingTemplatePath = null; }
+                                }
+                                blurBehavior="exit"
+                                onSave={(val) => handleRenameTemplate(tmpl, val)}
+                                onCancel={() => (renamingTemplatePath = null)}
+                              />
+                            </Sidebar.MenuButton>
+                          </ContextMenu.Trigger>
+                          <ContextMenu.Portal>
+                            <ContextMenu.Content>
+                              <ContextMenu.Item onSelect={() => startRenameTemplate(tmpl)}>Rename</ContextMenu.Item>
+                              <ContextMenu.Separator />
+                              <ContextMenu.Item
+                                variant="destructive"
+                                onSelect={() => deleteTemplate(tmpl)}
+                              >Delete Template</ContextMenu.Item>
+                            </ContextMenu.Content>
+                          </ContextMenu.Portal>
+                        </ContextMenu.Root>
+                      {/each}
+                    </Sidebar.Menu>
+                  {:else}
+                    <div class="flex flex-col items-center gap-3 px-4 py-6 text-center">
+                      <div class="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+                        <LayoutTemplate class="size-5 text-primary" strokeWidth={1.5} />
+                      </div>
+                      <div class="space-y-1">
+                        <p class="text-(--font-body) font-medium">No templates yet</p>
+                        <p class="text-(--font-ui) text-muted-foreground">
+                          Create your first template to reuse note structures.
+                        </p>
+                      </div>
+                    </div>
+                  {/if}
                 </Sidebar.GroupContent>
               </div>
             {/if}

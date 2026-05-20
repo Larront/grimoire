@@ -106,6 +106,77 @@ pub fn list_templates(vault: State<AppVault>) -> Result<Vec<TemplateEntry>, Stri
     list_templates_for_vault(vault_path)
 }
 
+pub fn rename_template_for_vault(
+    vault_path: &Path,
+    path: &str,
+    new_name: &str,
+) -> Result<(), String> {
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
+        return Err("Template name cannot be empty".to_string());
+    }
+    if new_name.contains('/') || new_name.contains('\\') || new_name.contains("..") {
+        return Err("Invalid template name".to_string());
+    }
+
+    let full_path = vault_path.join(path);
+    let canonical_file = full_path
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_dir = templates_dir(vault_path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid templates dir: {e}"))?;
+
+    if !canonical_file.starts_with(&canonical_dir) {
+        return Err("Path escapes templates directory".to_string());
+    }
+
+    let new_filename = format!("{new_name}.md");
+    let new_path = canonical_dir.join(&new_filename);
+
+    if new_path.exists() && new_path != canonical_file {
+        return Err(format!("A template named '{new_name}' already exists"));
+    }
+
+    std::fs::rename(&canonical_file, &new_path)
+        .map_err(|e| format!("Failed to rename template: {e}"))
+}
+
+#[tauri::command]
+pub fn rename_template(
+    path: String,
+    new_name: String,
+    vault: State<AppVault>,
+) -> Result<(), String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    rename_template_for_vault(vault_path, &path, &new_name)
+}
+
+pub fn delete_template_for_vault(vault_path: &Path, path: &str) -> Result<(), String> {
+    let full_path = vault_path.join(path);
+    let canonical_file = full_path
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_dir = templates_dir(vault_path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid templates dir: {e}"))?;
+
+    if !canonical_file.starts_with(&canonical_dir) {
+        return Err("Path escapes templates directory".to_string());
+    }
+
+    std::fs::remove_file(&canonical_file)
+        .map_err(|e| format!("Failed to delete template: {e}"))
+}
+
+#[tauri::command]
+pub fn delete_template(path: String, vault: State<AppVault>) -> Result<(), String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    delete_template_for_vault(vault_path, &path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -197,5 +268,55 @@ mod tests {
 
         let entries = list_templates_for_vault(tmp.path()).unwrap();
         assert_eq!(entries.len(), 4, "non-.md files should be ignored");
+    }
+
+    #[test]
+    fn rename_template_renames_file_on_disk() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let dir = templates_dir(tmp.path());
+        let path = ".grimoire/templates/NPC.md";
+        rename_template_for_vault(tmp.path(), path, "Character").unwrap();
+
+        assert!(!dir.join("NPC.md").exists(), "NPC.md should be gone");
+        assert!(dir.join("Character.md").exists(), "Character.md should exist");
+    }
+
+    #[test]
+    fn rename_template_rejects_empty_name() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        let result = rename_template_for_vault(tmp.path(), ".grimoire/templates/NPC.md", "  ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rename_template_rejects_path_traversal_in_name() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        let result =
+            rename_template_for_vault(tmp.path(), ".grimoire/templates/NPC.md", "../evil");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn delete_template_removes_file() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let dir = templates_dir(tmp.path());
+        delete_template_for_vault(tmp.path(), ".grimoire/templates/NPC.md").unwrap();
+
+        assert!(!dir.join("NPC.md").exists(), "NPC.md should be deleted");
+    }
+
+    #[test]
+    fn delete_template_rejects_path_outside_templates_dir() {
+        let tmp = tempdir().unwrap();
+        // Create a file outside the templates dir
+        std::fs::write(tmp.path().join("secret.md"), "secret").unwrap();
+        let result = delete_template_for_vault(tmp.path(), "secret.md");
+        assert!(result.is_err());
     }
 }
