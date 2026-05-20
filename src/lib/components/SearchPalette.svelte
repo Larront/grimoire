@@ -531,141 +531,141 @@
         {/each}
       </Command.Group>
     {:else}
-    {#if visibleRecent.length > 0}
-      <Command.Group heading="Recent">
-        {#each visibleRecent as entity (entity.entity_kind + ":" + entity.entity_id)}
-          {@const Icon = iconForKind(entity.entity_kind)}
-          <Command.Item
-            data-testid="cmd-recent-result"
-            value={entity.entity_kind + ":" + entity.entity_id}
-            onSelect={() => openRecent(entity)}
-            class="flex items-center gap-2"
-          >
-            <Icon class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-heading text-sm flex-1 truncate">{entity.title}</span>
-            <span
-              data-testid="recent-time-hint"
-              class="shrink-0 text-xs text-muted-foreground"
-            >{relativeTime(entity.accessed_at)}</span>
-            <span
-              data-testid="recent-kind-chip"
-              class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground capitalize"
-            >{entity.entity_kind}</span>
-          </Command.Item>
-        {/each}
-      </Command.Group>
-    {/if}
-    {#if visibleCommands.length > 0}
-      <Command.Group heading="Commands">
-        {#each visibleCommands as cmd (cmd.testid)}
-          {@const Icon = cmd.icon}
-          <Command.Item
-            data-testid={cmd.testid}
-            value={cmd.label}
-            onSelect={cmd.action}
-            class="flex items-center gap-2"
-          >
-            <Icon class="size-4 shrink-0 text-muted-foreground" />
-            <span class="text-sm font-medium">{cmd.label}</span>
-          </Command.Item>
-        {/each}
-        {@render showMoreRow("commands", commandsShowMore)}
-      </Command.Group>
-    {/if}
-    {#if visibleTagResults.length > 0}
-      <Command.Group heading="Tags">
-        {#each visibleTags as tag (tag.name)}
-          <Command.Item
-            data-testid="cmd-tag-result"
-            value={tag.name}
-            onSelect={() => onSelectTag(tag.name)}
-            class="flex items-center gap-2"
-          >
-            <Tag class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-mono text-xs">{tag.name}</span>
-            <span
-              data-testid="tag-count-chip"
-              class="ml-auto shrink-0 text-xs text-muted-foreground"
+      {#if visibleRecent.length > 0}
+        <Command.Group heading="Recent">
+          {#each visibleRecent as entity (entity.entity_kind + ":" + entity.entity_id)}
+            {@const Icon = iconForKind(entity.entity_kind)}
+            <Command.Item
+              data-testid="cmd-recent-result"
+              value={entity.entity_kind + ":" + entity.entity_id}
+              onSelect={() => openRecent(entity)}
+              class="flex items-center gap-2"
             >
-              {tag.note_count} notes
-            </span>
-          </Command.Item>
-        {/each}
-        {@render showMoreRow("tags", tagsShowMore)}
-      </Command.Group>
-    {/if}
-    {#if noteResults.length > 0}
-      <Command.Group heading="Notes">
-        {#each visibleNotes as result (result.id)}
-          <Command.Item
-            data-testid="cmd-note-result"
-            value={result.title}
-            onSelect={() => openNote(result)}
-            class="flex items-start gap-2 py-2"
-          >
-            <FileText class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <div class="min-w-0 flex-1">
-              <div class="font-heading text-sm">{result.title}</div>
-              {#if result.excerpt}
-                <div
-                  data-testid="note-excerpt"
-                  class="mt-0.5 truncate text-xs text-muted-foreground"
-                >
-                  {#each splitExcerpt(result.excerpt, freeSearchText) as part}
-                    {#if part.isMatch}
-                      <span class="font-medium text-primary">{part.text}</span>
-                    {:else}
-                      {part.text}
-                    {/if}
-                  {/each}
-                </div>
-              {/if}
-            </div>
-            {#if result.match_count > 1}
+              <Icon class="size-4 shrink-0 text-muted-foreground" />
+              <span class="font-heading text-sm flex-1 truncate">{entity.title}</span>
               <span
-                data-testid="match-count-chip"
+                data-testid="recent-time-hint"
+                class="shrink-0 text-xs text-muted-foreground"
+              >{relativeTime(entity.accessed_at)}</span>
+              <span
+                data-testid="recent-kind-chip"
+                class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground capitalize"
+              >{entity.entity_kind}</span>
+            </Command.Item>
+          {/each}
+        </Command.Group>
+      {/if}
+      {#if visibleCommands.length > 0}
+        <Command.Group heading="Commands">
+          {#each visibleCommands as cmd (cmd.testid)}
+            {@const Icon = cmd.icon}
+            <Command.Item
+              data-testid={cmd.testid}
+              value={cmd.label}
+              onSelect={cmd.action}
+              class="flex items-center gap-2"
+            >
+              <Icon class="size-4 shrink-0 text-muted-foreground" />
+              <span class="text-sm font-medium">{cmd.label}</span>
+            </Command.Item>
+          {/each}
+          {@render showMoreRow("commands", commandsShowMore)}
+        </Command.Group>
+      {/if}
+      {#if visibleTagResults.length > 0}
+        <Command.Group heading="Tags">
+          {#each visibleTags as tag (tag.name)}
+            <Command.Item
+              data-testid="cmd-tag-result"
+              value={tag.name}
+              onSelect={() => onSelectTag(tag.name)}
+              class="flex items-center gap-2"
+            >
+              <Tag class="size-4 shrink-0 text-muted-foreground" />
+              <span class="font-mono text-xs">{tag.name}</span>
+              <span
+                data-testid="tag-count-chip"
                 class="ml-auto shrink-0 text-xs text-muted-foreground"
               >
-                {result.match_count} matches
+                {tag.note_count} notes
               </span>
-            {/if}
-          </Command.Item>
-        {/each}
-        {@render showMoreRow("notes", notesShowMore)}
-      </Command.Group>
-    {/if}
-    {#if mapResults.length > 0}
-      <Command.Group heading="Maps">
-        {#each visibleMaps as result (result.id)}
-          <Command.Item
-            data-testid="cmd-map-result"
-            value={result.title}
-            onSelect={() => openMap(result)}
-            class="flex items-center gap-2"
-          >
-            <Map class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-heading text-sm">{result.title}</span>
-          </Command.Item>
-        {/each}
-        {@render showMoreRow("maps", mapsShowMore)}
-      </Command.Group>
-    {/if}
-    {#if sceneResults.length > 0}
-      <Command.Group heading="Scenes">
-        {#each visibleScenes as result (result.id)}
-          <Command.Item
-            data-testid="cmd-scene-result"
-            value={result.name}
-            onSelect={() => openScene(result)}
-            class="flex items-center gap-2"
-          >
-            <Clapperboard class="size-4 shrink-0 text-muted-foreground" />
-            <span class="font-heading text-sm">{result.name}</span>
-          </Command.Item>
-        {/each}
-        {@render showMoreRow("scenes", scenesShowMore)}
-      </Command.Group>
-    {/if}
+            </Command.Item>
+          {/each}
+          {@render showMoreRow("tags", tagsShowMore)}
+        </Command.Group>
+      {/if}
+      {#if noteResults.length > 0}
+        <Command.Group heading="Notes">
+          {#each visibleNotes as result (result.id)}
+            <Command.Item
+              data-testid="cmd-note-result"
+              value={result.title}
+              onSelect={() => openNote(result)}
+              class="flex items-start gap-2 py-2"
+            >
+              <FileText class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+              <div class="min-w-0 flex-1">
+                <div class="font-heading text-sm">{result.title}</div>
+                {#if result.excerpt}
+                  <div
+                    data-testid="note-excerpt"
+                    class="mt-0.5 truncate text-xs text-muted-foreground"
+                  >
+                    {#each splitExcerpt(result.excerpt, freeSearchText) as part}
+                      {#if part.isMatch}
+                        <span class="font-medium text-primary">{part.text}</span>
+                      {:else}
+                        {part.text}
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+              {#if result.match_count > 1}
+                <span
+                  data-testid="match-count-chip"
+                  class="ml-auto shrink-0 text-xs text-muted-foreground"
+                >
+                  {result.match_count} matches
+                </span>
+              {/if}
+            </Command.Item>
+          {/each}
+          {@render showMoreRow("notes", notesShowMore)}
+        </Command.Group>
+      {/if}
+      {#if mapResults.length > 0}
+        <Command.Group heading="Maps">
+          {#each visibleMaps as result (result.id)}
+            <Command.Item
+              data-testid="cmd-map-result"
+              value={result.title}
+              onSelect={() => openMap(result)}
+              class="flex items-center gap-2"
+            >
+              <Map class="size-4 shrink-0 text-muted-foreground" />
+              <span class="font-heading text-sm">{result.title}</span>
+            </Command.Item>
+          {/each}
+          {@render showMoreRow("maps", mapsShowMore)}
+        </Command.Group>
+      {/if}
+      {#if sceneResults.length > 0}
+        <Command.Group heading="Scenes">
+          {#each visibleScenes as result (result.id)}
+            <Command.Item
+              data-testid="cmd-scene-result"
+              value={result.name}
+              onSelect={() => openScene(result)}
+              class="flex items-center gap-2"
+            >
+              <Clapperboard class="size-4 shrink-0 text-muted-foreground" />
+              <span class="font-heading text-sm">{result.name}</span>
+            </Command.Item>
+          {/each}
+          {@render showMoreRow("scenes", scenesShowMore)}
+        </Command.Group>
+      {/if}
     {/if}
   </Command.List>
 </Command.Dialog>
