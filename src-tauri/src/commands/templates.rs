@@ -80,12 +80,12 @@ pub fn list_templates_for_vault(vault_path: &Path) -> Result<Vec<TemplateEntry>,
                 return None;
             }
 
-            let display_name = path.file_stem()?.to_string_lossy().to_string();
+            let display_name = path.file_stem()?.to_string_lossy().into_owned();
             let relative = canonical_file
                 .strip_prefix(&canonical_vault)
                 .ok()?
                 .to_string_lossy()
-                .to_string();
+                .replace('\\', "/");
 
             Some(TemplateEntry {
                 display_name,
@@ -167,8 +167,13 @@ mod tests {
                 entry.path
             );
             assert!(
-                !entry.path.contains(":\\") && !entry.path.starts_with('/'),
+                !entry.path.starts_with('/') && !entry.path.contains(":\\"),
                 "path '{}' should be relative, not absolute",
+                entry.path
+            );
+            assert!(
+                !entry.path.contains('\\'),
+                "path '{}' should use forward slashes",
                 entry.path
             );
         }
