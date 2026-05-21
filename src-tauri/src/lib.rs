@@ -120,6 +120,7 @@ pub fn run() {
             create_template,
             read_template,
             write_template,
+            save_note_as_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

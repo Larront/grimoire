@@ -2223,6 +2223,93 @@ describe("command palette – per-group caps", () => {
   });
 });
 
+// ── Save note as template (issue #49) ────────────────────────────────────────
+
+describe("command palette – Save note as template", () => {
+  const fakeNote = {
+    id: 1,
+    path: "notes/my-note.md",
+    title: "My Note",
+    icon: null,
+    cover_image: null,
+    parent_path: null,
+    archived: false,
+    modified_at: "2026-01-01T00:00:00Z",
+  };
+  const fakeSavedEntry = { display_name: "My Note", path: ".grimoire/templates/My Note.md" };
+
+  afterEach(() => {
+    searchPalette.open = false;
+    tabs.closeAll("left");
+    tabs.closeAll("right");
+  });
+
+  it("appears in Commands group only when active tab is a note", async () => {
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "save";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
+    ).toBeTruthy();
+  });
+
+  it("is hidden when active tab is not a note", async () => {
+    tabs.openTab({ type: "map", id: 1, title: "World Map" });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "save";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
+    ).toBeNull();
+  });
+
+  it("is hidden when no tabs are open", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "save";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
+    ).toBeNull();
+  });
+
+  it("invoking it calls save_note_as_template with the active note path and closes palette", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_notes") return Promise.resolve([fakeNote]);
+      if (cmd === "save_note_as_template") return Promise.resolve(fakeSavedEntry);
+      return Promise.resolve(null);
+    });
+    await notes.load();
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "save note as template";
+    await fireEvent.input(input);
+    await flush();
+
+    const item = document.body.querySelector(
+      '[data-testid="cmd-save-note-as-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    expect(invoke).toHaveBeenCalledWith("save_note_as_template", {
+      notePath: "notes/my-note.md",
+    });
+    expect(searchPalette.open).toBe(false);
+  });
+});
+
 // ── Create new template (issue #48) ──────────────────────────────────────────
 
 describe("command palette – Create new template", () => {

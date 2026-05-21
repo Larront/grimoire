@@ -14,6 +14,7 @@
     RefreshCw,
     BookTemplate,
     LayoutTemplate,
+    FileDown,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -241,6 +242,18 @@
     }
   }
 
+  async function cmdSaveNoteAsTemplate() {
+    const note = activeNote;
+    if (!note) return;
+    searchPalette.open = false;
+    try {
+      await invoke<TemplateEntry>("save_note_as_template", { notePath: note.path });
+      await templates.load();
+    } catch (e) {
+      console.error("save_note_as_template failed:", e);
+    }
+  }
+
   const ALL_COMMANDS = [
     { label: "Create new note", testid: "cmd-create-note", noteOnly: false, icon: FilePlus, action: cmdCreateNote },
     { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false, icon: Clapperboard, action: cmdCreateScene },
@@ -248,6 +261,7 @@
     { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
     { label: "Create note from template", testid: "cmd-create-note-from-template", noteOnly: false, icon: BookTemplate, action: cmdCreateNoteFromTemplate },
     { label: "Create new template", testid: "cmd-create-template", noteOnly: false, icon: LayoutTemplate, action: cmdCreateTemplate },
+    { label: "Save note as template", testid: "cmd-save-note-as-template", noteOnly: true, icon: FileDown, action: cmdSaveNoteAsTemplate },
     { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
     { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },

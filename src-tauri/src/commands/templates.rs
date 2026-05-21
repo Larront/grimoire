@@ -242,6 +242,65 @@ pub fn delete_template(path: String, vault: State<AppVault>) -> Result<(), Strin
     delete_template_for_vault(vault_path, &path)
 }
 
+pub fn save_note_as_template_for_vault(vault_path: &Path, note_path: &str) -> Result<TemplateEntry, String> {
+    let canonical_vault = vault_path
+        .canonicalize()
+        .map_err(|e| format!("Invalid vault root: {e}"))?;
+    let canonical_note = vault_path
+        .join(note_path)
+        .canonicalize()
+        .map_err(|e| format!("Invalid note path: {e}"))?;
+    if !canonical_note.starts_with(&canonical_vault) {
+        return Err("Note path escapes vault root".to_string());
+    }
+
+    let content = std::fs::read_to_string(&canonical_note)
+        .map_err(|e| format!("Failed to read note: {e}"))?;
+
+    let base_name = canonical_note
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("Cannot determine note filename")?
+        .to_string();
+
+    let dir = templates_dir(vault_path);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create templates directory: {e}"))?;
+
+    let mut resolved_name = base_name.clone();
+    let mut counter = 2u32;
+    loop {
+        let candidate = dir.join(format!("{resolved_name}.md"));
+        if !candidate.exists() {
+            std::fs::write(&candidate, &content)
+                .map_err(|e| format!("Failed to write template: {e}"))?;
+
+            let canonical_file = candidate
+                .canonicalize()
+                .map_err(|e| format!("Cannot resolve new template path: {e}"))?;
+            let relative = canonical_file
+                .strip_prefix(&canonical_vault)
+                .map_err(|_| "Template path escapes vault root".to_string())?
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            return Ok(TemplateEntry {
+                display_name: resolved_name,
+                path: relative,
+            });
+        }
+        resolved_name = format!("{} {}", base_name, counter);
+        counter += 1;
+    }
+}
+
+#[tauri::command]
+pub fn save_note_as_template(note_path: String, vault: State<AppVault>) -> Result<TemplateEntry, String> {
+    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.as_ref().ok_or("No vault open")?;
+    save_note_as_template_for_vault(vault_path, &note_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,5 +508,78 @@ mod tests {
         std::fs::write(tmp.path().join("secret.md"), "").unwrap();
         let result = write_template_content_for_vault(tmp.path(), "secret.md", "pwned");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn save_note_as_template_copies_content_verbatim() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let notes_dir = tmp.path().join("notes");
+        std::fs::create_dir_all(&notes_dir).unwrap();
+        let note_path = notes_dir.join("My Hero.md");
+        let note_content = "---\ntags: [hero]\n---\n\n# My Hero\n\n## Background\n";
+        std::fs::write(&note_path, note_content).unwrap();
+
+        let entry = save_note_as_template_for_vault(tmp.path(), "notes/My Hero.md").unwrap();
+
+        assert_eq!(entry.display_name, "My Hero");
+        let saved = std::fs::read_to_string(templates_dir(tmp.path()).join("My Hero.md")).unwrap();
+        assert_eq!(saved, note_content);
+    }
+
+    #[test]
+    fn save_note_as_template_conflict_resolution() {
+        let tmp = tempdir().unwrap();
+        let dir = templates_dir(tmp.path());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("My Hero.md"), "existing").unwrap();
+
+        let notes_dir = tmp.path().join("notes");
+        std::fs::create_dir_all(&notes_dir).unwrap();
+        std::fs::write(notes_dir.join("My Hero.md"), "new content").unwrap();
+
+        let entry = save_note_as_template_for_vault(tmp.path(), "notes/My Hero.md").unwrap();
+
+        assert_eq!(entry.display_name, "My Hero 2");
+        assert!(dir.join("My Hero 2.md").exists());
+        let saved = std::fs::read_to_string(dir.join("My Hero 2.md")).unwrap();
+        assert_eq!(saved, "new content");
+    }
+
+    #[test]
+    fn save_note_as_template_creates_templates_dir_if_missing() {
+        let tmp = tempdir().unwrap();
+        let notes_dir = tmp.path().join("notes");
+        std::fs::create_dir_all(&notes_dir).unwrap();
+        std::fs::write(notes_dir.join("Hero.md"), "hero content").unwrap();
+
+        let entry = save_note_as_template_for_vault(tmp.path(), "notes/Hero.md").unwrap();
+
+        assert_eq!(entry.display_name, "Hero");
+        assert!(templates_dir(tmp.path()).join("Hero.md").exists());
+    }
+
+    #[test]
+    fn save_note_as_template_rejects_path_outside_vault() {
+        let tmp = tempdir().unwrap();
+        let other = tempdir().unwrap();
+        std::fs::write(other.path().join("secret.md"), "secret").unwrap();
+
+        let result = save_note_as_template_for_vault(tmp.path(), "../secret.md");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn save_note_as_template_returns_vault_relative_forward_slash_path() {
+        let tmp = tempdir().unwrap();
+        let notes_dir = tmp.path().join("notes");
+        std::fs::create_dir_all(&notes_dir).unwrap();
+        std::fs::write(notes_dir.join("NPC.md"), "").unwrap();
+
+        let entry = save_note_as_template_for_vault(tmp.path(), "notes/NPC.md").unwrap();
+
+        assert!(entry.path.contains(".grimoire/templates/NPC.md"), "path should be vault-relative: {}", entry.path);
+        assert!(!entry.path.contains('\\'), "path should use forward slashes");
     }
 }
