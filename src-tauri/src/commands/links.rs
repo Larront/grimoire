@@ -31,7 +31,6 @@ pub fn extract_wikilinks(content: &str) -> Vec<String> {
         rest = &rest[start + 2..];
         if let Some(end) = rest.find("]]") {
             let inner = &rest[..end];
-            // Strip heading fragment (#...) then display text (|...)
             let target = inner
                 .split('|')
                 .next()
@@ -225,13 +224,6 @@ pub fn get_backlinks(note_id: i32, vault: State<AppVault>) -> Result<Vec<Backlin
         .first(conn)
         .map_err(|e| e.to_string())?;
 
-    let aliases: Vec<String> = na::note_aliases
-        .filter(na::note_id.eq(note_id))
-        .select(na::alias)
-        .load(conn)
-        .map_err(|e| e.to_string())?;
-
-    // Find all notes whose links point to this note (by path or alias).
     let rows = diesel::sql_query(
         "SELECT DISTINCT n.id, n.path, n.title
          FROM note_links nl
@@ -244,10 +236,6 @@ pub fn get_backlinks(note_id: i32, vault: State<AppVault>) -> Result<Vec<Backlin
     .bind::<diesel::sql_types::Integer, _>(note_id)
     .load::<BacklinkNoteRow>(conn)
     .map_err(|e| e.to_string())?;
-
-    // Also handle alias-matched target paths not covered by the subquery above
-    // (aliases listed inline for completeness; main path already covers common case).
-    let _ = aliases; // Resolved via SQL subquery above.
 
     Ok(rows
         .into_iter()

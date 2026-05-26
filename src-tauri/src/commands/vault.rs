@@ -63,7 +63,6 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
     // vault sizes; guarantees the index stays in sync with disk even if a
     // previous session crashed mid-write or `.grimoire/` was wiped.
     rebuild_note_tags_from_vault(&vault_path, &mut conn)?;
-    // Rebuild the link and alias indices from a fresh vault scan.
     rebuild_note_links_from_vault(&vault_path, &mut conn)?;
 
     // Rebuild the Tantivy search index. Non-fatal: a failure just leaves

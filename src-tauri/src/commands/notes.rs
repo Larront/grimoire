@@ -258,7 +258,6 @@ pub fn write_note_content(
     let full_path = validate_parent_path(&vault_path, &note_path)?;
     fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
-    // Re-index with updated body text; upsert link and alias indices.
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     let maybe_note = notes
         .filter(path.eq(&note_path))
