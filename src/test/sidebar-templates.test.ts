@@ -102,6 +102,16 @@ vi.mock("$lib/toast", () => ({
 
 import { toastUndo } from "$lib/toast";
 
+// transition:slide uses element.animate which JSDOM does not implement.
+Element.prototype.animate = vi.fn().mockReturnValue({
+  finished: Promise.resolve(),
+  cancel: vi.fn(),
+  pause: vi.fn(),
+  play: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+});
+
 function makeTemplate(displayName: string, path: string): TemplateEntry {
   return { display_name: displayName, path };
 }
@@ -118,6 +128,17 @@ async function flush() {
   await act(async () => { await Promise.resolve(); });
 }
 
+async function openTemplatesSection(container: Element) {
+  const labels = Array.from(container.querySelectorAll("[data-slot='sidebar-group-label']"));
+  const label = labels.find(el => el.textContent?.includes("Templates")) as HTMLElement | undefined;
+  if (!label) throw new Error("Templates group label not found");
+  // The Collapsible.Trigger renders as a button inside the label element.
+  const trigger = (label.tagName === "BUTTON" ? label : label.querySelector("button")) as HTMLElement | null;
+  if (!trigger) throw new Error("Templates collapsible trigger button not found");
+  await fireEvent.click(trigger);
+  await flush();
+}
+
 describe("AppSidebar — Templates section", () => {
   beforeEach(() => {
     mockTemplates = [];
@@ -131,9 +152,10 @@ describe("AppSidebar — Templates section", () => {
     expect(templatesLabel).toBeTruthy();
   });
 
-  it("shows a '+' button in the Templates section header", async () => {
+  it("shows a '+' button in the Templates section after expanding it", async () => {
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
     const addBtn = container.querySelector("[data-testid='new-template-btn']");
     expect(addBtn).toBeTruthy();
   });
@@ -145,6 +167,7 @@ describe("AppSidebar — Templates section", () => {
     ];
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
     expect(container.textContent).toContain("NPC");
     expect(container.textContent).toContain("Location");
   });
@@ -153,6 +176,7 @@ describe("AppSidebar — Templates section", () => {
     mockTemplates = [];
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
     const addBtn = container.querySelector("[data-testid='new-template-btn']");
     expect(addBtn).toBeTruthy();
     expect(container.textContent).not.toContain("No templates yet");
@@ -162,6 +186,7 @@ describe("AppSidebar — Templates section", () => {
     mockTemplates = [makeTemplate("NPC", ".grimoire/templates/NPC.md")];
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
 
     const trigger = container.querySelector("[data-testid='template-row-NPC']");
     expect(trigger).toBeTruthy();
@@ -191,6 +216,7 @@ describe("AppSidebar — Templates section", () => {
     });
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
 
     const addBtn = container.querySelector("[data-testid='new-template-btn']") as HTMLElement;
     await fireEvent.click(addBtn);
@@ -206,6 +232,7 @@ describe("AppSidebar — Templates section", () => {
     mockTemplates = [makeTemplate("NPC", ".grimoire/templates/NPC.md")];
     const { container } = render(AppShell);
     await flush();
+    await openTemplatesSection(container);
 
     const row = container.querySelector("[data-testid='template-row-NPC']") as HTMLElement;
     await fireEvent.click(row);
