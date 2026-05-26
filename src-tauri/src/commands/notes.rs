@@ -1,4 +1,5 @@
 use crate::commands::frontmatter;
+use crate::commands::links::{extract_wikilinks, upsert_note_aliases, upsert_note_links};
 use crate::commands::tags::upsert_note_tags;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
@@ -257,13 +258,19 @@ pub fn write_note_content(
     let full_path = validate_parent_path(&vault_path, &note_path)?;
     fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
-    // Re-index with updated body text
+    // Re-index with updated body text; upsert link and alias indices.
     let conn = state.connection.as_mut().ok_or("No vault open")?;
     let maybe_note = notes
         .filter(path.eq(&note_path))
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
+    if let Some(ref note) = maybe_note {
+        let links = extract_wikilinks(&content);
+        upsert_note_links(conn, note.id, &links)?;
+        let aliases = frontmatter::read_aliases(&content);
+        upsert_note_aliases(conn, note.id, &aliases)?;
+    }
     if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
         let body_text = crate::search::extract_plain_text(&content);
         let tags = frontmatter::read_tags(&content);

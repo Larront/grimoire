@@ -42,6 +42,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    note_aliases (note_id, alias) {
+        note_id -> Integer,
+        alias -> Text,
+    }
+}
+
+diesel::table! {
+    note_links (source_id, target_path) {
+        source_id -> Integer,
+        target_path -> Text,
+    }
+}
+
+diesel::table! {
     note_tags (note_path, tag) {
         note_path -> Text,
         tag -> Text,
@@ -132,6 +146,8 @@ diesel::table! {
 }
 
 diesel::joinable!(map_annotations -> maps (map_id));
+diesel::joinable!(note_aliases -> notes (note_id));
+diesel::joinable!(note_links -> notes (source_id));
 diesel::joinable!(pin_categories -> maps (map_id));
 diesel::joinable!(pin_tags -> pins (pin_id));
 diesel::joinable!(pins -> maps (map_id));
@@ -142,6 +158,8 @@ diesel::joinable!(scene_slots -> scenes (scene_id));
 diesel::allow_tables_to_appear_in_same_query!(
     map_annotations,
     maps,
+    note_aliases,
+    note_links,
     note_tags,
     notes,
     pin_categories,

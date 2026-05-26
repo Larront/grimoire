@@ -3,6 +3,7 @@ mod db;
 mod search;
 mod vault;
 
+use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
@@ -121,6 +122,11 @@ pub fn run() {
             read_template,
             write_template,
             save_note_as_template,
+            // Links
+            get_backlinks,
+            get_outbound_links,
+            get_note_aliases,
+            set_note_aliases,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -152,6 +152,41 @@ _Avoid_: "search modal," "command bar," "quick open" (overloaded with VS Code se
 The Tantivy index at `vault/.grimoire/search-index/` powering the Command Palette. Holds one document per searchable entity (note, map, scene); tags are a faceted multi-value field on note documents. Derived from SQLite + the vault filesystem and fully regenerable from a vault scan. SQLite remains the canonical entity store; the Search Index is never the source of truth.
 _Avoid_: "search database" (it isn't a database), "fts index" (specific to the rejected FTS5 alternative).
 
+### Link Index
+
+The SQLite `note_links(source_id, target_path)` table tracking every wikilink extracted from note content. `source_id` is the authoring note's SQLite id; `target_path` is the raw `[[...]]` text as written (path-keyed, not id-keyed). Rows where `target_path` matches no `notes.path` or `note_aliases.alias` represent links to Stub Notes. Populated incrementally on every `save_note`; fully regenerable from a vault scan on `open_vault`. See [ADR-0005](./docs/adr/0005-link-index-path-keyed.md).
+_Avoid_: "backlinks table," "link database."
+
+### Backlink
+
+An inbound wikilink: a note that references the current note via `[[...]]` syntax. Surfaced in the Details Pane (Backlinks section) and the Graph Pane. The opposite of an Outbound Link.
+_Avoid_: "incoming link," "inbound reference."
+
+### Outbound Link
+
+A wikilink authored in the current note body that points to another note. Displayed in the Details Pane below Backlinks. Broken outbound links (pointing to Stub Notes) are shown dimmed with a "not yet created" indicator.
+_Avoid_: "forward link."
+
+### Stub Note
+
+A note that is referenced by a wikilink but does not yet exist on disk. Stub notes appear in the Graph Pane as dimmer, smaller nodes. Clicking a stub node in the graph creates the note with the link text as its title and opens it in the active pane.
+_Avoid_: "ghost note," "missing note," "placeholder note."
+
+### Orphan Note
+
+A note with no inbound or outbound wikilinks. Appears in the Graph Pane as a disconnected node. Not hidden by default.
+_Avoid_: "unlinked note," "isolated note."
+
+### Note Alias
+
+An alternative name for a note, usable in wikilink resolution. Stored in frontmatter (`aliases: [...]`), indexed in the SQLite `note_aliases(note_id, alias TEXT)` table. When typing `[[alias text]]`, the wikilink suggestion dropdown shows the note whose alias matches. Wikilink-resolution-only — aliases do not affect how the note title displays anywhere in the app.
+_Avoid_: "note nickname," "alternate title."
+
+### Graph Pane
+
+The vault-wide force-directed graph. Opened as a tab (one max — opening when a graph tab already exists navigates to it). Entry points: Graph rail icon (opens the pane directly, no sidebar step) or the *Open graph view* command. Nodes represent notes (including Stub Notes) and maps; edges represent wikilinks (note→note) and pin references (map→note via `pins.note_id`). Rendered with Cytoscape.js.
+_Avoid_: "knowledge graph" (too broad), "graph view tab."
+
 ---
 
 ## Resolved Decisions
@@ -221,3 +256,17 @@ _Avoid_: "search database" (it isn't a database), "fts index" (specific to the r
 | Template discoverability          | Templates are not indexed by Tantivy and do not appear as Command Palette search results. Discovery is via the Templates sidebar section and the *Create note from template* picker. | A sixth search group for ~12 items adds noise; the sidebar section already solves "find and edit a template." |
 | Vault setup framework             | Idempotent calls on every `open_vault` — no vault format version number, no migration registry. App delivery is handled by Tauri's updater. | Version tracking adds a coordination surface with no payoff when calls are cheap to skip; Tauri handles "which code runs." |
 | Setup call categories             | Two kinds: **check-and-skip** (cheap stat-based checks, always run — e.g. `inject_builtin_templates`) and **incremental** (expensive derive operations that compare a `last_indexed_at` timestamp against the most-recently-modified vault file and skip if nothing changed — e.g. tag index, search index, future backlinks index). | "Always rebuild" is acceptable now but becomes O(n) tax on every open as the vault grows; staleness signal keeps correctness while avoiding the cost on stable vaults. |
+| Link index storage                | SQLite `note_links(source_id INTEGER, target_path TEXT)` — path-keyed, same pipeline as `note_tags`, regenerable from vault scan (see ADR-0005) | Path-keyed so broken links are representable as rows (enabling Stub Note rendering and dimmed outbound indicators). Id-keyed would silently drop unresolvable links. |
+| Wikilink rename handling          | On `rename_note`: auto-rewrite all `note_links` rows referencing the old path; update raw markdown in each source note; show toast after ("N notes updated"). Settings toggle to require a blocking confirmation dialog instead. | Silent rewrite matches GM-under-pressure flow. Blocking dialog option for GMs who rename deliberately and want to audit which notes are affected before committing. |
+| Note aliases                      | Wikilink-resolution-only. Stored as `aliases: [...]` in frontmatter. SQLite `note_aliases(note_id, alias TEXT)` index. Chip editor in Details Pane between Tags and Backlinks. Alias collision (two notes sharing the same alias) shown as an inline warning chip, not a hard error. | Aliases broaden wikilink discovery without polluting note titles or display names. Collision is a warning not an error to preserve vault-portability — the GM decides which note "wins." |
+| Details Pane section order (Phase 9) | Tags → Aliases → Backlinks → Outbound → Folder → Modified | Editable sections (Tags, Aliases) group at top as authoring tools. Read-only navigation (Backlinks, Outbound) form a "connections" block below. Passive metadata (Folder, Modified) at the bottom. |
+| Backlinks / Outbound display      | Title (Metamorphous) + folder path (Nunito, muted). Capped at 5 with expand-in-place. Empty state shows section header + "No backlinks yet" (section not hidden). Broken outbound links shown dimmed with a "not yet created" indicator. | Cap prevents popular notes from making the rail unusably long. Showing the empty state surfaces the feature to GMs who haven't yet linked notes. |
+| Graph node types                  | Notes (all, including Stub Notes) + Maps. Edges: wikilinks (note→note) and pin references (map→note via `pins.note_id`). Orphan notes shown as disconnected. | Pin→note edges are already in the schema and represent meaningful place↔lore relationships. Stub notes surface the "referenced but not yet written" signal — hiding them removes a useful prompt. |
+| Stub note click in graph          | Click-to-create: creates the note immediately with the link text as its title, opens in the active pane. Stub node resolves to a real node on next graph refresh. | Consistent with "GM clarity under pressure" — the action the GM wants is obvious, so do it without a confirmation step. |
+| Orphan notes in graph             | Shown as disconnected nodes, not hidden by default, no show/hide toggle. | Honest picture of the vault. The tag filter panel handles noise reduction. |
+| Graph rendering library           | Cytoscape.js (`cose` force-directed layout). CSS custom properties read at render time via `getComputedStyle` and re-applied on theme/accent change. | Handles zoom/pan/click/hover out of the box; suitable for 100–300 node scale; full visual control via its CSS-like style config. |
+| Graph pane lifecycle              | One graph tab max. Opening the graph when a tab already exists navigates to it. Rail icon opens the pane directly (no sidebar step — graph has no sidebar content). | No "which graph is current?" confusion. Rail skips sidebar because there is no sidebar content for the graph. |
+| Graph node coloring               | Color by primary tag (first tag in frontmatter array). Untagged nodes use `--foreground-muted`. Per-tag graph color config in Settings; shortcut to that config accessible from the graph filter panel. | Color-by-primary-tag is legible and leverages existing tag insertion-order convention. Settings is canonical; graph panel shortcut reduces friction during prep. |
+| Graph node sizing                 | Proportional to backlink count with min/max size caps so stub and orphan nodes remain visible. | Hub notes naturally dominate visually; size signal reduces reliance on always-on labels. |
+| Graph tag filter panel            | Panel in the graph pane. Per-tag show/hide toggle. Shortcut to open the tag's graph color config in Settings. Show/hide by tag is in scope for Phase 9. | Co-locates filter and config navigation in the graph context without duplicating the full Settings surface inline. |
+| Graph search                      | Search input in graph panel header. Typing filters/highlights matching nodes; Enter focuses the camera on the first match. | A 100+ note vault is hard to navigate spatially; search-to-focus is the keyboard path to a specific node without mousing through a dense layout. |

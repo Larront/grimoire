@@ -1,4 +1,5 @@
 pub mod frontmatter;
+pub mod links;
 pub mod maps;
 pub mod media;
 pub mod notes;

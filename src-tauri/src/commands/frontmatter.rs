@@ -23,66 +23,66 @@ fn split_frontmatter(raw: &str) -> Option<(String, String)> {
     Some((block.to_string(), body))
 }
 
-fn find_tag_lines(lines: &[String]) -> (Vec<String>, Vec<usize>) {
+fn find_list_lines(lines: &[String], key: &str) -> (Vec<String>, Vec<usize>) {
+    let prefix = format!("{}:", key);
     for (i, line) in lines.iter().enumerate() {
         let stripped = line.trim_start();
-        if let Some(rest) = stripped.strip_prefix("tags:") {
+        if let Some(rest) = stripped.strip_prefix(&prefix) {
             let rest = rest.trim_start();
             if let Some(inside) = rest.strip_prefix('[') {
                 if let Some(end) = inside.find(']') {
                     let inner = &inside[..end];
-                    let tags: Vec<String> = inner
+                    let values: Vec<String> = inner
                         .split(',')
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect();
-                    return (tags, vec![i]);
+                    return (values, vec![i]);
                 }
             } else if rest.is_empty() {
-                let mut tags = Vec::new();
+                let mut values = Vec::new();
                 let mut indices = vec![i];
                 for (j, next_line) in lines.iter().enumerate().skip(i + 1) {
                     let next = next_line.trim_start();
                     if let Some(val) = next.strip_prefix('-') {
-                        tags.push(val.trim().to_string());
+                        values.push(val.trim().to_string());
                         indices.push(j);
                     } else {
                         break;
                     }
                 }
-                return (tags, indices);
+                return (values, indices);
             }
         }
     }
     (Vec::new(), Vec::new())
 }
 
-pub fn read_tags(content: &str) -> Vec<String> {
+fn read_list(content: &str, key: &str) -> Vec<String> {
     match split_frontmatter(content) {
         Some((block, _)) => {
             let lines: Vec<String> = block.lines().map(String::from).collect();
-            find_tag_lines(&lines).0
+            find_list_lines(&lines, key).0
         }
         None => Vec::new(),
     }
 }
 
-pub fn apply_tags(content: &str, new_tags: &[String]) -> String {
+fn apply_list(content: &str, key: &str, new_values: &[String]) -> String {
     let (block_str, body) = split_frontmatter(content)
         .unwrap_or_else(|| (String::new(), content.to_string()));
     let mut lines: Vec<String> = block_str.lines().map(String::from).collect();
-    let (_, tag_indices) = find_tag_lines(&lines);
+    let (_, indices) = find_list_lines(&lines, key);
 
-    // find_tag_lines walks lines sequentially, so indices are already ascending.
-    let insert_at = tag_indices.first().copied().unwrap_or(0);
-    for idx in tag_indices.into_iter().rev() {
+    let insert_at = indices.first().copied().unwrap_or(0);
+    for idx in indices.into_iter().rev() {
         lines.remove(idx);
     }
 
-    if !new_tags.is_empty() {
-        let tag_line = format!("tags: [{}]", new_tags.join(", "));
+    if !new_values.is_empty() {
+        let line = format!("{}: [{}]", key, new_values.join(", "));
         let pos = insert_at.min(lines.len());
-        lines.insert(pos, tag_line);
+        lines.insert(pos, line);
     }
 
     let any_content = lines.iter().any(|l| !l.trim().is_empty());
@@ -92,6 +92,22 @@ pub fn apply_tags(content: &str, new_tags: &[String]) -> String {
 
     let block_joined = lines.join("\n");
     format!("---\n{}\n---\n{}", block_joined, body)
+}
+
+pub fn read_tags(content: &str) -> Vec<String> {
+    read_list(content, "tags")
+}
+
+pub fn apply_tags(content: &str, new_tags: &[String]) -> String {
+    apply_list(content, "tags", new_tags)
+}
+
+pub fn read_aliases(content: &str) -> Vec<String> {
+    read_list(content, "aliases")
+}
+
+pub fn apply_aliases(content: &str, new_aliases: &[String]) -> String {
+    apply_list(content, "aliases", new_aliases)
 }
 
 #[cfg(test)]
@@ -196,5 +212,50 @@ mod tests {
         let tags = read_tags(raw);
         let written = apply_tags(raw, &tags);
         assert_eq!(written, raw);
+    }
+
+    #[test]
+    fn read_aliases_inline() {
+        let raw = "---\naliases: [Captain Ash, Ash the Bold]\n---\nBody\n";
+        assert_eq!(read_aliases(raw), vec!["Captain Ash", "Ash the Bold"]);
+    }
+
+    #[test]
+    fn read_aliases_block_form() {
+        let raw = "---\naliases:\n  - Captain Ash\n  - Ash the Bold\n---\nBody\n";
+        assert_eq!(read_aliases(raw), vec!["Captain Ash", "Ash the Bold"]);
+    }
+
+    #[test]
+    fn read_aliases_none_when_no_frontmatter() {
+        assert_eq!(read_aliases("just body").len(), 0);
+        assert_eq!(read_aliases("").len(), 0);
+    }
+
+    #[test]
+    fn apply_aliases_creates_block_when_no_frontmatter() {
+        let written = apply_aliases("Body\n", &["Captain Ash".to_string()]);
+        assert_eq!(written, "---\naliases: [Captain Ash]\n---\nBody\n");
+    }
+
+    #[test]
+    fn apply_aliases_clears_block_when_only_key() {
+        let raw = "---\naliases: [Captain Ash]\n---\nBody\n";
+        let written = apply_aliases(raw, &[]);
+        assert_eq!(written, "Body\n");
+    }
+
+    #[test]
+    fn apply_aliases_preserves_other_keys() {
+        let raw = "---\ntags: [npc]\naliases: [Captain Ash]\n---\nBody\n";
+        let written = apply_aliases(raw, &["Ash".to_string()]);
+        assert_eq!(written, "---\ntags: [npc]\naliases: [Ash]\n---\nBody\n");
+    }
+
+    #[test]
+    fn tags_and_aliases_coexist() {
+        let raw = "---\ntags: [npc]\naliases: [Captain Ash]\n---\nBody\n";
+        assert_eq!(read_tags(raw), vec!["npc"]);
+        assert_eq!(read_aliases(raw), vec!["Captain Ash"]);
     }
 }
