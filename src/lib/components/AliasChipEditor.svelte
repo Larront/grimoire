@@ -43,12 +43,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      attach(draft);
-      return;
-    }
-    if (e.key === ",") {
+    if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       attach(draft);
       return;

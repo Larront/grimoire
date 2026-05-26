@@ -327,7 +327,6 @@ pub fn get_outbound_links(
 
     let mut result = Vec::new();
     for target_path in link_rows {
-        // Try to resolve via exact path match.
         let resolved = n::notes
             .filter(n::path.eq(&target_path))
             .select((n::id, n::title, n::path))
@@ -335,7 +334,6 @@ pub fn get_outbound_links(
             .optional()
             .map_err(|e| e.to_string())?;
 
-        // If not found by path, try alias resolution.
         let resolved = if resolved.is_none() {
             diesel::sql_query(
                 "SELECT n.id, n.title, n.path
