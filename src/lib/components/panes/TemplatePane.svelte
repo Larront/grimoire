@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { templates } from "$lib/stores/templates.svelte";
+  import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import { LoaderCircle } from "@lucide/svelte";
   import Editor from "$lib/components/editor/Editor.svelte";
 
@@ -12,6 +13,7 @@
   let { templatePath, templateTitle }: Props = $props();
 
   let body = $state<string | null>(null);
+  let frontmatterTags = $state<string[]>([]);
   let lastFetchedPath = $state<string | null>(null);
   let isLoading = $state(false);
 
@@ -23,7 +25,9 @@
       isLoading = true;
       invoke<string>("read_template", { path: targetPath }).then((content) => {
         if (lastFetchedPath !== targetPath) return;
-        body = content;
+        const parsed = parseFrontmatter(content);
+        frontmatterTags = parsed.tags;
+        body = parsed.body;
         isLoading = false;
       }).catch((e) => {
         console.error("read_template failed:", e);
@@ -40,11 +44,6 @@
     if (!isSavingTitle) draftTitle = templateTitle;
   });
 
-  $effect(() => {
-    const title = templateTitle;
-    untrack(() => tabs.updateTabTitle("template", 0, title));
-  });
-
   async function commitTitle() {
     const trimmed = draftTitle.trim();
     if (!trimmed || trimmed === templateTitle) {
@@ -52,13 +51,15 @@
       return;
     }
     isSavingTitle = true;
+    const currentPath = templatePath;
     try {
-      await invoke("rename_template", { path: templatePath, newName: trimmed });
-      tabs.updateTabTitle("template", 0, trimmed);
+      await invoke("rename_template", { path: currentPath, newName: trimmed });
+      const newPath = currentPath.replace(/[^/]+\.md$/, `${trimmed}.md`);
+      tabs.updateTemplateTab(currentPath, trimmed, newPath);
+      await templates.load();
     } catch (e) {
       console.error("title save failed:", e);
       draftTitle = templateTitle;
-    } finally {
       isSavingTitle = false;
     }
   }
@@ -77,7 +78,8 @@
   async function handleSave(markdown: string) {
     if (isSavingTitle) return;
     try {
-      await invoke("write_template", { path: templatePath, content: markdown });
+      const content = serializeFrontmatter(frontmatterTags, markdown);
+      await invoke("write_template", { path: templatePath, content });
     } catch (e) {
       console.error("content save failed:", e);
     }

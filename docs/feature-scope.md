@@ -92,7 +92,7 @@ Locks down the foundation before the feature-building phase.
 
 ---
 
-### Phase 4 — Images 🟢 Current
+### Phase 4 — Images ✅ Complete
 
 **Deliverables:**
 
@@ -117,7 +117,7 @@ Locks down the foundation before the feature-building phase.
 
 ---
 
-### Phase 5 — Tags
+### Phase 5 — Tags ✅ Complete
 
 **Deliverables:**
 
@@ -143,7 +143,7 @@ Locks down the foundation before the feature-building phase.
 
 ---
 
-### Phase 6 — Search
+### Phase 6 — Search ✅ Complete
 
 Search is hosted in the existing command palette (`AppSearch.svelte`). Both the Search rail icon and Ctrl/⌘+K open it. The palette becomes the single canonical surface for vault search, tag discovery, and command execution.
 
@@ -160,7 +160,7 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 - Per-group caps: Commands 3, Tags 5, Notes 6, Maps 3, Scenes 3, with a "Show N more in [group]" expand-in-place row when capped
 - When only one group matches, that group's cap relaxes (Notes ~15) before showing the expand row
 - Empty query state: a **Recent** section (cross-entity MRU, ~5 items) above the Commands section. Recent is the only place where grouping is mixed by entity type
-- Initial Commands set (append-only as later phases ship): *Create new note*, *Create new scene*, *Create new map*, *Add tag to current note*, *Open Settings*, *Toggle theme*, *Switch vault…*, *Rebuild search index*
+- Initial Commands set (append-only as later phases ship): *Create new note*, *Create new scene*, *Create new map*, *Add tag to current note*, *Open Settings*, *Toggle theme*, *Switch vault…*, *Rebuild search index* — Phase 7 appends: *Create note from template*, *Save note as template*, *Create new template*
 - Search fires from char 2 with 80ms debounce; perf target <150ms on 200+ note vaults
 - Fuzzy matching is on by default with tiered Levenshtein distance: 0 for queries < 4 chars, 1 for 4–7, 2 for 8+
 - Archived notes are excluded from results by default. Opt-in via `archived:true` (only archived) or `archived:any` (include archived)
@@ -191,19 +191,33 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 
 ---
 
-### Phase 7 — Templates
+### Phase 7 — Templates 🟢 Current
 
 **Deliverables:**
 
-- Built-in templates: NPC, Location, Session Log, Encounter
-- Create a note from a template (prompt on new note creation, or command palette option)
-- Save any existing note as a custom template
-- Custom templates stored in vault `.grimoire/templates/`
+- Four built-in templates injected into `vault/.grimoire/templates/` on first vault open: `NPC.md`, `Location.md`, `Session Log.md`, `Encounter.md` — each is a regular markdown file the GM can edit directly
+- Settings action: *Restore default templates* — overwrites only the four built-in files back to their original content; leaves custom templates untouched
+- Templates sidebar section — a collapsible section at the bottom of the Files sidebar listing all files in `vault/.grimoire/templates/`. Supports rename and delete inline (same patterns as the file tree). Section header has a "+" button wired to *Create new template*.
+- Three new Commands added to the palette (append-only): *Create note from template*, *Save note as template* (contextual — only active when focused pane is a note), *Create new template*
+- *Create note from template* replaces the palette results inline with a template picker list (same keyboard navigation); selecting a template creates a note immediately — title pre-selected in the editor for the GM to type. Note lands in the same folder context as *Create new note*. The "Create new note" flow is unchanged.
+- Template content is static markdown, copied verbatim into the new note (including any frontmatter in the template file, e.g. `tags: [npc]`). No variable substitution.
+- The template's filename (minus `.md`) is the display name in the picker; no special Grimoire frontmatter.
+- *Save note as template* copies the current note's full content to `vault/.grimoire/templates/<title>.md`; the GM can then edit that file directly.
+- *Create new template* creates a blank `.md` file in `vault/.grimoire/templates/` and opens it in the main editor with a non-intrusive "Editing template" chip in the tab.
+- Templates are not indexed by Tantivy and do not appear as search results in the command palette.
+
+**Out of scope (Phase 7):**
+
+- Variable substitution or placeholder syntax in templates — templates are static content
+- A "Choose folder" step in the create-from-template flow — note lands using the same folder logic as *Create new note*
+- Templates appearing in search results — discovery is via the Templates sidebar section and the command palette picker only
 
 **Success criteria:**
 
-- Creating a new NPC note from template takes one action
-- Custom templates survive vault moves (relative paths)
+- A GM can create a new NPC note from the template in two palette keystrokes (command + template selection)
+- Editing a built-in template and reopening the vault preserves the edits
+- *Restore default templates* in Settings resets all four built-ins without touching custom templates
+- Custom and built-in templates survive vault moves (relative paths, no absolute references)
 
 ---
 

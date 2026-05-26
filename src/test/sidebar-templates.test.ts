@@ -149,11 +149,13 @@ describe("AppSidebar — Templates section", () => {
     expect(container.textContent).toContain("Location");
   });
 
-  it("renders an empty state when no templates exist", async () => {
+  it("shows only the 'New template' button when no templates exist", async () => {
     mockTemplates = [];
     const { container } = render(AppShell);
     await flush();
-    expect(container.textContent).toContain("No templates yet");
+    const addBtn = container.querySelector("[data-testid='new-template-btn']");
+    expect(addBtn).toBeTruthy();
+    expect(container.textContent).not.toContain("No templates yet");
   });
 
   it("triggers toastUndo when Delete Template is selected from context menu", async () => {

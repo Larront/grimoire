@@ -37,7 +37,12 @@ function createTabsStore() {
     const serializeTabs = (tabs: Tab[]) =>
       tabs
         .filter((t) => t.type !== "empty")
-        .map((t) => ({ type: t.type, id: t.id, title: t.title }));
+        .map((t) => ({
+          type: t.type,
+          id: t.id,
+          title: t.title,
+          ...(t.templatePath ? { templatePath: t.templatePath } : {}),
+        }));
     const leftTabs = serializeTabs(left.tabs);
     const rightTabs = right ? serializeTabs(right.tabs) : null;
     return {
@@ -306,6 +311,20 @@ function createTabsStore() {
     persist();
   }
 
+  function updateTemplateTab(oldPath: string, newTitle: string, newPath: string) {
+    const update = (pane: TabPane) => ({
+      ...pane,
+      tabs: pane.tabs.map((t) =>
+        t.type === "template" && t.templatePath === oldPath
+          ? { ...t, title: newTitle, templatePath: newPath }
+          : t,
+      ),
+    });
+    left = update(left);
+    if (right) right = update(right);
+    persist();
+  }
+
   function clearRenameFlag(pane: "left" | "right", index: number) {
     if (pane === "right") {
       if (!right?.tabs[index]) return;
@@ -517,6 +536,7 @@ function createTabsStore() {
     closeActiveTab,
     closeTabByTypeAndId,
     updateTabTitle,
+    updateTemplateTab,
     clearRenameFlag,
     setFocusedPane,
     isTabOpen,

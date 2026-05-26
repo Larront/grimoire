@@ -151,6 +151,8 @@
     }
     try {
       await invoke("rename_template", { path: tmpl.path, newName: newName.trim() });
+      const newPath = tmpl.path.replace(/[^/]+\.md$/, `${newName.trim()}.md`);
+      tabs.updateTemplateTab(tmpl.path, newName.trim(), newPath);
       await templates.load();
       renamingTemplatePath = null;
       return true;
@@ -377,9 +379,12 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
-    <Collapsible.Root open class="group/collapsible">
-      <Sidebar.Group>
-        <Sidebar.GroupLabel>
+  </Sidebar.Content>
+
+  <Sidebar.Footer>
+    <Collapsible.Root class="group/collapsible">
+      <Sidebar.Group class="py-0">
+        <Sidebar.GroupLabel class="font-normal opacity-50">
           {#snippet child({ props })}
             <Collapsible.Trigger {...props}>
               Templates
@@ -389,14 +394,6 @@
             </Collapsible.Trigger>
           {/snippet}
         </Sidebar.GroupLabel>
-        <Sidebar.GroupAction
-          title="New Template"
-          aria-label="New Template"
-          data-testid="new-template-btn"
-          onclick={handleCreateTemplate}
-        >
-          <Plus strokeWidth={1.5} />
-        </Sidebar.GroupAction>
         <Collapsible.Content forceMount>
           {#snippet child({ props, open })}
             {#if open}
@@ -407,7 +404,7 @@
                       <Sidebar.MenuSkeleton showIcon />
                       <Sidebar.MenuSkeleton showIcon />
                     </div>
-                  {:else if templates.templates.length > 0}
+                  {:else}
                     <Sidebar.Menu>
                       {#each templates.templates as tmpl (tmpl.path)}
                         <ContextMenu.Root>
@@ -443,19 +440,17 @@
                           </ContextMenu.Portal>
                         </ContextMenu.Root>
                       {/each}
+                      <Sidebar.MenuItem>
+                        <Sidebar.MenuButton
+                          class="text-muted-foreground/50 hover:text-muted-foreground"
+                          onclick={handleCreateTemplate}
+                          data-testid="new-template-btn"
+                        >
+                          <Plus class="size-4 shrink-0" strokeWidth={1.5} />
+                          <span>New template</span>
+                        </Sidebar.MenuButton>
+                      </Sidebar.MenuItem>
                     </Sidebar.Menu>
-                  {:else}
-                    <div class="flex flex-col items-center gap-3 px-4 py-6 text-center">
-                      <div class="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                        <LayoutTemplate class="size-5 text-primary" strokeWidth={1.5} />
-                      </div>
-                      <div class="space-y-1">
-                        <p class="text-(--font-body) font-medium">No templates yet</p>
-                        <p class="text-(--font-ui) text-muted-foreground">
-                          Create your first template to reuse note structures.
-                        </p>
-                      </div>
-                    </div>
                   {/if}
                 </Sidebar.GroupContent>
               </div>
@@ -464,9 +459,6 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
-  </Sidebar.Content>
-
-  <Sidebar.Footer>
     <MiniPlayer />
     <VaultSelector />
   </Sidebar.Footer>
