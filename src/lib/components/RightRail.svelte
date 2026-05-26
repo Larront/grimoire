@@ -5,8 +5,9 @@
   import { tabs } from '$lib/stores/tabs.svelte';
   import { notes } from '$lib/stores/notes.svelte';
   import TagChipEditor from './TagChipEditor.svelte';
+  import AliasChipEditor from './AliasChipEditor.svelte';
   import { formatBreadcrumb, formatRelativeTime } from '$lib/utils/note-meta';
-  import { PanelRight, Check } from '@lucide/svelte';
+  import { PanelRight, Check, TriangleAlert } from '@lucide/svelte';
 
   const { rail, visible = false }: { rail: RightRailState; visible: boolean } = $props();
 
@@ -22,12 +23,22 @@
 
   const isOpen = $derived(rail.open && visible);
 
+  interface AliasCollision {
+    alias: string;
+    other_note_id: number;
+    other_note_title: string;
+  }
+
   let tags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
   let tagsLoadError = $state(false);
   let saveStatus = $state<'idle' | 'saved' | 'error'>('idle');
   let saveStatusTimer: ReturnType<typeof setTimeout> | null = null;
+
+  let aliases = $state<string[]>([]);
+  let aliasesLoadError = $state(false);
+  let aliasCollisions = $state<AliasCollision[]>([]);
 
   async function refreshAllTags() {
     try {
@@ -42,14 +53,20 @@
     const note = activeNote;
     if (!note) {
       tags = [];
+      aliases = [];
+      aliasCollisions = [];
       loadedForPath = null;
       tagsLoadError = false;
+      aliasesLoadError = false;
       return;
     }
     if (note.path === loadedForPath) return;
     const targetPath = note.path;
+    const noteId = note.id;
     loadedForPath = targetPath;
     tagsLoadError = false;
+    aliasesLoadError = false;
+    aliasCollisions = [];
     saveStatus = 'idle';
     invoke<string[]>('read_note_tags', { notePath: targetPath })
       .then((loaded) => {
@@ -61,6 +78,22 @@
         tags = [];
         tagsLoadError = true;
       });
+    invoke<string[]>('get_note_aliases', { noteId })
+      .then((loaded) => {
+        if (loadedForPath !== targetPath) return;
+        aliases = loaded ?? [];
+      })
+      .catch((e) => {
+        console.error('get_note_aliases failed:', e);
+        aliases = [];
+        aliasesLoadError = true;
+      });
+    invoke<AliasCollision[]>('get_alias_collisions', { noteId })
+      .then((cols) => {
+        if (loadedForPath !== targetPath) return;
+        aliasCollisions = cols ?? [];
+      })
+      .catch(() => { aliasCollisions = []; });
     refreshAllTags();
   });
 
@@ -83,6 +116,18 @@
 
   async function retryTags() {
     await persistTags(tags);
+  }
+
+  async function persistAliases(next: string[]) {
+    const note = activeNote;
+    if (!note) return;
+    try {
+      await invoke('set_note_aliases', { noteId: note.id, aliases: next });
+      const cols = await invoke<AliasCollision[]>('get_alias_collisions', { noteId: note.id });
+      aliasCollisions = cols ?? [];
+    } catch (e) {
+      console.error('set_note_aliases failed:', e);
+    }
   }
 </script>
 
@@ -122,6 +167,26 @@
               <p class="font-mono text-[10px] text-foreground-faint">Enter to add · Backspace to remove</p>
             {/if}
           {/if}
+        </section>
+        <section data-section="aliases" class="space-y-2 border-t border-sidebar-border pt-3 mt-3">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">Aliases</div>
+          {#if aliasesLoadError}
+            <p class="font-mono text-[10px] text-error">Aliases unavailable</p>
+          {:else}
+            <AliasChipEditor bind:aliases onchange={persistAliases} />
+            {#if aliases.length === 0}
+              <p class="font-mono text-[10px] text-foreground-faint">Enter or comma to add · Backspace to remove</p>
+            {/if}
+          {/if}
+          {#each aliasCollisions as col (col.alias + col.other_note_id)}
+            <p
+              data-slot="alias-collision-warning"
+              class="flex items-start gap-1 font-mono text-[10px] text-warning leading-[1.4]"
+            >
+              <TriangleAlert class="size-3 mt-px shrink-0" />
+              <span>'{col.alias}' is also used by <span class="font-medium">{col.other_note_title}</span></span>
+            </p>
+          {/each}
         </section>
         <section data-section="folder" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
           <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">Folder</div>

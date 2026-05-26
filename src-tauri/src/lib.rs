@@ -128,6 +128,7 @@ pub fn run() {
             get_outbound_links,
             get_note_aliases,
             set_note_aliases,
+            get_alias_collisions,
             // Graph styles
             get_tag_graph_styles,
             set_tag_graph_style,

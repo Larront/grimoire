@@ -199,6 +199,60 @@ fn collect_links_and_aliases(
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Debug, Clone)]
+pub struct AliasCollision {
+    pub alias: String,
+    pub other_note_id: i32,
+    pub other_note_title: String,
+}
+
+#[derive(QueryableByName, Debug)]
+struct AliasCollisionRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    alias: String,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    other_note_id: i32,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    other_note_title: String,
+}
+
+pub fn get_alias_collisions_on_conn(
+    conn: &mut SqliteConnection,
+    note_id: i32,
+) -> Result<Vec<AliasCollision>, String> {
+    diesel::sql_query(
+        "SELECT a1.alias, n.id as other_note_id, n.title as other_note_title
+         FROM note_aliases a1
+         JOIN note_aliases a2 ON LOWER(a1.alias) = LOWER(a2.alias)
+         JOIN notes n ON a2.note_id = n.id
+         WHERE a1.note_id = ?1
+           AND a2.note_id != ?1
+         ORDER BY a1.alias",
+    )
+    .bind::<diesel::sql_types::Integer, _>(note_id)
+    .load::<AliasCollisionRow>(conn)
+    .map_err(|e| e.to_string())
+    .map(|rows| {
+        rows.into_iter()
+            .map(|r| AliasCollision {
+                alias: r.alias,
+                other_note_id: r.other_note_id,
+                other_note_title: r.other_note_title,
+            })
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn get_alias_collisions(
+    note_id: i32,
+    vault: State<AppVault>,
+) -> Result<Vec<AliasCollision>, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    get_alias_collisions_on_conn(conn, note_id)
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct BacklinkNote {
     pub id: i32,
     pub path: String,
@@ -670,5 +724,61 @@ mod tests {
     struct CountRow {
         #[diesel(sql_type = diesel::sql_types::BigInt)]
         cnt: i64,
+    }
+
+    // ── get_alias_collisions_on_conn ─────────────────────────────────────────
+
+    #[test]
+    fn collisions_empty_when_no_shared_aliases() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "Note A");
+        insert_note(&mut conn, 2, "b.md", "Note B");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        upsert_note_aliases(&mut conn, 2, &["Dragon".to_string()]).unwrap();
+        let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
+        assert!(collisions.is_empty());
+    }
+
+    #[test]
+    fn collisions_detected_when_alias_shared_with_another_note() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "Note A");
+        insert_note(&mut conn, 2, "b.md", "Note B");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        upsert_note_aliases(&mut conn, 2, &["Captain Ash".to_string()]).unwrap();
+        let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
+        assert_eq!(collisions.len(), 1);
+        assert_eq!(collisions[0].alias, "Captain Ash");
+        assert_eq!(collisions[0].other_note_id, 2);
+        assert_eq!(collisions[0].other_note_title, "Note B");
+    }
+
+    #[test]
+    fn collisions_detected_case_insensitively() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "Note A");
+        insert_note(&mut conn, 2, "b.md", "Note B");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        upsert_note_aliases(&mut conn, 2, &["captain ash".to_string()]).unwrap();
+        let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
+        assert_eq!(collisions.len(), 1);
+        assert_eq!(collisions[0].other_note_id, 2);
+    }
+
+    #[test]
+    fn collisions_returns_no_results_when_note_has_no_aliases() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "Note A");
+        let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
+        assert!(collisions.is_empty());
+    }
+
+    #[test]
+    fn collisions_not_self_reported() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "Note A");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
+        assert!(collisions.is_empty(), "own aliases should not be reported as collisions");
     }
 }

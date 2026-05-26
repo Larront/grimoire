@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import { overlay } from "../lib/stores/overlay.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
+import { notes } from "../lib/stores/notes.svelte";
+import type { Note } from "../lib/types/vault";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -294,5 +296,116 @@ describe("rail visibility on non-note panes", () => {
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("right-rail-trigger")).toBeNull();
+  });
+});
+
+// ── Right rail — Aliases section ──────────────────────────────────────────────
+
+const testNote: Note = {
+  id: 1,
+  path: "Characters/Aldric.md",
+  title: "Aldric",
+  icon: null,
+  cover_image: null,
+  parent_path: "Characters",
+  archived: false,
+  modified_at: "2026-01-01T00:00:00Z",
+};
+
+async function openRailWithNote(
+  invokeImpl: (cmd: string, args?: unknown) => unknown,
+) {
+  vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+    if (cmd === "read_note_content") return "";
+    return invokeImpl(cmd, args);
+  });
+  tabs.openTab({ type: "note", id: 1, title: "Aldric" });
+  await act(() => notes.load());
+  const result = render(AppShell);
+  // Open the rail on desktop
+  await fireEvent.click(result.getByTestId("right-rail-trigger"));
+  return result;
+}
+
+describe("right rail — aliases section", () => {
+  it("aliases section appears in the details pane when a note is active", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_notes") return [testNote];
+      if (cmd === "get_note_aliases") return ["Captain Ash"];
+      if (cmd === "read_note_tags") return [];
+      if (cmd === "list_all_tags") return [];
+      if (cmd === "get_alias_collisions") return [];
+      return null;
+    });
+    await act(() => {});
+    expect(container.querySelector('[data-section="aliases"]')).toBeTruthy();
+  });
+
+  it("aliases section renders chips from get_note_aliases", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_notes") return [testNote];
+      if (cmd === "get_note_aliases") return ["Captain Ash", "The Hero"];
+      if (cmd === "read_note_tags") return [];
+      if (cmd === "list_all_tags") return [];
+      if (cmd === "get_alias_collisions") return [];
+      return null;
+    });
+    await act(() => {});
+    const chips = container.querySelectorAll('[data-slot="alias-chip"]');
+    expect(chips.length).toBe(2);
+  });
+
+  it("collision warning appears when get_alias_collisions returns a collision", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_notes") return [testNote];
+      if (cmd === "get_note_aliases") return ["Captain Ash"];
+      if (cmd === "read_note_tags") return [];
+      if (cmd === "list_all_tags") return [];
+      if (cmd === "get_alias_collisions")
+        return [{ alias: "Captain Ash", other_note_id: 2, other_note_title: "Ash Note" }];
+      return null;
+    });
+    await act(() => {});
+    const warning = container.querySelector('[data-slot="alias-collision-warning"]');
+    expect(warning).toBeTruthy();
+    expect(warning!.textContent).toContain("Captain Ash");
+    expect(warning!.textContent).toContain("Ash Note");
+  });
+
+  it("no collision warning when get_alias_collisions returns empty", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_notes") return [testNote];
+      if (cmd === "get_note_aliases") return ["Captain Ash"];
+      if (cmd === "read_note_tags") return [];
+      if (cmd === "list_all_tags") return [];
+      if (cmd === "get_alias_collisions") return [];
+      return null;
+    });
+    await act(() => {});
+    expect(
+      container.querySelector('[data-slot="alias-collision-warning"]'),
+    ).toBeNull();
+  });
+
+  it("aliases section is positioned between tags and folder sections", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_notes") return [testNote];
+      if (cmd === "get_note_aliases") return [];
+      if (cmd === "read_note_tags") return [];
+      if (cmd === "list_all_tags") return [];
+      if (cmd === "get_alias_collisions") return [];
+      return null;
+    });
+    await act(() => {});
+    const sections = container.querySelectorAll("[data-section]");
+    const sectionNames = Array.from(sections).map((s) =>
+      s.getAttribute("data-section"),
+    );
+    const tagsIdx = sectionNames.indexOf("tags");
+    const aliasesIdx = sectionNames.indexOf("aliases");
+    const folderIdx = sectionNames.indexOf("folder");
+    expect(tagsIdx).toBeGreaterThanOrEqual(0);
+    expect(aliasesIdx).toBeGreaterThan(tagsIdx);
+    expect(folderIdx).toBeGreaterThan(aliasesIdx);
   });
 });
