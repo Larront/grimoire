@@ -145,6 +145,14 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    tag_graph_styles (tag) {
+        tag -> Text,
+        color -> Nullable<Text>,
+        hidden -> Integer,
+    }
+}
+
 diesel::joinable!(map_annotations -> maps (map_id));
 diesel::joinable!(note_aliases -> notes (note_id));
 diesel::joinable!(note_links -> notes (source_id));
@@ -169,4 +177,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     scene_slots,
     scenes,
     spotify_auth,
+    tag_graph_styles,
 );

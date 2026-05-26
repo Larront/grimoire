@@ -3,6 +3,7 @@ mod db;
 mod search;
 mod vault;
 
+use commands::graph_styles::*;
 use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
@@ -127,6 +128,9 @@ pub fn run() {
             get_outbound_links,
             get_note_aliases,
             set_note_aliases,
+            // Graph styles
+            get_tag_graph_styles,
+            set_tag_graph_style,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
