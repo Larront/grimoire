@@ -44,13 +44,17 @@
         invoke<Record<string, TagStyle>>('get_tag_graph_styles'),
       ])
         .then(([tags, styles]) => {
-          allTags = tags;
-          tagStyles = styles;
+          allTags = tags ?? [];
+          tagStyles = styles ?? {};
         })
         .catch(() => {})
         .finally(() => { isGraphLoading = false; });
     }
   });
+
+  function isTagVisible(tag: string): boolean {
+    return !(tagStyles[tag]?.hidden ?? false);
+  }
 
   async function setTagColor(tag: string, color: string | null) {
     const current = tagStyles[tag] ?? { color: null, hidden: false };
@@ -246,14 +250,14 @@
                   <button
                     type="button"
                     role="switch"
-                    aria-checked={!(tagStyles[tag]?.hidden ?? false)}
+                    aria-checked={isTagVisible(tag)}
                     aria-label="Show {tag} in graph"
                     data-testid="tag-visibility-{tag}"
                     onclick={() => toggleTagVisibility(tag)}
-                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!(tagStyles[tag]?.hidden ?? false) ? 'bg-primary' : 'bg-input'}"
+                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {isTagVisible(tag) ? 'bg-primary' : 'bg-input'}"
                   >
                     <span
-                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform {!(tagStyles[tag]?.hidden ?? false) ? 'translate-x-4' : 'translate-x-0'}"
+                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform {isTagVisible(tag) ? 'translate-x-4' : 'translate-x-0'}"
                     ></span>
                   </button>
                 </div>

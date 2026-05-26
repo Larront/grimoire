@@ -2,11 +2,11 @@ use crate::db::schema::tag_graph_styles::dsl as gs;
 use crate::vault::AppVault;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct TagGraphStyleResponse {
     pub color: Option<String>,
     pub hidden: bool,
@@ -52,7 +52,7 @@ pub fn set_tag_graph_style_on_conn(
     color: Option<&str>,
     hidden: bool,
 ) -> Result<(), String> {
-    let hidden_val = if hidden { 1 } else { 0 };
+    let hidden_val = i32::from(hidden);
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         diesel::delete(gs::tag_graph_styles.filter(gs::tag.eq(tag))).execute(c)?;
         diesel::insert_into(gs::tag_graph_styles)
