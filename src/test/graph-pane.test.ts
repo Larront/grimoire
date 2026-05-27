@@ -182,6 +182,17 @@ function setupInvoke() {
   });
 }
 
+/** Variant of setupInvoke where the "npc" tag starts hidden. */
+function setupInvokeWithHiddenNpc() {
+  vi.mocked(invoke).mockImplementation((cmd: string) => {
+    if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
+    if (cmd === "get_tag_graph_styles") return Promise.resolve({ npc: { color: "#ff0000", hidden: true }, quest: { color: null, hidden: false } });
+    if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
+    if (cmd === "set_tag_graph_style") return Promise.resolve(null);
+    return Promise.resolve(null);
+  });
+}
+
 // ── Reset between tests ───────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -606,14 +617,7 @@ describe("GraphPane – filter panel", () => {
   });
 
   it("toggling a tag from hidden=true calls set_tag_graph_style with hidden: false", async () => {
-    // Override: npc starts hidden
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
-      if (cmd === "get_tag_graph_styles") return Promise.resolve({ npc: { color: "#ff0000", hidden: true }, quest: { color: null, hidden: false } });
-      if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
-      if (cmd === "set_tag_graph_style") return Promise.resolve(null);
-      return Promise.resolve(null);
-    });
+    setupInvokeWithHiddenNpc();
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
@@ -761,14 +765,7 @@ describe("GraphPane – node visibility filtering", () => {
   });
 
   it("re-showing a hidden tag restores display:element on its nodes", async () => {
-    // Start with npc hidden
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
-      if (cmd === "get_tag_graph_styles") return Promise.resolve({ npc: { color: "#ff0000", hidden: true }, quest: { color: null, hidden: false } });
-      if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
-      if (cmd === "set_tag_graph_style") return Promise.resolve(null);
-      return Promise.resolve(null);
-    });
+    setupInvokeWithHiddenNpc();
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());

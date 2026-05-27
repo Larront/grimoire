@@ -91,6 +91,12 @@
     return assignments;
   }
 
+  /** Resolve the display color for a tag: explicit color → accent cycle → muted foreground. */
+  function tagColor(tag: string): string {
+    const style = tagStylesMap.get(tag);
+    return style?.color ?? accentAssignments.get(tag) ?? getMutedColor();
+  }
+
   /** Compute the background color for a single node. */
   function computeNodeColor(
     kind: "note" | "map" | "stub",
@@ -98,13 +104,7 @@
   ): string {
     if (kind === "map") return MAP_COLOR;
     if (kind === "stub") return getMutedColor();
-    // note node
-    if (primaryTag) {
-      const style = tagStylesMap.get(primaryTag);
-      if (style?.color) return style.color;
-      return accentAssignments.get(primaryTag) ?? getMutedColor();
-    }
-    return getMutedColor();
+    return primaryTag ? tagColor(primaryTag) : getMutedColor();
   }
 
   /**
@@ -179,16 +179,6 @@
     cy.style(buildStyleArray());
   }
 
-  /**
-   * Compute the swatch color to display in the filter panel for a given tag.
-   * Uses explicit color if set, falls back to accent cycle assignment, then muted.
-   */
-  function computeSwatchColor(tag: string): string {
-    const style = tagStylesMap.get(tag);
-    if (style?.color) return style.color;
-    return accentAssignments.get(tag) ?? getMutedColor();
-  }
-
   /** Whether a tag is currently hidden in the filter. Uses "" for untagged. */
   function isFilterTagHidden(tag: string): boolean {
     return tagStylesMap.get(tag)?.hidden ?? false;
@@ -228,8 +218,7 @@
       const kind = node.data("kind") as string;
       const primaryTag = node.data("primary_tag") as string | null | undefined;
 
-      // Stubs have no tag; keep them visible unless explicitly filtering all stubs
-      // (not in scope for this issue — stubs are always visible)
+      // Stub nodes are not tag-filtered; always keep them visible
       if (kind === "stub") return;
 
       // Use "" as the untagged sentinel
@@ -365,7 +354,7 @@
           <span
             data-testid="filter-swatch-{tag}"
             class="size-3 rounded-full shrink-0 border border-border/40"
-            style="background-color: {computeSwatchColor(tag)}"
+            style="background-color: {tagColor(tag)}"
           ></span>
 
           <!-- Tag label -->
