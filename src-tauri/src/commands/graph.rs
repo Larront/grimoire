@@ -22,6 +22,12 @@ pub struct GraphNodeData {
     pub kind: String, // "note" | "map" | "stub"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<i32>,
+    /// First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_tag: Option<String>,
+    /// Number of note_links rows whose target_path resolves to this note's path.
+    /// Always 0 for map and stub nodes.
+    pub backlink_count: i32,
 }
 
 #[derive(Serialize, Debug)]
@@ -73,6 +79,22 @@ struct PinRow {
     note_id: i32,
 }
 
+#[derive(QueryableByName, Debug)]
+struct NotePrimaryTagRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    note_path: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    primary_tag: String,
+}
+
+#[derive(QueryableByName, Debug)]
+struct BacklinkCountRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    target_path: String,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    backlink_count: i32,
+}
+
 // ── Core logic (testable) ─────────────────────────────────────────────────────
 
 pub fn get_graph_data_on_conn(
@@ -100,9 +122,35 @@ pub fn get_graph_data_on_conn(
             .load(conn)
             .map_err(|e| e.to_string())?;
 
+    // 5. Primary tag per note (MIN(tag) for deterministic ordering)
+    let primary_tags: Vec<NotePrimaryTagRow> = diesel::sql_query(
+        "SELECT note_path, MIN(tag) AS primary_tag FROM note_tags GROUP BY note_path",
+    )
+    .load(conn)
+    .map_err(|e| e.to_string())?;
+
+    // 6. Backlink count per target path (count of incoming note_links)
+    let backlink_counts: Vec<BacklinkCountRow> = diesel::sql_query(
+        "SELECT target_path, COUNT(*) AS backlink_count FROM note_links GROUP BY target_path",
+    )
+    .load(conn)
+    .map_err(|e| e.to_string())?;
+
     // Build a path→id lookup for resolving wikilinks
     let path_to_id: std::collections::HashMap<&str, i32> =
         notes.iter().map(|note| (note.path.as_str(), note.id)).collect();
+
+    // Build a path→primary_tag lookup
+    let path_to_primary_tag: std::collections::HashMap<&str, &str> = primary_tags
+        .iter()
+        .map(|r| (r.note_path.as_str(), r.primary_tag.as_str()))
+        .collect();
+
+    // Build a path→backlink_count lookup
+    let path_to_backlink_count: std::collections::HashMap<&str, i32> = backlink_counts
+        .iter()
+        .map(|r| (r.target_path.as_str(), r.backlink_count))
+        .collect();
 
     // Build note nodes
     let mut nodes: Vec<GraphNodeData> = notes
@@ -112,6 +160,13 @@ pub fn get_graph_data_on_conn(
             label: note.title.clone(),
             kind: "note".to_string(),
             entity_id: Some(note.id),
+            primary_tag: path_to_primary_tag
+                .get(note.path.as_str())
+                .map(|s| s.to_string()),
+            backlink_count: path_to_backlink_count
+                .get(note.path.as_str())
+                .copied()
+                .unwrap_or(0),
         })
         .collect();
 
@@ -122,6 +177,8 @@ pub fn get_graph_data_on_conn(
             label: map.title.clone(),
             kind: "map".to_string(),
             entity_id: Some(map.id),
+            primary_tag: None,
+            backlink_count: 0,
         });
     }
 
@@ -135,6 +192,8 @@ pub fn get_graph_data_on_conn(
                     label: link.target_path.clone(),
                     kind: "stub".to_string(),
                     entity_id: None,
+                    primary_tag: None,
+                    backlink_count: 0,
                 });
             }
         }
@@ -233,6 +292,11 @@ mod tests {
                 shape TEXT,
                 icon TEXT,
                 color TEXT
+            );
+            CREATE TABLE note_tags (
+                note_path TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                PRIMARY KEY (note_path, tag)
             );
         ").unwrap();
         conn
@@ -483,5 +547,157 @@ mod tests {
         let data = get_graph_data_on_conn(&mut conn).unwrap();
         assert_eq!(data.nodes.len(), 1);
         assert!(data.edges.is_empty());
+    }
+
+    // ── New tests: primary_tag and backlink_count ────────────────────────────
+
+    #[test]
+    fn test_note_with_tag_has_primary_tag_set() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("npc.md"),
+                notes::title.eq("NPC Note"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::sql_query("INSERT INTO note_tags (note_path, tag) VALUES ('npc.md', 'npc')")
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let note = data.nodes.iter().find(|n| n.id == "note-1").unwrap();
+        assert_eq!(note.primary_tag.as_deref(), Some("npc"));
+    }
+
+    #[test]
+    fn test_note_without_tags_has_none_primary_tag() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("plain.md"),
+                notes::title.eq("Plain"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let note = data.nodes.iter().find(|n| n.id == "note-1").unwrap();
+        assert!(note.primary_tag.is_none());
+    }
+
+    #[test]
+    fn test_note_with_multiple_tags_primary_tag_is_alphabetically_first() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("multi.md"),
+                notes::title.eq("Multi"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::sql_query(
+            "INSERT INTO note_tags (note_path, tag) VALUES ('multi.md', 'zebra'), ('multi.md', 'alpha')",
+        )
+        .execute(&mut conn)
+        .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let note = data.nodes.iter().find(|n| n.id == "note-1").unwrap();
+        // MIN(tag) picks the lexicographically smallest
+        assert_eq!(note.primary_tag.as_deref(), Some("alpha"));
+    }
+
+    #[test]
+    fn test_note_backlink_count_reflects_incoming_links() {
+        let mut conn = setup_db();
+        // Target note
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(2),
+                notes::path.eq("popular.md"),
+                notes::title.eq("Popular"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        // Two source notes linking to popular.md
+        for id in [3, 4] {
+            diesel::insert_into(notes::table)
+                .values((
+                    notes::id.eq(id),
+                    notes::path.eq(format!("source{id}.md")),
+                    notes::title.eq(format!("Source {id}")),
+                    notes::archived.eq(false),
+                    notes::modified_at.eq(""),
+                ))
+                .execute(&mut conn)
+                .unwrap();
+            diesel::insert_into(note_links::table)
+                .values((note_links::source_id.eq(id), note_links::target_path.eq("popular.md")))
+                .execute(&mut conn)
+                .unwrap();
+        }
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let popular = data.nodes.iter().find(|n| n.id == "note-2").unwrap();
+        assert_eq!(popular.backlink_count, 2);
+
+        // Source notes have no backlinks
+        let source3 = data.nodes.iter().find(|n| n.id == "note-3").unwrap();
+        assert_eq!(source3.backlink_count, 0);
+    }
+
+    #[test]
+    fn test_map_nodes_have_zero_backlink_count() {
+        let mut conn = setup_db();
+        diesel::insert_into(maps::table)
+            .values((
+                maps::id.eq(1),
+                maps::title.eq("Map"),
+                maps::created_at.eq(""),
+                maps::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let map = data.nodes.iter().find(|n| n.kind == "map").unwrap();
+        assert_eq!(map.backlink_count, 0);
+        assert!(map.primary_tag.is_none());
+    }
+
+    #[test]
+    fn test_stub_nodes_have_zero_backlink_count() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("src.md"),
+                notes::title.eq("Src"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("missing.md")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let stub = data.nodes.iter().find(|n| n.kind == "stub").unwrap();
+        assert_eq!(stub.backlink_count, 0);
+        assert!(stub.primary_tag.is_none());
     }
 }
