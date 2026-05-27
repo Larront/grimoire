@@ -1,5 +1,7 @@
 use crate::commands::frontmatter;
-use crate::commands::links::{extract_wikilinks, upsert_note_aliases, upsert_note_links};
+use crate::commands::links::{
+    extract_wikilinks, rewrite_backlinks_on_rename_on_conn, upsert_note_aliases, upsert_note_links,
+};
 use crate::commands::tags::upsert_note_tags;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
@@ -212,6 +214,62 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
     }
 
     Ok(updated)
+}
+
+#[derive(Serialize)]
+pub struct RenameNoteResult {
+    pub note: Note,
+    pub updated_count: usize,
+}
+
+/// Like `update_note` but also rewrites all wikilinks that reference the old
+/// path in every other note in the vault.  Returns the count of notes whose
+/// files were actually rewritten so the frontend can show a toast.
+#[tauri::command]
+pub fn rename_note(note: Note, vault: State<AppVault>) -> Result<RenameNoteResult, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let vault_path = state.path.clone().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+
+    let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
+
+    let mut updated_count = 0usize;
+
+    if old_note.path != note.path {
+        let old_full = validate_path(&vault_path, &old_note.path)?;
+        let new_full = validate_parent_path(&vault_path, &note.path)?;
+        if new_full.exists() {
+            return Err(format!("A file already exists at '{}'", note.path));
+        }
+        if old_full.exists() {
+            fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
+        }
+        diesel::sql_query("UPDATE note_tags SET note_path = ? WHERE note_path = ?")
+            .bind::<diesel::sql_types::Text, _>(&note.path)
+            .bind::<diesel::sql_types::Text, _>(&old_note.path)
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        updated_count =
+            rewrite_backlinks_on_rename_on_conn(&vault_path, conn, &old_note.path, &note.path)?;
+    }
+
+    let updated: Note = diesel::update(notes.find(note.id))
+        .set(&note)
+        .returning(Note::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+
+    let raw_content = std::fs::read_to_string(vault_path.join(&updated.path)).unwrap_or_default();
+    let body_text = crate::search::extract_plain_text(&raw_content);
+    let tags = frontmatter::read_tags(&raw_content);
+    if let Some(index) = &state.search_index {
+        let _ = crate::search::index_note(index, &updated, &body_text, &tags);
+    }
+
+    Ok(RenameNoteResult {
+        note: updated,
+        updated_count,
+    })
 }
 
 #[tauri::command]

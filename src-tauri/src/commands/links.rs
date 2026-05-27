@@ -196,6 +196,91 @@ fn collect_links_and_aliases(
     Ok(())
 }
 
+// ── Backlink rewrite ──────────────────────────────────────────────────────────
+
+/// Replace wikilink occurrences of `old_path` with `new_path` inside `content`.
+/// Matches `[[old_path]]`, `[[old_path|display]]`, `[[old_path#heading]]`.
+/// Leaves frontmatter and non-matching links untouched.
+/// Returns (new_content, was_changed).
+pub fn rewrite_wikilinks_in_content(content: &str, old_path: &str, new_path: &str) -> (String, bool) {
+    let mut result = String::with_capacity(content.len());
+    let mut rest = content;
+    let mut changed = false;
+
+    while let Some(start) = rest.find("[[") {
+        result.push_str(&rest[..start + 2]);
+        rest = &rest[start + 2..];
+        if let Some(end) = rest.find("]]") {
+            let inner = &rest[..end];
+            // Split at first `|` or `#` to isolate the target
+            let sep_pos = inner.find(['|', '#']).unwrap_or(inner.len());
+            let raw_target = inner[..sep_pos].trim();
+            if raw_target == old_path {
+                result.push_str(new_path);
+                result.push_str(&inner[sep_pos..]);
+                changed = true;
+            } else {
+                result.push_str(inner);
+            }
+            result.push_str("]]");
+            rest = &rest[end + 2..];
+        } else {
+            // Unclosed `[[` — emit verbatim and stop
+            result.push_str(rest);
+            rest = "";
+            break;
+        }
+    }
+    result.push_str(rest);
+    (result, changed)
+}
+
+#[derive(QueryableByName, Debug)]
+struct SourceNoteRow {
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    id: i32,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    path: String,
+}
+
+/// For every note that has a `note_links` row pointing at `old_path`:
+/// reads the markdown file, rewrites `[[old_path...]]` → `[[new_path...]]`,
+/// saves the file, and re-indexes the note's outbound links in the DB.
+/// Returns the number of notes whose files were actually modified.
+pub fn rewrite_backlinks_on_rename_on_conn(
+    vault_path: &Path,
+    conn: &mut SqliteConnection,
+    old_path: &str,
+    new_path: &str,
+) -> Result<usize, String> {
+    let sources: Vec<SourceNoteRow> = diesel::sql_query(
+        "SELECT n.id, n.path
+         FROM note_links nl
+         JOIN notes n ON nl.source_id = n.id
+         WHERE nl.target_path = ?1",
+    )
+    .bind::<diesel::sql_types::Text, _>(old_path)
+    .load(conn)
+    .map_err(|e| e.to_string())?;
+
+    let mut updated_count = 0usize;
+    for source in sources {
+        let full_path = vault_path.join(&source.path);
+        let content = match fs::read_to_string(&full_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let (new_content, changed) = rewrite_wikilinks_in_content(&content, old_path, new_path);
+        if changed {
+            fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
+            let new_links = extract_wikilinks(&new_content);
+            upsert_note_links(conn, source.id, &new_links)?;
+            updated_count += 1;
+        }
+    }
+    Ok(updated_count)
+}
+
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Debug, Clone)]
@@ -442,6 +527,24 @@ struct ResolvedNoteRow {
     title: String,
     #[diesel(sql_type = diesel::sql_types::Text)]
     path: String,
+}
+
+#[tauri::command]
+pub fn get_note_backlink_count(note_path: String, vault: State<AppVault>) -> Result<usize, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    #[derive(QueryableByName)]
+    struct CountRow {
+        #[diesel(sql_type = diesel::sql_types::BigInt)]
+        cnt: i64,
+    }
+    let row = diesel::sql_query(
+        "SELECT COUNT(DISTINCT source_id) as cnt FROM note_links WHERE target_path = ?1",
+    )
+    .bind::<diesel::sql_types::Text, _>(&note_path)
+    .load::<CountRow>(conn)
+    .map_err(|e| e.to_string())?;
+    Ok(row.into_iter().next().map(|r| r.cnt as usize).unwrap_or(0))
 }
 
 #[tauri::command]
@@ -794,6 +897,139 @@ mod tests {
     struct CountRow {
         #[diesel(sql_type = diesel::sql_types::BigInt)]
         cnt: i64,
+    }
+
+    // ── rewrite_wikilinks_in_content ─────────────────────────────────────────
+
+    #[test]
+    fn rewrite_simple_wikilink() {
+        let (out, changed) =
+            rewrite_wikilinks_in_content("See [[old.md]] for details.", "old.md", "new.md");
+        assert_eq!(out, "See [[new.md]] for details.");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_wikilink_with_display_text() {
+        let (out, changed) =
+            rewrite_wikilinks_in_content("[[old.md|The Hero]]", "old.md", "new.md");
+        assert_eq!(out, "[[new.md|The Hero]]");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_wikilink_with_heading_fragment() {
+        let (out, changed) =
+            rewrite_wikilinks_in_content("[[old.md#Background]]", "old.md", "new.md");
+        assert_eq!(out, "[[new.md#Background]]");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_does_not_change_unrelated_links() {
+        let (out, changed) =
+            rewrite_wikilinks_in_content("[[other.md]]", "old.md", "new.md");
+        assert_eq!(out, "[[other.md]]");
+        assert!(!changed);
+    }
+
+    #[test]
+    fn rewrite_all_occurrences_in_content() {
+        let content = "[[old.md]] and also [[old.md|alias]] and [[other.md]].";
+        let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
+        assert_eq!(out, "[[new.md]] and also [[new.md|alias]] and [[other.md]].");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_returns_false_when_no_match() {
+        let (out, changed) = rewrite_wikilinks_in_content("No links here.", "old.md", "new.md");
+        assert_eq!(out, "No links here.");
+        assert!(!changed);
+    }
+
+    #[test]
+    fn rewrite_does_not_partially_match() {
+        // "old.md" must not match inside "folder/old.md"
+        let (out, changed) =
+            rewrite_wikilinks_in_content("[[folder/old.md]]", "old.md", "new.md");
+        assert_eq!(out, "[[folder/old.md]]");
+        assert!(!changed);
+    }
+
+    // ── rewrite_backlinks_on_rename_on_conn ──────────────────────────────────
+
+    #[test]
+    fn rewrite_backlinks_updates_files_and_link_rows() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "See [[b.md]].").unwrap();
+        fs::write(dir.path().join("b.md"), "Body.").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "b.md", "B");
+        upsert_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
+
+        let count =
+            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "b.md", "b-renamed.md")
+                .unwrap();
+
+        assert_eq!(count, 1, "one note should have been rewritten");
+
+        // File content should have been updated
+        let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert_eq!(updated, "See [[b-renamed.md]].");
+
+        // note_links should now point to the new path
+        let rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
+        assert_eq!(rows, vec![(1, "b-renamed.md".to_string())]);
+    }
+
+    #[test]
+    fn rewrite_backlinks_returns_zero_when_no_backlinks() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "No links.").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+
+        let count =
+            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "missing.md", "new.md")
+                .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn rewrite_backlinks_multiple_sources() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "[[target.md]]").unwrap();
+        fs::write(dir.path().join("c.md"), "Also [[target.md|display]].").unwrap();
+        fs::write(dir.path().join("target.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "target.md", "Target");
+        insert_note(&mut conn, 3, "c.md", "C");
+        upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
+        upsert_note_links(&mut conn, 3, &["target.md".to_string()]).unwrap();
+
+        let count = rewrite_backlinks_on_rename_on_conn(
+            dir.path(),
+            &mut conn,
+            "target.md",
+            "renamed.md",
+        )
+        .unwrap();
+
+        assert_eq!(count, 2);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.md")).unwrap(),
+            "[[renamed.md]]"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("c.md")).unwrap(),
+            "Also [[renamed.md|display]]."
+        );
     }
 
     // ── get_alias_collisions_on_conn ─────────────────────────────────────────

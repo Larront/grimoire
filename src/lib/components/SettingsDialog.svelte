@@ -209,6 +209,34 @@
         </div>
       </section>
 
+      <!-- ── Editing ───────────────────────────────────────────── -->
+      <section class="flex flex-col gap-4">
+        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
+          Editing
+        </h3>
+
+        <!-- Confirm before updating links on rename -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-(--font-body) font-medium text-foreground">Confirm before updating links on rename</span>
+            <span class="text-(--font-ui) text-foreground-muted">Ask before rewriting wikilinks when a note is renamed</span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={appPrefs.confirmRenameLinks}
+            aria-label="Confirm before updating links on rename"
+            data-testid="confirm-rename-links-toggle"
+            onclick={() => appPrefs.setConfirmRenameLinks(!appPrefs.confirmRenameLinks)}
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.confirmRenameLinks ? 'bg-primary' : 'bg-input'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform {appPrefs.confirmRenameLinks ? 'translate-x-4' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </div>
+      </section>
+
       <!-- ── Graph ──────────────────────────────────────────────── -->
       <section id="settings-graph" class="flex flex-col gap-4">
         <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">

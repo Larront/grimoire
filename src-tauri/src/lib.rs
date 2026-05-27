@@ -46,6 +46,7 @@ pub fn run() {
             get_notes,
             read_note_content,
             update_note,
+            rename_note,
             write_note_content,
             delete_note,
             search_notes,
@@ -126,6 +127,7 @@ pub fn run() {
             // Links
             get_backlinks,
             get_outbound_links,
+            get_note_backlink_count,
             get_note_aliases,
             set_note_aliases,
             get_alias_collisions,
