@@ -8,10 +8,6 @@
 //
 // Edge IDs use sequential integers serialised as strings.
 
-use crate::db::schema::maps::dsl as m;
-use crate::db::schema::note_links::dsl as nl;
-use crate::db::schema::notes::dsl as n;
-use crate::db::schema::pins::dsl as p;
 use crate::vault::AppVault;
 use diesel::prelude::*;
 use serde::Serialize;
