@@ -85,21 +85,24 @@
   }
 
   /** Compute the background color for a single node. */
-  function computeNodeColor(node: GraphNodeData): string {
-    if (node.kind === "map") return MAP_COLOR;
-    if (node.kind === "stub") return getMutedColor();
+  function computeNodeColor(
+    kind: "note" | "map" | "stub",
+    primaryTag: string | null | undefined,
+  ): string {
+    if (kind === "map") return MAP_COLOR;
+    if (kind === "stub") return getMutedColor();
     // note node
-    if (node.primary_tag) {
-      const style = tagStylesMap.get(node.primary_tag);
+    if (primaryTag) {
+      const style = tagStylesMap.get(primaryTag);
       if (style?.color) return style.color;
-      return accentAssignments.get(node.primary_tag) ?? getMutedColor();
+      return accentAssignments.get(primaryTag) ?? getMutedColor();
     }
     return getMutedColor();
   }
 
   /**
    * Compute the diameter (px) for a node.
-   * Stub nodes always get the minimum. Note nodes scale linearly with backlink count.
+   * Stub and map nodes always get the minimum. Notes scale linearly with backlink count.
    */
   function computeNodeSize(node: GraphNodeData, maxBacklinks: number): number {
     if (node.kind === "stub" || node.kind === "map") return MIN_RADIUS * 2;
@@ -162,15 +165,9 @@
         data(key: string): unknown;
         data(key: string, val: unknown): void;
       };
-      const kind = node.data("kind") as string;
+      const kind = node.data("kind") as "note" | "map" | "stub";
       const primaryTag = node.data("primary_tag") as string | null | undefined;
-      const nodeData: GraphNodeData = {
-        id: node.data("id") as string,
-        label: node.data("label") as string,
-        kind: kind as "note" | "map" | "stub",
-        primary_tag: primaryTag,
-      };
-      node.data("color", computeNodeColor(nodeData));
+      node.data("color", computeNodeColor(kind, primaryTag));
     });
     cy.style(buildStyleArray());
   }
@@ -200,7 +197,7 @@
           nodes: rawData.nodes.map((n) => ({
             data: {
               ...n,
-              color: computeNodeColor(n),
+              color: computeNodeColor(n.kind, n.primary_tag),
               size: computeNodeSize(n, maxBacklinks),
             },
           })),
