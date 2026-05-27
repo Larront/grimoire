@@ -290,10 +290,6 @@
     }
   }
 
-  /**
-   * Create a new note from a stub node's label (= target_path) and open it
-   * with the title pre-selected so the GM can confirm or edit the name.
-   */
   async function createNoteFromStub(label: string) {
     try {
       const newNote = await invoke<{ id: number; title: string }>("create_note", {
