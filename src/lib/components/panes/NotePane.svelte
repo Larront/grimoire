@@ -5,6 +5,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
+  import { linksTick } from "$lib/stores/links-tick.svelte";
   import { toastSuccess } from "$lib/toast";
   import { LoaderCircle } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
@@ -175,6 +176,7 @@
         notePath: note.path,
         content: markdown,
       });
+      linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);
     }

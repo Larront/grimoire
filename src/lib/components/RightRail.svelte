@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import * as Sheet from '$lib/components/ui/sheet/index.js';
   import type { RightRailState } from '$lib/stores/right-rail.svelte.js';
   import { invoke } from '@tauri-apps/api/core';
   import { tabs } from '$lib/stores/tabs.svelte';
   import { notes } from '$lib/stores/notes.svelte';
+  import { linksTick } from '$lib/stores/links-tick.svelte';
   import TagChipEditor from './TagChipEditor.svelte';
   import AliasChipEditor from './AliasChipEditor.svelte';
   import { formatBreadcrumb, formatRelativeTime } from '$lib/utils/note-meta';
@@ -29,6 +31,21 @@
     other_note_title: string;
   }
 
+  interface BacklinkNote {
+    id: number;
+    path: string;
+    title: string;
+  }
+
+  interface OutboundLink {
+    target_path: string;
+    resolved_id: number | null;
+    resolved_title: string | null;
+    resolved_path: string | null;
+  }
+
+  const LINK_CAP = 5;
+
   let tags = $state<string[]>([]);
   let allTags = $state<string[]>([]);
   let loadedForPath = $state<string | null>(null);
@@ -40,6 +57,24 @@
   let aliasesLoadError = $state(false);
   let aliasCollisions = $state<AliasCollision[]>([]);
 
+  let backlinks = $state<BacklinkNote[]>([]);
+  let backlinksExpanded = $state(false);
+  let linksLoadedForId = $state<number | null>(null);
+
+  let outboundLinks = $state<OutboundLink[]>([]);
+  let outboundExpanded = $state(false);
+
+  const displayedBacklinks = $derived(backlinksExpanded ? backlinks : backlinks.slice(0, LINK_CAP));
+  const hiddenBacklinksCount = $derived(backlinks.length - LINK_CAP);
+  const displayedOutbound = $derived(outboundExpanded ? outboundLinks : outboundLinks.slice(0, LINK_CAP));
+  const hiddenOutboundCount = $derived(outboundLinks.length - LINK_CAP);
+
+  function folderLabel(path: string): string {
+    const parts = path.split('/');
+    parts.pop();
+    return parts.join(' / ');
+  }
+
   async function refreshAllTags() {
     try {
       allTags = (await invoke<string[]>('list_all_tags')) ?? [];
@@ -49,13 +84,25 @@
     }
   }
 
+  function loadLinks(noteId: number) {
+    invoke<BacklinkNote[]>('get_backlinks', { noteId })
+      .then((loaded) => { backlinks = loaded ?? []; })
+      .catch(() => { backlinks = []; });
+    invoke<OutboundLink[]>('get_outbound_links', { noteId })
+      .then((loaded) => { outboundLinks = loaded ?? []; })
+      .catch(() => { outboundLinks = []; });
+  }
+
   $effect(() => {
     const note = activeNote;
     if (!note) {
       tags = [];
       aliases = [];
       aliasCollisions = [];
+      backlinks = [];
+      outboundLinks = [];
       loadedForPath = null;
+      linksLoadedForId = null;
       tagsLoadError = false;
       aliasesLoadError = false;
       return;
@@ -68,6 +115,12 @@
     aliasesLoadError = false;
     aliasCollisions = [];
     saveStatus = 'idle';
+    // Reset expand state when switching notes
+    if (noteId !== linksLoadedForId) {
+      backlinksExpanded = false;
+      outboundExpanded = false;
+      linksLoadedForId = noteId;
+    }
     invoke<string[]>('read_note_tags', { notePath: targetPath })
       .then((loaded) => {
         if (loadedForPath !== targetPath) return;
@@ -94,8 +147,22 @@
         aliasCollisions = cols ?? [];
       })
       .catch(() => { aliasCollisions = []; });
+    loadLinks(noteId);
     refreshAllTags();
   });
+
+  // Reload links when NotePane saves content (outbound links may have changed).
+  $effect(() => {
+    const tick = linksTick.value;
+    if (tick === 0) return; // skip initial mount — main effect handles it
+    const note = untrack(() => activeNote);
+    if (!note) return;
+    loadLinks(note.id);
+  });
+
+  function navigateToNote(id: number, title: string) {
+    tabs.openTab({ type: 'note', id, title });
+  }
 
   async function persistTags(next: string[]) {
     const note = activeNote;
@@ -188,6 +255,76 @@
             </p>
           {/each}
         </section>
+        <!-- ── Backlinks ──────────────────────────────────────────────── -->
+        <section data-section="backlinks" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">Backlinks</div>
+          {#if backlinks.length === 0}
+            <p class="font-mono text-[10px] text-foreground-faint italic">No backlinks yet</p>
+          {:else}
+            <div class="space-y-0.5">
+              {#each displayedBacklinks as link (link.id)}
+                <button
+                  data-slot="backlink-row"
+                  onclick={() => navigateToNote(link.id, link.title)}
+                  class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
+                >
+                  <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.title}</div>
+                  {#if folderLabel(link.path)}
+                    <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folderLabel(link.path)}</div>
+                  {/if}
+                </button>
+              {/each}
+              {#if hiddenBacklinksCount > 0 && !backlinksExpanded}
+                <button
+                  data-slot="backlinks-expand"
+                  onclick={() => { backlinksExpanded = true; }}
+                  class="w-full text-left font-mono text-[10px] text-muted-foreground px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+                >Show {hiddenBacklinksCount} more</button>
+              {/if}
+            </div>
+          {/if}
+        </section>
+
+        <!-- ── Outbound Links ─────────────────────────────────────────── -->
+        <section data-section="outbound" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">Outbound Links</div>
+          {#if outboundLinks.length === 0}
+            <p class="font-mono text-[10px] text-foreground-faint italic">No outbound links</p>
+          {:else}
+            <div class="space-y-0.5">
+              {#each displayedOutbound as link (link.target_path)}
+                {#if link.resolved_id !== null}
+                  <button
+                    data-slot="outbound-row"
+                    onclick={() => navigateToNote(link.resolved_id!, link.resolved_title!)}
+                    class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
+                  >
+                    <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.resolved_title}</div>
+                    {#if link.resolved_path && folderLabel(link.resolved_path)}
+                      <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folderLabel(link.resolved_path)}</div>
+                    {/if}
+                  </button>
+                {:else}
+                  <div
+                    data-slot="outbound-broken"
+                    class="rounded px-1 py-0.5 opacity-50 cursor-default"
+                  >
+                    <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.target_path}</div>
+                    <div class="font-mono text-[10px] text-foreground-faint italic">Not yet created</div>
+                  </div>
+                {/if}
+              {/each}
+              {#if hiddenOutboundCount > 0 && !outboundExpanded}
+                <button
+                  data-slot="outbound-expand"
+                  onclick={() => { outboundExpanded = true; }}
+                  class="w-full text-left font-mono text-[10px] text-muted-foreground px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+                >Show {hiddenOutboundCount} more</button>
+              {/if}
+            </div>
+          {/if}
+        </section>
+
         <section data-section="folder" class="space-y-1 border-t border-sidebar-border pt-3 mt-3">
           <div class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">Folder</div>
           <div

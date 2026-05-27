@@ -5,6 +5,7 @@ import AppShell from "../lib/components/AppShell.svelte";
 import { overlay } from "../lib/stores/overlay.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
+import { linksTick } from "../lib/stores/links-tick.svelte";
 import type { Note } from "../lib/types/vault";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -394,6 +395,8 @@ describe("right rail — aliases section", () => {
       if (cmd === "read_note_tags") return [];
       if (cmd === "list_all_tags") return [];
       if (cmd === "get_alias_collisions") return [];
+      if (cmd === "get_backlinks") return [];
+      if (cmd === "get_outbound_links") return [];
       return null;
     });
     await act(() => {});
@@ -407,5 +410,270 @@ describe("right rail — aliases section", () => {
     expect(tagsIdx).toBeGreaterThanOrEqual(0);
     expect(aliasesIdx).toBeGreaterThan(tagsIdx);
     expect(folderIdx).toBeGreaterThan(aliasesIdx);
+  });
+});
+
+// ── Right rail — Backlinks section ───────────────────────────────────────────
+
+const defaultInvokeImpl = async (cmd: string) => {
+  if (cmd === "get_notes") return [testNote];
+  if (cmd === "read_note_tags") return [];
+  if (cmd === "list_all_tags") return [];
+  if (cmd === "get_note_aliases") return [];
+  if (cmd === "get_alias_collisions") return [];
+  if (cmd === "get_backlinks") return [];
+  if (cmd === "get_outbound_links") return [];
+  return null;
+};
+
+describe("right rail — backlinks section", () => {
+  it("backlinks section appears in the details pane when a note is active", async () => {
+    const { container } = await openRailWithNote(defaultInvokeImpl);
+    await act(() => {});
+    expect(container.querySelector('[data-section="backlinks"]')).toBeTruthy();
+  });
+
+  it("backlinks empty state shows 'No backlinks yet'", async () => {
+    const { container } = await openRailWithNote(defaultInvokeImpl);
+    await act(() => {});
+    const section = container.querySelector('[data-section="backlinks"]')!;
+    expect(section.textContent).toContain("No backlinks yet");
+  });
+
+  it("backlinks renders rows from get_backlinks", async () => {
+    const backlinksData = [
+      { id: 2, path: "Characters/Bard.md", title: "Bard" },
+      { id: 3, path: "Places/Inn.md", title: "Inn" },
+    ];
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return backlinksData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const rows = container.querySelectorAll('[data-slot="backlink-row"]');
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain("Bard");
+    expect(rows[1].textContent).toContain("Inn");
+  });
+
+  it("backlinks row shows folder path below title", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return [{ id: 2, path: "Characters/Bard.md", title: "Bard" }];
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const folderEl = container.querySelector('[data-slot="backlink-row"] [data-slot="link-folder"]');
+    expect(folderEl).toBeTruthy();
+    expect(folderEl!.textContent).toContain("Characters");
+  });
+
+  it("backlinks caps at 5 rows when there are more than 5", async () => {
+    const backlinksData = Array.from({ length: 8 }, (_, i) => ({
+      id: i + 2,
+      path: `Notes/Note${i}.md`,
+      title: `Note ${i}`,
+    }));
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return backlinksData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const rows = container.querySelectorAll('[data-slot="backlink-row"]');
+    expect(rows.length).toBe(5);
+  });
+
+  it("backlinks shows 'Show N more' expand button when capped", async () => {
+    const backlinksData = Array.from({ length: 8 }, (_, i) => ({
+      id: i + 2,
+      path: `Notes/Note${i}.md`,
+      title: `Note ${i}`,
+    }));
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return backlinksData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const expandBtn = container.querySelector('[data-slot="backlinks-expand"]');
+    expect(expandBtn).toBeTruthy();
+    expect(expandBtn!.textContent).toContain("3 more");
+  });
+
+  it("backlinks expand button shows all rows when clicked", async () => {
+    const backlinksData = Array.from({ length: 7 }, (_, i) => ({
+      id: i + 2,
+      path: `Notes/Note${i}.md`,
+      title: `Note ${i}`,
+    }));
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return backlinksData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const expandBtn = container.querySelector('[data-slot="backlinks-expand"]')!;
+    await fireEvent.click(expandBtn);
+    const rows = container.querySelectorAll('[data-slot="backlink-row"]');
+    expect(rows.length).toBe(7);
+  });
+
+  it("clicking a backlink row navigates to that note", async () => {
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") return [{ id: 2, path: "Characters/Bard.md", title: "Bard" }];
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const row = container.querySelector('[data-slot="backlink-row"]') as HTMLElement;
+    await fireEvent.click(row);
+    expect(tabs.activeTab).toMatchObject({ type: "note", id: 2 });
+  });
+});
+
+// ── Right rail — Outbound Links section ──────────────────────────────────────
+
+describe("right rail — outbound links section", () => {
+  it("outbound section appears in the details pane when a note is active", async () => {
+    const { container } = await openRailWithNote(defaultInvokeImpl);
+    await act(() => {});
+    expect(container.querySelector('[data-section="outbound"]')).toBeTruthy();
+  });
+
+  it("outbound empty state shows 'No outbound links'", async () => {
+    const { container } = await openRailWithNote(defaultInvokeImpl);
+    await act(() => {});
+    const section = container.querySelector('[data-section="outbound"]')!;
+    expect(section.textContent).toContain("No outbound links");
+  });
+
+  it("outbound renders resolved link rows", async () => {
+    const outboundData = [
+      {
+        target_path: "Characters/Bard.md",
+        resolved_id: 2,
+        resolved_title: "Bard",
+        resolved_path: "Characters/Bard.md",
+      },
+    ];
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_outbound_links") return outboundData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const rows = container.querySelectorAll('[data-slot="outbound-row"]');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("Bard");
+  });
+
+  it("outbound broken links shown dimmed with 'Not yet created'", async () => {
+    const outboundData = [
+      {
+        target_path: "Missing/Ghost.md",
+        resolved_id: null,
+        resolved_title: null,
+        resolved_path: null,
+      },
+    ];
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_outbound_links") return outboundData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const broken = container.querySelector('[data-slot="outbound-broken"]');
+    expect(broken).toBeTruthy();
+    expect(broken!.textContent).toContain("Not yet created");
+  });
+
+  it("outbound broken links are not clickable", async () => {
+    const outboundData = [
+      {
+        target_path: "Missing/Ghost.md",
+        resolved_id: null,
+        resolved_title: null,
+        resolved_path: null,
+      },
+    ];
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_outbound_links") return outboundData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    // Broken link should be a non-interactive element (div/span), not a button
+    const broken = container.querySelector('[data-slot="outbound-broken"]')!;
+    expect(broken.tagName.toLowerCase()).not.toBe("button");
+  });
+
+  it("outbound caps at 5 rows when there are more than 5", async () => {
+    const outboundData = Array.from({ length: 8 }, (_, i) => ({
+      target_path: `Notes/Note${i}.md`,
+      resolved_id: i + 2,
+      resolved_title: `Note ${i}`,
+      resolved_path: `Notes/Note${i}.md`,
+    }));
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_outbound_links") return outboundData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const rows = container.querySelectorAll('[data-slot="outbound-row"]');
+    expect(rows.length).toBe(5);
+    const expandBtn = container.querySelector('[data-slot="outbound-expand"]');
+    expect(expandBtn).toBeTruthy();
+    expect(expandBtn!.textContent).toContain("3 more");
+  });
+
+  it("outbound expand button shows all rows when clicked", async () => {
+    const outboundData = Array.from({ length: 7 }, (_, i) => ({
+      target_path: `Notes/Note${i}.md`,
+      resolved_id: i + 2,
+      resolved_title: `Note ${i}`,
+      resolved_path: `Notes/Note${i}.md`,
+    }));
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_outbound_links") return outboundData;
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const expandBtn = container.querySelector('[data-slot="outbound-expand"]')!;
+    await fireEvent.click(expandBtn);
+    const rows = container.querySelectorAll('[data-slot="outbound-row"]');
+    expect(rows.length).toBe(7);
+  });
+});
+
+// ── Section ordering: Tags → Aliases → Backlinks → Outbound → Folder → Modified
+
+describe("right rail — full section ordering", () => {
+  it("section order is tags → aliases → backlinks → outbound → folder → modified", async () => {
+    const { container } = await openRailWithNote(defaultInvokeImpl);
+    await act(() => {});
+    const sections = container.querySelectorAll("[data-section]");
+    const names = Array.from(sections).map((s) => s.getAttribute("data-section"));
+    const idx = (name: string) => names.indexOf(name);
+    expect(idx("tags")).toBeGreaterThanOrEqual(0);
+    expect(idx("aliases")).toBeGreaterThan(idx("tags"));
+    expect(idx("backlinks")).toBeGreaterThan(idx("aliases"));
+    expect(idx("outbound")).toBeGreaterThan(idx("backlinks"));
+    expect(idx("folder")).toBeGreaterThan(idx("outbound"));
+    expect(idx("modified")).toBeGreaterThan(idx("folder"));
+  });
+});
+
+// ── Refresh after save ────────────────────────────────────────────────────────
+
+describe("right rail — refresh after save", () => {
+  it("backlinks and outbound reload when linksTick is bumped", async () => {
+    let backlinkCallCount = 0;
+    let outboundCallCount = 0;
+    const { container } = await openRailWithNote(async (cmd: string) => {
+      if (cmd === "get_backlinks") { backlinkCallCount++; return []; }
+      if (cmd === "get_outbound_links") { outboundCallCount++; return []; }
+      return defaultInvokeImpl(cmd);
+    });
+    await act(() => {});
+    const beforeBacklink = backlinkCallCount;
+    const beforeOutbound = outboundCallCount;
+
+    await act(() => { linksTick.bump(); });
+
+    expect(backlinkCallCount).toBeGreaterThan(beforeBacklink);
+    expect(outboundCallCount).toBeGreaterThan(beforeOutbound);
   });
 });
