@@ -282,10 +282,10 @@
   function focusFirstMatch() {
     if (!cy || !firstMatchId) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const matched = (cy as any).getElementById(firstMatchId);
+    const cyAny = cy as any;
+    const matched = cyAny.getElementById(firstMatchId);
     if (matched && matched.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (cy as any).animate({ fit: { eles: matched, padding: 80 }, duration: 400 });
+      cyAny.animate({ fit: { eles: matched, padding: 80 }, duration: 400 });
     }
   }
 
