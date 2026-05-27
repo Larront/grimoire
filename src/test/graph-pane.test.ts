@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import GraphPane from "../lib/components/panes/GraphPane.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
+import { notes } from "../lib/stores/notes.svelte";
 
 // ── Cytoscape mock ─────────────────────────────────────────────────────────────
 // JSDOM has no canvas; mock cytoscape so the component mounts without errors.
@@ -28,6 +29,8 @@ type CyEdge = {
 };
 
 const tapHandlers: TapHandler[] = [];
+const mouseoverHandlers: Array<(e: { target: MockNode }) => void> = [];
+const mouseoutHandlers: Array<() => void> = [];
 let cytoscapeOptions: unknown = null;
 let mockNodes: CyNode[] = [];
 let mockEdges: CyEdge[] = [];
@@ -104,8 +107,10 @@ vi.mock("cytoscape", () => {
       mockEdges = edgeStore;
 
       return {
-        on: vi.fn((event: string, selector: string, handler: TapHandler) => {
+        on: vi.fn((event: string, _selector: string, handler: TapHandler) => {
           if (event === "tap") tapHandlers.push(handler);
+          if (event === "mouseover") mouseoverHandlers.push(handler);
+          if (event === "mouseout") mouseoutHandlers.push(handler as () => void);
         }),
         fit: mockFit,
         destroy: mockDestroy,
@@ -135,6 +140,12 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 
 vi.mock("../lib/stores/search.svelte", () => ({
   searchPalette: { open: false, activeQuery: "", settingsOpen: false },
+}));
+
+vi.mock("../lib/stores/notes.svelte", () => ({
+  notes: {
+    load: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -184,6 +195,8 @@ function setupInvoke() {
     if (cmd === "get_tag_graph_styles") return Promise.resolve(mockTagStyles);
     if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
     if (cmd === "set_tag_graph_style") return Promise.resolve(null);
+    if (cmd === "create_note") return Promise.resolve({ id: 99, title: "unknown.md", path: "unknown.md" });
+    if (cmd === "get_notes") return Promise.resolve([]);
     return Promise.resolve(null);
   });
 }
@@ -203,6 +216,8 @@ function setupInvokeWithHiddenNpc() {
 
 beforeEach(() => {
   tapHandlers.length = 0;
+  mouseoverHandlers.length = 0;
+  mouseoutHandlers.length = 0;
   cytoscapeOptions = null;
   mockNodes = [];
   mockEdges = [];
@@ -213,6 +228,7 @@ beforeEach(() => {
   mockStyleFn.mockClear();
   mockAnimate.mockClear();
   vi.mocked(tabs.openTab).mockClear();
+  vi.mocked(notes.load).mockClear();
   setupInvoke();
   mockComputedStyle();
 });
@@ -500,7 +516,7 @@ describe("GraphPane – node click navigation", () => {
     });
   });
 
-  it("clicking a stub node does nothing (no openTab call)", async () => {
+  it("clicking a stub node calls create_note with the stub label as title and path", async () => {
     render(GraphPane);
     await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
 
@@ -512,7 +528,99 @@ describe("GraphPane – node click navigation", () => {
     };
     tapHandlers[0]({ target: stubNode });
 
-    expect(tabs.openTab).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("create_note", {
+        noteTitle: "unknown.md",
+        notePath: "unknown.md",
+        noteParentPath: null,
+      });
+    });
+  });
+
+  it("clicking a stub node opens the new note with rename: true", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
+
+    const stubNode: MockNode = {
+      data: (key: string) => {
+        const map: Record<string, unknown> = { id: "stub-unknown.md", label: "unknown.md", kind: "stub" };
+        return map[key];
+      },
+    };
+    tapHandlers[0]({ target: stubNode });
+
+    await waitFor(() => {
+      expect(tabs.openTab).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "note", id: 99, rename: true }),
+      );
+    });
+  });
+
+  it("clicking a stub node reloads the notes list", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
+
+    const stubNode: MockNode = {
+      data: (key: string) => {
+        const map: Record<string, unknown> = { id: "stub-unknown.md", label: "unknown.md", kind: "stub" };
+        return map[key];
+      },
+    };
+    tapHandlers[0]({ target: stubNode });
+
+    await waitFor(() => {
+      expect(notes.load).toHaveBeenCalled();
+    });
+  });
+});
+
+// ── Stub node cursor affordance ───────────────────────────────────────────────
+
+describe("GraphPane – stub node cursor affordance", () => {
+  it("registers a mouseover handler for stub nodes", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+    expect(mouseoverHandlers.length).toBeGreaterThan(0);
+  });
+
+  it("registers a mouseout handler for stub nodes", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+    expect(mouseoutHandlers.length).toBeGreaterThan(0);
+  });
+
+  it("mouseover on a stub node changes container cursor", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    const graphContainer = container.querySelector("[data-testid='graph-container']") as HTMLElement;
+    const stubNode: MockNode = {
+      data: (key: string) => {
+        const map: Record<string, unknown> = { id: "stub-unknown.md", kind: "stub" };
+        return map[key];
+      },
+    };
+    mouseoverHandlers[0]({ target: stubNode });
+
+    expect(graphContainer.style.cursor).toBeTruthy();
+  });
+
+  it("mouseout from a stub node restores the container cursor", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    const graphContainer = container.querySelector("[data-testid='graph-container']") as HTMLElement;
+    const stubNode: MockNode = {
+      data: (key: string) => {
+        const map: Record<string, unknown> = { id: "stub-unknown.md", kind: "stub" };
+        return map[key];
+      },
+    };
+    mouseoverHandlers[0]({ target: stubNode });
+    expect(graphContainer.style.cursor).toBeTruthy();
+
+    mouseoutHandlers[0]();
+    expect(graphContainer.style.cursor).toBe("");
   });
 });
 

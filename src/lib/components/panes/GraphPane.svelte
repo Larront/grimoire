@@ -4,6 +4,7 @@
   import cytoscape from "cytoscape";
   import type { Core } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { notes } from "$lib/stores/notes.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import Filter from "@lucide/svelte/icons/filter";
   import Search from "@lucide/svelte/icons/search";
@@ -289,6 +290,24 @@
     }
   }
 
+  /**
+   * Create a new note from a stub node's label (= target_path) and open it
+   * with the title pre-selected so the GM can confirm or edit the name.
+   */
+  async function createNoteFromStub(label: string) {
+    try {
+      const newNote = await invoke<{ id: number; title: string }>("create_note", {
+        noteTitle: label,
+        notePath: label,
+        noteParentPath: null,
+      });
+      await notes.load();
+      tabs.openTab({ type: "note", id: newNote.id, title: newNote.title, rename: true });
+    } catch (e) {
+      console.error("create_note from stub failed:", e);
+    }
+  }
+
   function handleSearchKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       focusFirstMatch();
@@ -361,8 +380,17 @@
           tabs.openTab({ type: "note", id: entity_id, title: label });
         } else if (kind === "map" && entity_id != null) {
           tabs.openTab({ type: "map", id: entity_id, title: label });
+        } else if (kind === "stub") {
+          createNoteFromStub(label);
         }
-        // stub nodes: no navigation
+      });
+
+      // Change cursor on stub node hover to signal create affordance
+      cy.on("mouseover", "node[kind='stub']", () => {
+        container.style.cursor = "cell";
+      });
+      cy.on("mouseout", "node[kind='stub']", () => {
+        container.style.cursor = "";
       });
 
       // Re-apply styles when the user switches accent preset or theme (light/dark).
