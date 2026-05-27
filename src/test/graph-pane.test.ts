@@ -34,7 +34,8 @@ let mockEdges: CyEdge[] = [];
 const mockFit = vi.fn();
 const mockDestroy = vi.fn();
 const mockStyleFn = vi.fn();
-// Per-node style stores: maps node id → { display: ..., ... }
+const mockAnimate = vi.fn();
+// Per-node style stores: maps node id → { display: ..., opacity: ..., ... }
 const nodeStyleStores = new Map<string, Record<string, unknown>>();
 const edgeStyleStores = new Map<string, Record<string, unknown>>();
 
@@ -109,6 +110,11 @@ vi.mock("cytoscape", () => {
         fit: mockFit,
         destroy: mockDestroy,
         style: mockStyleFn,
+        animate: mockAnimate,
+        getElementById: (id: string) => {
+          const node = nodeMap.get(id);
+          return { length: node ? 1 : 0 };
+        },
         nodes: () => ({
           forEach: (cb: (n: CyNode) => void) => nodeStore.forEach(cb),
         }),
@@ -205,6 +211,7 @@ beforeEach(() => {
   mockFit.mockClear();
   mockDestroy.mockClear();
   mockStyleFn.mockClear();
+  mockAnimate.mockClear();
   vi.mocked(tabs.openTab).mockClear();
   setupInvoke();
   mockComputedStyle();
@@ -782,5 +789,186 @@ describe("GraphPane – node visibility filtering", () => {
       const styles = nodeStyleStores.get("note-1");
       expect(styles?.["display"]).toBe("element");
     });
+  });
+});
+
+// ── Search input ──────────────────────────────────────────────────────────────
+
+describe("GraphPane – search", () => {
+  it("renders a search input in the toolbar", () => {
+    const { container } = render(GraphPane);
+    expect(container.querySelector("[data-testid='graph-search']")).toBeTruthy();
+  });
+
+  it("search input has a placeholder", () => {
+    const { container } = render(GraphPane);
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.placeholder).toBeTruthy();
+  });
+
+  it("typing in the search dims non-matching nodes to 0.2 opacity", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    // "My Note" matches note-1; note-2 "Other Note" also contains "note" so use "My Note" specifically
+    await fireEvent.input(input, { target: { value: "My Note" } });
+
+    await waitFor(() => {
+      // note-2 ("Other Note") does not contain "My Note" (case-insensitive)
+      const styles = nodeStyleStores.get("note-2");
+      expect(styles?.["opacity"]).toBe(0.2);
+    });
+  });
+
+  it("typing in the search keeps matching nodes at full opacity", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+
+    await waitFor(() => {
+      // note-1 label = "My Note" — should match
+      const styles = nodeStyleStores.get("note-1");
+      expect(styles?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("pressing Enter triggers an animated camera focus on the first match", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    // Wait for highlight to apply so firstMatchId is set
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
+
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mockAnimate).toHaveBeenCalled();
+    });
+  });
+
+  it("cy.animate is called with a fit option when Enter is pressed on a match", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
+
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mockAnimate).toHaveBeenCalledWith(
+        expect.objectContaining({ fit: expect.objectContaining({ padding: expect.any(Number) }) }),
+      );
+    });
+  });
+
+  it("pressing Esc clears the search query", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+
+    await fireEvent.keyDown(input, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(input.value).toBe("");
+    });
+  });
+
+  it("pressing Esc restores all node opacities to full", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+
+    await fireEvent.keyDown(input, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("clearing the input (typing empty string) restores all node opacities", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    // Dim nodes with a search query
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+
+    // Clear the input
+    await fireEvent.input(input, { target: { value: "" } });
+
+    await waitFor(() => {
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("search is case-insensitive", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    // "MY NOTE" uppercase should still match note-1 "My Note"
+    await fireEvent.input(input, { target: { value: "MY NOTE" } });
+
+    await waitFor(() => {
+      const styles = nodeStyleStores.get("note-1");
+      expect(styles?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("search matches map nodes by label", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    // "World Map" is the map-10 label
+    await fireEvent.input(input, { target: { value: "World" } });
+
+    await waitFor(() => {
+      const mapStyles = nodeStyleStores.get("map-10");
+      expect(mapStyles?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("search matches stub nodes by label", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    // "unknown.md" is the stub label
+    await fireEvent.input(input, { target: { value: "unknown" } });
+
+    await waitFor(() => {
+      const stubStyles = nodeStyleStores.get("stub-unknown.md");
+      expect(stubStyles?.["opacity"]).toBe(1);
+    });
+  });
+
+  it("Enter does nothing if there are no matches", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "zzznomatchzzz" } });
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(0.2));
+
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    // animate should NOT be called since there's no match
+    expect(mockAnimate).not.toHaveBeenCalled();
   });
 });

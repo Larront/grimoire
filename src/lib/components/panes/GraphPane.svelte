@@ -6,6 +6,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import Filter from "@lucide/svelte/icons/filter";
+  import Search from "@lucide/svelte/icons/search";
 
   // The five accent preset swatch hex values, in cycle order:
   // crimson → arcane → verdant → ice → amber
@@ -51,6 +52,11 @@
   // Filter panel state
   let filterOpen = $state(false);
   let allTags = $state<string[]>([]);
+
+  // Search state
+  let searchQuery = $state("");
+  /** ID of the first node matching the current search query; null when none. */
+  let firstMatchId: string | null = null;
 
   // Stored in closure so reapplyStyles() can reference them
   // tagStylesMap is $state so the filter panel template reacts to changes
@@ -240,6 +246,63 @@
     searchPalette.settingsOpen = true;
   }
 
+  /**
+   * Highlight nodes whose label contains `query` (case-insensitive).
+   * Non-matching nodes are dimmed to 20% opacity; matching nodes stay at 1.
+   * An empty query restores all nodes to full opacity.
+   * Also updates `firstMatchId` for Enter-key camera focus.
+   */
+  function applySearchHighlight(query: string) {
+    if (!cy) return;
+    const q = query.trim().toLowerCase();
+    firstMatchId = null;
+
+    cy.nodes().forEach((n: unknown) => {
+      const node = n as {
+        data(key: string): unknown;
+        style(key: string, val: unknown): void;
+      };
+      if (!q) {
+        node.style("opacity", 1);
+        return;
+      }
+      const label = ((node.data("label") as string) ?? "").toLowerCase();
+      const matches = label.includes(q);
+      node.style("opacity", matches ? 1 : 0.2);
+      if (matches && firstMatchId === null) {
+        firstMatchId = node.data("id") as string;
+      }
+    });
+  }
+
+  /**
+   * Animate the Cytoscape viewport to center and zoom to the first matching
+   * node. No-op when there is no current match.
+   */
+  function focusFirstMatch() {
+    if (!cy || !firstMatchId) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const matched = (cy as any).getElementById(firstMatchId);
+    if (matched && matched.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (cy as any).animate({ fit: { eles: matched, padding: 80 }, duration: 400 });
+    }
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      focusFirstMatch();
+    } else if (e.key === "Escape") {
+      searchQuery = "";
+      (e.target as HTMLInputElement).value = "";
+    }
+  }
+
+  // Re-apply search highlight whenever searchQuery changes (including clear).
+  $effect(() => {
+    applySearchHighlight(searchQuery);
+  });
+
   onMount(async () => {
     try {
       const [rawData, rawTagStyles, tags] = await Promise.all([
@@ -324,8 +387,22 @@
 </script>
 
 <div class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
-  <!-- Filter toggle button — top-right toolbar overlay -->
-  <div class="absolute top-2 right-2 z-20 flex gap-1">
+  <!-- Toolbar overlay — search input + filter toggle, anchored top-right -->
+  <div class="absolute top-2 right-2 z-20 flex items-center gap-1">
+    <!-- Search input -->
+    <div class="relative flex items-center">
+      <Search class="pointer-events-none absolute left-2 size-3 text-foreground-muted" />
+      <input
+        data-testid="graph-search"
+        type="text"
+        placeholder="Search nodes…"
+        bind:value={searchQuery}
+        onkeydown={handleSearchKeydown}
+        class="h-7 w-36 rounded border border-border bg-background/80 pl-6 pr-2 text-xs text-foreground placeholder:text-foreground-muted shadow focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+    </div>
+
+    <!-- Filter toggle button -->
     <button
       data-testid="filter-toggle"
       aria-label="Toggle filter panel"
