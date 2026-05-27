@@ -1,4 +1,5 @@
 pub mod frontmatter;
+pub mod graph;
 pub mod graph_styles;
 pub mod links;
 pub mod maps;

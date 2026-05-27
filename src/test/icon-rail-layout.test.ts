@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import VaultSelector from "../lib/components/sidebar/VaultSelector.svelte";
 import { vault } from "../lib/stores/vault.svelte";
+import { tabs } from "../lib/stores/tabs.svelte";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -30,6 +31,8 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 afterEach(async () => {
   cleanup();
   await vault.closeVault();
+  tabs.closeAll("left");
+  if (tabs.right) tabs.closeAll("right");
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: desktopMatchMedia,
@@ -129,4 +132,32 @@ describe("icon rail", () => {
     expect(filesBtn).toBeTruthy();
   });
 
+  it("renders a Graph button in the icon rail (between Scenes and Settings)", () => {
+    const { getByTestId } = render(AppShell);
+    const rail = getByTestId("icon-rail");
+    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
+    expect(graphBtn).toBeTruthy();
+  });
+
+  it("clicking Graph button opens a graph tab", async () => {
+    const { getByTestId } = render(AppShell);
+    const rail = getByTestId("icon-rail");
+    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
+    await fireEvent.click(graphBtn);
+    const graphTabs = tabs.left.tabs.filter((t) => t.type === "graph");
+    expect(graphTabs.length).toBe(1);
+  });
+
+  it("clicking Graph button twice does not open a second graph tab", async () => {
+    const { getByTestId } = render(AppShell);
+    const rail = getByTestId("icon-rail");
+    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
+    await fireEvent.click(graphBtn);
+    await fireEvent.click(graphBtn);
+    const graphTabs = [
+      ...tabs.left.tabs,
+      ...(tabs.right?.tabs ?? []),
+    ].filter((t) => t.type === "graph");
+    expect(graphTabs.length).toBe(1);
+  });
 });

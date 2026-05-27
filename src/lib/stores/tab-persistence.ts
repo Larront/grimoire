@@ -1,4 +1,4 @@
-export type TabType = "note" | "map" | "scene" | "scenes" | "empty" | "template";
+export type TabType = "note" | "map" | "scene" | "scenes" | "empty" | "template" | "graph";
 
 export interface PersistedTab {
   type: TabType;

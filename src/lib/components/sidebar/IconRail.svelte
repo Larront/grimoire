@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { Search, Files, Music2, Settings } from "@lucide/svelte";
+  import { Search, Files, Music2, Settings, Network } from "@lucide/svelte";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
 
-  let { onFilesClick, onScenesClick, onSearchClick, onSettingsClick }: {
+  let { onFilesClick, onScenesClick, onSearchClick, onSettingsClick, onGraphClick }: {
     onFilesClick?: () => void;
     onScenesClick?: () => void;
     onSearchClick?: () => void;
     onSettingsClick?: () => void;
+    onGraphClick?: () => void;
   } = $props();
 
   const sidebar = useSidebar();
@@ -60,6 +61,16 @@
       onclick={onScenesClick}
     >
       <Music2 class="size-(--icon-rail-icon)" strokeWidth={1.5} />
+    </button>
+
+    <!-- Graph -->
+    <button
+      type="button"
+      aria-label="Graph"
+      class={btnBase}
+      onclick={onGraphClick}
+    >
+      <Network class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
   </div>
 

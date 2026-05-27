@@ -5,6 +5,7 @@
 	import ScenePane from './panes/ScenePane.svelte';
 	import ScenesDashboard from './panes/ScenesDashboard.svelte';
 	import TemplatePane from './panes/TemplatePane.svelte';
+	import GraphPane from './panes/GraphPane.svelte';
 
 	interface Props {
 		pane: 'left' | 'right';
@@ -56,6 +57,8 @@
 				templateTitle={activeTab.title}
 			/>
 		{/key}
+	{:else if activeTab.type === 'graph'}
+		<GraphPane />
 	{/if}
 
 	<!-- Drop zone overlay when the other pane already exists -->

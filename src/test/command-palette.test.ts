@@ -2373,3 +2373,65 @@ describe("command palette – Create new template", () => {
     expect((activeTab as any)?.templatePath).toBe(fakeEntry.path);
   });
 });
+
+// ── Open graph view command ───────────────────────────────────────────────────
+
+describe("command palette – Open graph view", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+    tabs.closeAll("left");
+    if (tabs.right) tabs.closeAll("right");
+  });
+
+  it("'Open graph view' command appears in the Commands group", async () => {
+    render(AppSearch);
+    await openPalette();
+    expect(
+      document.body.querySelector('[data-testid="cmd-open-graph"]'),
+    ).toBeTruthy();
+  });
+
+  it("appears when searching 'graph'", async () => {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "graph";
+    await fireEvent.input(input);
+    await flush();
+    expect(
+      document.body.querySelector('[data-testid="cmd-open-graph"]'),
+    ).toBeTruthy();
+  });
+
+  it("selecting 'Open graph view' opens a graph tab and closes palette", async () => {
+    render(AppSearch);
+    await openPalette();
+    const item = document.body.querySelector('[data-testid="cmd-open-graph"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    const activeTab = tabs.activeTab;
+    expect(activeTab?.type).toBe("graph");
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("selecting 'Open graph view' twice does not create a second graph tab", async () => {
+    render(AppSearch);
+    await openPalette();
+    const item = document.body.querySelector('[data-testid="cmd-open-graph"]') as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+
+    // Re-open and select again
+    await openPalette();
+    const item2 = document.body.querySelector('[data-testid="cmd-open-graph"]') as HTMLElement;
+    await fireEvent.click(item2);
+    await flush();
+
+    const allGraphTabs = [
+      ...tabs.left.tabs,
+      ...(tabs.right?.tabs ?? []),
+    ].filter((t) => t.type === "graph");
+    expect(allGraphTabs.length).toBe(1);
+  });
+});

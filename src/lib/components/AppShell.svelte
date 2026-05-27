@@ -59,6 +59,7 @@
       onScenesClick={() => {}}
       onSearchClick={() => (searchPalette.open = true)}
       onSettingsClick={() => (searchPalette.settingsOpen = true)}
+      onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
     />
     <SettingsDialog bind:open={searchPalette.settingsOpen} />
     <SearchPalette />

@@ -3,6 +3,7 @@ mod db;
 mod search;
 mod vault;
 
+use commands::graph::*;
 use commands::graph_styles::*;
 use commands::links::*;
 use commands::maps::*;
@@ -132,6 +133,8 @@ pub fn run() {
             set_note_aliases,
             get_alias_collisions,
             resolve_note_by_alias,
+            // Graph data
+            get_graph_data,
             // Graph styles
             get_tag_graph_styles,
             set_tag_graph_style,

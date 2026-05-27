@@ -15,6 +15,7 @@
     BookTemplate,
     LayoutTemplate,
     FileDown,
+    Network,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -176,6 +177,11 @@
     }
   }
 
+  function cmdOpenGraphView() {
+    searchPalette.open = false;
+    tabs.openTab({ type: "graph", id: 0, title: "Graph" });
+  }
+
   function cmdOpenSettings() {
     searchPalette.open = false;
     searchPalette.settingsOpen = true;
@@ -259,6 +265,7 @@
     { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false, icon: Clapperboard, action: cmdCreateScene },
     // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
     { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
+    { label: "Open graph view", testid: "cmd-open-graph", noteOnly: false, icon: Network, action: cmdOpenGraphView },
     { label: "Create note from template", testid: "cmd-create-note-from-template", noteOnly: false, icon: BookTemplate, action: cmdCreateNoteFromTemplate },
     { label: "Create new template", testid: "cmd-create-template", noteOnly: false, icon: LayoutTemplate, action: cmdCreateTemplate },
     { label: "Save note as template", testid: "cmd-save-note-as-template", noteOnly: true, icon: FileDown, action: cmdSaveNoteAsTemplate },
