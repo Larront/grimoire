@@ -4,6 +4,8 @@
   import cytoscape from "cytoscape";
   import type { Core } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
+  import Filter from "@lucide/svelte/icons/filter";
 
   // The five accent preset swatch hex values, in cycle order:
   // crimson → arcane → verdant → ice → amber
@@ -46,8 +48,13 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
+  // Filter panel state
+  let filterOpen = $state(false);
+  let allTags = $state<string[]>([]);
+
   // Stored in closure so reapplyStyles() can reference them
-  let tagStylesMap = new Map<string, TagStyle>();
+  // tagStylesMap is $state so the filter panel template reacts to changes
+  let tagStylesMap = $state(new Map<string, TagStyle>());
   let accentAssignments = new Map<string, string>();
 
   let observer: MutationObserver | null = null;
@@ -172,15 +179,91 @@
     cy.style(buildStyleArray());
   }
 
+  /**
+   * Compute the swatch color to display in the filter panel for a given tag.
+   * Uses explicit color if set, falls back to accent cycle assignment, then muted.
+   */
+  function computeSwatchColor(tag: string): string {
+    const style = tagStylesMap.get(tag);
+    if (style?.color) return style.color;
+    return accentAssignments.get(tag) ?? getMutedColor();
+  }
+
+  /** Whether a tag is currently hidden in the filter. Uses "" for untagged. */
+  function isFilterTagHidden(tag: string): boolean {
+    return tagStylesMap.get(tag)?.hidden ?? false;
+  }
+
+  /**
+   * Toggle a tag's visibility in the filter panel.
+   * Writes to set_tag_graph_style (same as Settings) so they stay in sync.
+   * Uses "" (empty string) as the sentinel key for untagged notes.
+   */
+  async function toggleFilterTag(tag: string) {
+    const current = tagStylesMap.get(tag) ?? { color: null, hidden: false };
+    const hidden = !current.hidden;
+    tagStylesMap.set(tag, { color: current.color, hidden });
+    await invoke("set_tag_graph_style", { tag, color: current.color, hidden });
+    updateCyVisibility();
+  }
+
+  /**
+   * Update cytoscape node and edge display based on the current tagStylesMap.
+   * Nodes whose primary_tag is hidden (or untagged with "" hidden) get display:none.
+   * Edges involving a hidden node are also set to display:none.
+   * Cytoscape treats display:none as full removal from the layout.
+   */
+  function updateCyVisibility() {
+    if (!cy) return;
+
+    type CyElem = {
+      data(k: string): unknown;
+      style(k: string, v?: unknown): unknown;
+      source(): { style(k: string): unknown };
+      target(): { style(k: string): unknown };
+    };
+
+    cy.nodes().forEach((n: unknown) => {
+      const node = n as CyElem;
+      const kind = node.data("kind") as string;
+      const primaryTag = node.data("primary_tag") as string | null | undefined;
+
+      // Stubs have no tag; keep them visible unless explicitly filtering all stubs
+      // (not in scope for this issue — stubs are always visible)
+      if (kind === "stub") return;
+
+      // Use "" as the untagged sentinel
+      const lookupTag = primaryTag ?? "";
+      const hidden = tagStylesMap.get(lookupTag)?.hidden ?? false;
+      node.style("display", hidden ? "none" : "element");
+    });
+
+    cy.edges().forEach((e: unknown) => {
+      const edge = e as CyElem;
+      const srcHidden = edge.source().style("display") === "none";
+      const tgtHidden = edge.target().style("display") === "none";
+      edge.style("display", srcHidden || tgtHidden ? "none" : "element");
+    });
+  }
+
+  /** Open the Settings dialog scrolled to the Graph section. */
+  function openGraphSettings() {
+    searchPalette.settingsOpen = true;
+  }
+
   onMount(async () => {
     try {
-      const [rawData, rawTagStyles] = await Promise.all([
+      const [rawData, rawTagStyles, tags] = await Promise.all([
         invoke<GraphData>("get_graph_data"),
         invoke<Record<string, TagStyle>>("get_tag_graph_styles"),
+        invoke<string[]>("list_all_tags"),
       ]);
 
       // Build tag styles map
       tagStylesMap = new Map(Object.entries(rawTagStyles ?? {}));
+
+      // Store vault tags for the filter panel
+      allTags = tags ?? [];
 
       // Build accent cycle assignments (encounter order across nodes)
       accentAssignments = buildAccentAssignments(rawData.nodes, tagStylesMap);
@@ -212,6 +295,9 @@
       });
 
       cy.fit();
+
+      // Apply initial visibility from tag_graph_styles (hidden tags are hidden at load)
+      updateCyVisibility();
 
       cy.on("tap", "node", (e) => {
         const node = e.target;
@@ -249,6 +335,96 @@
 </script>
 
 <div class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
+  <!-- Filter toggle button — top-right toolbar overlay -->
+  <div class="absolute top-2 right-2 z-20 flex gap-1">
+    <button
+      data-testid="filter-toggle"
+      aria-label="Toggle filter panel"
+      aria-pressed={filterOpen}
+      type="button"
+      onclick={() => (filterOpen = !filterOpen)}
+      class="flex size-7 items-center justify-center rounded bg-background/80 text-foreground-muted hover:text-foreground shadow border border-border transition-colors {filterOpen ? 'bg-primary/10 text-primary' : ''}"
+    >
+      <Filter class="size-4" />
+    </button>
+  </div>
+
+  <!-- Filter panel overlay — anchored to top-right -->
+  {#if filterOpen}
+    <div
+      data-testid="filter-panel"
+      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border shadow-lg p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
+    >
+      <p class="text-xs font-semibold text-foreground-muted uppercase tracking-wider">
+        Filter by tag
+      </p>
+
+      {#each allTags as tag (tag)}
+        <div class="flex items-center gap-2 min-w-0">
+          <!-- Color swatch -->
+          <span
+            data-testid="filter-swatch-{tag}"
+            class="size-3 rounded-full shrink-0 border border-border/40"
+            style="background-color: {computeSwatchColor(tag)}"
+          ></span>
+
+          <!-- Tag label -->
+          <span class="flex-1 text-sm text-foreground truncate">{tag}</span>
+
+          <!-- Edit color link -->
+          <a
+            data-testid="filter-edit-{tag}"
+            href="#settings-graph"
+            onclick={(e) => { e.preventDefault(); openGraphSettings(); }}
+            class="text-xs text-foreground-muted hover:text-foreground shrink-0 transition-colors"
+          >Edit →</a>
+
+          <!-- Show/hide toggle -->
+          <button
+            type="button"
+            role="switch"
+            data-testid="filter-tag-toggle-{tag}"
+            aria-checked={!isFilterTagHidden(tag)}
+            aria-label="Show {tag} in graph"
+            onclick={() => toggleFilterTag(tag)}
+            class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(tag) ? 'bg-primary' : 'bg-input'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(tag) ? 'translate-x-3' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </div>
+      {/each}
+
+      <!-- Untagged row (separator) -->
+      <div class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1">
+        <!-- Swatch uses muted color -->
+        <span
+          data-testid="filter-swatch-__untagged__"
+          class="size-3 rounded-full shrink-0 border border-border/40"
+          style="background-color: {getMutedColor()}"
+        ></span>
+
+        <span class="flex-1 text-sm text-foreground-muted truncate">Untagged</span>
+
+        <!-- Show/hide toggle for untagged notes -->
+        <button
+          type="button"
+          role="switch"
+          data-testid="filter-untagged-toggle"
+          aria-checked={!isFilterTagHidden("")}
+          aria-label="Show untagged notes in graph"
+          onclick={() => toggleFilterTag("")}
+          class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden('') ? 'bg-primary' : 'bg-input'}"
+        >
+          <span
+            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden('') ? 'translate-x-3' : 'translate-x-0'}"
+          ></span>
+        </button>
+      </div>
+    </div>
+  {/if}
+
   <!-- Container is always in DOM so cytoscape can bind to it -->
   <div
     bind:this={container}
