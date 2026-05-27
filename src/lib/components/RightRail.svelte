@@ -263,14 +263,15 @@
           {:else}
             <div class="space-y-0.5">
               {#each displayedBacklinks as link (link.id)}
+                {@const folder = folderLabel(link.path)}
                 <button
                   data-slot="backlink-row"
                   onclick={() => navigateToNote(link.id, link.title)}
                   class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
                 >
                   <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.title}</div>
-                  {#if folderLabel(link.path)}
-                    <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folderLabel(link.path)}</div>
+                  {#if folder}
+                    <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folder}</div>
                   {/if}
                 </button>
               {/each}
@@ -294,14 +295,15 @@
             <div class="space-y-0.5">
               {#each displayedOutbound as link (link.target_path)}
                 {#if link.resolved_id !== null}
+                  {@const folder = link.resolved_path ? folderLabel(link.resolved_path) : ''}
                   <button
                     data-slot="outbound-row"
                     onclick={() => navigateToNote(link.resolved_id!, link.resolved_title!)}
                     class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
                   >
                     <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.resolved_title}</div>
-                    {#if link.resolved_path && folderLabel(link.resolved_path)}
-                      <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folderLabel(link.resolved_path)}</div>
+                    {#if folder}
+                      <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folder}</div>
                     {/if}
                   </button>
                 {:else}
