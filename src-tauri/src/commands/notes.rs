@@ -317,12 +317,26 @@ pub fn write_note_tags(
 
 #[tauri::command]
 pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSearchResult>, String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    match &state.search_index {
-        Some(index) => crate::search::search_notes_in_index(index, &vault_path, &query, 10),
-        None => Ok(vec![]),
+
+    let tantivy_results = match state.search_index.as_ref() {
+        Some(index) => crate::search::search_notes_in_index(index, &vault_path, &query, 10)?,
+        None => vec![],
+    };
+
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let alias_results = crate::commands::links::search_notes_by_alias_on_conn(conn, &query)?;
+
+    let mut seen: std::collections::HashSet<i32> = tantivy_results.iter().map(|r| r.id).collect();
+    let mut merged = tantivy_results;
+    for r in alias_results {
+        if seen.insert(r.id) {
+            merged.push(r);
+        }
     }
+    merged.truncate(10);
+    Ok(merged)
 }
 
 #[tauri::command]

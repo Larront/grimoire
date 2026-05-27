@@ -253,6 +253,78 @@ pub fn get_alias_collisions(
 }
 
 #[derive(Serialize, Debug, Clone)]
+pub struct ResolvedNote {
+    pub id: i32,
+    pub title: String,
+    pub path: String,
+}
+
+pub fn search_notes_by_alias_on_conn(
+    conn: &mut SqliteConnection,
+    query: &str,
+) -> Result<Vec<crate::search::NoteSearchResult>, String> {
+    if query.trim().is_empty() {
+        return Ok(vec![]);
+    }
+    let pattern = format!("{}%", query.to_lowercase());
+    diesel::sql_query(
+        "SELECT DISTINCT n.id, n.title, n.path
+         FROM note_aliases al
+         JOIN notes n ON al.note_id = n.id
+         WHERE LOWER(al.alias) LIKE ?1
+         ORDER BY al.alias
+         LIMIT 10",
+    )
+    .bind::<diesel::sql_types::Text, _>(&pattern)
+    .load::<ResolvedNoteRow>(conn)
+    .map_err(|e| e.to_string())
+    .map(|rows| {
+        rows.into_iter()
+            .map(|r| crate::search::NoteSearchResult {
+                id: r.id,
+                title: r.title,
+                path: r.path,
+                excerpt: None,
+                match_count: 0,
+            })
+            .collect()
+    })
+}
+
+pub fn resolve_note_by_alias_on_conn(
+    conn: &mut SqliteConnection,
+    alias: &str,
+) -> Result<Option<ResolvedNote>, String> {
+    diesel::sql_query(
+        "SELECT n.id, n.title, n.path
+         FROM note_aliases al
+         JOIN notes n ON al.note_id = n.id
+         WHERE LOWER(al.alias) = LOWER(?1)
+         LIMIT 1",
+    )
+    .bind::<diesel::sql_types::Text, _>(alias)
+    .load::<ResolvedNoteRow>(conn)
+    .map_err(|e| e.to_string())
+    .map(|rows| {
+        rows.into_iter().next().map(|r| ResolvedNote {
+            id: r.id,
+            title: r.title,
+            path: r.path,
+        })
+    })
+}
+
+#[tauri::command]
+pub fn resolve_note_by_alias(
+    alias: String,
+    vault: State<AppVault>,
+) -> Result<Option<ResolvedNote>, String> {
+    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    resolve_note_by_alias_on_conn(conn, &alias)
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct BacklinkNote {
     pub id: i32,
     pub path: String,
@@ -778,5 +850,105 @@ mod tests {
         upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
         assert!(collisions.is_empty(), "own aliases should not be reported as collisions");
+    }
+
+    // ── search_notes_by_alias_on_conn ────────────────────────────────────────
+
+    #[test]
+    fn alias_search_prefix_matches() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let results = search_notes_by_alias_on_conn(&mut conn, "Captain").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 1);
+        assert_eq!(results[0].title, "Ash");
+        assert_eq!(results[0].path, "ash.md");
+    }
+
+    #[test]
+    fn alias_search_case_insensitive() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let results = search_notes_by_alias_on_conn(&mut conn, "captain").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 1);
+    }
+
+    #[test]
+    fn alias_search_no_match_returns_empty() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let results = search_notes_by_alias_on_conn(&mut conn, "Dragon").unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn alias_search_empty_query_returns_empty() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let results = search_notes_by_alias_on_conn(&mut conn, "").unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn alias_search_deduplicates_same_note_multiple_aliases() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(
+            &mut conn,
+            1,
+            &["Captain Ash".to_string(), "Captain Ashford".to_string()],
+        )
+        .unwrap();
+        let results = search_notes_by_alias_on_conn(&mut conn, "Captain").unwrap();
+        assert_eq!(results.len(), 1, "DISTINCT should collapse multiple alias matches to one row");
+        assert_eq!(results[0].id, 1);
+    }
+
+    // ── resolve_note_by_alias_on_conn ────────────────────────────────────────
+
+    #[test]
+    fn resolve_by_alias_exact_match() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let result = resolve_note_by_alias_on_conn(&mut conn, "Captain Ash").unwrap();
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.id, 1);
+        assert_eq!(r.title, "Ash");
+        assert_eq!(r.path, "ash.md");
+    }
+
+    #[test]
+    fn resolve_by_alias_no_match_returns_none() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let result = resolve_note_by_alias_on_conn(&mut conn, "Unknown").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn resolve_by_alias_case_insensitive() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let result = resolve_note_by_alias_on_conn(&mut conn, "captain ash").unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().id, 1);
+    }
+
+    #[test]
+    fn resolve_by_alias_partial_does_not_match() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "ash.md", "Ash");
+        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        let result = resolve_note_by_alias_on_conn(&mut conn, "Captain").unwrap();
+        assert!(result.is_none(), "partial alias must not resolve");
     }
 }

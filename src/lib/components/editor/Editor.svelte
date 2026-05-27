@@ -157,11 +157,26 @@
 
   // ── Wiki-link interaction ────────────────────────────────────────────────────
 
-  function handleClick(e: MouseEvent) {
+  async function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
-    const note = notes.notes.find((n) => n.path === link.dataset.path);
-    if (note) tabs.navigate({ type: "note", id: note.id, title: note.title });
+    const path = link.dataset.path;
+
+    const note = notes.notes.find((n) => n.path === path);
+    if (note) {
+      tabs.navigate({ type: "note", id: note.id, title: note.title });
+      return;
+    }
+
+    try {
+      const resolved = await invoke<{ id: number; title: string; path: string } | null>(
+        "resolve_note_by_alias",
+        { alias: path },
+      );
+      if (resolved) tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
+    } catch {
+      // stub note or no vault open — do nothing
+    }
   }
 
   function handleMouseover(e: MouseEvent) {
