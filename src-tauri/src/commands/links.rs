@@ -529,20 +529,21 @@ struct ResolvedNoteRow {
     path: String,
 }
 
+#[derive(QueryableByName)]
+struct BacklinkCountRow {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    cnt: i64,
+}
+
 #[tauri::command]
 pub fn get_note_backlink_count(note_path: String, vault: State<AppVault>) -> Result<usize, String> {
     let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No vault open")?;
-    #[derive(QueryableByName)]
-    struct CountRow {
-        #[diesel(sql_type = diesel::sql_types::BigInt)]
-        cnt: i64,
-    }
     let row = diesel::sql_query(
         "SELECT COUNT(DISTINCT source_id) as cnt FROM note_links WHERE target_path = ?1",
     )
     .bind::<diesel::sql_types::Text, _>(&note_path)
-    .load::<CountRow>(conn)
+    .load::<BacklinkCountRow>(conn)
     .map_err(|e| e.to_string())?;
     Ok(row.into_iter().next().map(|r| r.cnt as usize).unwrap_or(0))
 }

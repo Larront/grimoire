@@ -82,7 +82,6 @@
     const newPath = dir ? `${dir}/${trimmed}.md` : `${trimmed}.md`;
 
     if (appPrefs.confirmRenameLinks) {
-      // Check backlink count before deciding to show dialog
       let count = 0;
       try {
         count = await invoke<number>("get_note_backlink_count", { notePath: note.path });
@@ -93,7 +92,7 @@
         pendingRenameNote = { title: trimmed, path: newPath };
         pendingBacklinkCount = count;
         renameDialogOpen = true;
-        return; // dialog will call doRename or doRenameOnly
+        return; // dialog will call handleRenameAndUpdate or handleRenameOnly
       }
     }
 
@@ -108,7 +107,6 @@
         const result = await invoke<{ note: unknown; updated_count: number }>("rename_note", {
           note: { ...note, title, path: newPath },
         });
-        await notes.load();
         if (result.updated_count > 0) {
           const n = result.updated_count;
           toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
@@ -117,8 +115,8 @@
         await invoke("update_note", {
           note: { ...note, title, path: newPath },
         });
-        await notes.load();
       }
+      await notes.load();
     } catch (e) {
       console.error("title save failed:", e);
       draftTitle = note.title;
