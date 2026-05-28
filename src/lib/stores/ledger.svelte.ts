@@ -10,14 +10,20 @@ export type AccentPreset =
 
 export type DensityLevel = "cozy" | "balanced" | "dense";
 
-interface OpenVaultResult {
+interface FailedImport {
+  path: string;
+  reason: string;
+}
+
+interface OpenLedgerResult {
   path: string;
   note_count: number;
   scene_count: number;
   map_count: number;
+  failed_imports: FailedImport[];
 }
 
-export interface RecentVault {
+export interface RecentLedger {
   path: string;
   name: string;
   note_count: number;
@@ -26,7 +32,7 @@ export interface RecentVault {
   last_opened: string;
 }
 
-function createVaultStore() {
+function createLedgerStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
   let isLoading = $state(false);
@@ -34,36 +40,36 @@ function createVaultStore() {
   let accent = $state<AccentPreset>("accent-crimson");
   let density = $state<DensityLevel>("balanced");
 
-  async function openVault(selectedPath?: string): Promise<boolean> {
+  async function openLedger(selectedPath?: string): Promise<boolean> {
     isLoading = true;
     error = null;
 
     try {
-      const vaultPath =
+      const ledgerPath =
         selectedPath ??
         (await open({
           directory: true,
-          title: "Open Vault Folder",
+          title: "Open Ledger Folder",
         }));
 
-      if (!vaultPath || typeof vaultPath !== "string") {
+      if (!ledgerPath || typeof ledgerPath !== "string") {
         isLoading = false;
         return false;
       }
 
-      const result = await invoke<OpenVaultResult>("open_vault", {
-        path: vaultPath,
+      const result = await invoke<OpenLedgerResult>("open_ledger", {
+        path: ledgerPath,
       });
 
       path = result.path;
       isOpen = true;
 
-      // Record in recent vaults (fire-and-forget).
-      // Item counts in this entry are set at open time and refreshed on the next open_vault call.
+      // Record in recent ledgers (fire-and-forget).
+      // Item counts in this entry are set at open time and refreshed on the next open_ledger call.
       // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
       // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
       const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
-      invoke("add_recent_vault", {
+      invoke("add_recent_ledger", {
         entry: {
           path: result.path,
           name,
@@ -94,20 +100,20 @@ function createVaultStore() {
     invoke("save_accent_preset", { preset }).catch(console.error);
   }
 
-  async function getRecentVaults(): Promise<RecentVault[]> {
+  async function getRecentLedgers(): Promise<RecentLedger[]> {
     try {
-      return (await invoke<RecentVault[]>("get_recent_vaults")) ?? [];
+      return (await invoke<RecentLedger[]>("get_recent_ledgers")) ?? [];
     } catch {
       return [];
     }
   }
 
-  async function closeVault(): Promise<void> {
+  async function closeLedger(): Promise<void> {
     try {
-      await invoke("close_vault");
+      await invoke("close_ledger");
     } catch (e) {
       // Log but do not block frontend close — we still clear local state
-      console.warn("[vault] close_vault command failed:", e);
+      console.warn("[ledger] close_ledger command failed:", e);
     }
     path = null;
     isOpen = false;
@@ -116,9 +122,9 @@ function createVaultStore() {
     error = null;
   }
 
-  async function checkExistingVault(): Promise<void> {
+  async function checkExistingLedger(): Promise<void> {
     try {
-      const existingPath = await invoke<string | null>("get_vault_path");
+      const existingPath = await invoke<string | null>("get_ledger_path");
       if (existingPath) {
         path = existingPath;
         isOpen = true;
@@ -132,7 +138,7 @@ function createVaultStore() {
       ).catch(() => null);
       if (savedDensity) density = savedDensity;
     } catch {
-      // No vault open — normal on first launch
+      // No ledger open — normal on first launch
     }
   }
 
@@ -155,13 +161,13 @@ function createVaultStore() {
     get density() {
       return density;
     },
-    openVault,
-    closeVault,
-    checkExistingVault,
-    getRecentVaults,
+    openLedger,
+    closeLedger,
+    checkExistingLedger,
+    getRecentLedgers,
     setAccent,
     setDensity,
   };
 }
 
-export const vault = createVaultStore();
+export const ledger = createLedgerStore();

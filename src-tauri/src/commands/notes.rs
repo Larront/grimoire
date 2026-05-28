@@ -5,7 +5,7 @@ use crate::commands::links::{
 use crate::commands::tags::upsert_note_tags;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use serde::Serialize;
 use std::fs;
@@ -14,39 +14,39 @@ use tauri::State;
 
 pub use crate::search::{NoteSearchResult, SearchAllResult};
 
-/// Validates that `relative` resolves to a path inside `vault_root`.
+/// Validates that `relative` resolves to a path inside `ledger_root`.
 /// Use for reading/deleting existing files — the file must exist for canonicalize().
 /// Both sides are canonicalized so the starts_with check works correctly on Windows
 /// (where canonicalize returns \\?\ extended-length paths).
-fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
-    let canonical_root = vault_root
+fn validate_path(ledger_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = ledger_root
         .canonicalize()
-        .map_err(|e| format!("Invalid vault root: {e}"))?;
-    let joined = vault_root.join(relative);
+        .map_err(|e| format!("Invalid ledger root: {e}"))?;
+    let joined = ledger_root.join(relative);
     let canonical = joined
         .canonicalize()
         .map_err(|e| format!("Invalid path: {e}"))?;
     if !canonical.starts_with(&canonical_root) {
-        return Err("Path escapes vault root".to_string());
+        return Err("Path escapes ledger root".to_string());
     }
     Ok(canonical)
 }
 
-/// Validates that the PARENT of `relative` resolves inside `vault_root`.
+/// Validates that the PARENT of `relative` resolves inside `ledger_root`.
 /// Use for creating/writing new files — the file itself may not exist yet.
 /// Both sides are canonicalized so the starts_with check works correctly on Windows.
-pub(crate) fn validate_parent_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
-    let canonical_root = vault_root
+pub(crate) fn validate_parent_path(ledger_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = ledger_root
         .canonicalize()
-        .map_err(|e| format!("Invalid vault root: {e}"))?;
-    let joined = vault_root.join(relative);
+        .map_err(|e| format!("Invalid ledger root: {e}"))?;
+    let joined = ledger_root.join(relative);
     let parent = joined.parent().ok_or("Cannot determine parent directory")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let canonical_parent = parent
         .canonicalize()
         .map_err(|e| format!("Invalid parent path: {e}"))?;
     if !canonical_parent.starts_with(&canonical_root) {
-        return Err("Path escapes vault root".to_string());
+        return Err("Path escapes ledger root".to_string());
     }
     Ok(joined) // parent is validated; return the full (not yet existing) file path
 }
@@ -66,9 +66,9 @@ pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Pa
 }
 
 #[tauri::command]
-pub fn get_notes(vault: State<AppVault>) -> Result<Vec<Note>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_notes(ledger: State<AppLedger>) -> Result<Vec<Note>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     notes.load::<Note>(conn).map_err(|e| e.to_string())
 }
 
@@ -77,34 +77,36 @@ pub fn create_note(
     note_title: String,
     note_path: String,
     note_parent_path: Option<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Note, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     // Determine the parent directory and resolve any filename conflicts
     // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
-    let initial_full_path = validate_parent_path(&vault_path, &note_path)?;
+    let initial_full_path = validate_parent_path(&ledger_path, &note_path)?;
     let parent_dir = initial_full_path
         .parent()
         .ok_or("Cannot determine parent directory")?;
 
     let (resolved_title, full_path) = resolve_note_filename(&note_title, parent_dir);
 
-    // Convert the resolved absolute path back to a vault-relative forward-slash path
+    // Convert the resolved absolute path back to a ledger-relative forward-slash path
     let resolved_path = full_path
-        .strip_prefix(&vault_path)
+        .strip_prefix(&ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
 
     fs::write(&full_path, "").map_err(|e| e.to_string())?;
 
+    let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
         title: &resolved_title,
         parent_path: note_parent_path.as_deref(),
+        modified_at: &now,
     };
 
     let created: Note = diesel::insert_into(notes)
@@ -124,20 +126,20 @@ pub fn create_note(
 pub fn create_note_from_template(
     template_path: String,
     note_parent_path: Option<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Note, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
-    let content = crate::commands::templates::read_template_content(&vault_path, &template_path)?;
+    let content = crate::commands::templates::read_template_content(&ledger_path, &template_path)?;
 
     let note_path = match &note_parent_path {
         Some(parent) => format!("{}/Untitled.md", parent.trim_end_matches('/')),
         None => "Untitled.md".to_string(),
     };
 
-    let initial_full_path = validate_parent_path(&vault_path, &note_path)?;
+    let initial_full_path = validate_parent_path(&ledger_path, &note_path)?;
     let parent_dir = initial_full_path
         .parent()
         .ok_or("Cannot determine parent directory")?;
@@ -145,17 +147,19 @@ pub fn create_note_from_template(
     let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir);
 
     let resolved_path = full_path
-        .strip_prefix(&vault_path)
+        .strip_prefix(&ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
 
     fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
+    let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
         title: &resolved_title,
         parent_path: note_parent_path.as_deref(),
+        modified_at: &now,
     };
 
     let created: Note = diesel::insert_into(notes)
@@ -172,18 +176,18 @@ pub fn create_note_from_template(
 }
 
 #[tauri::command]
-pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     // Fetch the current record to detect path changes
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
     // Rename file on disk if the path changed
     if old_note.path != note.path {
-        let old_full = validate_path(&vault_path, &old_note.path)?;
-        let new_full = validate_parent_path(&vault_path, &note.path)?;
+        let old_full = validate_path(&ledger_path, &old_note.path)?;
+        let new_full = validate_parent_path(&ledger_path, &note.path)?;
         if new_full.exists() {
             return Err(format!("A file already exists at '{}'", note.path));
         }
@@ -204,7 +208,7 @@ pub fn update_note(note: Note, vault: State<AppVault>) -> Result<Note, String> {
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let raw_content = std::fs::read_to_string(vault_path.join(&updated.path))
+    let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path))
         .unwrap_or_default();
     let body_text = crate::search::extract_plain_text(&raw_content);
     let tags = frontmatter::read_tags(&raw_content);
@@ -223,21 +227,21 @@ pub struct RenameNoteResult {
 }
 
 /// Like `update_note` but also rewrites all wikilinks that reference the old
-/// path in every other note in the vault.  Returns the count of notes whose
+/// path in every other note in the ledger.  Returns the count of notes whose
 /// files were actually rewritten so the frontend can show a toast.
 #[tauri::command]
-pub fn rename_note(note: Note, vault: State<AppVault>) -> Result<RenameNoteResult, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteResult, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
     let mut updated_count = 0usize;
 
     if old_note.path != note.path {
-        let old_full = validate_path(&vault_path, &old_note.path)?;
-        let new_full = validate_parent_path(&vault_path, &note.path)?;
+        let old_full = validate_path(&ledger_path, &old_note.path)?;
+        let new_full = validate_parent_path(&ledger_path, &note.path)?;
         if new_full.exists() {
             return Err(format!("A file already exists at '{}'", note.path));
         }
@@ -250,7 +254,7 @@ pub fn rename_note(note: Note, vault: State<AppVault>) -> Result<RenameNoteResul
             .execute(conn)
             .map_err(|e| e.to_string())?;
         updated_count =
-            rewrite_backlinks_on_rename_on_conn(&vault_path, conn, &old_note.path, &note.path)?;
+            rewrite_backlinks_on_rename_on_conn(&ledger_path, conn, &old_note.path, &note.path)?;
     }
 
     let updated: Note = diesel::update(notes.find(note.id))
@@ -259,7 +263,7 @@ pub fn rename_note(note: Note, vault: State<AppVault>) -> Result<RenameNoteResul
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let raw_content = std::fs::read_to_string(vault_path.join(&updated.path)).unwrap_or_default();
+    let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path)).unwrap_or_default();
     let body_text = crate::search::extract_plain_text(&raw_content);
     let tags = frontmatter::read_tags(&raw_content);
     if let Some(index) = &state.search_index {
@@ -273,13 +277,13 @@ pub fn rename_note(note: Note, vault: State<AppVault>) -> Result<RenameNoteResul
 }
 
 #[tauri::command]
-pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let note: Note = notes.find(note_id).first(conn).map_err(|e| e.to_string())?;
-    let full_path = validate_path(&vault_path, &note.path)?;
+    let full_path = validate_path(&ledger_path, &note.path)?;
     if full_path.exists() {
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
@@ -298,10 +302,10 @@ pub fn delete_note(note_id: i32, vault: State<AppVault>) -> Result<usize, String
 }
 
 #[tauri::command]
-pub fn read_note_content(note_path: String, vault: State<AppVault>) -> Result<String, String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = validate_path(&vault_path, &note_path)?;
+pub fn read_note_content(note_path: String, ledger: State<AppLedger>) -> Result<String, String> {
+    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    let full_path = validate_path(&ledger_path, &note_path)?;
     fs::read_to_string(&full_path).map_err(|e| e.to_string())
 }
 
@@ -309,14 +313,14 @@ pub fn read_note_content(note_path: String, vault: State<AppVault>) -> Result<St
 pub fn write_note_content(
     note_path: String,
     content: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = validate_parent_path(&vault_path, &note_path)?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    let full_path = validate_parent_path(&ledger_path, &note_path)?;
     fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let maybe_note = notes
         .filter(path.eq(&note_path))
         .first::<Note>(conn)
@@ -338,10 +342,10 @@ pub fn write_note_content(
 }
 
 #[tauri::command]
-pub fn read_note_tags(note_path: String, vault: State<AppVault>) -> Result<Vec<String>, String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = validate_path(&vault_path, &note_path)?;
+pub fn read_note_tags(note_path: String, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
+    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    let full_path = validate_path(&ledger_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     Ok(frontmatter::read_tags(&content))
 }
@@ -350,15 +354,15 @@ pub fn read_note_tags(note_path: String, vault: State<AppVault>) -> Result<Vec<S
 pub fn write_note_tags(
     note_path: String,
     tags: Vec<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let full_path = validate_path(&vault_path, &note_path)?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    let full_path = validate_path(&ledger_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
     fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     upsert_note_tags(conn, &note_path, &tags)?;
     // Re-index in Tantivy so tag: filters reflect the updated tags immediately
     let maybe_note = notes
@@ -374,16 +378,16 @@ pub fn write_note_tags(
 }
 
 #[tauri::command]
-pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSearchResult>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+pub fn search_notes(query: String, ledger: State<AppLedger>) -> Result<Vec<NoteSearchResult>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
 
     let tantivy_results = match state.search_index.as_ref() {
-        Some(index) => crate::search::search_notes_in_index(index, &vault_path, &query, 10)?,
+        Some(index) => crate::search::search_notes_in_index(index, &ledger_path, &query, 10)?,
         None => vec![],
     };
 
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let alias_results = crate::commands::links::search_notes_by_alias_on_conn(conn, &query)?;
 
     let mut seen: std::collections::HashSet<i32> = tantivy_results.iter().map(|r| r.id).collect();
@@ -398,7 +402,7 @@ pub fn search_notes(query: String, vault: State<AppVault>) -> Result<Vec<NoteSea
 }
 
 #[tauri::command]
-pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResult, String> {
+pub fn search_all(query: String, ledger: State<AppLedger>) -> Result<SearchAllResult, String> {
     use crate::db::schema::note_tags::dsl as nt;
     use crate::search::{parse_tag_filters, strip_tag_tokens, TagFacet};
 
@@ -406,10 +410,10 @@ pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResu
     let free_text = strip_tag_tokens(&query);
     let free_text_lower = free_text.to_lowercase();
 
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
 
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let all_tag_rows: Vec<String> = nt::note_tags
         .select(nt::tag)
         .load::<String>(conn)
@@ -433,7 +437,7 @@ pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResu
 
     match &state.search_index {
         Some(index) => {
-            let mut result = crate::search::search_all_in_index(index, &vault_path, &query, 10)?;
+            let mut result = crate::search::search_all_in_index(index, &ledger_path, &query, 10)?;
             result.tags = tag_facets;
             Ok(result)
         }
@@ -442,14 +446,14 @@ pub fn search_all(query: String, vault: State<AppVault>) -> Result<SearchAllResu
 }
 
 #[tauri::command]
-pub fn rebuild_search_index(vault: State<AppVault>) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn rebuild_search_index(ledger: State<AppLedger>) -> Result<(), String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let all_notes: Vec<Note> = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
     let all_maps: Vec<Map> = maps::table.load::<Map>(conn).map_err(|e| e.to_string())?;
     let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(conn).map_err(|e| e.to_string())?;
-    let index = crate::search::rebuild_index(&vault_path, &all_notes, &all_maps, &all_scenes)?;
+    let index = crate::search::rebuild_index(&ledger_path, &all_notes, &all_maps, &all_scenes)?;
     state.search_index = Some(index);
     Ok(())
 }
@@ -462,12 +466,12 @@ pub struct NotePathResult {
 }
 
 #[tauri::command]
-pub fn get_note_by_path(note_path: String, vault: State<AppVault>) -> Result<Option<NotePathResult>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_note_by_path(note_path: String, ledger: State<AppLedger>) -> Result<Option<NotePathResult>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
-    // Notes store vault-relative paths in the DB (e.g. "Characters/Aldric.md").
+    // Notes store ledger-relative paths in the DB (e.g. "Characters/Aldric.md").
     // Content is read from disk, not stored in the DB.
     let result = notes
         .filter(path.eq(&note_path))
@@ -479,7 +483,7 @@ pub fn get_note_by_path(note_path: String, vault: State<AppVault>) -> Result<Opt
     match result {
         None => Ok(None),
         Some((note_id, note_title)) => {
-            let full_path = validate_path(&vault_path, &note_path)?;
+            let full_path = validate_path(&ledger_path, &note_path)?;
             let content = std::fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
             Ok(Some(NotePathResult {
                 id: note_id,

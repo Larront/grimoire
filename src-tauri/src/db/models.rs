@@ -23,6 +23,7 @@ pub struct NewNote<'a> {
     pub path: &'a str,
     pub title: &'a str,
     pub parent_path: Option<&'a str>,
+    pub modified_at: &'a str,
 }
 
 use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_auth};

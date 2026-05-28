@@ -1,10 +1,11 @@
-use crate::commands::links::rebuild_note_links_from_vault;
-use crate::commands::tags::rebuild_note_tags_from_vault;
+use crate::commands::import::{reconcile_notes_with_disk, FailedImport};
+use crate::commands::links::rebuild_note_links_from_ledger;
+use crate::commands::tags::rebuild_note_tags_from_ledger;
 use crate::commands::templates::inject_builtin_templates;
 use crate::db::establish_connection;
 use crate::db::models::{Map, NewPinCategory, Note, Scene};
 use crate::db::schema::{maps, notes, pin_categories, scenes};
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use std::path::PathBuf;
 use tauri::State;
@@ -39,25 +40,26 @@ fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(), String> {
 }
 
 #[derive(serde::Serialize)]
-pub struct OpenVaultResult {
+pub struct OpenLedgerResult {
     pub path: String,
     pub note_count: i64,
     pub scene_count: i64,
     pub map_count: i64,
+    pub failed_imports: Vec<FailedImport>,
 }
 
 #[tauri::command]
-pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResult, String> {
-    let vault_path = PathBuf::from(&path);
+pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerResult, String> {
+    let ledger_path = PathBuf::from(&path);
 
-    if !vault_path.exists() {
-        std::fs::create_dir_all(&vault_path)
-            .map_err(|e| format!("Failed to create vault directory: {}", e))?;
+    if !ledger_path.exists() {
+        std::fs::create_dir_all(&ledger_path)
+            .map_err(|e| format!("Failed to create ledger directory: {}", e))?;
     }
 
-    inject_builtin_templates(&vault_path)?;
+    inject_builtin_templates(&ledger_path)?;
 
-    let mut conn = establish_connection(&vault_path)?;
+    let mut conn = establish_connection(&ledger_path)?;
     seed_default_categories(&mut conn)?;
 
     // Prune maps abandoned mid-creation: a map row is inserted as soon as the
@@ -68,18 +70,22 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
         .execute(&mut conn)
         .map_err(|e| e.to_string())?;
 
+    // Bring the notes table into agreement with on-disk .md files before the
+    // tag/link/search rebuild passes so they see fully-populated rows.
+    let import_report = reconcile_notes_with_disk(&ledger_path, &mut conn)?;
+
     // Rebuild the tag index from a fresh frontmatter scan. Cheap for typical
-    // vault sizes; guarantees the index stays in sync with disk even if a
+    // ledger sizes; guarantees the index stays in sync with disk even if a
     // previous session crashed mid-write or `.grimoire/` was wiped.
-    rebuild_note_tags_from_vault(&vault_path, &mut conn)?;
-    rebuild_note_links_from_vault(&vault_path, &mut conn)?;
+    rebuild_note_tags_from_ledger(&ledger_path, &mut conn)?;
+    rebuild_note_links_from_ledger(&ledger_path, &mut conn)?;
 
     // Rebuild the Tantivy search index. Non-fatal: a failure just leaves
-    // search unavailable until the next manual rebuild or vault reopen.
+    // search unavailable until the next manual rebuild or ledger reopen.
     let all_notes: Vec<Note> = notes::table.load::<Note>(&mut conn).unwrap_or_default();
     let all_maps: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap_or_default();
     let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(&mut conn).unwrap_or_default();
-    let search_index = crate::search::rebuild_index(&vault_path, &all_notes, &all_maps, &all_scenes).ok();
+    let search_index = crate::search::rebuild_index(&ledger_path, &all_notes, &all_maps, &all_scenes).ok();
 
     let note_count: i64 = notes::table
         .count()
@@ -94,34 +100,35 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
         .get_result(&mut conn)
         .unwrap_or(0);
 
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    state.path = Some(vault_path);
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    state.path = Some(ledger_path);
     state.connection = Some(conn);
     state.search_index = search_index;
 
-    Ok(OpenVaultResult {
+    Ok(OpenLedgerResult {
         path,
         note_count,
         scene_count,
         map_count,
+        failed_imports: import_report.failed,
     })
 }
 
 #[tauri::command]
-pub fn get_vault_path(vault: State<AppVault>) -> Option<String> {
-    let state = vault.lock().ok()?;
+pub fn get_ledger_path(ledger: State<AppLedger>) -> Option<String> {
+    let state = ledger.lock().ok()?;
     state.path.as_ref().map(|p| p.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn close_vault(vault: State<AppVault>) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|e| e.to_string())?;
+pub fn close_ledger(ledger: State<AppLedger>) -> Result<(), String> {
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
     state.connection = None;
     state.path = None;
     state.search_index = None;
     state.pending_spotify_verifier = None;
     state.pending_spotify_state = None;
-    // spotify_client_id is intentionally kept — it is app-level config, not vault-specific
+    // spotify_client_id is intentionally kept — it is app-level config, not ledger-specific
     Ok(())
 }
 
@@ -130,9 +137,9 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_open_vault_creates_directory() {
+    fn test_open_ledger_creates_directory() {
         let tmp = tempdir().unwrap();
-        let new_dir = tmp.path().join("new_vault");
+        let new_dir = tmp.path().join("new_ledger");
         // Just test the directory creation logic directly
         std::fs::create_dir_all(&new_dir).unwrap();
         assert!(new_dir.exists());
