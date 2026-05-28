@@ -1,8 +1,15 @@
+<script module lang="ts">
+  import cytoscape from "cytoscape";
+  import d3Force from "cytoscape-d3-force";
+
+  // Register the d3-force layout once for the whole module (idempotent).
+  cytoscape.use(d3Force);
+</script>
+
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import cytoscape from "cytoscape";
-  import type { Core } from "cytoscape";
+  import type { Core, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
@@ -19,6 +26,9 @@
 
   // Map nodes use a fixed neutral teal (not tag-colored, not muted)
   const MAP_COLOR = "#6b9e8d";
+
+  // Fade duration (ms) for the hover neighbor-dimming transition.
+  const DIM_FADE_MS = 150;
 
   interface GraphNodeData {
     id: string;
@@ -65,6 +75,9 @@
   let accentAssignments = new Map<string, string>();
 
   let observer: MutationObserver | null = null;
+
+  // Undirected adjacency built from edges, used for neighbor-dimming on hover.
+  let adjacency = new Map<string, Set<string>>();
 
   /** Read --foreground-muted from computed CSS at call time (light/dark aware). */
   function getMutedColor(): string {
@@ -127,27 +140,39 @@
     return Math.round(radius * 2);
   }
 
-  /** The Cytoscape style array. Colors live in element data via data() mappers. */
-  function buildStyleArray() {
+  /**
+   * The Cytoscape style array. Colors live in element data via data() mappers.
+   * Nodes render as translucent orbs (soft fill + colored stroke), edges are thin
+   * and undirected — an Obsidian-like aesthetic. Label/edge colors are read from
+   * CSS at build time so reapplyStyles() picks up theme changes.
+   */
+  function buildStyleArray(): StylesheetJson {
+    const muted = getMutedColor();
     return [
       {
         selector: "node",
         style: {
           label: "data(label)",
           "background-color": "data(color)",
+          "background-opacity": 0.25,
+          "border-color": "data(color)",
+          "border-width": 2,
+          "border-opacity": 0.9,
           width: "data(size)",
           height: "data(size)",
           "font-size": 10,
-          color: "#333",
+          color: muted,
           "text-valign": "bottom",
           "text-halign": "center",
           "text-margin-y": 4,
+          "min-zoomed-font-size": 7,
         },
       },
       {
         selector: "node[kind='stub']",
         style: {
           opacity: 0.6,
+          "background-opacity": 0.12,
           "border-style": "dashed",
           "border-width": 1.5,
           "border-color": "data(color)",
@@ -157,10 +182,9 @@
         selector: "edge",
         style: {
           width: 1,
-          "line-color": "#ccc",
-          "target-arrow-color": "#ccc",
-          "target-arrow-shape": "triangle",
-          "curve-style": "bezier",
+          "line-color": muted,
+          "line-opacity": 0.25,
+          "curve-style": "straight",
         },
       },
     ];
@@ -199,7 +223,7 @@
   async function toggleFilterTag(tag: string) {
     const current = tagStylesMap.get(tag) ?? { color: null, hidden: false };
     const hidden = !current.hidden;
-    tagStylesMap.set(tag, { color: current.color, hidden });
+    tagStylesMap = new Map(tagStylesMap).set(tag, { color: current.color, hidden });
     await invoke("set_tag_graph_style", { tag, color: current.color, hidden });
     updateCyVisibility();
   }
@@ -290,6 +314,39 @@
     }
   }
 
+  /**
+   * Dim everything except the hovered node and its direct neighbors (Obsidian-style
+   * focus). Passing null restores full opacity. No-op while a search is active so the
+   * two highlight mechanisms don't fight over the opacity bypass.
+   */
+  function applyNeighborDim(focusId: string | null) {
+    if (!cy || searchQuery.trim()) return;
+    const connected = focusId
+      ? new Set<string>([focusId, ...(adjacency.get(focusId) ?? [])])
+      : null;
+
+    type Animatable = {
+      data(k: string): unknown;
+      animate(opts: { style: { opacity: number } }, params: { duration: number; queue: boolean }): void;
+    };
+    const fade = (ele: Animatable, opacity: number) =>
+      ele.animate({ style: { opacity } }, { duration: DIM_FADE_MS, queue: false });
+
+    cy.nodes().forEach((n: unknown) => {
+      const node = n as Animatable;
+      const id = node.data("id") as string;
+      fade(node, !connected || connected.has(id) ? 1 : 0.12);
+    });
+
+    cy.edges().forEach((e: unknown) => {
+      const edge = e as Animatable;
+      const touches =
+        focusId != null &&
+        (edge.data("source") === focusId || edge.data("target") === focusId);
+      fade(edge, focusId == null || touches ? 1 : 0.05);
+    });
+  }
+
   async function createNoteFromStub(label: string) {
     try {
       const newNote = await invoke<{ id: number; title: string }>("create_note", {
@@ -341,19 +398,63 @@
         0,
       );
 
+      // Build undirected adjacency for neighbor-dimming on hover
+      adjacency = new Map<string, Set<string>>();
+      for (const e of rawData.edges) {
+        if (!adjacency.has(e.source)) adjacency.set(e.source, new Set());
+        if (!adjacency.has(e.target)) adjacency.set(e.target, new Set());
+        adjacency.get(e.source)!.add(e.target);
+        adjacency.get(e.target)!.add(e.source);
+      }
+
+      // Seed nodes on a circle so the initial camera frame is sensible, then let a
+      // continuously-running ("warm") d3-force simulation relax them. Keeping the sim
+      // alive is what makes dragging feel springy: the extension pins the grabbed node
+      // and re-heats the simulation on grab/free, so neighbors react live.
+      const w = container.clientWidth || 800;
+      const h = container.clientHeight || 600;
+      const ringX = w / 2;
+      const ringY = h / 2;
+      const ringRadius = Math.min(w, h) * 0.4 || 240;
+      const nodeCount = rawData.nodes.length;
+
+      // ── Physics knobs (d3-force) ──────────────────────────────────────────────
+      // linkDistance      spring rest length — how far apart linked nodes settle
+      // linkStrength      spring stiffness — higher snaps links to rest length harder
+      // manyBodyStrength  node repulsion — more negative pushes everything apart more
+      // velocityDecay     damping — 0 = bouncy/floaty, 1 = stiff/dead-stop
+      // collideRadius     hard minimum spacing so node circles don't overlap
+      const layout = {
+        name: "d3-force",
+        animate: true,
+        infinite: true,
+        // Resolve edge source/target by the node's `id` field, not d3's default
+        // array index — our edges reference nodes by string id.
+        linkId: (d: { id: string }) => d.id,
+        linkDistance: 90,
+        linkStrength: 1,
+        manyBodyStrength: -300,
+        velocityDecay: 0.4,
+        collideRadius: 24,
+      } as unknown as LayoutOptions;
+
       cy = cytoscape({
         container,
         elements: {
-          nodes: rawData.nodes.map((n) => ({
+          nodes: rawData.nodes.map((n, i) => ({
             data: {
               ...n,
               color: computeNodeColor(n.kind, n.primary_tag),
               size: computeNodeSize(n, maxBacklinks),
             },
+            position: {
+              x: ringX + ringRadius * Math.cos((2 * Math.PI * i) / nodeCount),
+              y: ringY + ringRadius * Math.sin((2 * Math.PI * i) / nodeCount),
+            },
           })),
           edges: rawData.edges.map((e) => ({ data: e })),
         },
-        layout: { name: "cose" },
+        layout,
         style: buildStyleArray(),
         userZoomingEnabled: true,
         userPanningEnabled: true,
@@ -361,7 +462,7 @@
         maxZoom: 10,
       });
 
-      cy.fit();
+      cy.fit(undefined, 60);
 
       // Apply initial visibility from tag_graph_styles (hidden tags are hidden at load)
       updateCyVisibility();
@@ -381,12 +482,16 @@
         }
       });
 
-      // Change cursor on stub node hover to signal create affordance
-      cy.on("mouseover", "node[kind='stub']", () => {
-        container.style.cursor = "cell";
+      // On node hover: dim everything except the node and its neighbors, and show a
+      // "create" cursor over stub nodes to signal the click-to-create affordance.
+      cy.on("mouseover", "node", (e) => {
+        const node = e.target;
+        if (node.data("kind") === "stub") container.style.cursor = "cell";
+        applyNeighborDim(node.data("id") as string);
       });
-      cy.on("mouseout", "node[kind='stub']", () => {
+      cy.on("mouseout", "node", () => {
         container.style.cursor = "";
+        applyNeighborDim(null);
       });
 
       // Re-apply styles when the user switches accent preset or theme (light/dark).
@@ -519,7 +624,7 @@
   <div
     bind:this={container}
     data-testid="graph-container"
-    class="absolute inset-0"
+    class="flex-1 min-h-0 w-full"
   ></div>
 
   {#if loading}

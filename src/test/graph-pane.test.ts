@@ -17,13 +17,16 @@ interface MockNode {
   data(key: string): unknown;
 }
 
+type AnimateOpts = { style?: Record<string, unknown> };
 type CyNode = {
   data: (key?: string, val?: unknown) => unknown;
   style: (key?: string, val?: unknown) => unknown;
+  animate: (opts: AnimateOpts, params?: unknown) => void;
 };
 type CyEdge = {
   data: (key?: string, val?: unknown) => unknown;
   style: (key?: string, val?: unknown) => unknown;
+  animate: (opts: AnimateOpts, params?: unknown) => void;
   source: () => CyNode;
   target: () => CyNode;
 };
@@ -42,99 +45,121 @@ const mockAnimate = vi.fn();
 const nodeStyleStores = new Map<string, Record<string, unknown>>();
 const edgeStyleStores = new Map<string, Record<string, unknown>>();
 
+vi.mock("cytoscape-d3-force", () => ({ default: vi.fn() }));
+
 vi.mock("cytoscape", () => {
-  return {
-    default: vi.fn((opts: unknown) => {
-      cytoscapeOptions = opts;
-      // Build mock node objects from the options so data-update tests work
-      const typedOpts = opts as {
-        elements?: {
-          nodes?: Array<{ data: Record<string, unknown> }>;
-          edges?: Array<{ data: Record<string, unknown> }>;
-        };
+  const cyMock = vi.fn((opts: unknown) => {
+    cytoscapeOptions = opts;
+    // Build mock node objects from the options so data-update tests work
+    const typedOpts = opts as {
+      elements?: {
+        nodes?: Array<{ data: Record<string, unknown> }>;
+        edges?: Array<{ data: Record<string, unknown> }>;
       };
-      const nodeDataArr = typedOpts.elements?.nodes ?? [];
-      const edgeDataArr = typedOpts.elements?.edges ?? [];
+    };
+    const nodeDataArr = typedOpts.elements?.nodes ?? [];
+    const edgeDataArr = typedOpts.elements?.edges ?? [];
 
-      nodeStyleStores.clear();
-      edgeStyleStores.clear();
+    nodeStyleStores.clear();
+    edgeStyleStores.clear();
 
-      const nodeMap = new Map<string, CyNode>();
+    const nodeMap = new Map<string, CyNode>();
 
-      const nodeStore = nodeDataArr.map((n) => {
-        const store: Record<string, unknown> = { ...n.data };
-        const styles: Record<string, unknown> = {};
-        const id = n.data.id as string;
-        nodeStyleStores.set(id, styles);
-        const node: CyNode = {
-          data: (key?: string, val?: unknown) => {
-            if (val !== undefined && key !== undefined) { store[key] = val; return undefined; }
-            if (key !== undefined) return store[key];
-            return store;
-          },
-          style: (key?: string, val?: unknown) => {
-            if (val !== undefined && key !== undefined) { styles[key] = val; return undefined; }
-            if (key !== undefined) return styles[key];
-            return styles;
-          },
-        };
-        nodeMap.set(id, node);
-        return node;
-      });
-      mockNodes = nodeStore;
-
-      const edgeStore = edgeDataArr.map((e) => {
-        const store: Record<string, unknown> = { ...e.data };
-        const styles: Record<string, unknown> = {};
-        const id = e.data.id as string;
-        edgeStyleStores.set(id, styles);
-        const edge: CyEdge = {
-          data: (key?: string, val?: unknown) => {
-            if (val !== undefined && key !== undefined) { store[key] = val; return undefined; }
-            if (key !== undefined) return store[key];
-            return store;
-          },
-          style: (key?: string, val?: unknown) => {
-            if (val !== undefined && key !== undefined) { styles[key] = val; return undefined; }
-            if (key !== undefined) return styles[key];
-            return styles;
-          },
-          source: () => nodeMap.get(store.source as string) ?? nodeStore[0],
-          target: () => nodeMap.get(store.target as string) ?? nodeStore[0],
-        };
-        return edge;
-      });
-      mockEdges = edgeStore;
-
-      return {
-        on: vi.fn((event: string, _selector: string, handler: TapHandler) => {
-          if (event === "tap") tapHandlers.push(handler);
-          if (event === "mouseover") mouseoverHandlers.push(handler);
-          if (event === "mouseout") mouseoutHandlers.push(handler as () => void);
-        }),
-        fit: mockFit,
-        destroy: mockDestroy,
-        style: mockStyleFn,
-        animate: mockAnimate,
-        getElementById: (id: string) => {
-          const node = nodeMap.get(id);
-          return { length: node ? 1 : 0 };
+    const nodeStore = nodeDataArr.map((n) => {
+      const store: Record<string, unknown> = { ...n.data };
+      const styles: Record<string, unknown> = {};
+      const id = n.data.id as string;
+      nodeStyleStores.set(id, styles);
+      const node: CyNode = {
+        data: (key?: string, val?: unknown) => {
+          if (val !== undefined && key !== undefined) {
+            store[key] = val;
+            return undefined;
+          }
+          if (key !== undefined) return store[key];
+          return store;
         },
-        nodes: () => ({
-          forEach: (cb: (n: CyNode) => void) => nodeStore.forEach(cb),
-        }),
-        edges: () => ({
-          forEach: (cb: (e: CyEdge) => void) => edgeStore.forEach(cb),
-        }),
+        style: (key?: string, val?: unknown) => {
+          if (val !== undefined && key !== undefined) {
+            styles[key] = val;
+            return undefined;
+          }
+          if (key !== undefined) return styles[key];
+          return styles;
+        },
+        animate: (opts: AnimateOpts) => {
+          if (opts.style) Object.assign(styles, opts.style);
+        },
       };
-    }),
-  };
+      nodeMap.set(id, node);
+      return node;
+    });
+    mockNodes = nodeStore;
+
+    const edgeStore = edgeDataArr.map((e) => {
+      const store: Record<string, unknown> = { ...e.data };
+      const styles: Record<string, unknown> = {};
+      const id = e.data.id as string;
+      edgeStyleStores.set(id, styles);
+      const edge: CyEdge = {
+        data: (key?: string, val?: unknown) => {
+          if (val !== undefined && key !== undefined) {
+            store[key] = val;
+            return undefined;
+          }
+          if (key !== undefined) return store[key];
+          return store;
+        },
+        style: (key?: string, val?: unknown) => {
+          if (val !== undefined && key !== undefined) {
+            styles[key] = val;
+            return undefined;
+          }
+          if (key !== undefined) return styles[key];
+          return styles;
+        },
+        animate: (opts: AnimateOpts) => {
+          if (opts.style) Object.assign(styles, opts.style);
+        },
+        source: () => nodeMap.get(store.source as string) ?? nodeStore[0],
+        target: () => nodeMap.get(store.target as string) ?? nodeStore[0],
+      };
+      return edge;
+    });
+    mockEdges = edgeStore;
+
+    return {
+      on: vi.fn((event: string, _selector: string, handler: TapHandler) => {
+        if (event === "tap") tapHandlers.push(handler);
+        if (event === "mouseover") mouseoverHandlers.push(handler);
+        if (event === "mouseout") mouseoutHandlers.push(handler as () => void);
+      }),
+      fit: mockFit,
+      destroy: mockDestroy,
+      style: mockStyleFn,
+      animate: mockAnimate,
+      getElementById: (id: string) => {
+        const node = nodeMap.get(id);
+        return { length: node ? 1 : 0 };
+      },
+      nodes: () => ({
+        forEach: (cb: (n: CyNode) => void) => nodeStore.forEach(cb),
+      }),
+      edges: () => ({
+        forEach: (cb: (e: CyEdge) => void) => edgeStore.forEach(cb),
+      }),
+    };
+  });
+  (cyMock as unknown as { use: () => void }).use = vi.fn();
+  return { default: cyMock };
 });
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: {
     openTab: vi.fn(),
-    get activeTab() { return null; },
+    get activeTab() {
+      return null;
+    },
   },
 }));
 
@@ -153,11 +178,45 @@ vi.mock("../lib/stores/notes.svelte", () => ({
 
 const mockGraphData = {
   nodes: [
-    { id: "note-1", label: "My Note",    kind: "note", entity_id: 1,  primary_tag: "npc",    backlink_count: 5 },
-    { id: "note-2", label: "Other Note", kind: "note", entity_id: 2,  primary_tag: "quest",  backlink_count: 0 },
-    { id: "note-3", label: "No Tag",     kind: "note", entity_id: 3,  primary_tag: null,     backlink_count: 2 },
-    { id: "map-10", label: "World Map",  kind: "map",  entity_id: 10, primary_tag: null,     backlink_count: 0 },
-    { id: "stub-unknown.md", label: "unknown.md", kind: "stub", primary_tag: null, backlink_count: 0 },
+    {
+      id: "note-1",
+      label: "My Note",
+      kind: "note",
+      entity_id: 1,
+      primary_tag: "npc",
+      backlink_count: 5,
+    },
+    {
+      id: "note-2",
+      label: "Other Note",
+      kind: "note",
+      entity_id: 2,
+      primary_tag: "quest",
+      backlink_count: 0,
+    },
+    {
+      id: "note-3",
+      label: "No Tag",
+      kind: "note",
+      entity_id: 3,
+      primary_tag: null,
+      backlink_count: 2,
+    },
+    {
+      id: "map-10",
+      label: "World Map",
+      kind: "map",
+      entity_id: 10,
+      primary_tag: null,
+      backlink_count: 0,
+    },
+    {
+      id: "stub-unknown.md",
+      label: "unknown.md",
+      kind: "stub",
+      primary_tag: null,
+      backlink_count: 0,
+    },
   ],
   edges: [
     { id: "e-0", source: "note-1", target: "note-2" },
@@ -168,8 +227,8 @@ const mockGraphData = {
 
 // "npc" has an explicit hex color; "quest" has null (auto-assign from accent cycle)
 const mockTagStyles = {
-  npc:   { color: "#ff0000", hidden: false },
-  quest: { color: null,      hidden: false },
+  npc: { color: "#ff0000", hidden: false },
+  quest: { color: null, hidden: false },
 };
 
 // Tags returned by list_all_tags
@@ -195,7 +254,12 @@ function setupInvoke() {
     if (cmd === "get_tag_graph_styles") return Promise.resolve(mockTagStyles);
     if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
     if (cmd === "set_tag_graph_style") return Promise.resolve(null);
-    if (cmd === "create_note") return Promise.resolve({ id: 99, title: "unknown.md", path: "unknown.md" });
+    if (cmd === "create_note")
+      return Promise.resolve({
+        id: 99,
+        title: "unknown.md",
+        path: "unknown.md",
+      });
     if (cmd === "get_notes") return Promise.resolve([]);
     return Promise.resolve(null);
   });
@@ -205,7 +269,11 @@ function setupInvoke() {
 function setupInvokeWithHiddenNpc() {
   vi.mocked(invoke).mockImplementation((cmd: string) => {
     if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
-    if (cmd === "get_tag_graph_styles") return Promise.resolve({ npc: { color: "#ff0000", hidden: true }, quest: { color: null, hidden: false } });
+    if (cmd === "get_tag_graph_styles")
+      return Promise.resolve({
+        npc: { color: "#ff0000", hidden: true },
+        quest: { color: null, hidden: false },
+      });
     if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
     if (cmd === "set_tag_graph_style") return Promise.resolve(null);
     return Promise.resolve(null);
@@ -243,7 +311,9 @@ afterEach(() => {
 describe("GraphPane – shell", () => {
   it("renders the graph container element", () => {
     const { container } = render(GraphPane);
-    expect(container.querySelector("[data-testid='graph-container']")).toBeTruthy();
+    expect(
+      container.querySelector("[data-testid='graph-container']"),
+    ).toBeTruthy();
   });
 
   it("calls get_graph_data on mount", async () => {
@@ -267,12 +337,15 @@ describe("GraphPane – shell", () => {
     });
   });
 
-  it("initialises cytoscape with cose layout after data loads", async () => {
+  it("initialises cytoscape with the d3-force spring layout after data loads", async () => {
     render(GraphPane);
     await waitFor(() => {
       expect(cytoscapeOptions).toBeTruthy();
-      const opts = cytoscapeOptions as { layout: { name: string } };
-      expect(opts.layout.name).toBe("cose");
+      const opts = cytoscapeOptions as {
+        layout: { name: string; infinite: boolean };
+      };
+      expect(opts.layout.name).toBe("d3-force");
+      expect(opts.layout.infinite).toBe(true);
     });
   });
 
@@ -304,7 +377,9 @@ describe("GraphPane – node tag coloring", () => {
   it("note with explicit tag color receives that color in element data", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const note1 = opts.elements.nodes.find((n) => n.data.id === "note-1");
       // "npc" tag has color "#ff0000"
       expect(note1?.data.color).toBe("#ff0000");
@@ -314,7 +389,9 @@ describe("GraphPane – node tag coloring", () => {
   it("note with null-color tag receives the first accent cycle hex", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const note2 = opts.elements.nodes.find((n) => n.data.id === "note-2");
       // "quest" tag has null color → gets first accent cycle color: #c2483d
       expect(note2?.data.color).toBe("#c2483d");
@@ -324,7 +401,9 @@ describe("GraphPane – node tag coloring", () => {
   it("untagged note receives the muted foreground color from CSS", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const note3 = opts.elements.nodes.find((n) => n.data.id === "note-3");
       expect(note3?.data.color).toBe(MUTED_COLOR);
     });
@@ -333,7 +412,9 @@ describe("GraphPane – node tag coloring", () => {
   it("map node receives fixed neutral color (not the muted foreground)", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const map = opts.elements.nodes.find((n) => n.data.id === "map-10");
       expect(map?.data.color).toBeDefined();
       expect(map?.data.color).not.toBe(MUTED_COLOR);
@@ -359,7 +440,9 @@ describe("GraphPane – backlink-proportional sizing", () => {
   it("node size is encoded in element data", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const note1 = opts.elements.nodes.find((n) => n.data.id === "note-1");
       expect(typeof note1?.data.size).toBe("number");
     });
@@ -368,17 +451,23 @@ describe("GraphPane – backlink-proportional sizing", () => {
   it("hub note (backlink_count=5) gets larger size than orphan (backlink_count=0)", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const hub = opts.elements.nodes.find((n) => n.data.id === "note-1")!;
       const orphan = opts.elements.nodes.find((n) => n.data.id === "note-2")!;
-      expect(hub.data.size as number).toBeGreaterThan(orphan.data.size as number);
+      expect(hub.data.size as number).toBeGreaterThan(
+        orphan.data.size as number,
+      );
     });
   });
 
   it("orphan note (backlink_count=0) uses minimum size (diameter 16px)", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       const orphan = opts.elements.nodes.find((n) => n.data.id === "note-2")!;
       // Min radius 8px → diameter 16px
       expect(orphan.data.size as number).toBe(16);
@@ -388,7 +477,9 @@ describe("GraphPane – backlink-proportional sizing", () => {
   it("maximum-backlink note does not exceed diameter 56px (radius 28)", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
       opts.elements.nodes.forEach((n) => {
         expect(n.data.size as number).toBeLessThanOrEqual(56);
       });
@@ -417,7 +508,9 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
+      const stubStyle = opts.style.find(
+        (s) => s.selector === "node[kind='stub']",
+      );
       expect(stubStyle?.style["opacity"]).toBe(0.6);
     });
   });
@@ -428,7 +521,9 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
+      const stubStyle = opts.style.find(
+        (s) => s.selector === "node[kind='stub']",
+      );
       expect(stubStyle?.style["border-style"]).toBe("dashed");
     });
   });
@@ -436,8 +531,12 @@ describe("GraphPane – stub node distinction", () => {
   it("stub node always gets minimum size regardless of backlink count", async () => {
     render(GraphPane);
     await waitFor(() => {
-      const opts = cytoscapeOptions as { elements: { nodes: Array<{ data: Record<string, unknown> }> } };
-      const stub = opts.elements.nodes.find((n) => n.data.id === "stub-unknown.md")!;
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
+      const stub = opts.elements.nodes.find(
+        (n) => n.data.id === "stub-unknown.md",
+      )!;
       expect(stub.data.size as number).toBe(16); // min diameter
     });
   });
@@ -448,7 +547,9 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
+      const stubStyle = opts.style.find(
+        (s) => s.selector === "node[kind='stub']",
+      );
       expect(stubStyle?.style["border-width"]).toBeTruthy();
     });
   });
@@ -484,7 +585,12 @@ describe("GraphPane – node click navigation", () => {
 
     const noteNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "note-1", label: "My Note", kind: "note", entity_id: 1 };
+        const map: Record<string, unknown> = {
+          id: "note-1",
+          label: "My Note",
+          kind: "note",
+          entity_id: 1,
+        };
         return map[key];
       },
     };
@@ -503,7 +609,12 @@ describe("GraphPane – node click navigation", () => {
 
     const mapNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "map-10", label: "World Map", kind: "map", entity_id: 10 };
+        const map: Record<string, unknown> = {
+          id: "map-10",
+          label: "World Map",
+          kind: "map",
+          entity_id: 10,
+        };
         return map[key];
       },
     };
@@ -522,7 +633,11 @@ describe("GraphPane – node click navigation", () => {
 
     const stubNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "stub-unknown.md", label: "unknown.md", kind: "stub" };
+        const map: Record<string, unknown> = {
+          id: "stub-unknown.md",
+          label: "unknown.md",
+          kind: "stub",
+        };
         return map[key];
       },
     };
@@ -543,7 +658,11 @@ describe("GraphPane – node click navigation", () => {
 
     const stubNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "stub-unknown.md", label: "unknown.md", kind: "stub" };
+        const map: Record<string, unknown> = {
+          id: "stub-unknown.md",
+          label: "unknown.md",
+          kind: "stub",
+        };
         return map[key];
       },
     };
@@ -562,7 +681,11 @@ describe("GraphPane – node click navigation", () => {
 
     const stubNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "stub-unknown.md", label: "unknown.md", kind: "stub" };
+        const map: Record<string, unknown> = {
+          id: "stub-unknown.md",
+          label: "unknown.md",
+          kind: "stub",
+        };
         return map[key];
       },
     };
@@ -593,10 +716,15 @@ describe("GraphPane – stub node cursor affordance", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
-    const graphContainer = container.querySelector("[data-testid='graph-container']") as HTMLElement;
+    const graphContainer = container.querySelector(
+      "[data-testid='graph-container']",
+    ) as HTMLElement;
     const stubNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "stub-unknown.md", kind: "stub" };
+        const map: Record<string, unknown> = {
+          id: "stub-unknown.md",
+          kind: "stub",
+        };
         return map[key];
       },
     };
@@ -609,10 +737,15 @@ describe("GraphPane – stub node cursor affordance", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
-    const graphContainer = container.querySelector("[data-testid='graph-container']") as HTMLElement;
+    const graphContainer = container.querySelector(
+      "[data-testid='graph-container']",
+    ) as HTMLElement;
     const stubNode: MockNode = {
       data: (key: string) => {
-        const map: Record<string, unknown> = { id: "stub-unknown.md", kind: "stub" };
+        const map: Record<string, unknown> = {
+          id: "stub-unknown.md",
+          kind: "stub",
+        };
         return map[key];
       },
     };
@@ -629,7 +762,9 @@ describe("GraphPane – stub node cursor affordance", () => {
 describe("GraphPane – filter panel", () => {
   it("renders a filter toggle button", () => {
     const { container } = render(GraphPane);
-    expect(container.querySelector("[data-testid='filter-toggle']")).toBeTruthy();
+    expect(
+      container.querySelector("[data-testid='filter-toggle']"),
+    ).toBeTruthy();
   });
 
   it("filter panel is hidden initially", () => {
@@ -639,53 +774,81 @@ describe("GraphPane – filter panel", () => {
 
   it("clicking the filter toggle shows the filter panel", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-panel']")).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-panel']"),
+      ).toBeTruthy();
     });
   });
 
   it("clicking the filter toggle twice hides the panel again", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-panel']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-panel']"),
+      ).toBeTruthy(),
+    );
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-panel']")).toBeFalsy();
+      expect(
+        container.querySelector("[data-testid='filter-panel']"),
+      ).toBeFalsy();
     });
   });
 
   it("filter panel lists all vault tags from list_all_tags", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("list_all_tags"));
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy();
-      expect(container.querySelector("[data-testid='filter-tag-toggle-quest']")).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-quest']"),
+      ).toBeTruthy();
     });
   });
 
   it("each tag row has a colored swatch element", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-swatch-npc']")).toBeTruthy();
-      expect(container.querySelector("[data-testid='filter-swatch-quest']")).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-swatch-npc']"),
+      ).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-swatch-quest']"),
+      ).toBeTruthy();
     });
   });
 
   it("npc swatch uses its explicit tag color from tag_graph_styles", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      const swatch = container.querySelector("[data-testid='filter-swatch-npc']") as HTMLElement;
+      const swatch = container.querySelector(
+        "[data-testid='filter-swatch-npc']",
+      ) as HTMLElement;
       expect(swatch).toBeTruthy();
       expect(swatch.style.backgroundColor).toBeTruthy();
     });
@@ -693,20 +856,28 @@ describe("GraphPane – filter panel", () => {
 
   it("filter panel shows an 'Untagged' row", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-untagged-toggle']"),
+      ).toBeTruthy();
     });
   });
 
   it("tag toggle aria-checked is true when tag is visible (not hidden)", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+      const toggle = container.querySelector(
+        "[data-testid='filter-tag-toggle-npc']",
+      ) as HTMLElement;
       expect(toggle.getAttribute("aria-checked")).toBe("true");
     });
   });
@@ -714,12 +885,20 @@ describe("GraphPane – filter panel", () => {
   it("toggling a visible tag calls set_tag_graph_style with hidden: true", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -736,12 +915,20 @@ describe("GraphPane – filter panel", () => {
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -756,12 +943,20 @@ describe("GraphPane – filter panel", () => {
   it("toggling untagged row calls set_tag_graph_style with tag '' and hidden: true", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-untagged-toggle']"),
+      ).toBeTruthy(),
+    );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector("[data-testid='filter-untagged-toggle']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-untagged-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -773,14 +968,45 @@ describe("GraphPane – filter panel", () => {
     });
   });
 
+  it("untagged toggle aria-checked flips to false after clicking when initially visible", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
+    await fireEvent.click(btn);
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-untagged-toggle']"),
+      ).toBeTruthy(),
+    );
+
+    const toggle = container.querySelector(
+      "[data-testid='filter-untagged-toggle']",
+    ) as HTMLElement;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+
+    await fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
   it("each tag row has an 'Edit color' link", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(container.querySelector("[data-testid='filter-edit-npc']")).toBeTruthy();
-      expect(container.querySelector("[data-testid='filter-edit-quest']")).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-edit-npc']"),
+      ).toBeTruthy();
+      expect(
+        container.querySelector("[data-testid='filter-edit-quest']"),
+      ).toBeTruthy();
     });
   });
 
@@ -790,11 +1016,19 @@ describe("GraphPane – filter panel", () => {
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-edit-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-edit-npc']"),
+      ).toBeTruthy(),
+    );
 
-    const editLink = container.querySelector("[data-testid='filter-edit-npc']") as HTMLElement;
+    const editLink = container.querySelector(
+      "[data-testid='filter-edit-npc']",
+    ) as HTMLElement;
     await fireEvent.click(editLink);
 
     expect(searchPalette.settingsOpen).toBe(true);
@@ -809,11 +1043,19 @@ describe("GraphPane – node visibility filtering", () => {
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
     // Open filter panel and toggle npc off
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -826,11 +1068,19 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -848,11 +1098,19 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -866,11 +1124,19 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-untagged-toggle']"),
+      ).toBeTruthy(),
+    );
 
-    const toggle = container.querySelector("[data-testid='filter-untagged-toggle']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-untagged-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -885,12 +1151,20 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
+    const btn = container.querySelector(
+      "[data-testid='filter-toggle']",
+    ) as HTMLElement;
     await fireEvent.click(btn);
-    await waitFor(() => expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
+      ).toBeTruthy(),
+    );
 
     // Initially hidden → toggle to show
-    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
+    const toggle = container.querySelector(
+      "[data-testid='filter-tag-toggle-npc']",
+    ) as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -905,12 +1179,16 @@ describe("GraphPane – node visibility filtering", () => {
 describe("GraphPane – search", () => {
   it("renders a search input in the toolbar", () => {
     const { container } = render(GraphPane);
-    expect(container.querySelector("[data-testid='graph-search']")).toBeTruthy();
+    expect(
+      container.querySelector("[data-testid='graph-search']"),
+    ).toBeTruthy();
   });
 
   it("search input has a placeholder", () => {
     const { container } = render(GraphPane);
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     expect(input).toBeTruthy();
     expect(input.placeholder).toBeTruthy();
   });
@@ -919,7 +1197,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     // "My Note" matches note-1; note-2 "Other Note" also contains "note" so use "My Note" specifically
     await fireEvent.input(input, { target: { value: "My Note" } });
 
@@ -934,7 +1214,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
 
     await waitFor(() => {
@@ -948,10 +1230,14 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
     // Wait for highlight to apply so firstMatchId is set
-    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1),
+    );
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -964,15 +1250,21 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1),
+    );
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
       expect(mockAnimate).toHaveBeenCalledWith(
-        expect.objectContaining({ fit: expect.objectContaining({ padding: expect.any(Number) }) }),
+        expect.objectContaining({
+          fit: expect.objectContaining({ padding: expect.any(Number) }),
+        }),
       );
     });
   });
@@ -981,9 +1273,13 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
+    );
 
     await fireEvent.keyDown(input, { key: "Escape" });
 
@@ -996,9 +1292,13 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
+    );
 
     await fireEvent.keyDown(input, { key: "Escape" });
 
@@ -1011,10 +1311,14 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     // Dim nodes with a search query
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
+    );
 
     // Clear the input
     await fireEvent.input(input, { target: { value: "" } });
@@ -1028,7 +1332,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     // "MY NOTE" uppercase should still match note-1 "My Note"
     await fireEvent.input(input, { target: { value: "MY NOTE" } });
 
@@ -1042,7 +1348,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     // "World Map" is the map-10 label
     await fireEvent.input(input, { target: { value: "World" } });
 
@@ -1056,7 +1364,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     // "unknown.md" is the stub label
     await fireEvent.input(input, { target: { value: "unknown" } });
 
@@ -1070,13 +1380,89 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "zzznomatchzzz" } });
-    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(0.2));
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(0.2),
+    );
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
     // animate should NOT be called since there's no match
     expect(mockAnimate).not.toHaveBeenCalled();
+  });
+});
+
+// ── Neighbor dimming (hover focus) ─────────────────────────────────────────────
+
+describe("GraphPane – neighbor dimming on hover", () => {
+  /** A minimal hovered-node stand-in exposing only data(). */
+  function hoverNode(id: string, kind = "note"): MockNode {
+    return { data: (key: string) => ({ id, kind })[key] };
+  }
+
+  it("hovering a node dims non-neighbors to 0.12", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    // note-1 connects to note-2, map-10 and the stub; note-3 is unconnected.
+    mouseoverHandlers[0]({ target: hoverNode("note-1") });
+
+    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(0.12);
+  });
+
+  it("hovering a node keeps the node and its neighbors at full opacity", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    mouseoverHandlers[0]({ target: hoverNode("note-1") });
+
+    expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1); // self
+    expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1); // neighbor
+  });
+
+  it("hovering dims edges not touching the focused node to 0.05", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    // map-10 only touches e-2; e-0 and e-1 should dim.
+    mouseoverHandlers[0]({ target: hoverNode("map-10", "map") });
+
+    expect(edgeStyleStores.get("e-2")?.["opacity"]).toBe(1);
+    expect(edgeStyleStores.get("e-0")?.["opacity"]).toBe(0.05);
+  });
+
+  it("mouseout restores all node opacities to full", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    mouseoverHandlers[0]({ target: hoverNode("note-1") });
+    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(0.12);
+
+    mouseoutHandlers[0]();
+
+    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(1);
+  });
+
+  it("does not override search highlighting while a search is active", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    // note-2 is a non-match → dimmed to 0.2 by search
+    await waitFor(() =>
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
+    );
+
+    // Hovering note-1 (note-2 is a neighbor) would normally raise note-2 to 1;
+    // the search guard should leave it untouched at 0.2.
+    mouseoverHandlers[0]({ target: hoverNode("note-1") });
+
+    expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2);
   });
 });

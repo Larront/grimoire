@@ -29,6 +29,7 @@
     "bits-ui": "^2.17.1",
     "clsx": "^2.1.1",
     "cytoscape": "^3.33.4",
+    "cytoscape-d3-force": "^1.1.4",
     "leaflet": "^1.9.4",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
