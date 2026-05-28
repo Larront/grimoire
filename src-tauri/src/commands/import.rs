@@ -5,6 +5,7 @@
 // Must run before rebuild_note_tags_from_ledger / rebuild_note_links_from_ledger
 // so those passes see fully-populated notes rows.
 
+use crate::db::models::NewNote;
 use crate::db::schema::notes::dsl as n;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
@@ -63,14 +64,13 @@ pub fn reconcile_notes_with_disk(
         for (rel_path, mtime) in &to_insert {
             let title = title_from_path(rel_path);
             let parent = parent_path_from(rel_path);
-            diesel::insert_into(n::notes)
-                .values((
-                    n::path.eq(rel_path.as_str()),
-                    n::title.eq(title.as_str()),
-                    n::parent_path.eq(parent.as_deref()),
-                    n::modified_at.eq(mtime.as_str()),
-                ))
-                .execute(c)?;
+            let new_note = NewNote {
+                path: rel_path,
+                title: &title,
+                parent_path: parent.as_deref(),
+                modified_at: mtime,
+            };
+            diesel::insert_into(n::notes).values(&new_note).execute(c)?;
         }
 
         Ok(())
