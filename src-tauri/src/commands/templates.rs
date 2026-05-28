@@ -47,6 +47,23 @@ pub fn inject_builtin_templates(ledger_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Overwrites only the four built-in template files with their original
+/// content, recreating any that are missing. Custom `.md` files in the
+/// templates directory are left untouched.
+pub fn restore_builtin_templates_for_ledger(ledger_path: &Path) -> Result<(), String> {
+    let dir = templates_dir(ledger_path);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create templates directory: {e}"))?;
+
+    for (filename, content) in BUILTIN_TEMPLATES {
+        let dest = dir.join(filename);
+        std::fs::write(&dest, content)
+            .map_err(|e| format!("Failed to restore template {filename}: {e}"))?;
+    }
+
+    Ok(())
+}
+
 pub fn list_templates_for_ledger(ledger_path: &Path) -> Result<Vec<TemplateEntry>, String> {
     let dir = templates_dir(ledger_path);
 
@@ -104,6 +121,13 @@ pub fn list_templates(ledger: State<AppLedger>) -> Result<Vec<TemplateEntry>, St
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
     list_templates_for_ledger(ledger_path)
+}
+
+#[tauri::command]
+pub fn restore_builtin_templates(ledger: State<AppLedger>) -> Result<(), String> {
+    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+    restore_builtin_templates_for_ledger(ledger_path)
 }
 
 pub(crate) fn resolve_template_path(ledger_path: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -317,6 +341,72 @@ mod tests {
         for (filename, _) in BUILTIN_TEMPLATES {
             assert!(dir.join(filename).exists(), "{filename} should exist");
         }
+    }
+
+    #[test]
+    fn restore_overwrites_edited_builtin_files() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let dir = templates_dir(tmp.path());
+        let npc_path = dir.join("NPC.md");
+        std::fs::write(&npc_path, "edited content").unwrap();
+
+        restore_builtin_templates_for_ledger(tmp.path()).unwrap();
+
+        let content = std::fs::read_to_string(&npc_path).unwrap();
+        let original = BUILTIN_TEMPLATES
+            .iter()
+            .find(|(name, _)| *name == "NPC.md")
+            .map(|(_, c)| *c)
+            .unwrap();
+        assert_eq!(content, original, "edited built-in should be restored");
+    }
+
+    #[test]
+    fn restore_resets_all_four_builtins() {
+        let tmp = tempdir().unwrap();
+        let dir = templates_dir(tmp.path());
+        std::fs::create_dir_all(&dir).unwrap();
+        for (filename, _) in BUILTIN_TEMPLATES {
+            std::fs::write(dir.join(filename), "garbage").unwrap();
+        }
+
+        restore_builtin_templates_for_ledger(tmp.path()).unwrap();
+
+        for (filename, content) in BUILTIN_TEMPLATES {
+            let on_disk = std::fs::read_to_string(dir.join(filename)).unwrap();
+            assert_eq!(&on_disk, content, "{filename} should be reset to default");
+        }
+    }
+
+    #[test]
+    fn restore_leaves_custom_templates_untouched() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let dir = templates_dir(tmp.path());
+        let custom_path = dir.join("My Custom.md");
+        std::fs::write(&custom_path, "custom body").unwrap();
+
+        restore_builtin_templates_for_ledger(tmp.path()).unwrap();
+
+        assert!(custom_path.exists(), "custom template must not be deleted");
+        let content = std::fs::read_to_string(&custom_path).unwrap();
+        assert_eq!(content, "custom body", "custom template must not be modified");
+    }
+
+    #[test]
+    fn restore_recreates_missing_builtin_files() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        let dir = templates_dir(tmp.path());
+        std::fs::remove_file(dir.join("Encounter.md")).unwrap();
+
+        restore_builtin_templates_for_ledger(tmp.path()).unwrap();
+
+        assert!(dir.join("Encounter.md").exists(), "deleted built-in should be recreated");
     }
 
     #[test]

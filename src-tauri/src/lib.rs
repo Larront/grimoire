@@ -119,6 +119,7 @@ pub fn run() {
             spotify_skip_prev,
             // Templates
             list_templates,
+            restore_builtin_templates,
             rename_template,
             delete_template,
             create_template,

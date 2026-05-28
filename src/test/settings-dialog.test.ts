@@ -7,6 +7,8 @@ import AppShell from "../lib/components/AppShell.svelte";
 import ThemeWatcher from "../lib/components/ThemeWatcher.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { appPrefs } from "../lib/stores/app-prefs.svelte";
+import { templates } from "../lib/stores/templates.svelte";
+import { waitFor } from "@testing-library/svelte";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -263,6 +265,56 @@ describe("settings dialog — graph section", () => {
       color: null,
       hidden: false,
     });
+  });
+});
+
+// ── Templates section ─────────────────────────────────────────────
+
+describe("settings dialog — templates section", () => {
+  it("shows a 'Templates' section heading", async () => {
+    const { dialog } = await openSettingsDialog();
+    expect(within(dialog).getByText(/^templates$/i)).toBeTruthy();
+  });
+
+  it("shows a 'Restore default templates' button", async () => {
+    const { dialog } = await openSettingsDialog();
+    expect(within(dialog).getByTestId("restore-templates-btn")).toBeTruthy();
+  });
+
+  it("clicking restore shows a confirmation dialog before acting", async () => {
+    const invokeSpy = vi.mocked(invoke);
+    const { dialog } = await openSettingsDialog();
+    invokeSpy.mockClear();
+    await fireEvent.click(within(dialog).getByTestId("restore-templates-btn"));
+    // No command fired yet — confirmation is required first.
+    expect(invokeSpy).not.toHaveBeenCalledWith("restore_builtin_templates");
+    const confirm = await waitFor(() => {
+      const btn = document.body.querySelector("[data-testid='restore-templates-confirm']");
+      if (!btn) throw new Error("confirm button not found");
+      return btn as HTMLElement;
+    });
+    expect(confirm).toBeTruthy();
+  });
+
+  it("confirming invokes restore_builtin_templates and reloads templates", async () => {
+    const invokeSpy = vi.mocked(invoke);
+    const loadSpy = vi.spyOn(templates, "load").mockResolvedValue(undefined);
+    const { dialog } = await openSettingsDialog();
+    invokeSpy.mockClear();
+    await fireEvent.click(within(dialog).getByTestId("restore-templates-btn"));
+    const confirm = await waitFor(() => {
+      const btn = document.body.querySelector("[data-testid='restore-templates-confirm']");
+      if (!btn) throw new Error("confirm button not found");
+      return btn as HTMLElement;
+    });
+    await fireEvent.click(confirm);
+    await waitFor(() => {
+      expect(invokeSpy).toHaveBeenCalledWith("restore_builtin_templates");
+    });
+    await waitFor(() => {
+      expect(loadSpy).toHaveBeenCalled();
+    });
+    loadSpy.mockRestore();
   });
 });
 

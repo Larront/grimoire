@@ -2,9 +2,12 @@
   import { setMode, userPrefersMode } from 'mode-watcher';
   import { invoke } from '@tauri-apps/api/core';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Button } from '$lib/components/ui/button';
   import { ledger, type AccentPreset, type DensityLevel } from '$lib/stores/ledger.svelte';
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
+  import { templates } from '$lib/stores/templates.svelte';
+  import { toastSuccess, toastError } from '$lib/toast';
   import {
     getSpotifyStatus,
     connectSpotify,
@@ -25,6 +28,23 @@
   let tagStyles = $state<Record<string, TagStyle>>({});
   let isGraphLoading = $state(true);
   let hasLoadedGraph = $state(false);
+
+  let restoreDialogOpen = $state(false);
+  let isRestoring = $state(false);
+
+  async function handleRestoreTemplates() {
+    isRestoring = true;
+    try {
+      await invoke('restore_builtin_templates');
+      await templates.load();
+      toastSuccess('Default templates restored');
+    } catch (e) {
+      toastError(`Failed to restore templates: ${e}`);
+    } finally {
+      isRestoring = false;
+      restoreDialogOpen = false;
+    }
+  }
 
   $effect(() => {
     if (open && !hasLoadedSpotify) {
@@ -237,6 +257,27 @@
         </div>
       </section>
 
+      <!-- ── Templates ──────────────────────────────────────────── -->
+      <section class="flex flex-col gap-4">
+        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
+          Templates
+        </h3>
+
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-(--font-body) font-medium text-foreground">Restore default templates</span>
+            <span class="text-(--font-ui) text-foreground-muted">Reset the four built-in templates to their original content. Custom templates are left untouched.</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="shrink-0"
+            data-testid="restore-templates-btn"
+            onclick={() => (restoreDialogOpen = true)}
+          >Restore</Button>
+        </div>
+      </section>
+
       <!-- ── Graph ──────────────────────────────────────────────── -->
       <section id="settings-graph" class="flex flex-col gap-4">
         <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
@@ -338,3 +379,35 @@
     </div>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- ── Restore default templates confirmation ───────────────────────────── -->
+<AlertDialog.Root bind:open={restoreDialogOpen}>
+  <AlertDialog.Portal>
+    <AlertDialog.Overlay />
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>Restore default templates?</AlertDialog.Title>
+        <AlertDialog.Description>
+          This overwrites the four built-in templates (NPC, Location, Session Log,
+          Encounter) with their original content. Any custom templates you've
+          created are left untouched.
+        </AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action
+          data-testid="restore-templates-confirm"
+          disabled={isRestoring}
+          onclick={handleRestoreTemplates}
+        >
+          {#if isRestoring}
+            <LoaderCircle class="size-3.5 animate-spin" />
+            Restoring…
+          {:else}
+            Restore
+          {/if}
+        </AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
