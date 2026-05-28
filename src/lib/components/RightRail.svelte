@@ -269,7 +269,7 @@
                   onclick={() => navigateToNote(link.id, link.title)}
                   class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
                 >
-                  <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.title}</div>
+                  <div class="font-heading text-[11px] text-foreground leading-snug truncate">{link.title}</div>
                   {#if folder}
                     <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folder}</div>
                   {/if}
@@ -301,7 +301,7 @@
                     onclick={() => navigateToNote(link.resolved_id!, link.resolved_title!)}
                     class="w-full text-left rounded px-1 py-0.5 hover:bg-accent transition-colors duration-100"
                   >
-                    <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.resolved_title}</div>
+                    <div class="font-heading text-[11px] text-foreground leading-snug truncate">{link.resolved_title}</div>
                     {#if folder}
                       <div data-slot="link-folder" class="font-sans text-[10px] text-foreground-muted truncate">{folder}</div>
                     {/if}
@@ -311,7 +311,7 @@
                     data-slot="outbound-broken"
                     class="rounded px-1 py-0.5 opacity-50 cursor-default"
                   >
-                    <div class="font-heading text-[12px] text-foreground leading-snug truncate">{link.target_path}</div>
+                    <div class="font-heading text-[11px] text-foreground leading-snug truncate">{link.target_path}</div>
                     <div class="font-mono text-[10px] text-foreground-faint italic">Not yet created</div>
                   </div>
                 {/if}

@@ -13,6 +13,12 @@
 
   const sidebar = useSidebar();
 
+  function handleFilesClick() {
+    if (sidebar.isMobile) sidebar.setOpenMobile(true);
+    else sidebar.setOpen(true);
+    onFilesClick?.();
+  }
+
   const btnBase =
     "flex size-(--row-h) items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring";
 </script>
@@ -48,7 +54,7 @@
       type="button"
       aria-label="Files"
       class={btnBase}
-      onclick={onFilesClick}
+      onclick={handleFilesClick}
     >
       <Files class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>

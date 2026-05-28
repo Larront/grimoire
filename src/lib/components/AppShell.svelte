@@ -56,7 +56,7 @@
   <Sidebar.Provider>
     <IconRail
       onFilesClick={() => {}}
-      onScenesClick={() => {}}
+      onScenesClick={() => tabs.navigateOpen({ type: 'scenes', id: 0, title: 'All Scenes' })}
       onSearchClick={() => (searchPalette.open = true)}
       onSettingsClick={() => (searchPalette.settingsOpen = true)}
       onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
