@@ -92,7 +92,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         const broken = el.dataset.broken !== undefined;
         el.className = broken
           ? "inline-flex items-center text-foreground-muted line-through cursor-default select-none whitespace-nowrap"
-          : "inline-flex items-center text-accent cursor-pointer select-none whitespace-nowrap";
+          : "inline-flex items-center text-primary cursor-pointer select-none whitespace-nowrap";
       };
 
       dom.dataset.wikiLink = "";
