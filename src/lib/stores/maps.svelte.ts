@@ -19,6 +19,20 @@ function createMapsStore() {
     }
   }
 
+  // Delete a map that was created but never given an image (abandoned creation).
+  // No-op if the map has an image or is already gone. Imageless maps have no
+  // pins/annotations (those require the canvas), so a plain delete is safe.
+  async function pruneIfImageless(mapId: number) {
+    const m = maps.find((x) => x.id === mapId);
+    if (!m || m.image_path) return;
+    try {
+      await invoke("delete_map", { mapId });
+      await load();
+    } catch (e) {
+      console.error("prune imageless map failed:", e);
+    }
+  }
+
   $effect.root(() => {
     $effect(() => {
       if (vault.isOpen) {
@@ -45,6 +59,7 @@ function createMapsStore() {
       return error;
     },
     load,
+    pruneIfImageless,
   };
 }
 

@@ -59,6 +59,15 @@ pub fn open_vault(path: String, vault: State<AppVault>) -> Result<OpenVaultResul
 
     let mut conn = establish_connection(&vault_path)?;
     seed_default_categories(&mut conn)?;
+
+    // Prune maps abandoned mid-creation: a map row is inserted as soon as the
+    // user clicks "New Map", but only becomes navigable (file tree, image) once
+    // an image is assigned. An imageless map is invisible everywhere except the
+    // graph view, so sweep them here to catch ones left by a crash or force-quit.
+    diesel::delete(maps::table.filter(maps::image_path.is_null()))
+        .execute(&mut conn)
+        .map_err(|e| e.to_string())?;
+
     // Rebuild the tag index from a fresh frontmatter scan. Cheap for typical
     // vault sizes; guarantees the index stays in sync with disk even if a
     // previous session crashed mid-write or `.grimoire/` was wiped.

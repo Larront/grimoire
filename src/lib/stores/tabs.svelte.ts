@@ -1,5 +1,6 @@
 import { untrack } from "svelte";
 import { vault } from "./vault.svelte";
+import { maps } from "./maps.svelte";
 import {
   LocalStorageTabPersistence,
   type TabPersistence,
@@ -163,6 +164,7 @@ function createTabsStore() {
   }
 
   function closeTab(pane: "left" | "right", index: number) {
+    const closing = (pane === "right" ? right?.tabs : left.tabs)?.[index] ?? null;
     if (pane === "right") {
       if (!right) return;
       const tabs = [...right.tabs];
@@ -186,6 +188,11 @@ function createTabsStore() {
       };
     }
     persist();
+    // A map closed before an image was assigned is an abandoned creation —
+    // remove its DB row. Skip if the same map is still open in the other pane.
+    if (closing?.type === "map" && !isTabOpen("map", closing.id)) {
+      maps.pruneIfImageless(closing.id);
+    }
   }
 
   function closeOthers(pane: "left" | "right", index: number) {
