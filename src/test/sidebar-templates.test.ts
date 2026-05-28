@@ -3,17 +3,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
-import type { TemplateEntry } from "../lib/types/vault";
+import type { TemplateEntry } from "../lib/types/ledger";
 
 let mockTemplates: TemplateEntry[] = [];
 
-vi.mock("../lib/stores/vault.svelte", () => ({
-  vault: {
+vi.mock("../lib/stores/ledger.svelte", () => ({
+  ledger: {
     get isOpen() { return true; },
-    get path() { return "/vault"; },
-    closeVault: vi.fn(),
-    checkExistingVault: vi.fn(),
+    get path() { return "/ledger"; },
+    closeLedger: vi.fn(),
+    checkExistingLedger: vi.fn(),
   },
+  failedImportsModal: { open: false, failures: [] },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({

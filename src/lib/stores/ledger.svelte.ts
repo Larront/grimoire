@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { toastImportFailures } from "$lib/toast";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -10,7 +11,7 @@ export type AccentPreset =
 
 export type DensityLevel = "cozy" | "balanced" | "dense";
 
-interface FailedImport {
+export interface FailedImport {
   path: string;
   reason: string;
 }
@@ -31,6 +32,11 @@ export interface RecentLedger {
   map_count: number;
   last_opened: string;
 }
+
+export const failedImportsModal = $state({
+  open: false,
+  failures: [] as FailedImport[],
+});
 
 function createLedgerStore() {
   let path = $state<string | null>(null);
@@ -63,6 +69,13 @@ function createLedgerStore() {
 
       path = result.path;
       isOpen = true;
+
+      if (result.failed_imports.length > 0) {
+        failedImportsModal.failures = result.failed_imports;
+        toastImportFailures(result.failed_imports, () => {
+          failedImportsModal.open = true;
+        });
+      }
 
       // Record in recent ledgers (fire-and-forget).
       // Item counts in this entry are set at open time and refreshed on the next open_ledger call.

@@ -1,19 +1,20 @@
 import { render, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import AppShell from "../lib/components/AppShell.svelte";
-import type { SceneWithCount } from "../lib/types/vault";
+import type { SceneWithCount } from "../lib/types/ledger";
 
 let mockSidebarScenes: SceneWithCount[] = [];
 let mockSidebarActiveSceneId: number | null = null;
 let mockSidebarLoadingSceneId: number | null = null;
 
-vi.mock("../lib/stores/vault.svelte", () => ({
-  vault: {
+vi.mock("../lib/stores/ledger.svelte", () => ({
+  ledger: {
     get isOpen() { return false; },
     get path() { return null; },
-    closeVault: vi.fn(),
-    checkExistingVault: vi.fn(),
+    closeLedger: vi.fn(),
+    checkExistingLedger: vi.fn(),
   },
+  failedImportsModal: { open: false, failures: [] },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({

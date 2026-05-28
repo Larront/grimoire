@@ -3,6 +3,7 @@
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import RightRail from "./RightRail.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
@@ -10,6 +11,7 @@
   import { RightRailState } from "$lib/stores/right-rail.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import { failedImportsModal } from "$lib/stores/ledger.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
@@ -62,6 +64,10 @@
       onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
     />
     <SettingsDialog bind:open={searchPalette.settingsOpen} />
+    <FailedImportsDialog
+      bind:open={failedImportsModal.open}
+      failures={failedImportsModal.failures}
+    />
     <SearchPalette />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar />

@@ -8,7 +8,7 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { toast as sonner } from "svelte-sonner";
-import { toastError, toastSuccess, toastUndo } from "../lib/toast";
+import { toastError, toastSuccess, toastUndo, toastImportFailures } from "../lib/toast";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,6 +31,55 @@ describe("toastSuccess", () => {
       "Saved",
       expect.objectContaining({ duration: 3000 }),
     );
+  });
+});
+
+describe("toastImportFailures", () => {
+  it("shows no toast when failures array is empty", () => {
+    toastImportFailures([], vi.fn());
+    expect(sonner).not.toHaveBeenCalled();
+  });
+
+  it("shows singular 'file' message for one failure", () => {
+    toastImportFailures(
+      [{ path: "notes/foo.md", reason: "Permission denied" }],
+      vi.fn(),
+    );
+    expect(sonner).toHaveBeenCalledWith(
+      "Couldn't import 1 file",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Show details" }),
+      }),
+    );
+  });
+
+  it("shows plural 'files' message for multiple failures", () => {
+    toastImportFailures(
+      [
+        { path: "a.md", reason: "Permission denied" },
+        { path: "b.md", reason: "Broken symlink" },
+      ],
+      vi.fn(),
+    );
+    expect(sonner).toHaveBeenCalledWith(
+      "Couldn't import 2 files",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Show details" }),
+      }),
+    );
+  });
+
+  it("action onClick calls onShowDetails", () => {
+    const onShowDetails = vi.fn();
+    toastImportFailures(
+      [{ path: "foo.md", reason: "err" }],
+      onShowDetails,
+    );
+    const opts = vi.mocked(sonner).mock.calls[0][1] as {
+      action: { onClick: () => void };
+    };
+    opts.action.onClick();
+    expect(onShowDetails).toHaveBeenCalledOnce();
   });
 });
 
