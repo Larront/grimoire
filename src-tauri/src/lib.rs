@@ -1,25 +1,25 @@
 mod commands;
 mod db;
+mod ledger;
 mod search;
-mod vault;
 
 use commands::graph::*;
 use commands::graph_styles::*;
+use commands::ledger::*;
 use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
 use commands::preferences::*;
 use commands::recent::*;
-use commands::recent_vaults::*;
+use commands::recent_ledgers::*;
 use commands::scenes::*;
 use commands::spotify::*;
 use commands::tags::*;
 use commands::templates::*;
 use commands::tree::*;
-use commands::vault::*;
 
-use crate::vault::{AppVault, VaultState};
+use crate::ledger::{AppLedger, LedgerState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,18 +30,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(AppVault::new(VaultState::new(client_id)))
+        .manage(AppLedger::new(LedgerState::new(client_id)))
         .invoke_handler(tauri::generate_handler![
-            get_vault_path,
-            open_vault,
-            close_vault,
+            get_ledger_path,
+            open_ledger,
+            close_ledger,
             save_accent_preset,
             get_accent_preset,
             save_density_level,
             get_density_level,
-            get_recent_vaults,
-            add_recent_vault,
-            remove_recent_vault,
+            get_recent_ledgers,
+            add_recent_ledger,
+            remove_recent_ledger,
             create_note,
             create_note_from_template,
             get_notes,

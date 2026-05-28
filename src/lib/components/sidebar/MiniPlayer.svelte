@@ -1,7 +1,7 @@
 <script lang="ts">
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import type { SceneSlot } from "$lib/types/vault";
+  import type { SceneSlot } from "$lib/types/ledger";
   import MiniPlayerTrack from "./MiniPlayerTrack.svelte";
   import MiniPlayerVisualizer from "./MiniPlayerVisualizer.svelte";
   import { Play, Pause, Square, Volume2, VolumeOff, ChevronUp, LoaderCircle } from "@lucide/svelte";

@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::db::models::{NewSpotifyAuth, SpotifyAuth, SpotifyAuthStatus};
 use crate::db::schema::spotify_auth;
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 
 // ---- PKCE helpers ----
 
@@ -91,10 +91,10 @@ fn persist_auth(auth: &TokenResponse, conn: &mut SqliteConnection) -> Result<(),
 
 #[tauri::command]
 pub fn spotify_get_auth_status(
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Option<SpotifyAuthStatus>, String> {
-    let mut state = vault.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     match spotify_auth::table.find(1).first::<SpotifyAuth>(conn) {
         Ok(auth) => Ok(Some(SpotifyAuthStatus {
             is_connected: true,
@@ -107,11 +107,11 @@ pub fn spotify_get_auth_status(
 
 #[tauri::command]
 pub async fn spotify_start_auth_flow(
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
     app: AppHandle,
 ) -> Result<String, String> {
     let client_id = {
-        let state = vault.lock().map_err(|e| e.to_string())?;
+        let state = ledger.lock().map_err(|e| e.to_string())?;
         state.spotify_client_id.clone()
     };
     if client_id.is_empty() {
@@ -128,7 +128,7 @@ pub async fn spotify_start_auth_flow(
     let state_val = generate_random_string(16);
 
     {
-        let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|e| e.to_string())?;
         state.pending_spotify_verifier = Some(verifier);
         state.pending_spotify_state = Some(state_val.clone());
     }
@@ -209,17 +209,17 @@ pub async fn spotify_start_auth_flow(
 pub async fn spotify_exchange_code(
     code: String,
     state: String,
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<SpotifyAuthStatus, String> {
     // Brief lock: take verifier + validate state + read client_id, then drop
     let (client_id, verifier) = {
-        let mut vault_state = vault.lock().map_err(|e| e.to_string())?;
-        let client_id = vault_state.spotify_client_id.clone();
-        let verifier = vault_state
+        let mut ledger_state = ledger.lock().map_err(|e| e.to_string())?;
+        let client_id = ledger_state.spotify_client_id.clone();
+        let verifier = ledger_state
             .pending_spotify_verifier
             .take()
             .ok_or("No pending auth flow — please start the auth flow again")?;
-        let stored_state = vault_state
+        let stored_state = ledger_state
             .pending_spotify_state
             .take()
             .ok_or("No pending auth flow — please start the auth flow again")?;
@@ -242,8 +242,8 @@ pub async fn spotify_exchange_code(
     let expires_at = auth.expires_at.clone();
 
     {
-        let mut vault_state = vault.lock().map_err(|e| e.to_string())?;
-        let conn = vault_state.connection.as_mut().ok_or("No vault open")?;
+        let mut ledger_state = ledger.lock().map_err(|e| e.to_string())?;
+        let conn = ledger_state.connection.as_mut().ok_or("No ledger open")?;
         persist_auth(&auth, conn)?;
     }
 
@@ -255,12 +255,12 @@ pub async fn spotify_exchange_code(
 
 #[tauri::command]
 pub async fn spotify_refresh_token(
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<SpotifyAuthStatus, String> {
     let (client_id, current_refresh) = {
-        let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|e| e.to_string())?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No vault open")?;
+        let conn = state.connection.as_mut().ok_or("No ledger open")?;
         let current_refresh = spotify_auth::table
             .find(1)
             .select(spotify_auth::refresh_token)
@@ -280,8 +280,8 @@ pub async fn spotify_refresh_token(
     let expires_at = auth.expires_at.clone();
 
     {
-        let mut state = vault.lock().map_err(|e| e.to_string())?;
-        let conn = state.connection.as_mut().ok_or("No vault open")?;
+        let mut state = ledger.lock().map_err(|e| e.to_string())?;
+        let conn = state.connection.as_mut().ok_or("No ledger open")?;
         persist_auth(&auth, conn)?;
     }
 
@@ -292,11 +292,11 @@ pub async fn spotify_refresh_token(
 }
 
 #[tauri::command]
-pub async fn spotify_get_access_token(vault: State<'_, AppVault>) -> Result<String, String> {
+pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<String, String> {
     let (client_id, auth) = {
-        let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|e| e.to_string())?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No vault open")?;
+        let conn = state.connection.as_mut().ok_or("No ledger open")?;
         let auth = spotify_auth::table
             .find(1)
             .first::<SpotifyAuth>(conn)
@@ -319,8 +319,8 @@ pub async fn spotify_get_access_token(vault: State<'_, AppVault>) -> Result<Stri
         let new_auth = parse_token_response(&token_data, Some(auth.refresh_token))?;
         let new_access = new_auth.access_token.clone();
         {
-            let mut state = vault.lock().map_err(|e| e.to_string())?;
-            let conn = state.connection.as_mut().ok_or("No vault open")?;
+            let mut state = ledger.lock().map_err(|e| e.to_string())?;
+            let conn = state.connection.as_mut().ok_or("No ledger open")?;
             persist_auth(&new_auth, conn)?;
         }
         return Ok(new_access);
@@ -330,9 +330,9 @@ pub async fn spotify_get_access_token(vault: State<'_, AppVault>) -> Result<Stri
 }
 
 #[tauri::command]
-pub fn spotify_revoke(vault: State<AppVault>) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn spotify_revoke(ledger: State<AppLedger>) -> Result<(), String> {
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(spotify_auth::table)
         .execute(conn)
         .map(|_| ())
@@ -341,11 +341,11 @@ pub fn spotify_revoke(vault: State<AppVault>) -> Result<(), String> {
 
 // ---- Private helper: read token + client_id, auto-refresh if expiring ----
 
-async fn get_token_and_client(vault: &State<'_, AppVault>) -> Result<(String, String), String> {
+async fn get_token_and_client(ledger: &State<'_, AppLedger>) -> Result<(String, String), String> {
     let (auth, client_id) = {
-        let mut state = vault.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|e| e.to_string())?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No vault open")?;
+        let conn = state.connection.as_mut().ok_or("No ledger open")?;
         let auth = spotify_auth::table
             .find(1)
             .first::<SpotifyAuth>(conn)
@@ -365,8 +365,8 @@ async fn get_token_and_client(vault: &State<'_, AppVault>) -> Result<(String, St
         let new_auth = parse_token_response(&token_data, Some(auth.refresh_token))?;
         let new_access = new_auth.access_token.clone();
         {
-            let mut state = vault.lock().map_err(|e| e.to_string())?;
-            let conn = state.connection.as_mut().ok_or("No vault open")?;
+            let mut state = ledger.lock().map_err(|e| e.to_string())?;
+            let conn = state.connection.as_mut().ok_or("No ledger open")?;
             persist_auth(&new_auth, conn)?;
         }
         return Ok((client_id, new_access));
@@ -383,9 +383,9 @@ pub async fn spotify_play_track(
     loop_mode: bool,
     shuffle: bool,
     device_id: String,
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<(), String> {
-    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let (_client_id, access_token) = get_token_and_client(&ledger).await?;
     let source_uri = source_id.replace("playlist_v2", "playlist");
     let body = if use_context {
         serde_json::json!({ "context_uri": source_uri })
@@ -449,9 +449,9 @@ pub async fn spotify_play_track(
 #[tauri::command]
 pub async fn spotify_resume(
     device_id: String,
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<(), String> {
-    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let (_client_id, access_token) = get_token_and_client(&ledger).await?;
     let client = reqwest::Client::new();
     client
         .put(format!(
@@ -468,9 +468,9 @@ pub async fn spotify_resume(
 #[tauri::command]
 pub async fn spotify_skip_next(
     device_id: String,
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<(), String> {
-    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let (_client_id, access_token) = get_token_and_client(&ledger).await?;
     let client = reqwest::Client::new();
     client
         .post(format!(
@@ -486,9 +486,9 @@ pub async fn spotify_skip_next(
 #[tauri::command]
 pub async fn spotify_skip_prev(
     device_id: String,
-    vault: State<'_, AppVault>,
+    ledger: State<'_, AppLedger>,
 ) -> Result<(), String> {
-    let (_client_id, access_token) = get_token_and_client(&vault).await?;
+    let (_client_id, access_token) = get_token_and_client(&ledger).await?;
     let client = reqwest::Client::new();
     client
         .post(format!(

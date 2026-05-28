@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
-import type { Scene, SceneSlot } from "../lib/types/vault";
+import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
 let mockSlots: SceneSlot[] = [];

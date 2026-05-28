@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { vault } from "./vault.svelte";
-import type { Note } from "$lib/types/vault";
+import { ledger } from "./ledger.svelte";
+import type { Note } from "$lib/types/ledger";
 
 function createNotesStore() {
   let notes = $state<Note[]>([]);
@@ -32,7 +32,7 @@ function createNotesStore() {
 
   $effect.root(() => {
     $effect(() => {
-      if (vault.isOpen) {
+      if (ledger.isOpen) {
         load();
       } else {
         notes = [];

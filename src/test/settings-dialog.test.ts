@@ -5,7 +5,7 @@ import { userPrefersMode, resetMode } from "mode-watcher";
 import { flushSync } from "svelte";
 import AppShell from "../lib/components/AppShell.svelte";
 import ThemeWatcher from "../lib/components/ThemeWatcher.svelte";
-import { vault } from "../lib/stores/vault.svelte";
+import { ledger } from "../lib/stores/ledger.svelte";
 import { appPrefs } from "../lib/stores/app-prefs.svelte";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -21,8 +21,8 @@ const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
 
 afterEach(async () => {
   cleanup();
-  vault.setAccent("accent-crimson");
-  vault.setDensity("balanced");
+  ledger.setAccent("accent-crimson");
+  ledger.setDensity("balanced");
   appPrefs.setReduceMotion(false);
   delete document.documentElement.dataset.reduceMotion;
   document.documentElement.style.cssText = "";
@@ -99,10 +99,10 @@ describe("settings dialog — accent", () => {
     expect(within(dialog).getByTestId("accent-accent-amber")).toBeTruthy();
   });
 
-  it("clicking an accent swatch updates vault.accent", async () => {
+  it("clicking an accent swatch updates ledger.accent", async () => {
     const { dialog } = await openSettingsDialog();
     await fireEvent.click(within(dialog).getByTestId("accent-accent-arcane"));
-    expect(vault.accent).toBe("accent-arcane");
+    expect(ledger.accent).toBe("accent-arcane");
   });
 
   it("clicking an accent swatch calls invoke save_accent_preset", async () => {
@@ -119,12 +119,12 @@ describe("settings dialog — accent", () => {
 // ── Density control ───────────────────────────────────────────────
 
 describe("settings dialog — density", () => {
-  it("clicking Cozy updates vault.density", async () => {
+  it("clicking Cozy updates ledger.density", async () => {
     const { dialog } = await openSettingsDialog();
     await fireEvent.click(
       within(dialog).getByRole("button", { name: /^cozy$/i }),
     );
-    expect(vault.density).toBe("cozy");
+    expect(ledger.density).toBe("cozy");
   });
 
   it("clicking Dense calls invoke save_density_level", async () => {
@@ -179,7 +179,7 @@ describe("settings dialog — graph section", () => {
     expect(within(dialog).getByText(/^graph$/i)).toBeTruthy();
   });
 
-  it("lists vault tags in the graph section after loading", async () => {
+  it("lists ledger tags in the graph section after loading", async () => {
     mockGraphInvoke(["npc", "creature"], {});
     const { dialog } = await openSettingsDialog();
     expect(await within(dialog).findByText("npc")).toBeTruthy();

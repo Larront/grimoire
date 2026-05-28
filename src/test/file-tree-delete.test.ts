@@ -1,6 +1,6 @@
 import { render, fireEvent, waitFor, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { FileNode, Note } from "../lib/types/vault";
+import type { FileNode, Note } from "../lib/types/ledger";
 
 vi.mock("$lib/toast", () => ({
   toastUndo: vi.fn(),

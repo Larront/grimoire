@@ -21,7 +21,7 @@
 >
   <span class="flex items-center gap-1.5">
     <Search class="w-3.5 h-3.5 shrink-0" />
-    Search vault…
+    Search ledger…
   </span>
   <kbd
     class="pointer-events-none inline-flex h-4 select-none items-center gap-0.5

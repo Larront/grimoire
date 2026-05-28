@@ -6,7 +6,7 @@ Grimoire is a modern desktop application designed for Game Masters to manage lor
 
 ## ✨ Key Features
 
-- **Local-First Vaults:** Your data belongs to you. Grimoire operates on a local directory ("Vault"). Because all paths are relative to the vault root, your campaign is fully portable—move it between drives or computers without breaking a single link.
+- **Local-First Ledgers:** Your data belongs to you. Grimoire operates on a local directory ("Ledger"). Because all paths are relative to the ledger root, your campaign is fully portable—move it between drives or computers without breaking a single link.
 - **Rich Text Notes:** A distraction-free Markdown editor for capturing lore. Notes are stored as raw `.md` files, ensuring your data is never locked in a proprietary format.
 - **Ambient Audio Scenes:** Create immersive soundscapes by layering local audio files and Spotify tracks into custom scene slots.
 - **Interactive Maps:** (Planned) Annotate world maps with pins and categories to track geography and points of interest.
@@ -22,9 +22,9 @@ Grimoire is a modern desktop application designed for Game Masters to manage lor
     - **macOS:** Drag the `.app` to your Applications folder.
     - **Linux:** Use the `.deb` or `AppImage`.
 
-### Opening a Vault
+### Opening a Ledger
 
-When you first launch Grimoire, you will be prompted to open a directory. This directory is your **Vault**. Grimoire will create a hidden `.grimoire` folder inside to manage its campaign database and metadata.
+When you first launch Grimoire, you will be prompted to open a directory. This directory is your **Ledger**. Grimoire will create a hidden `.grimoire` folder inside to manage its campaign database and metadata.
 
 ## ❓ FAQ
 
@@ -32,7 +32,7 @@ When you first launch Grimoire, you will be prompted to open a directory. This d
 You simply need a **Spotify Premium** account. You can connect your account in the app settings to start adding tracks and playlists to your scenes.
 
 **Can I use other Markdown editors?**
-Yes. Your notes are stored as standard Markdown files. You can open and edit them in tools like Obsidian or VS Code without breaking your Grimoire vault.
+Yes. Your notes are stored as standard Markdown files. You can open and edit them in tools like Obsidian or VS Code without breaking your Grimoire ledger.
 
 ---
 

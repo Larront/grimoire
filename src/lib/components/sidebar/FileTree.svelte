@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import type { FileNode, Note } from "$lib/types/vault";
+  import type { FileNode, Note } from "$lib/types/ledger";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";

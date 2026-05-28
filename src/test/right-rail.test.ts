@@ -6,7 +6,7 @@ import { overlay } from "../lib/stores/overlay.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
 import { linksTick } from "../lib/stores/links-tick.svelte";
-import type { Note } from "../lib/types/vault";
+import type { Note } from "../lib/types/ledger";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,

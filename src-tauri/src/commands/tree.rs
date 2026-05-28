@@ -1,7 +1,7 @@
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::sql_query;                // used in rename_folder (Task 4)
 use diesel::sql_types::Text;          // used in rename_folder (Task 4)
@@ -23,8 +23,8 @@ pub struct FileNode {
 }
 
 /// Pure recursive tree builder — no Tauri State, fully unit-testable.
-/// When called with `relative_path = ""` (the vault root), the returned root node has
-/// `path = ""` — it is a container, not a vault-addressable path. Callers should
+/// When called with `relative_path = ""` (the ledger root), the returned root node has
+/// `path = ""` — it is a container, not a ledger-addressable path. Callers should
 /// iterate `root.children`, not use `root.path` as a Tauri command argument.
 pub fn build_file_tree(
     dir_path: &Path,
@@ -44,15 +44,11 @@ pub fn build_file_tree(
         for entry in entries.flatten() {
             let entry_name = entry.file_name().to_string_lossy().into_owned();
 
-            // Skip hidden entries
+            // Skip hidden entries — this also hides the `.grimoire/` metadata
+            // folder where the app stores its DB, templates, pasted images,
+            // audio, search index, and thumbnails. Users can name everything
+            // else whatever they want.
             if entry_name.starts_with('.') {
-                continue;
-            }
-
-            // Skip vault meta folders at the root level only
-            if relative_path.is_empty()
-                && (entry_name == "audio" || entry_name == "images")
-            {
                 continue;
             }
 
@@ -114,13 +110,13 @@ pub fn build_file_tree(
 }
 
 #[tauri::command]
-pub fn get_file_tree(vault: State<AppVault>) -> Result<FileNode, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_file_tree(ledger: State<AppLedger>) -> Result<FileNode, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     // Build note map — acquire mutex once; do not call get_notes as a sub-command
-    // (double-locking AppVault's Mutex would deadlock).
+    // (double-locking AppLedger's Mutex would deadlock).
     let note_list = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
     let note_map: HashMap<String, i32> = note_list
         .into_iter()
@@ -133,35 +129,35 @@ pub fn get_file_tree(vault: State<AppVault>) -> Result<FileNode, String> {
         .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
         .collect();
 
-    Ok(build_file_tree(&vault_path, "", &note_map, &map_map))
+    Ok(build_file_tree(&ledger_path, "", &note_map, &map_map))
 }
 
 // ── create_folder ──────────────────────────────────────────────────────────
 
-pub fn create_folder_inner(vault_path: &Path, folder_path: &str) -> Result<(), String> {
-    fs::create_dir_all(vault_path.join(folder_path))
+pub fn create_folder_inner(ledger_path: &Path, folder_path: &str) -> Result<(), String> {
+    fs::create_dir_all(ledger_path.join(folder_path))
         .map_err(|e| format!("create_dir_all: {}", e))
 }
 
 #[tauri::command]
-pub fn create_folder(folder_path: String, vault: State<AppVault>) -> Result<(), String> {
-    let state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
+pub fn create_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
+    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     drop(state); // release lock before filesystem op
-    create_folder_inner(&vault_path, &folder_path)
+    create_folder_inner(&ledger_path, &folder_path)
 }
 
 // ── delete_folder ──────────────────────────────────────────────────────────
 
 pub fn delete_folder_inner(
-    vault_path: &Path,
+    ledger_path: &Path,
     folder_path: &str,
     conn: &mut SqliteConnection,
 ) -> Result<(), String> {
     // Delete files first — if this succeeds and the DB step fails, the user
     // sees stale tree entries (recoverable). Reverse order (ghost notes in DB
     // after files are gone) is worse.
-    fs::remove_dir_all(vault_path.join(folder_path))
+    fs::remove_dir_all(ledger_path.join(folder_path))
         .map_err(|e| format!("remove_dir_all: {}", e))?;
 
     let like_pattern = format!("{}/%" , folder_path);
@@ -179,24 +175,24 @@ pub fn delete_folder_inner(
 }
 
 #[tauri::command]
-pub fn delete_folder(folder_path: String, vault: State<AppVault>) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
-    delete_folder_inner(&vault_path, &folder_path, conn)
+pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    delete_folder_inner(&ledger_path, &folder_path, conn)
 }
 
 // ── rename_folder ──────────────────────────────────────────────────────────
 
 pub fn rename_folder_inner(
-    vault_path: &Path,
+    ledger_path: &Path,
     old_path: &str,
     new_path: &str,
     conn: &mut SqliteConnection,
 ) -> Result<(), String> {
     // 1. Rename directory on disk. Individual .md files move atomically with
     //    the folder — no per-file renames are needed.
-    fs::rename(vault_path.join(old_path), vault_path.join(new_path))
+    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
         .map_err(|e| format!("rename dir: {}", e))?;
 
     let old_prefix = format!("{}/", old_path);
@@ -245,12 +241,12 @@ pub fn rename_folder_inner(
 pub fn rename_folder(
     old_path: String,
     new_path: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
-    rename_folder_inner(&vault_path, &old_path, &new_path, conn)
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    rename_folder_inner(&ledger_path, &old_path, &new_path, conn)
 }
 
 #[cfg(test)]
@@ -267,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_vault_has_no_children() {
+    fn empty_ledger_has_no_children() {
         let (_dir, tree) = make_tree(|_| {});
         assert!(tree.children.is_empty());
     }
@@ -287,7 +283,7 @@ mod tests {
     #[test]
     fn non_md_and_hidden_files_are_skipped() {
         let (_dir, tree) = make_tree(|p| {
-            fs::write(p.join("vault.db"), "").unwrap();
+            fs::write(p.join("ledger.db"), "").unwrap();
             fs::write(p.join(".hidden"), "").unwrap();
             fs::write(p.join("image.png"), "").unwrap();
         });

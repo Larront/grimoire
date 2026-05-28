@@ -23,7 +23,7 @@
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import type { SceneSlot } from "$lib/types/vault";
+  import type { SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
   import { toastError } from "$lib/toast";

@@ -2,7 +2,7 @@
   import AppShell from "$lib/components/AppShell.svelte";
   import ThemeWatcher from "$lib/components/ThemeWatcher.svelte";
   import { Toaster } from "svelte-sonner";
-  import { vault } from "../lib/stores/vault.svelte";
+  import { ledger } from "../lib/stores/ledger.svelte";
   import "../app.css";
 
   const { children } = $props();
@@ -11,7 +11,7 @@
 <ThemeWatcher />
 <Toaster richColors closeButton />
 
-{#if vault.isOpen}
+{#if ledger.isOpen}
   <AppShell />
 {:else}
   {@render children?.()}

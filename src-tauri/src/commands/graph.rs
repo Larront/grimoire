@@ -1,5 +1,5 @@
 // Graph data command — returns all nodes (notes, maps, stub notes) and edges
-// (wikilinks + map-pin references) for the vault-wide force-directed graph.
+// (wikilinks + map-pin references) for the ledger-wide force-directed graph.
 //
 // Node IDs use prefixed strings to avoid collisions across entity types:
 //   "note-{id}"          — a real note (resolved)
@@ -8,7 +8,7 @@
 //
 // Edge IDs use sequential integers serialised as strings.
 
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use serde::Serialize;
 use tauri::State;
@@ -235,9 +235,9 @@ pub fn get_graph_data_on_conn(
 // ── Tauri command ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_graph_data(vault: State<AppVault>) -> Result<GraphData, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_graph_data(ledger: State<AppLedger>) -> Result<GraphData, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     get_graph_data_on_conn(conn)
 }
 
@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_vault_returns_empty_graph() {
+    fn test_empty_ledger_returns_empty_graph() {
         let mut conn = setup_db();
         let data = get_graph_data_on_conn(&mut conn).unwrap();
         assert!(data.nodes.is_empty());

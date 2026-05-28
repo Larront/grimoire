@@ -4,50 +4,50 @@ import { setMode, resetMode } from "mode-watcher";
 import { flushSync } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import ThemeWatcher from "../lib/components/ThemeWatcher.svelte";
-import { vault } from "../lib/stores/vault.svelte";
+import { ledger } from "../lib/stores/ledger.svelte";
 
 afterEach(() => {
   cleanup();
-  vault.setAccent("accent-crimson");
-  vault.setDensity("balanced");
+  ledger.setAccent("accent-crimson");
+  ledger.setDensity("balanced");
   document.documentElement.style.cssText = "";
   document.documentElement.className = "";
   delete document.documentElement.dataset.density;
 });
 
-// ── Vault store — density ────────────────────────────────────────
+// ── Ledger store — density ────────────────────────────────────────
 
-describe("vault store — density default", () => {
+describe("ledger store — density default", () => {
   it("density defaults to balanced", () => {
-    expect(vault.density).toBe("balanced");
+    expect(ledger.density).toBe("balanced");
   });
 });
 
-describe("vault store — density persistence", () => {
+describe("ledger store — density persistence", () => {
   it("calls invoke save_density_level when density changes", () => {
     const invokeSpy = vi.mocked(invoke);
     invokeSpy.mockClear();
-    vault.setDensity("dense");
+    ledger.setDensity("dense");
     expect(invokeSpy).toHaveBeenCalledWith("save_density_level", {
       level: "dense",
     });
   });
 
-  it("resets density to balanced on closeVault", async () => {
-    vault.setDensity("cozy");
-    expect(vault.density).toBe("cozy");
-    await vault.closeVault();
-    expect(vault.density).toBe("balanced");
+  it("resets density to balanced on closeLedger", async () => {
+    ledger.setDensity("cozy");
+    expect(ledger.density).toBe("cozy");
+    await ledger.closeLedger();
+    expect(ledger.density).toBe("balanced");
   });
 
-  it("restores saved density level on checkExistingVault", async () => {
+  it("restores saved density level on checkExistingLedger", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_vault_path") return "/some/vault";
+      if (cmd === "get_ledger_path") return "/some/ledger";
       if (cmd === "get_density_level") return "cozy";
       return null;
     });
-    await vault.checkExistingVault();
-    expect(vault.density).toBe("cozy");
+    await ledger.checkExistingLedger();
+    expect(ledger.density).toBe("cozy");
     vi.mocked(invoke).mockResolvedValue(null);
   });
 });
@@ -62,7 +62,7 @@ describe("ThemeWatcher — data-density attribute", () => {
 
   it("updates data-density immediately when density changes", () => {
     render(ThemeWatcher);
-    flushSync(() => vault.setDensity("dense"));
+    flushSync(() => ledger.setDensity("dense"));
     expect(document.documentElement.dataset.density).toBe("dense");
   });
 });
@@ -79,7 +79,7 @@ describe("ThemeWatcher — dark mode (default)", () => {
 
   it("updates --primary immediately when preset switches", () => {
     render(ThemeWatcher);
-    flushSync(() => vault.setAccent("accent-verdant"));
+    flushSync(() => ledger.setAccent("accent-verdant"));
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
       "#5c9e6e",
     );
@@ -102,7 +102,7 @@ describe("ThemeWatcher — light mode", () => {
 
   it("swaps class when preset switches", () => {
     render(ThemeWatcher);
-    flushSync(() => vault.setAccent("accent-arcane"));
+    flushSync(() => ledger.setAccent("accent-arcane"));
     expect(document.documentElement.classList.contains("accent-arcane")).toBe(
       true,
     );
@@ -115,28 +115,28 @@ describe("ThemeWatcher — light mode", () => {
   });
 });
 
-// ── vault store — accent persistence (migrated) ──────────────────
+// ── ledger store — accent persistence (migrated) ──────────────────
 
-describe("vault store — accent persistence", () => {
-  afterEach(() => vault.setAccent("accent-crimson"));
+describe("ledger store — accent persistence", () => {
+  afterEach(() => ledger.setAccent("accent-crimson"));
 
   it("calls invoke save_accent_preset when preset changes", () => {
     const invokeSpy = vi.mocked(invoke);
     invokeSpy.mockClear();
-    vault.setAccent("accent-amber");
+    ledger.setAccent("accent-amber");
     expect(invokeSpy).toHaveBeenCalledWith("save_accent_preset", {
       preset: "accent-amber",
     });
   });
 
-  it("restores saved accent preset on checkExistingVault", async () => {
+  it("restores saved accent preset on checkExistingLedger", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_vault_path") return "/some/vault";
+      if (cmd === "get_ledger_path") return "/some/ledger";
       if (cmd === "get_accent_preset") return "accent-arcane";
       return null;
     });
-    await vault.checkExistingVault();
-    expect(vault.accent).toBe("accent-arcane");
+    await ledger.checkExistingLedger();
+    expect(ledger.accent).toBe("accent-arcane");
     vi.mocked(invoke).mockResolvedValue(null);
   });
 });

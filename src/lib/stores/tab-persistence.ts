@@ -26,8 +26,8 @@ export interface TabPersistence {
 export class LocalStorageTabPersistence implements TabPersistence {
   private readonly key: string;
 
-  constructor(vaultPath: string) {
-    this.key = `grimoire:tabs:${vaultPath}`;
+  constructor(ledgerPath: string) {
+    this.key = `grimoire:tabs:${ledgerPath}`;
   }
 
   save(state: PersistedState): void {

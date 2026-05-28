@@ -20,8 +20,8 @@
     Volume2,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
-  import type { FileNode, Note, Map as VaultMap, TemplateEntry } from "$lib/types/vault";
-  import { vault } from "$lib/stores/vault.svelte";
+  import type { FileNode, Note, Map as LedgerMap, TemplateEntry } from "$lib/types/ledger";
+  import { ledger } from "$lib/stores/ledger.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -32,7 +32,7 @@
   import { slide } from "svelte/transition";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
-  import VaultSelector from "./VaultSelector.svelte";
+  import LedgerSelector from "./LedgerSelector.svelte";
 
   let {
     ref = $bindable(null),
@@ -51,7 +51,7 @@
   const activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
 
   async function refresh() {
-    if (!vault.isOpen) return;
+    if (!ledger.isOpen) return;
     try {
       tree = await invoke<FileNode>("get_file_tree");
     } catch (e) {
@@ -65,7 +65,7 @@
   });
 
   $effect(() => {
-    if (!vault.isOpen) {
+    if (!ledger.isOpen) {
       tree = null;
       noteMap.clear();
     }
@@ -74,7 +74,7 @@
   $effect(() => {
     notes.notes;
     maps.maps;
-    if (vault.isOpen) {
+    if (ledger.isOpen) {
       treeLoading = true;
       invoke<FileNode>("get_file_tree")
         .then((result) => (tree = result))
@@ -85,7 +85,7 @@
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
-      const newMap = await invoke<VaultMap>("create_map_empty", {
+      const newMap = await invoke<LedgerMap>("create_map_empty", {
         title: "Untitled Map",
       });
       await maps.load();
@@ -460,7 +460,7 @@
       </Sidebar.Group>
     </Collapsible.Root>
     <MiniPlayer />
-    <VaultSelector />
+    <LedgerSelector />
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

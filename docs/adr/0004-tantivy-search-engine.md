@@ -1,15 +1,15 @@
-# ADR-0004 — Tantivy as the vault search engine
+# ADR-0004 — Tantivy as the ledger search engine
 
 **Status:** Accepted
 **Date:** 2026-05-16
 
 ## Context
 
-Phase 6 introduces vault-wide search across notes, maps, scenes, and tags, with results rendered in the command palette. The success criteria require sub-200ms response on vaults of 200+ notes, full-text search across note bodies, tag faceting, and the same regenerable-from-vault-scan lifecycle that Phase 5's tag index established.
+Phase 6 introduces ledger-wide search across notes, maps, scenes, and tags, with results rendered in the command palette. The success criteria require sub-200ms response on ledgers of 200+ notes, full-text search across note bodies, tag faceting, and the same regenerable-from-ledger-scan lifecycle that Phase 5's tag index established.
 
 ## Decision
 
-Use **Tantivy** (Rust crate, embedded) as the single search engine for all vault search. A single Tantivy index lives at `vault/.grimoire/search-index/` and holds one document per searchable entity (notes, maps, scenes), discriminated by a `kind` field. Tags are a faceted multi-value field on note documents, not a separate document type. SQLite (`vault/.grimoire/index.db`) remains the canonical entity store and tag-relationship store; Tantivy is a derived index, regenerable from a vault scan.
+Use **Tantivy** (Rust crate, embedded) as the single search engine for all ledger search. A single Tantivy index lives at `ledger/.grimoire/search-index/` and holds one document per searchable entity (notes, maps, scenes), discriminated by a `kind` field. Tags are a faceted multi-value field on note documents, not a separate document type. SQLite (`ledger/.grimoire/index.db`) remains the canonical entity store and tag-relationship store; Tantivy is a derived index, regenerable from a ledger scan.
 
 ## Rationale
 
@@ -34,7 +34,7 @@ A single Tantivy index (rather than splitting maps/scenes into SQLite `LIKE` que
 ## Consequences
 
 - **Two indexes to coordinate** — SQLite for entity rows and tag relationships, Tantivy for search. Note-write commands wrap both writes in a transaction-like sequence; on Tantivy write failure the index is marked stale and a rebuild is scheduled. Surfaced to the user as a non-blocking status when relevant.
-- **Two rebuild paths from a vault scan** — a single `rebuild_indexes` command rebuilds both in sequence. The Phase 5 recovery guarantee extends: *"Deleting `vault/.grimoire/` and reopening the vault recovers all tags and search."*
+- **Two rebuild paths from a ledger scan** — a single `rebuild_indexes` command rebuilds both in sequence. The Phase 5 recovery guarantee extends: *"Deleting `ledger/.grimoire/` and reopening the ledger recovers all tags and search."*
 - **Tantivy schema is code** — a schema change is a forced full reindex. Acceptable: schema changes are rare and the rebuild path already exists for recovery.
 - **+3–5MB binary size** — Tauri bundle already in the 10MB+ range; not a packaging concern.
 - **Incremental updates on save** — every `save_note` / `rename_note` / `delete_note` upserts the Tantivy document inline, so notes created since the last full scan are searchable immediately. Full rebuild is only the cold-start and recovery path.
@@ -45,7 +45,7 @@ A single Tantivy index (rather than splitting maps/scenes into SQLite `LIKE` que
 |---|---|---|
 | `kind` | string (stored, indexed) | `"note"`, `"map"`, `"scene"` |
 | `entity_id` | i64 (stored) | SQLite row id |
-| `path` | string (stored, not indexed) | Notes only; relative vault path |
+| `path` | string (stored, not indexed) | Notes only; relative ledger path |
 | `title` | text (stored, indexed, BM25-boosted) | Notes/maps `title`, scenes `name` |
 | `body` | text (indexed, not stored) | Notes only; plain text extracted from markdown |
 | `tags` | facet, multi-value | Notes only; lowercase tag strings |

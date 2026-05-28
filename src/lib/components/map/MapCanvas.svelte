@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { mount, unmount } from "svelte";
-  import type { Map as VaultMap, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/vault";
+  import type { Map as LedgerMap, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
   import type { Map as LeafletMap, Marker } from "leaflet";
   import {
     CURATED_ICON_COMPONENTS,
@@ -31,7 +31,7 @@
     onannotationmove,
     onannotationclick,
   }: {
-    map: VaultMap;
+    map: LedgerMap;
     imageDataUrl: string;
     pins: Pin[];
     categories: PinCategory[];

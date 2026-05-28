@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { vault } from "./vault.svelte";
+import { ledger } from "./ledger.svelte";
 import { scenes } from "./scenes.svelte";
-import type { SceneSlot } from "$lib/types/vault";
+import type { SceneSlot } from "$lib/types/ledger";
 
 const FADE_SEC = 2.5;
 const FADE_SEC_COLD = 0.3;
@@ -505,10 +505,10 @@ function createAudioEngine() {
     }
   }
 
-  // Vault close cleanup
+  // Ledger close cleanup
   $effect.root(() => {
     $effect(() => {
-      if (!vault.isOpen) {
+      if (!ledger.isOpen) {
         stopAll();
         localCtx?.close();
         localCtx = null;

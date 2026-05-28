@@ -1,4 +1,4 @@
-import type { Pin, PinCategory, PinShape, PinIcon } from "$lib/types/vault";
+import type { Pin, PinCategory, PinShape, PinIcon } from "$lib/types/ledger";
 import type { Component } from "svelte";
 import {
   Star,

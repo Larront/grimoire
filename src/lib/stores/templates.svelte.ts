@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { vault } from "./vault.svelte";
-import type { TemplateEntry } from "$lib/types/vault";
+import { ledger } from "./ledger.svelte";
+import type { TemplateEntry } from "$lib/types/ledger";
 
 function createTemplatesStore() {
   let templatesList = $state<TemplateEntry[]>([]);
@@ -19,7 +19,7 @@ function createTemplatesStore() {
 
   $effect.root(() => {
     $effect(() => {
-      if (vault.isOpen) {
+      if (ledger.isOpen) {
         load();
       } else {
         templatesList = [];

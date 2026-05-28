@@ -1163,7 +1163,7 @@ describe("command palette – Commands group visibility", () => {
   it("shows up to 3 commands when query is empty", async () => {
     render(AppSearch);
     await openPalette();
-    const allCmds = document.body.querySelectorAll('[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-vault"], [data-testid="cmd-rebuild-index"]');
+    const allCmds = document.body.querySelectorAll('[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]');
     expect(allCmds.length).toBeLessThanOrEqual(3);
     expect(allCmds.length).toBeGreaterThanOrEqual(1);
   });
@@ -1320,7 +1320,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Switch vault closes palette and calls vault.openVault", async () => {
+  it("Switch ledger closes palette and calls ledger.openLedger", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -1328,13 +1328,13 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.input(input);
     await flush();
 
-    const item = document.body.querySelector('[data-testid="cmd-switch-vault"]') as HTMLElement;
+    const item = document.body.querySelector('[data-testid="cmd-switch-ledger"]') as HTMLElement;
     expect(item).toBeTruthy();
     await fireEvent.click(item);
     await flush();
 
     expect(searchPalette.open).toBe(false);
-    // vault.openVault() calls tauri dialog open (mocked to return null) → silent no-op
+    // ledger.openLedger() calls tauri dialog open (mocked to return null) → silent no-op
     // Verify invoke was not called with any destructive command; the dialog mock returns null
   });
 
@@ -2077,7 +2077,7 @@ describe("command palette – per-group caps", () => {
     render(AppSearch);
     await openPalette();
     const cmds = document.body.querySelectorAll(
-      '[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-vault"], [data-testid="cmd-rebuild-index"]',
+      '[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]',
     );
     expect(cmds.length).toBeLessThanOrEqual(3);
     expect(document.body.querySelector('[data-testid="cmd-show-more-commands"]')).toBeTruthy();

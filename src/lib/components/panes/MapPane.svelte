@@ -17,7 +17,7 @@
     Circle,
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
-  import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/vault";
+  import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
   import PinDetailPanel from "$lib/components/map/PinDetailPanel.svelte";
   import AnnotationDetailPanel from "$lib/components/map/AnnotationDetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
@@ -285,7 +285,7 @@
     <div class="flex flex-col items-center gap-4 text-center max-w-xs">
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
       <p class="font-display text-lg font-semibold">Map not found</p>
-      <a href="/" class="text-sm text-accent hover:underline">← Back to vault</a>
+      <a href="/" class="text-sm text-accent hover:underline">← Back to ledger</a>
     </div>
   </div>
 {:else if !mapData.image_path}

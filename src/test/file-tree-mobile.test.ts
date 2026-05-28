@@ -1,6 +1,6 @@
 import { render, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import type { FileNode } from "../lib/types/vault";
+import type { FileNode } from "../lib/types/ledger";
 
 const mockSetOpenMobile = vi.hoisted(() => vi.fn());
 

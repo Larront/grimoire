@@ -219,8 +219,8 @@ fn make_schema() -> Schema {
     builder.build()
 }
 
-fn index_dir(vault_path: &Path) -> std::path::PathBuf {
-    vault_path.join(".grimoire").join("search-index")
+fn index_dir(ledger_path: &Path) -> std::path::PathBuf {
+    ledger_path.join(".grimoire").join("search-index")
 }
 
 fn parse_modified_at(s: &str) -> i64 {
@@ -306,12 +306,12 @@ fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
 // ── Index lifecycle ───────────────────────────────────────────────────────────
 
 pub fn rebuild_index(
-    vault_path: &Path,
+    ledger_path: &Path,
     notes: &[Note],
     maps: &[Map],
     scenes: &[Scene],
 ) -> Result<Index, String> {
-    let dir_path = index_dir(vault_path);
+    let dir_path = index_dir(ledger_path);
     if dir_path.exists() {
         std::fs::remove_dir_all(&dir_path).map_err(|e| e.to_string())?;
     }
@@ -324,7 +324,7 @@ pub fn rebuild_index(
 
     let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
     for note in notes {
-        let content = std::fs::read_to_string(vault_path.join(&note.path))
+        let content = std::fs::read_to_string(ledger_path.join(&note.path))
             .ok()
             .unwrap_or_default();
         let body_text = extract_plain_text(&content);
@@ -613,7 +613,7 @@ fn build_kind_query(
 /// text+tag queries use BM25 ranking filtered by the tag constraint.
 pub fn search_notes_in_index(
     index: &Index,
-    vault_path: &Path,
+    ledger_path: &Path,
     query: &str,
     limit: usize,
 ) -> Result<Vec<NoteSearchResult>, String> {
@@ -692,7 +692,7 @@ pub fn search_notes_in_index(
         };
 
         let (excerpt, match_count) = if !path.is_empty() && !excerpt_q.trim().is_empty() {
-            let body_text = std::fs::read_to_string(vault_path.join(&path))
+            let body_text = std::fs::read_to_string(ledger_path.join(&path))
                 .ok()
                 .map(|c| extract_plain_text(&c))
                 .unwrap_or_default();
@@ -800,11 +800,11 @@ fn search_scenes_in_index(
 
 pub fn search_all_in_index(
     index: &Index,
-    vault_path: &Path,
+    ledger_path: &Path,
     query: &str,
     limit: usize,
 ) -> Result<SearchAllResult, String> {
-    let notes = search_notes_in_index(index, vault_path, query, limit)?;
+    let notes = search_notes_in_index(index, ledger_path, query, limit)?;
     // Maps and scenes are not filtered by tag: tokens; strip them before querying
     let free_text = strip_tag_tokens(query);
     let has_free_text = free_text.split_whitespace().any(|w| w.len() >= 2);

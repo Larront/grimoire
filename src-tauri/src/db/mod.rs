@@ -8,9 +8,12 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
-pub fn establish_connection(vault_path: &Path) -> Result<SqliteConnection, String> {
-    let db_path = vault_path.join("vault.db");
-    let db_url = db_path.to_str().ok_or("Invalid Vault path.")?;
+pub fn establish_connection(ledger_path: &Path) -> Result<SqliteConnection, String> {
+    let grimoire_dir = ledger_path.join(".grimoire");
+    std::fs::create_dir_all(&grimoire_dir)
+        .map_err(|e| format!("Failed to create .grimoire directory: {}", e))?;
+    let db_path = grimoire_dir.join("ledger.db");
+    let db_url = db_path.to_str().ok_or("Invalid Ledger path.")?;
 
     let mut conn = SqliteConnection::establish(db_url)
         .map_err(|e| format!("Failed to connect to database: {}", e))?;

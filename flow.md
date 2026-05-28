@@ -26,7 +26,7 @@ git checkout -b feature/your-feature-name
 
 Use issue-closing keywords in your commit messages to automate your workflow.
 
-Example: `git commit -m "Implement Tiptap editor for vault notes (fixes #45)"`
+Example: `git commit -m "Implement Tiptap editor for ledger notes (fixes #45)"`
 
 ### Step 3: Merging to "Next"
 

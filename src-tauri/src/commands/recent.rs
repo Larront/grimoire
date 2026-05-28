@@ -1,5 +1,5 @@
 use crate::db::schema::recent_entities::dsl as re;
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use chrono::Utc;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -63,19 +63,19 @@ pub fn record_recent(
     kind: String,
     id: i32,
     title: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     upsert_recent(conn, &kind, id, &title)?;
     trim_recent(conn, 20)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_recent_entities(vault: State<AppVault>) -> Result<Vec<RecentEntityResult>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_recent_entities(ledger: State<AppLedger>) -> Result<Vec<RecentEntityResult>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     load_recent(conn, 20)
 }
 

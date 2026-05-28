@@ -157,6 +157,12 @@
 					isTarget  ? 'ring-inset ring-1 ring-primary/60' : ''
 				].join(' ')}
 				onclick={() => tabs.activateTab(pane, i)}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						tabs.activateTab(pane, i);
+					}
+				}}
 				onpointerdown={(e) => onChipPointerDown(e, i)}
 				onpointermove={(e) => onChipPointerMove(e, i)}
 				onpointerup={(e) => onChipPointerUp(e, i)}

@@ -1,40 +1,40 @@
 <script lang="ts">
   import { ChevronDown, FolderOpen } from "@lucide/svelte";
-  import { vault, type RecentVault } from "$lib/stores/vault.svelte";
+  import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { buttonVariants } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
 
   let open = $state(false);
-  let recentVaults = $state<RecentVault[]>([]);
+  let recentLedgers = $state<RecentLedger[]>([]);
 
-  const vaultName = $derived(
-    vault.path
-      ? (vault.path.replace(/\\/g, "/").split("/").pop() ?? "Untitled")
-      : "No vault"
+  const ledgerName = $derived(
+    ledger.path
+      ? (ledger.path.replace(/\\/g, "/").split("/").pop() ?? "Untitled")
+      : "No ledger"
   );
 
   async function handleToggle() {
     open = !open;
     if (open) {
-      recentVaults = await vault.getRecentVaults();
+      recentLedgers = await ledger.getRecentLedgers();
     }
   }
 
-  async function switchVault(path: string) {
+  async function switchLedger(path: string) {
     open = false;
-    await vault.openVault(path);
+    await ledger.openLedger(path);
   }
 
-  async function openNewVault() {
+  async function openNewLedger() {
     open = false;
-    await vault.openVault();
+    await ledger.openLedger();
   }
 </script>
 
 <div class="relative w-full">
   <button
     type="button"
-    aria-label="Vault selector"
+    aria-label="Ledger selector"
     aria-haspopup="true"
     aria-expanded={open}
     onclick={handleToggle}
@@ -44,7 +44,7 @@
     )}
   >
     <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
-    <span class="flex-1 truncate text-(--font-ui)">{vaultName}</span>
+    <span class="flex-1 truncate text-(--font-ui)">{ledgerName}</span>
     <ChevronDown
       class={cn(
         "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
@@ -58,7 +58,7 @@
       class="absolute bottom-full left-0 z-50 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg"
       role="menu"
     >
-      {#each recentVaults as v (v.path)}
+      {#each recentLedgers as v (v.path)}
         <button
           type="button"
           role="menuitem"
@@ -66,14 +66,14 @@
             buttonVariants({ variant: "ghost", size: "sm" }),
             "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
           )}
-          onclick={() => switchVault(v.path)}
+          onclick={() => switchLedger(v.path)}
         >
           <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
           <span class="truncate">{v.name}</span>
         </button>
       {/each}
 
-      {#if recentVaults.length > 0}
+      {#if recentLedgers.length > 0}
         <div class="my-1 h-px bg-border" role="separator"></div>
       {/if}
 
@@ -84,9 +84,9 @@
           buttonVariants({ variant: "ghost", size: "sm" }),
           "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
         )}
-        onclick={openNewVault}
+        onclick={openNewLedger}
       >
-        Open new vault
+        Open new ledger
       </button>
     </div>
   {/if}

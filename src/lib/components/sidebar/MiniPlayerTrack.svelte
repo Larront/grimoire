@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import type { SceneSlot } from "$lib/types/vault";
+  import type { SceneSlot } from "$lib/types/ledger";
   import {
     Play,
     Pause,

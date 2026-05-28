@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Mutex};
 use diesel::SqliteConnection;
 use tantivy::Index;
 
-pub struct VaultState {
+pub struct LedgerState {
     pub path: Option<PathBuf>,
     pub connection: Option<SqliteConnection>,
     pub search_index: Option<Index>,
@@ -12,9 +12,9 @@ pub struct VaultState {
     pub pending_spotify_state: Option<String>,
 }
 
-impl VaultState {
+impl LedgerState {
     pub fn new(spotify_client_id: String) -> Self {
-        VaultState {
+        LedgerState {
             path: None,
             connection: None,
             search_index: None,
@@ -25,4 +25,4 @@ impl VaultState {
     }
 }
 
-pub type AppVault = Mutex<VaultState>;
+pub type AppLedger = Mutex<LedgerState>;

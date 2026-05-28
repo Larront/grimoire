@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Grimoire is a Tauri 2 desktop app for worldbuilding — Notes (Markdown), Scenes (ambient audio), and Maps (annotated images with pins), backed by a local SQLite vault. Package manager: **bun**.
+Grimoire is a Tauri 2 desktop app for worldbuilding — Notes (Markdown), Scenes (ambient audio), and Maps (annotated images with pins), backed by a local SQLite ledger. Package manager: **bun**.
 
 ## Commands
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MapAnnotation, AnnotationKind } from "$lib/types/vault";
+  import type { MapAnnotation, AnnotationKind } from "$lib/types/ledger";
   import { Trash2, Lock, LockOpen } from "@lucide/svelte";
 
   interface Props {

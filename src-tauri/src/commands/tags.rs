@@ -1,9 +1,9 @@
-// Vault-global tag index.
+// Ledger-global tag index.
 //
 // The `note_tags` table is a derived index. Markdown frontmatter is the source
-// of truth; this table is fully regenerable by `rebuild_note_tags_from_vault`.
+// of truth; this table is fully regenerable by `rebuild_note_tags_from_ledger`.
 // Wiping `.grimoire/index.db` (or just the `note_tags` table) and re-opening
-// the vault reconstructs the index from a fresh frontmatter scan.
+// the ledger reconstructs the index from a fresh frontmatter scan.
 //
 // Tag-string keyed: rows are (note_path, tag); `SELECT DISTINCT tag FROM
 // note_tags` is the natural "list all tags" query. Pins will use the same
@@ -12,7 +12,7 @@
 use crate::commands::frontmatter;
 use crate::db::schema::note_tags::dsl as nt;
 use crate::db::schema::pin_tags::dsl as pt;
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use std::collections::BTreeSet;
@@ -20,15 +20,15 @@ use std::fs;
 use std::path::Path;
 use tauri::State;
 
-/// Walk the vault scanning every `.md` file for frontmatter tags, then replace
+/// Walk the ledger scanning every `.md` file for frontmatter tags, then replace
 /// the `note_tags` table contents with the fresh scan. Hidden directories
 /// (anything starting with '.') are skipped.
-pub fn rebuild_note_tags_from_vault(
-    vault_path: &Path,
+pub fn rebuild_note_tags_from_ledger(
+    ledger_path: &Path,
     conn: &mut SqliteConnection,
 ) -> Result<(), String> {
     let mut rows: Vec<(String, String)> = Vec::new();
-    collect_md_tags(vault_path, "", &mut rows)?;
+    collect_md_tags(ledger_path, "", &mut rows)?;
 
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         diesel::delete(nt::note_tags).execute(c)?;
@@ -61,7 +61,7 @@ fn collect_md_tags(
 ) -> Result<(), String> {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
-        // Vault may be brand new / empty — not an error.
+        // Ledger may be brand new / empty — not an error.
         Err(_) => return Ok(()),
     };
     for entry in entries.flatten() {
@@ -111,9 +111,9 @@ pub fn upsert_note_tags(
 }
 
 #[tauri::command]
-pub fn list_all_tags(vault: State<AppVault>) -> Result<Vec<String>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn list_all_tags(ledger: State<AppLedger>) -> Result<Vec<String>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     list_all_tags_from_conn(conn)
 }
 
@@ -154,9 +154,9 @@ pub fn upsert_pin_tags(
 }
 
 #[tauri::command]
-pub fn get_pin_tags(pin_id: i32, vault: State<AppVault>) -> Result<Vec<String>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_pin_tags(pin_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     pt::pin_tags
         .filter(pt::pin_id.eq(pin_id))
         .select(pt::tag)
@@ -168,10 +168,10 @@ pub fn get_pin_tags(pin_id: i32, vault: State<AppVault>) -> Result<Vec<String>, 
 pub fn set_pin_tags(
     pin_id: i32,
     tags: Vec<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     upsert_pin_tags(conn, pin_id, &tags)
 }
 
@@ -218,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_from_empty_vault_yields_no_rows() {
+    fn rebuild_from_empty_ledger_yields_no_rows() {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
         let rows: Vec<(String, String)> =
             nt::note_tags.load(&mut conn).unwrap();
         assert!(rows.is_empty());
@@ -243,7 +243,7 @@ mod tests {
         .unwrap();
 
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
 
         let mut rows: Vec<(String, String)> =
             nt::note_tags.load(&mut conn).unwrap();
@@ -268,7 +268,7 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
 
         // Tag changes on disk; rebuild reflects the new state.
         fs::write(
@@ -276,7 +276,7 @@ mod tests {
             "---\ntags: [two]\n---\n",
         )
         .unwrap();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
 
         let rows: Vec<(String, String)> =
             nt::note_tags.load(&mut conn).unwrap();
@@ -293,7 +293,7 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
         let rows: Vec<(String, String)> =
             nt::note_tags.load(&mut conn).unwrap();
         assert!(rows.is_empty());
@@ -351,12 +351,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "---\ntags: [keep, drop]\n---\n").unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
 
         // Remove `drop` from the note. After rebuild it should disappear from
         // the index entirely — no orphan retention.
         fs::write(dir.path().join("a.md"), "---\ntags: [keep]\n---\n").unwrap();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
 
         let rows: Vec<String> = nt::note_tags
             .select(nt::tag)
@@ -443,7 +443,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "---\ntags: [note-tag]\n---\n").unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["pin-only".to_string()]).unwrap();
 
@@ -457,7 +457,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "---\ntags: [shared]\n---\n").unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["shared".to_string()]).unwrap();
 

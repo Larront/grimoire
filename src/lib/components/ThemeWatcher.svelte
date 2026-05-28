@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ModeWatcher, mode } from 'mode-watcher';
-  import { vault, type AccentPreset } from '$lib/stores/vault.svelte';
+  import { ledger, type AccentPreset } from '$lib/stores/ledger.svelte';
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
 
   const ALL_ACCENT_CLASSES: AccentPreset[] = [
@@ -59,7 +59,7 @@
   $effect(() => {
     const root = document.documentElement;
     const currentMode = mode.current ?? 'dark';
-    const preset = vault.accent;
+    const preset = ledger.accent;
     const tokens = DARK_TOKENS[preset];
 
     // 1. Remove all accent classes
@@ -83,7 +83,7 @@
   });
 
   $effect(() => {
-    document.documentElement.dataset.density = vault.density;
+    document.documentElement.dataset.density = ledger.density;
   });
 
   $effect(() => {

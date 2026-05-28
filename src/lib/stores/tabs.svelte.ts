@@ -1,5 +1,5 @@
 import { untrack } from "svelte";
-import { vault } from "./vault.svelte";
+import { ledger } from "./ledger.svelte";
 import { maps } from "./maps.svelte";
 import {
   LocalStorageTabPersistence,
@@ -480,8 +480,8 @@ function createTabsStore() {
 
   $effect.root(() => {
     $effect(() => {
-      if (vault.isOpen && vault.path) {
-        persistence = new LocalStorageTabPersistence(vault.path);
+      if (ledger.isOpen && ledger.path) {
+        persistence = new LocalStorageTabPersistence(ledger.path);
         const saved = persistence.load();
         if (saved) {
           left = saved.left ?? { tabs: [], activeIndex: 0 };

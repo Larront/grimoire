@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 9 introduces backlinks (Details Pane), outbound links (Details Pane), and a vault-wide graph. All three require a persistent record of which notes link to which. The existing wikilink system (`[[path]]` syntax in TipTap) resolves links at click time with no persistence — there is no index to answer "which notes reference this note?"
+Phase 9 introduces backlinks (Details Pane), outbound links (Details Pane), and a ledger-wide graph. All three require a persistent record of which notes link to which. The existing wikilink system (`[[path]]` syntax in TipTap) resolves links at click time with no persistence — there is no index to answer "which notes reference this note?"
 
 Two credible storage shapes were considered:
 
@@ -15,7 +15,7 @@ Two credible storage shapes were considered:
 
 ## Decision
 
-Use **Option B: path-keyed** (`target_path TEXT`). Populated incrementally on every `save_note` (same pipeline as `note_tags`); fully regenerable from a vault scan on `open_vault`.
+Use **Option B: path-keyed** (`target_path TEXT`). Populated incrementally on every `save_note` (same pipeline as `note_tags`); fully regenerable from a ledger scan on `open_ledger`.
 
 ## Rationale
 
@@ -33,7 +33,7 @@ Phase 9 also introduces `note_aliases(note_id, alias TEXT)`. A link like `[[Capt
 
 ### Same pattern as `note_tags`
 
-`note_tags(note_path, tag TEXT)` is already path-keyed for the same reason: the tag string is the canonical value, not a row id. Backlinks follow the same convention, keeping the two derived tables symmetric and the vault-scan rebuild logic consistent.
+`note_tags(note_path, tag TEXT)` is already path-keyed for the same reason: the tag string is the canonical value, not a row id. Backlinks follow the same convention, keeping the two derived tables symmetric and the ledger-scan rebuild logic consistent.
 
 ## Consequences
 

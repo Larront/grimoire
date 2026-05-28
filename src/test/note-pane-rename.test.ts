@@ -5,7 +5,7 @@ import AppShell from "../lib/components/AppShell.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
 import { appPrefs } from "../lib/stores/app-prefs.svelte";
-import type { Note } from "../lib/types/vault";
+import type { Note } from "../lib/types/ledger";
 
 vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), {

@@ -9,7 +9,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
-  import type { SceneWithCount } from "$lib/types/vault";
+  import type { SceneWithCount } from "$lib/types/ledger";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import { toastError } from "$lib/toast";
@@ -191,7 +191,7 @@
       >
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
-          {@const ThumbnailIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) ?? Clapperboard}
+          {@const ThumbnailIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Clapperboard}
           {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
             <ContextMenu.Trigger>

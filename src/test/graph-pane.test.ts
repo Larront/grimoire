@@ -804,7 +804,7 @@ describe("GraphPane – filter panel", () => {
     });
   });
 
-  it("filter panel lists all vault tags from list_all_tags", async () => {
+  it("filter panel lists all ledger tags from list_all_tags", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("list_all_tags"));
     const btn = container.querySelector(

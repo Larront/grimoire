@@ -3,14 +3,14 @@
   import { invoke } from '@tauri-apps/api/core';
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
-  import { vault, type AccentPreset, type DensityLevel } from '$lib/stores/vault.svelte';
+  import { ledger, type AccentPreset, type DensityLevel } from '$lib/stores/ledger.svelte';
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
   import {
     getSpotifyStatus,
     connectSpotify,
     disconnectSpotify,
   } from '$lib/utils/spotify-auth';
-  import type { SpotifyAuthStatus } from '$lib/types/vault';
+  import type { SpotifyAuthStatus } from '$lib/types/ledger';
   import { LoaderCircle } from '@lucide/svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
@@ -161,10 +161,10 @@
                 type="button"
                 data-testid="accent-{preset.value}"
                 aria-label={preset.label}
-                aria-pressed={vault.accent === preset.value}
-                onclick={() => vault.setAccent(preset.value)}
+                aria-pressed={ledger.accent === preset.value}
+                onclick={() => ledger.setAccent(preset.value)}
                 style="background-color: {preset.color}"
-                class="size-6 rounded-full ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {vault.accent === preset.value ? 'ring-2 ring-ring ring-offset-1' : 'opacity-70 hover:opacity-100'}"
+                class="size-6 rounded-full ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent === preset.value ? 'ring-2 ring-ring ring-offset-1' : 'opacity-70 hover:opacity-100'}"
               ></button>
             {/each}
           </div>
@@ -180,8 +180,8 @@
             {#each DENSITY_LEVELS as level (level.value)}
               <button
                 type="button"
-                class={segmentedBtn(vault.density === level.value)}
-                onclick={() => vault.setDensity(level.value)}
+                class={segmentedBtn(ledger.density === level.value)}
+                onclick={() => ledger.setDensity(level.value)}
               >{level.label}</button>
             {/each}
           </div>
@@ -249,7 +249,7 @@
             <span class="text-(--font-ui) text-foreground-muted">Loading…</span>
           </div>
         {:else if allTags.length === 0}
-          <p class="text-(--font-ui) text-foreground-muted">No tags in vault yet.</p>
+          <p class="text-(--font-ui) text-foreground-muted">No tags in ledger yet.</p>
         {:else}
           <div class="flex flex-col gap-2">
             {#each allTags as tag (tag)}

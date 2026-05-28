@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ScenesDashboard from "../lib/components/panes/ScenesDashboard.svelte";
-import type { SceneWithCount } from "../lib/types/vault";
+import type { SceneWithCount } from "../lib/types/ledger";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { audioEngine } from "../lib/stores/audio-engine.svelte";
 import { scenes } from "../lib/stores/scenes.svelte";

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { vault } from "./vault.svelte";
-import type { SceneSlot, SceneWithCount } from "$lib/types/vault";
+import { ledger } from "./ledger.svelte";
+import type { SceneSlot, SceneWithCount } from "$lib/types/ledger";
 
 interface CreateSlotParams {
   source: string;
@@ -26,7 +26,7 @@ function createScenesStore() {
   let error = $state<string | null>(null);
 
   // Slot cache: keyed by scene_id. Populated on first getSlots() call per scene.
-  // Cleared entirely on vault close. Invalidated per-scene on mutations.
+  // Cleared entirely on ledger close. Invalidated per-scene on mutations.
   const slotCache = new Map<number, SceneSlot[]>();
 
   async function load() {
@@ -140,7 +140,7 @@ function createScenesStore() {
 
   $effect.root(() => {
     $effect(() => {
-      if (vault.isOpen) {
+      if (ledger.isOpen) {
         load();
       } else {
         scenes = [];

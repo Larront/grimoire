@@ -1,20 +1,20 @@
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-/// Validates that `relative` resolves to a path inside `vault_root`.
+/// Validates that `relative` resolves to a path inside `ledger_root`.
 /// Both sides are canonicalized so the starts_with check works correctly on Windows
 /// (where canonicalize returns \\?\ extended-length paths).
-fn validate_path(vault_root: &Path, relative: &str) -> Result<PathBuf, String> {
-    let canonical_root = vault_root
+fn validate_path(ledger_root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let canonical_root = ledger_root
         .canonicalize()
-        .map_err(|e| format!("Invalid vault root: {e}"))?;
-    let joined = vault_root.join(relative);
+        .map_err(|e| format!("Invalid ledger root: {e}"))?;
+    let joined = ledger_root.join(relative);
     let canonical = joined
         .canonicalize()
         .map_err(|e| format!("Invalid path: {e}"))?;
     if !canonical.starts_with(&canonical_root) {
-        return Err("Path escapes vault root".to_string());
+        return Err("Path escapes ledger root".to_string());
     }
     Ok(canonical)
 }
@@ -58,7 +58,7 @@ pub fn resolve_image_filename(images_dir: &Path, file_name: &str) -> PathBuf {
     }
 }
 
-pub fn copy_image_file_to(vault_path: Option<&Path>, absolute_path: &str) -> Result<String, String> {
+pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Result<String, String> {
     let src = PathBuf::from(absolute_path);
     validate_image_extension(&src)?;
     let file_name = src
@@ -66,18 +66,18 @@ pub fn copy_image_file_to(vault_path: Option<&Path>, absolute_path: &str) -> Res
         .ok_or("Invalid file path")?
         .to_string_lossy()
         .to_string();
-    let vault_path = vault_path.ok_or("No vault open")?;
-    let images_dir = vault_path.join("images");
+    let ledger_path = ledger_path.ok_or("No ledger open")?;
+    let images_dir = ledger_path.join(".grimoire").join("images");
     std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
     let dest = resolve_image_filename(&images_dir, &file_name);
-    let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
+    let relative = format!(".grimoire/images/{}", dest.file_name().unwrap().to_string_lossy());
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(relative)
 }
 
 #[tauri::command]
-pub fn copy_image_file(absolute_path: String, vault: State<AppVault>) -> Result<String, String> {
-    let state = vault.lock().map_err(|e| e.to_string())?;
+pub fn copy_image_file(absolute_path: String, ledger: State<AppLedger>) -> Result<String, String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
     copy_image_file_to(state.path.as_deref(), &absolute_path)
 }
 
@@ -91,7 +91,10 @@ pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> R
         .to_string();
     std::fs::create_dir_all(images_dir).map_err(|e| e.to_string())?;
     let dest = resolve_image_filename(images_dir, &file_name);
-    let relative = format!("images/{}", dest.file_name().unwrap().to_string_lossy());
+    let relative = format!(
+        ".grimoire/images/{}",
+        dest.file_name().unwrap().to_string_lossy()
+    );
     std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(relative)
 }
@@ -100,22 +103,22 @@ pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> R
 pub fn save_image_bytes(
     bytes: Vec<u8>,
     filename: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = vault.lock().map_err(|e| e.to_string())?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?;
-    let images_dir = vault_path.join("images");
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+    let images_dir = ledger_path.join(".grimoire").join("images");
     save_image_bytes_to(&images_dir, &filename, &bytes)
 }
 
 #[tauri::command]
 pub fn get_image_absolute_path(
     relative_path: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = vault.lock().map_err(|e| e.to_string())?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?;
-    let canonical = validate_path(vault_path, &relative_path)?;
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+    let canonical = validate_path(ledger_path, &relative_path)?;
     canonical
         .to_str()
         .map(|s| s.to_string())
@@ -173,7 +176,7 @@ mod tests {
         let result = save_image_bytes_to(&images_dir, "pasted-image.png", fake_bytes);
         assert!(result.is_ok(), "Expected ok, got {:?}", result);
         let rel = result.unwrap();
-        assert_eq!(rel, "images/pasted-image.png");
+        assert_eq!(rel, ".grimoire/images/pasted-image.png");
         let written = fs::read(images_dir.join("pasted-image.png")).unwrap();
         assert_eq!(written, fake_bytes);
     }
@@ -186,7 +189,7 @@ mod tests {
         fs::write(images_dir.join("clip.png"), b"first").unwrap();
         let result = save_image_bytes_to(&images_dir, "clip.png", b"second");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "images/clip 2.png");
+        assert_eq!(result.unwrap(), ".grimoire/images/clip 2.png");
         assert_eq!(fs::read(images_dir.join("clip 2.png")).unwrap(), b"second");
     }
 
@@ -197,7 +200,7 @@ mod tests {
         let result = save_image_bytes_to(&images_dir, "人物.png", b"fake-png-data");
         assert!(result.is_ok(), "Expected ok, got {:?}", result);
         let rel = result.unwrap();
-        assert_eq!(rel, "images/人物.png");
+        assert_eq!(rel, ".grimoire/images/人物.png");
         assert!(images_dir.join("人物.png").exists());
         assert_eq!(fs::read(images_dir.join("人物.png")).unwrap(), b"fake-png-data");
     }
@@ -213,60 +216,63 @@ mod tests {
     #[test]
     fn test_copy_image_file_end_to_end() {
         let outer = tempfile::tempdir().unwrap();
-        let vault = outer.path().join("vault");
-        std::fs::create_dir(&vault).unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
         let src = outer.path().join("portrait.png");
         fs::write(&src, b"png-bytes").unwrap();
 
-        let rel = copy_image_file_to(Some(&vault), src.to_str().unwrap()).unwrap();
-        assert_eq!(rel, "images/portrait.png");
-        assert_eq!(fs::read(vault.join("images/portrait.png")).unwrap(), b"png-bytes");
+        let rel = copy_image_file_to(Some(&ledger), src.to_str().unwrap()).unwrap();
+        assert_eq!(rel, ".grimoire/images/portrait.png");
+        assert_eq!(
+            fs::read(ledger.join(".grimoire/images/portrait.png")).unwrap(),
+            b"png-bytes"
+        );
     }
 
     #[test]
-    fn test_copy_image_file_no_vault_open_returns_graceful_error() {
+    fn test_copy_image_file_no_ledger_open_returns_graceful_error() {
         let outer = tempfile::tempdir().unwrap();
         let src = outer.path().join("portrait.png");
         fs::write(&src, b"png-bytes").unwrap();
 
         let result = copy_image_file_to(None, src.to_str().unwrap());
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "No vault open");
+        assert_eq!(result.unwrap_err(), "No ledger open");
     }
 
     #[test]
     fn test_copy_image_file_rejects_unsupported_extension() {
         let outer = tempfile::tempdir().unwrap();
-        let vault = outer.path().join("vault");
-        std::fs::create_dir(&vault).unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
         let src = outer.path().join("icon.svg");
         fs::write(&src, b"<svg/>").unwrap();
 
-        let result = copy_image_file_to(Some(&vault), src.to_str().unwrap());
+        let result = copy_image_file_to(Some(&ledger), src.to_str().unwrap());
         assert!(result.is_err());
-        assert!(!vault.join("images").join("icon.svg").exists());
+        assert!(!ledger.join(".grimoire/images").join("icon.svg").exists());
     }
 
     #[test]
     fn test_validate_path_rejects_parent_escape() {
         let outer = tempfile::tempdir().unwrap();
-        let vault = outer.path().join("vault");
-        std::fs::create_dir(&vault).unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
         fs::write(outer.path().join("escape.png"), b"x").unwrap();
 
-        let result = validate_path(&vault, "../escape.png");
+        let result = validate_path(&ledger, "../escape.png");
         assert!(result.is_err(), "expected ../escape.png to be rejected");
     }
 
     #[test]
     fn test_validate_path_rejects_absolute_path() {
         let outer = tempfile::tempdir().unwrap();
-        let vault = outer.path().join("vault");
-        std::fs::create_dir(&vault).unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
         let outside = outer.path().join("outside.png");
         fs::write(&outside, b"x").unwrap();
 
-        let result = validate_path(&vault, outside.to_str().unwrap());
+        let result = validate_path(&ledger, outside.to_str().unwrap());
         assert!(result.is_err(), "expected absolute outside path to be rejected");
     }
 }

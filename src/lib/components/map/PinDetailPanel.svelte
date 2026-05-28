@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { notes } from "$lib/stores/notes.svelte";
-  import type { Note, Pin, PinCategory, PinShape } from "$lib/types/vault";
+  import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
   import { ExternalLink, ChevronDown, Lock, LockOpen } from "@lucide/svelte";
   import { invoke } from "@tauri-apps/api/core";
   import {

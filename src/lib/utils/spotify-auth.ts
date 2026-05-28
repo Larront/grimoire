@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { SpotifyAuthStatus } from "$lib/types/vault";
+import type { SpotifyAuthStatus } from "$lib/types/ledger";
 
 export async function getSpotifyStatus(): Promise<SpotifyAuthStatus | null> {
   return invoke<SpotifyAuthStatus | null>("spotify_get_auth_status");

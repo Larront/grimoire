@@ -1,33 +1,33 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { vault, type RecentVault } from "$lib/stores/vault.svelte";
+  import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import type { Note } from "$lib/types/vault";
+  import type { Note } from "$lib/types/ledger";
   import { Folder, Plus, LoaderCircle } from "@lucide/svelte";
 
-  let recentVaults = $state<RecentVault[]>([]);
+  let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
   let openingPath = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
   let isCreatingNote = $state(false);
 
-  // Create vault form
+  // Create ledger form
   let mode = $state<"idle" | "creating">("idle");
-  let newVaultName = $state("");
-  let newVaultParent = $state<string | null>(null);
+  let newLedgerName = $state("");
+  let newLedgerParent = $state<string | null>(null);
   let nameError = $state<string | null>(null);
   let isPickingLocation = $state(false);
 
-  const vaultName = $derived(vault.path?.split(/[\\/]/).pop() ?? "My Vault");
+  const ledgerName = $derived(ledger.path?.split(/[\\/]/).pop() ?? "My Ledger");
 
   $effect(() => {
-    if (!vault.isOpen) {
-      invoke<RecentVault[]>("get_recent_vaults")
-        .then((vaults) => {
-          recentVaults = vaults;
+    if (!ledger.isOpen) {
+      invoke<RecentLedger[]>("get_recent_ledgers")
+        .then((ledgers) => {
+          recentLedgers = ledgers;
         })
         .catch(console.error)
         .finally(() => {
@@ -36,11 +36,11 @@
     }
   });
 
-  async function handleOpenRecent(vaultPath: string) {
-    openingPath = vaultPath;
+  async function handleOpenRecent(ledgerPath: string) {
+    openingPath = ledgerPath;
     errorMsg = null;
     try {
-      await vault.openVault(vaultPath);
+      await ledger.openLedger(ledgerPath);
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -52,7 +52,7 @@
     openingPath = "__dialog__";
     errorMsg = null;
     try {
-      await vault.openVault();
+      await ledger.openLedger();
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -62,8 +62,8 @@
 
   function startCreate() {
     mode = "creating";
-    newVaultName = "";
-    newVaultParent = null;
+    newLedgerName = "";
+    newLedgerParent = null;
     nameError = null;
     errorMsg = null;
   }
@@ -82,7 +82,7 @@
         title: "Choose Location",
       });
       if (selected && typeof selected === "string") {
-        newVaultParent = selected;
+        newLedgerParent = selected;
         if (nameError === "Please choose a storage location.") nameError = null;
       }
     } finally {
@@ -90,12 +90,12 @@
     }
   }
 
-  async function handleCreateVault() {
+  async function handleCreateLedger() {
     nameError = null;
-    const name = newVaultName.trim();
+    const name = newLedgerName.trim();
 
     if (!name) {
-      nameError = "Please enter a vault name.";
+      nameError = "Please enter a ledger name.";
       return;
     }
     if (/[/\\:*?"<>|]/.test(name)) {
@@ -103,10 +103,10 @@
       return;
     }
     if (name === "." || name === "..") {
-      nameError = "Invalid vault name.";
+      nameError = "Invalid ledger name.";
       return;
     }
-    if (!newVaultParent) {
+    if (!newLedgerParent) {
       nameError = "Please choose a storage location.";
       return;
     }
@@ -114,7 +114,7 @@
     openingPath = "__creating__";
     errorMsg = null;
     try {
-      await vault.openVault(`${newVaultParent}/${name}`);
+      await ledger.openLedger(`${newLedgerParent}/${name}`);
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -160,7 +160,7 @@
     }
   }
 
-  function formatVaultStats(v: RecentVault): string {
+  function formatLedgerStats(v: RecentLedger): string {
     const parts: string[] = [];
     if (v.note_count > 0)
       parts.push(`${v.note_count} note${v.note_count !== 1 ? "s" : ""}`);
@@ -168,12 +168,12 @@
       parts.push(`${v.scene_count} scene${v.scene_count !== 1 ? "s" : ""}`);
     if (v.map_count > 0)
       parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
-    return parts.join(" · ") || "Empty vault";
+    return parts.join(" · ") || "Empty ledger";
   }
 </script>
 
-{#if vault.isOpen}
-  <!-- ── Vault home (new vault) ────────────────────────────────── -->
+{#if ledger.isOpen}
+  <!-- ── Ledger home (new ledger) ────────────────────────────────── -->
   <div class="flex flex-col items-center justify-center h-full">
     <div
       class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade"
@@ -181,7 +181,7 @@
       <h1
         class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight"
       >
-        {vaultName}
+        {ledgerName}
       </h1>
 
       {#if !notes.isLoading}
@@ -237,34 +237,34 @@
     {#if isLoadingRecents}
       <!-- Minimal loading — title visible, content loads beneath -->
     {:else if mode === "creating"}
-      <!-- ── Create new vault form ───────────────────────────────── -->
+      <!-- ── Create new ledger form ───────────────────────────────── -->
       <div
         class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1"
       >
         <span
           class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint"
         >
-          New Vault
+          New Ledger
         </span>
 
-        <!-- Vault name -->
+        <!-- Ledger name -->
         <div class="flex flex-col gap-1.5">
           <label
-            for="vault-name"
+            for="ledger-name"
             class="font-sans text-[11px] text-muted-foreground"
           >
             Name
           </label>
           <!-- svelte-ignore a11y_autofocus -->
           <input
-            id="vault-name"
+            id="ledger-name"
             type="text"
             placeholder="My Campaign"
-            bind:value={newVaultName}
+            bind:value={newLedgerName}
             autofocus
             disabled={openingPath !== null}
             onkeydown={(e) => {
-              if (e.key === "Enter") handleCreateVault();
+              if (e.key === "Enter") handleCreateLedger();
               if (e.key === "Escape") cancelCreate();
             }}
             class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
@@ -290,11 +290,11 @@
                    disabled:opacity-50 cursor-default"
           >
             <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-            {#if newVaultParent}
+            {#if newLedgerParent}
               <span
                 class="font-sans text-[12px] text-foreground truncate min-w-0"
               >
-                {newVaultParent}
+                {newLedgerParent}
               </span>
             {:else}
               <span class="font-sans text-[12px] text-foreground/30 italic">
@@ -327,28 +327,28 @@
           </Button>
           <Button
             size="sm"
-            onclick={handleCreateVault}
+            onclick={handleCreateLedger}
             disabled={openingPath !== null ||
-              !newVaultName.trim() ||
-              !newVaultParent}
+              !newLedgerName.trim() ||
+              !newLedgerParent}
             class="flex-1 text-[11px]"
           >
             {#if openingPath === "__creating__"}
               <LoaderCircle class="w-3 h-3 animate-spin mr-1.5" />
               Creating...
             {:else}
-              Create Vault
+              Create Ledger
             {/if}
           </Button>
         </div>
       </div>
-    {:else if recentVaults.length === 0}
+    {:else if recentLedgers.length === 0}
       <!-- ── First-time user ──────────────────────────────────── -->
       <p
         class="font-sans text-sm text-muted-foreground mt-7 text-center max-w-70
                leading-relaxed relative z-10 splash-fade-delay-1"
       >
-        A worldbuilding vault for your campaigns, lore, maps, and sessions.
+        A worldbuilding ledger for your campaigns, lore, maps, and sessions.
       </p>
 
       <div
@@ -361,9 +361,9 @@
         >
           <Plus class="w-4 h-4 shrink-0" />
           <div class="text-left">
-            <div class="text-sm font-semibold">Create New Vault</div>
+            <div class="text-sm font-semibold">Create New Ledger</div>
             <div class="text-[10px] opacity-70 font-normal">
-              Start fresh with an empty vault
+              Start fresh with an empty ledger
             </div>
           </div>
         </Button>
@@ -380,9 +380,9 @@
             <Folder class="w-4 h-4 shrink-0" />
           {/if}
           <div class="text-left">
-            <div class="text-sm font-semibold">Open Existing Vault</div>
+            <div class="text-sm font-semibold">Open Existing Ledger</div>
             <div class="text-[10px] opacity-70 font-normal">
-              Browse for an existing vault
+              Browse for an existing ledger
             </div>
           </div>
         </Button>
@@ -393,11 +393,11 @@
         <span
           class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint mb-2.5 block"
         >
-          Recent Vaults
+          Recent Ledgers
         </span>
 
         <div class="flex flex-col">
-          {#each recentVaults as v (v.path)}
+          {#each recentLedgers as v (v.path)}
             <button
               class="flex items-center justify-between py-2.5 px-3 rounded-sm
                      border-b border-border text-left
@@ -426,7 +426,7 @@
                   </div>
                 {/if}
                 <div class="font-mono text-[10px] text-foreground-muted mt-0.5">
-                  {formatVaultStats(v)}
+                  {formatLedgerStats(v)}
                 </div>
               </div>
               <div
@@ -451,7 +451,7 @@
           {#if openingPath === "__dialog__"}
             <LoaderCircle class="w-3 h-3 animate-spin mr-1.5" />
           {/if}
-          Open Existing Vault
+          Open Existing Ledger
         </Button>
         <Button
           variant="ghost"
@@ -460,7 +460,7 @@
           class="text-[11px] text-muted-foreground"
           disabled={openingPath !== null}
         >
-          Create New Vault
+          Create New Ledger
         </Button>
       </div>
     {/if}

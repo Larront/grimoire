@@ -2,8 +2,8 @@ import { render, fireEvent, cleanup, within } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
-import VaultSelector from "../lib/components/sidebar/VaultSelector.svelte";
-import { vault } from "../lib/stores/vault.svelte";
+import LedgerSelector from "../lib/components/sidebar/LedgerSelector.svelte";
+import { ledger } from "../lib/stores/ledger.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -30,7 +30,7 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 
 afterEach(async () => {
   cleanup();
-  await vault.closeVault();
+  await ledger.closeLedger();
   tabs.closeAll("left");
   if (tabs.right) tabs.closeAll("right");
   Object.defineProperty(window, "matchMedia", {
@@ -73,27 +73,27 @@ describe("sidebar responsive behaviour", () => {
   });
 });
 
-// ── Vault selector ────────────────────────────────────────────────────────────
+// ── Ledger selector ────────────────────────────────────────────────────────────
 
-describe("vault selector", () => {
+describe("ledger selector", () => {
   beforeEach(async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_vault_path") return "/Users/test/MyVault";
+      if (cmd === "get_ledger_path") return "/Users/test/MyLedger";
       if (cmd === "get_accent_preset") return null;
       if (cmd === "get_density_level") return null;
-      if (cmd === "get_recent_vaults")
+      if (cmd === "get_recent_ledgers")
         return [
           {
-            name: "MyVault",
-            path: "/Users/test/MyVault",
+            name: "MyLedger",
+            path: "/Users/test/MyLedger",
             note_count: 5,
             scene_count: 2,
             map_count: 1,
             last_opened: "2025-01-01T00:00:00Z",
           },
           {
-            name: "OtherVault",
-            path: "/Users/test/OtherVault",
+            name: "OtherLedger",
+            path: "/Users/test/OtherLedger",
             note_count: 0,
             scene_count: 0,
             map_count: 0,
@@ -102,21 +102,21 @@ describe("vault selector", () => {
         ];
       return null;
     });
-    await vault.checkExistingVault();
+    await ledger.checkExistingLedger();
   });
 
-  it("shows the current vault name", () => {
-    const { getByText } = render(VaultSelector);
-    expect(getByText("MyVault")).toBeTruthy();
+  it("shows the current ledger name", () => {
+    const { getByText } = render(LedgerSelector);
+    expect(getByText("MyLedger")).toBeTruthy();
   });
 
-  it("popover opens on click and lists available vaults", async () => {
-    const { getByRole, findByText } = render(VaultSelector);
-    const trigger = getByRole("button", { name: /vault selector/i });
+  it("popover opens on click and lists available ledgers", async () => {
+    const { getByRole, findByText } = render(LedgerSelector);
+    const trigger = getByRole("button", { name: /ledger selector/i });
     await fireEvent.click(trigger);
 
-    expect(await findByText("OtherVault")).toBeTruthy();
-    expect(await findByText("Open new vault")).toBeTruthy();
+    expect(await findByText("OtherLedger")).toBeTruthy();
+    expect(await findByText("Open new ledger")).toBeTruthy();
   });
 });
 

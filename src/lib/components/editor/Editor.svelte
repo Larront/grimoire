@@ -175,7 +175,7 @@
       );
       if (resolved) tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
     } catch {
-      // stub note or no vault open — do nothing
+      // stub note or no ledger open — do nothing
     }
   }
 

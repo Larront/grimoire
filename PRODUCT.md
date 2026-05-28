@@ -10,7 +10,7 @@ Game Masters running tabletop RPG campaigns, from solo worldbuilders doing sessi
 
 ## Product Purpose
 
-Grimoire is a desktop worldbuilding tool for tabletop RPG Game Masters. It unifies notes, maps, scenes, and audio ambience into one vault-based application. Success looks like a GM who never thinks about the tool during a live session — only about the world.
+Grimoire is a desktop worldbuilding tool for tabletop RPG Game Masters. It unifies notes, maps, scenes, and audio ambience into one ledger-based application. Success looks like a GM who never thinks about the tool during a live session — only about the world.
 
 ## Brand Personality
 
@@ -29,7 +29,7 @@ References that capture the right feel: Notion (structured document-editor clari
 
 **One action away.** Any piece of critical information is reachable in a single gesture. During a live session, the GM can't be slowed down by buried menus or modal interruptions.
 
-**Restrained structure, expressive moments.** The app shell is quiet and functional. Arrival moments — the splash screen, empty states, the first note in a new vault — earn richer, more considered treatment.
+**Restrained structure, expressive moments.** The app shell is quiet and functional. Arrival moments — the splash screen, empty states, the first note in a new ledger — earn richer, more considered treatment.
 
 **The interface has no mode.** Prep and live play are the same surface. There is no "session start" ritual, no state the GM must enter or exit. The tool is always ready.
 

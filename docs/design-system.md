@@ -47,7 +47,7 @@ Each preset drives the `--primary` CSS variable. The two derived tints are compu
 
 In dark mode these are set directly via inline `style`. In light mode each preset maps to a named CSS class (e.g. `.accent-crimson`) because the light-mode hex values differ for contrast.
 
-The accent preset is a user preference stored per vault alongside theme (light/dark) and density.
+The accent preset is a user preference stored per ledger alongside theme (light/dark) and density.
 
 ---
 
@@ -217,13 +217,13 @@ The sidebar collapses to a narrow icon rail — the grid responds accordingly.
 
 **Sidebar (expanded)** — Contains all primary navigation. Fixed structure from top to bottom:
 
-1. **Brand header** — Metamorphous wordmark "Grimoire", vault name subtitle, collapse button
+1. **Brand header** — Metamorphous wordmark "Grimoire", ledger name subtitle, collapse button
 2. **Inline search bar** — click to open the command palette
 3. **Pinned section** — star icon, flat list of starred/pinned notes (collapsible)
 4. **Recent section** — clock icon, up to 5 recently opened notes (collapsible)
 5. **Campaign tree** — folder icon, hierarchical file tree (collapsible, with "+" to create)
 6. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
-7. **Footer** — vault select button (current vault name + chevron; click opens vault switcher popover)
+7. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
 
 **Icon Rail (collapsed state)** — 48px wide, contains:
 
@@ -279,7 +279,7 @@ No type filter toggle. Folders are the only organizational primitive.
 
 The Scene Player is a collapsible panel docked at the bottom of the sidebar scroll area, above the footer.
 
-The Scene Player panel is not rendered until at least one scene exists in the vault. Once a scene exists it persists in the sidebar regardless of whether audio is playing.
+The Scene Player panel is not rendered until at least one scene exists in the ledger. Once a scene exists it persists in the sidebar regardless of whether audio is playing.
 
 **Collapsed header** (always visible when a scene exists):
 
@@ -358,9 +358,9 @@ Each empty state gets:
 - A Nunito body line orienting the user
 - A single primary CTA
 
-**Splash screen:** Metamorphous wordmark "Grimoire", a subtle decorative element (geometric pattern or atmospheric motif), recent vaults list, "Open Vault" and "Create Vault" actions.
+**Splash screen:** Metamorphous wordmark "Grimoire", a subtle decorative element (geometric pattern or atmospheric motif), recent ledgers list, "Open Ledger" and "Create Ledger" actions.
 
-**Empty vault:** "Your world awaits" or similar — not generic "No items found."
+**Empty ledger:** "Your world awaits" or similar — not generic "No items found."
 
 **No scenes:** Evocative empty state, "Create your first scene" CTA.
 
@@ -376,7 +376,7 @@ Settings include:
 - **Accent:** Crimson (default) / Arcane / Amber / Verdant / Ice
 - **Density:** Cozy / Balanced (default) / Dense
 - **Reduce motion:** Toggle (off by default, respects OS `prefers-reduced-motion` as initial value)
-- Vault-specific config (Spotify client ID, inline helper text explaining how to obtain one)
+- Ledger-specific config (Spotify client ID, inline helper text explaining how to obtain one)
 
 **Density definitions** — only spacing and component height change. Type sizes are fixed in all modes.
 
@@ -399,12 +399,12 @@ The three density names replace the previous two-tier Comfortable/Compact model.
 
 ### Loading
 
-All async operations (file open, audio source connect, vault load) must show a loading state. Do not show empty content and hope it populates.
+All async operations (file open, audio source connect, ledger load) must show a loading state. Do not show empty content and hope it populates.
 
 - **Skeleton screens** for list items and file tree rows: `--foreground-muted` at 20% opacity, `border-radius: md`, width varies per element. Animate with a subtle shimmer (left-to-right gradient sweep, 1.5s loop). Reduced motion: static skeleton, no shimmer.
 - **Scene card thumbnails** that are loading show the generated fallback (warm background + music icon) until the image resolves — do not show a broken image or blank space.
 - **Audio source connecting**: slot shows a spinner (primary color, 16px) inside the waveform area. Label: "Connecting…"
-- **Vault loading on launch**: splash screen remains visible with a subtle loading indicator below the vault list. Do not navigate away until the vault is ready.
+- **Ledger loading on launch**: splash screen remains visible with a subtle loading indicator below the ledger list. Do not navigate away until the ledger is ready.
 
 ### Toasts / Feedback
 
@@ -430,7 +430,7 @@ Never use a modal for a destructive confirmation — it is disproportionate and 
 - **Files error**: "Couldn't load your files" + Retry button. Show in the sidebar where the tree would appear.
 - **Scenes error**: "Couldn't load scenes" + Retry button. Show in the main content area.
 - **Audio disconnect**: slot shows "Source unavailable" label replacing the waveform, with a Reconnect link. The scene continues — other slots that are working are unaffected.
-- **Vault load failure** (launch): stay on splash screen, show an error message below the vault list with a Retry option.
+- **Ledger load failure** (launch): stay on splash screen, show an error message below the ledger list with a Retry option.
 
 ---
 

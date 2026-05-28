@@ -23,12 +23,12 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { templates } from "$lib/stores/templates.svelte";
-  import type { TemplateEntry } from "$lib/types/vault";
+  import type { TemplateEntry } from "$lib/types/ledger";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { vault } from "$lib/stores/vault.svelte";
+  import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-  import type { Note, Map as VaultMap } from "$lib/types/vault";
+  import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
     id: number;
@@ -167,7 +167,7 @@
   async function cmdCreateMap() {
     searchPalette.open = false;
     try {
-      const newMap = await invoke<VaultMap>("create_map_empty", {
+      const newMap = await invoke<LedgerMap>("create_map_empty", {
         title: "Untitled Map",
       });
       await maps.load();
@@ -195,9 +195,9 @@
     searchPalette.open = false;
   }
 
-  function cmdSwitchVault() {
+  function cmdSwitchLedger() {
     searchPalette.open = false;
-    vault.openVault();
+    ledger.openLedger();
   }
 
   async function cmdRebuildIndex() {
@@ -272,7 +272,7 @@
     { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
     { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
-    { label: "Switch vault…", testid: "cmd-switch-vault", noteOnly: false, icon: FolderOpen, action: cmdSwitchVault },
+    { label: "Switch ledger…", testid: "cmd-switch-ledger", noteOnly: false, icon: FolderOpen, action: cmdSwitchLedger },
     { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },
   ];
 

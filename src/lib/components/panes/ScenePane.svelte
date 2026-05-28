@@ -29,7 +29,7 @@
     X,
     ChevronLeft,
   } from "@lucide/svelte";
-  import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/vault";
+  import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import {
     getSpotifyStatus,
     connectSpotify,
@@ -496,7 +496,7 @@
     </div>
   {:else}
     <!-- HERO HEADER -->
-    {@const HeroIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) ?? Music2}
+    {@const HeroIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Music2}
     <div
       data-hero-header
       class="group relative flex min-h-52 flex-col justify-end overflow-hidden"

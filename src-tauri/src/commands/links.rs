@@ -2,13 +2,13 @@
 //
 // Both tables are derived indices — the markdown file is the source of truth
 // for wikilinks and aliases respectively. Both are fully regenerable from a
-// vault scan; see ADR-0005 and CONTEXT.md §Link Index / §Note Alias.
+// ledger scan; see ADR-0005 and CONTEXT.md §Link Index / §Note Alias.
 
 use crate::commands::frontmatter;
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::notes::dsl as n;
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -104,10 +104,10 @@ pub fn upsert_note_aliases(
     .map_err(|e| e.to_string())
 }
 
-/// Walk the vault scanning every `.md` file; replace both tables with the
+/// Walk the ledger scanning every `.md` file; replace both tables with the
 /// results of a fresh scan. Hidden directories are skipped.
-pub fn rebuild_note_links_from_vault(
-    vault_path: &Path,
+pub fn rebuild_note_links_from_ledger(
+    ledger_path: &Path,
     conn: &mut SqliteConnection,
 ) -> Result<(), String> {
     // Build a path→id map so the walk can resolve source_id cheaply.
@@ -120,7 +120,7 @@ pub fn rebuild_note_links_from_vault(
 
     let mut link_rows: Vec<(i32, String)> = Vec::new();
     let mut alias_rows: Vec<(i32, String)> = Vec::new();
-    collect_links_and_aliases(vault_path, "", &path_to_id, &mut link_rows, &mut alias_rows)?;
+    collect_links_and_aliases(ledger_path, "", &path_to_id, &mut link_rows, &mut alias_rows)?;
 
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         diesel::delete(nl::note_links).execute(c)?;
@@ -248,7 +248,7 @@ struct SourceNoteRow {
 /// saves the file, and re-indexes the note's outbound links in the DB.
 /// Returns the number of notes whose files were actually modified.
 pub fn rewrite_backlinks_on_rename_on_conn(
-    vault_path: &Path,
+    ledger_path: &Path,
     conn: &mut SqliteConnection,
     old_path: &str,
     new_path: &str,
@@ -265,7 +265,7 @@ pub fn rewrite_backlinks_on_rename_on_conn(
 
     let mut updated_count = 0usize;
     for source in sources {
-        let full_path = vault_path.join(&source.path);
+        let full_path = ledger_path.join(&source.path);
         let content = match fs::read_to_string(&full_path) {
             Ok(c) => c,
             Err(_) => continue,
@@ -330,10 +330,10 @@ pub fn get_alias_collisions_on_conn(
 #[tauri::command]
 pub fn get_alias_collisions(
     note_id: i32,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Vec<AliasCollision>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     get_alias_collisions_on_conn(conn, note_id)
 }
 
@@ -402,10 +402,10 @@ pub fn resolve_note_by_alias_on_conn(
 #[tauri::command]
 pub fn resolve_note_by_alias(
     alias: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Option<ResolvedNote>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     resolve_note_by_alias_on_conn(conn, &alias)
 }
 
@@ -425,9 +425,9 @@ pub struct OutboundLink {
 }
 
 #[tauri::command]
-pub fn get_backlinks(note_id: i32, vault: State<AppVault>) -> Result<Vec<BacklinkNote>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_backlinks(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<BacklinkNote>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let note_path: String = n::notes
         .find(note_id)
@@ -471,10 +471,10 @@ struct BacklinkNoteRow {
 #[tauri::command]
 pub fn get_outbound_links(
     note_id: i32,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Vec<OutboundLink>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let link_rows: Vec<String> = nl::note_links
         .filter(nl::source_id.eq(note_id))
@@ -536,9 +536,9 @@ struct BacklinkCountRow {
 }
 
 #[tauri::command]
-pub fn get_note_backlink_count(note_path: String, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let row = diesel::sql_query(
         "SELECT COUNT(DISTINCT source_id) as cnt FROM note_links WHERE target_path = ?1",
     )
@@ -549,9 +549,9 @@ pub fn get_note_backlink_count(note_path: String, vault: State<AppVault>) -> Res
 }
 
 #[tauri::command]
-pub fn get_note_aliases(note_id: i32, vault: State<AppVault>) -> Result<Vec<String>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_note_aliases(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     na::note_aliases
         .filter(na::note_id.eq(note_id))
         .select(na::alias)
@@ -563,11 +563,11 @@ pub fn get_note_aliases(note_id: i32, vault: State<AppVault>) -> Result<Vec<Stri
 pub fn set_note_aliases(
     note_id: i32,
     aliases: Vec<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.as_ref().ok_or("No vault open")?.clone();
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let note_path: String = n::notes
         .find(note_id)
@@ -575,7 +575,7 @@ pub fn set_note_aliases(
         .first(conn)
         .map_err(|e| e.to_string())?;
 
-    let full_path = vault_path.join(&note_path);
+    let full_path = ledger_path.join(&note_path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
     fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
@@ -794,13 +794,13 @@ mod tests {
         assert!(rows.is_empty(), "cascade delete should remove alias rows");
     }
 
-    // ── rebuild_note_links_from_vault ────────────────────────────────────────
+    // ── rebuild_note_links_from_ledger ────────────────────────────────────────
 
     #[test]
-    fn rebuild_from_empty_vault_yields_no_rows() {
+    fn rebuild_from_empty_ledger_yields_no_rows() {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
         let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         let aliases: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
         assert!(links.is_empty());
@@ -821,7 +821,7 @@ mod tests {
         insert_note(&mut conn, 1, "aldric.md", "Aldric");
         insert_note(&mut conn, 2, "dragon.md", "Dragon");
 
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
 
         let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         assert_eq!(links, vec![(1, "dragon.md".to_string())]);
@@ -837,8 +837,8 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
 
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
 
         let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         assert_eq!(links.len(), 1);
@@ -854,7 +854,7 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
         let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         assert!(links.is_empty());
     }
@@ -865,7 +865,7 @@ mod tests {
         fs::write(dir.path().join("unregistered.md"), "[[b.md]]").unwrap();
         let mut conn = test_conn();
         // No matching note in DB for "unregistered.md" → no links inserted.
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
         let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         assert!(links.is_empty());
     }
@@ -877,7 +877,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
 
-        rebuild_note_links_from_vault(dir.path(), &mut conn).unwrap();
+        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
 
         // target_path "nonexistent.md" does not appear in notes.path → stub
         let stub_count: i64 = diesel::sql_query(

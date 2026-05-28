@@ -386,7 +386,7 @@
       // Build tag styles map
       tagStylesMap = new Map(Object.entries(rawTagStyles ?? {}));
 
-      // Store vault tags for the filter panel
+      // Store ledger tags for the filter panel
       allTags = tags ?? [];
 
       // Build accent cycle assignments (encounter order across nodes)

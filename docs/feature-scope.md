@@ -7,7 +7,7 @@ A local-first desktop application for TTRPG Game Masters. It serves two equally 
 1. **Worldbuilding** — capturing lore, NPCs, locations, timelines, and maps during prep
 2. **Session companion** — fast access to notes, audio scene management, and maps during live play
 
-All data lives in a local vault directory (a folder on disk). Content is stored as Markdown files and SQLite metadata — never proprietary formats. The vault is portable across drives and machines.
+All data lives in a local ledger directory (a folder on disk). Content is stored as Markdown files and SQLite metadata — never proprietary formats. The ledger is portable across drives and machines.
 
 ---
 
@@ -23,7 +23,7 @@ All data lives in a local vault directory (a folder on disk). Content is stored 
 
 - Mobile
 - Cloud sync or collaboration
-- Multi-user / shared vaults
+- Multi-user / shared ledgers
 - Web app
 
 ---
@@ -80,8 +80,8 @@ Locks down the foundation before the feature-building phase.
 
 **Deliverables:**
 
-- Vitest unit tests for all 5 stores (vault, notes, scenes, audio-engine, maps)
-- Rust `#[cfg(test)]` tests for all 6 command modules (vault, notes, scenes, maps, media, spotify)
+- Vitest unit tests for all 5 stores (ledger, notes, scenes, audio-engine, maps)
+- Rust `#[cfg(test)]` tests for all 6 command modules (ledger, notes, scenes, maps, media, spotify)
 - Audio crossfade lock paths covered
 - `bun run test` and `cargo test` both pass clean
 
@@ -97,9 +97,9 @@ Locks down the foundation before the feature-building phase.
 **Deliverables:**
 
 - Insert images from the local filesystem into notes via TipTap (slash command, drag-and-drop, paste)
-- Images copied to vault `images/` directory on insert
+- Images copied to ledger `images/` directory on insert
 - Inline image rendering in the editor
-- Relative paths stored in note content (vault-portable)
+- Relative paths stored in note content (ledger-portable)
 - Alt text editable inline; renders as a visible caption below the image when non-empty
 - Per-image align (left/center/right) and width (percent) controls, persisted in markdown via `{align=X width=Y%}` syntax
 - Click-to-zoom lightbox: toolbar button opens the image at natural size in a fullscreen overlay, Esc/click-outside to close
@@ -112,8 +112,8 @@ Locks down the foundation before the feature-building phase.
 
 **Success criteria:**
 
-- Drop an image into a note, it appears inline, vault remains portable
-- Caption appears below the image and survives a vault reload
+- Drop an image into a note, it appears inline, ledger remains portable
+- Caption appears below the image and survives a ledger reload
 
 ---
 
@@ -124,9 +124,9 @@ Locks down the foundation before the feature-building phase.
 - Tag notes from the Details Pane (right rail) chip editor; app command palette as secondary entry point
 - Tag pins via the existing floating `PinDetailPanel` (tag chip editor added to the panel)
 - Pin Category selector added to `PinDetailPanel` alongside tag editing
-- Tags persisted in markdown frontmatter for notes (vault-portable); SQLite for pins (no markdown backing)
-- SQLite tag index regenerable from a vault scan
-- Tag autocomplete from vault-global tag list when editing chips
+- Tags persisted in markdown frontmatter for notes (ledger-portable); SQLite for pins (no markdown backing)
+- SQLite tag index regenerable from a ledger scan
+- Tag autocomplete from ledger-global tag list when editing chips
 - Details Pane content (notes only): Tags chip editor, Folder breadcrumb (display-only), Modified relative time
 
 **Out of scope (Phase 5):**
@@ -138,14 +138,14 @@ Locks down the foundation before the feature-building phase.
 **Success criteria:**
 
 - A GM can tag a note in two clicks from the Details Pane
-- Closing and reopening the vault preserves tags (frontmatter round-trip)
-- Deleting `.grimoire/index.db` and reopening the vault recovers all tags
+- Closing and reopening the ledger preserves tags (frontmatter round-trip)
+- Deleting `.grimoire/index.db` and reopening the ledger recovers all tags
 
 ---
 
 ### Phase 6 — Search ✅ Complete
 
-Search is hosted in the existing command palette (`AppSearch.svelte`). Both the Search rail icon and Ctrl/⌘+K open it. The palette becomes the single canonical surface for vault search, tag discovery, and command execution.
+Search is hosted in the existing command palette (`AppSearch.svelte`). Both the Search rail icon and Ctrl/⌘+K open it. The palette becomes the single canonical surface for ledger search, tag discovery, and command execution.
 
 **Deliverables:**
 
@@ -160,8 +160,8 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 - Per-group caps: Commands 3, Tags 5, Notes 6, Maps 3, Scenes 3, with a "Show N more in [group]" expand-in-place row when capped
 - When only one group matches, that group's cap relaxes (Notes ~15) before showing the expand row
 - Empty query state: a **Recent** section (cross-entity MRU, ~5 items) above the Commands section. Recent is the only place where grouping is mixed by entity type
-- Initial Commands set (append-only as later phases ship): *Create new note*, *Create new scene*, *Create new map*, *Add tag to current note*, *Open Settings*, *Toggle theme*, *Switch vault…*, *Rebuild search index* — Phase 7 appends: *Create note from template*, *Save note as template*, *Create new template*
-- Search fires from char 2 with 80ms debounce; perf target <150ms on 200+ note vaults
+- Initial Commands set (append-only as later phases ship): *Create new note*, *Create new scene*, *Create new map*, *Add tag to current note*, *Open Settings*, *Toggle theme*, *Switch ledger…*, *Rebuild search index* — Phase 7 appends: *Create note from template*, *Save note as template*, *Create new template*
+- Search fires from char 2 with 80ms debounce; perf target <150ms on 200+ note ledgers
 - Fuzzy matching is on by default with tiered Levenshtein distance: 0 for queries < 4 chars, 1 for 4–7, 2 for 8+
 - Archived notes are excluded from results by default. Opt-in via `archived:true` (only archived) or `archived:any` (include archived)
 - Opening a result:
@@ -170,7 +170,7 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
   - **Shift+Enter** — opens in the opposite pane (creates split if not yet split)
 - Opening a note from a query with free-text terms places the cursor on the matched span and plays a ~600ms highlight pulse on the matched text (`--primary-subtle`)
 - Section headers are skipped during keyboard navigation (↑ ↓ moves across group boundaries directly)
-- Tantivy index lives at `vault/.grimoire/search-index/`; updated incrementally on every note write; fully rebuildable via the *Rebuild search index* command and on vault open if missing or stale
+- Tantivy index lives at `ledger/.grimoire/search-index/`; updated incrementally on every note write; fully rebuildable via the *Rebuild search index* command and on ledger open if missing or stale
 
 **Out of scope (Phase 6):**
 
@@ -183,11 +183,11 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 
 **Success criteria:**
 
-- Type 2 characters, results appear within 150ms on a 200+ note vault
+- Type 2 characters, results appear within 150ms on a 200+ note ledger
 - "Captian Ash" (transposed typo) returns the *Captain Ash* note
 - `tag:npc` with no free text lists every NPC-tagged note, most-recently-modified first
 - Selecting the Search rail icon, pressing Ctrl/⌘+K, and clicking *Add tag to current note* in the palette all reach the same surface
-- Deleting `vault/.grimoire/` and reopening the vault recovers all search results from a vault scan
+- Deleting `ledger/.grimoire/` and reopening the ledger recovers all search results from a ledger scan
 
 ---
 
@@ -195,15 +195,15 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 
 **Deliverables:**
 
-- Four built-in templates injected into `vault/.grimoire/templates/` on first vault open: `NPC.md`, `Location.md`, `Session Log.md`, `Encounter.md` — each is a regular markdown file the GM can edit directly
+- Four built-in templates injected into `ledger/.grimoire/templates/` on first ledger open: `NPC.md`, `Location.md`, `Session Log.md`, `Encounter.md` — each is a regular markdown file the GM can edit directly
 - Settings action: *Restore default templates* — overwrites only the four built-in files back to their original content; leaves custom templates untouched
-- Templates sidebar section — a collapsible section at the bottom of the Files sidebar listing all files in `vault/.grimoire/templates/`. Supports rename and delete inline (same patterns as the file tree). Section header has a "+" button wired to *Create new template*.
+- Templates sidebar section — a collapsible section at the bottom of the Files sidebar listing all files in `ledger/.grimoire/templates/`. Supports rename and delete inline (same patterns as the file tree). Section header has a "+" button wired to *Create new template*.
 - Three new Commands added to the palette (append-only): *Create note from template*, *Save note as template* (contextual — only active when focused pane is a note), *Create new template*
 - *Create note from template* replaces the palette results inline with a template picker list (same keyboard navigation); selecting a template creates a note immediately — title pre-selected in the editor for the GM to type. Note lands in the same folder context as *Create new note*. The "Create new note" flow is unchanged.
 - Template content is static markdown, copied verbatim into the new note (including any frontmatter in the template file, e.g. `tags: [npc]`). No variable substitution.
 - The template's filename (minus `.md`) is the display name in the picker; no special Grimoire frontmatter.
-- *Save note as template* copies the current note's full content to `vault/.grimoire/templates/<title>.md`; the GM can then edit that file directly.
-- *Create new template* creates a blank `.md` file in `vault/.grimoire/templates/` and opens it in the main editor with a non-intrusive "Editing template" chip in the tab.
+- *Save note as template* copies the current note's full content to `ledger/.grimoire/templates/<title>.md`; the GM can then edit that file directly.
+- *Create new template* creates a blank `.md` file in `ledger/.grimoire/templates/` and opens it in the main editor with a non-intrusive "Editing template" chip in the tab.
 - Templates are not indexed by Tantivy and do not appear as search results in the command palette.
 
 **Out of scope (Phase 7):**
@@ -215,9 +215,9 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 **Success criteria:**
 
 - A GM can create a new NPC note from the template in two palette keystrokes (command + template selection)
-- Editing a built-in template and reopening the vault preserves the edits
+- Editing a built-in template and reopening the ledger preserves the edits
 - *Restore default templates* in Settings resets all four built-ins without touching custom templates
-- Custom and built-in templates survive vault moves (relative paths, no absolute references)
+- Custom and built-in templates survive ledger moves (relative paths, no absolute references)
 
 ---
 
@@ -256,7 +256,7 @@ Depends on Phase 5 (Tags) being complete — the graph uses tags as a clustering
 **Success criteria:**
 
 - Open any note, see what links to it in one click
-- Graph renders a vault with 100+ notes without performance issues
+- Graph renders a ledger with 100+ notes without performance issues
 
 ---
 
@@ -267,7 +267,7 @@ These are valid ideas but explicitly not planned:
 - **Dice roller** — out of scope; other tools handle this better
 - **Initiative tracker** — combat management is a separate tool problem
 - **Character sheets** — too structured; fights the freeform note model
-- **Real-time collaboration** — conflicts with local-first vault model
+- **Real-time collaboration** — conflicts with local-first ledger model
 - **Mobile app** — may revisit after tablet is solid
 - **Export to PDF** — future consideration post-Phase 9
 - **Scene scheduling / queuing** — future enhancement to Phase 2
@@ -282,5 +282,5 @@ These are valid ideas but explicitly not planned:
 - Path traversal guards on all file-touching commands
 - Crossfade lock always released on error
 - Leaflet cleanup correct
-- close_vault command, boolean column migration, RFC3339 timestamps
+- close_ledger command, boolean column migration, RFC3339 timestamps
 - Git workflow established (main / next / feature/\*)

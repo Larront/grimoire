@@ -1,5 +1,5 @@
 use crate::db::schema::tag_graph_styles::dsl as gs;
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -14,10 +14,10 @@ pub struct TagGraphStyleResponse {
 
 #[tauri::command]
 pub fn get_tag_graph_styles(
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<HashMap<String, TagGraphStyleResponse>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     get_tag_graph_styles_from_conn(conn)
 }
 
@@ -39,10 +39,10 @@ pub fn set_tag_graph_style(
     tag: String,
     color: Option<String>,
     hidden: bool,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     set_tag_graph_style_on_conn(conn, &tag, color.as_deref(), hidden)
 }
 

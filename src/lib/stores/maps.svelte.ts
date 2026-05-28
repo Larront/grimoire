@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { vault } from "./vault.svelte";
-import type { Map } from "$lib/types/vault";
+import { ledger } from "./ledger.svelte";
+import type { Map } from "$lib/types/ledger";
 
 function createMapsStore() {
   let maps = $state<Map[]>([]);
@@ -35,7 +35,7 @@ function createMapsStore() {
 
   $effect.root(() => {
     $effect(() => {
-      if (vault.isOpen) {
+      if (ledger.isOpen) {
         load();
       } else {
         maps = [];

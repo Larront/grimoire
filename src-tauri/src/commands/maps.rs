@@ -1,6 +1,6 @@
 use crate::db::models::{Map, NewMap, AssignImageChangeset, MapAnnotation, NewMapAnnotation, Pin, NewPin, PinCategory, NewPinCategory};
 use crate::db::schema::{map_annotations, maps, pin_categories, pins};
-use crate::vault::AppVault;
+use crate::ledger::AppLedger;
 use base64::Engine;
 use chrono::Utc;
 use diesel::prelude::*;
@@ -31,11 +31,11 @@ pub fn create_map(
     title: String,
     source_image_path: String,
     dest_path: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Map, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let source = std::path::Path::new(&source_image_path);
     let ext = source
@@ -44,7 +44,7 @@ pub fn create_map(
         .unwrap_or("png")
         .to_lowercase();
 
-    let initial_dest = vault_path.join(&dest_path);
+    let initial_dest = ledger_path.join(&dest_path);
     let parent_dir = initial_dest.parent().ok_or("Cannot determine parent directory")?;
     fs::create_dir_all(parent_dir).map_err(|e| e.to_string())?;
 
@@ -55,7 +55,7 @@ pub fn create_map(
         image::image_dimensions(&dest_full).map_err(|e| e.to_string())?;
 
     let resolved_path = dest_full
-        .strip_prefix(&vault_path)
+        .strip_prefix(&ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
@@ -81,9 +81,9 @@ pub fn create_map(
 }
 
 #[tauri::command]
-pub fn create_map_empty(title: String, vault: State<AppVault>) -> Result<Map, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn create_map_empty(title: String, ledger: State<AppLedger>) -> Result<Map, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let new_map = NewMap {
         title: &title,
@@ -110,17 +110,17 @@ pub fn assign_map_image(
     map_id: i32,
     source_image_path: String,
     dest_folder: Option<String>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Map, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
 
     // Clean up existing image file if one is already assigned
     if let Some(ref old_ip) = m.image_path {
-        let old_full = vault_path.join(old_ip);
+        let old_full = ledger_path.join(old_ip);
         if old_full.exists() {
             fs::remove_file(&old_full).map_err(|e| e.to_string())?;
         }
@@ -135,11 +135,11 @@ pub fn assign_map_image(
 
     let dest_dir = match dest_folder.as_deref().filter(|s| !s.is_empty()) {
         Some(folder) => {
-            let dir = vault_path.join(folder);
+            let dir = ledger_path.join(folder);
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             dir
         }
-        None => vault_path.clone(),
+        None => ledger_path.clone(),
     };
     let (_, dest_full) = resolve_map_filename(&m.title, &ext, &dest_dir);
     fs::copy(&source_image_path, &dest_full).map_err(|e| e.to_string())?;
@@ -148,7 +148,7 @@ pub fn assign_map_image(
         image::image_dimensions(&dest_full).map_err(|e| e.to_string())?;
 
     let resolved_path = dest_full
-        .strip_prefix(&vault_path)
+        .strip_prefix(&ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
@@ -170,16 +170,16 @@ pub fn assign_map_image(
 }
 
 #[tauri::command]
-pub fn get_maps(vault: State<AppVault>) -> Result<Vec<Map>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_maps(ledger: State<AppLedger>) -> Result<Vec<Map>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     maps::table.load::<Map>(conn).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn update_map(map: Map, vault: State<AppVault>) -> Result<Map, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn update_map(map: Map, ledger: State<AppLedger>) -> Result<Map, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let updated: Map = diesel::update(maps::table.find(map.id))
         .set(&map)
         .returning(Map::as_returning())
@@ -194,14 +194,14 @@ pub fn update_map(map: Map, vault: State<AppVault>) -> Result<Map, String> {
 }
 
 #[tauri::command]
-pub fn delete_map(map_id: i32, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
     if let Some(ref ip) = m.image_path {
-        let full_path = vault_path.join(ip);
+        let full_path = ledger_path.join(ip);
         if full_path.exists() {
             fs::remove_file(&full_path).map_err(|e| e.to_string())?;
         }
@@ -218,14 +218,14 @@ pub fn delete_map(map_id: i32, vault: State<AppVault>) -> Result<usize, String> 
 }
 
 #[tauri::command]
-pub fn get_map_image_data_url(map_id: i32, vault: State<AppVault>) -> Result<String, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let vault_path = state.path.clone().ok_or("No vault open")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_map_image_data_url(map_id: i32, ledger: State<AppLedger>) -> Result<String, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
     let image_path = m.image_path.ok_or("Map has no image assigned")?;
-    let full_path = vault_path.join(&image_path);
+    let full_path = ledger_path.join(&image_path);
     let bytes = fs::read(&full_path).map_err(|e| e.to_string())?;
 
     let ext = Path::new(&image_path)
@@ -246,9 +246,9 @@ pub fn get_map_image_data_url(map_id: i32, vault: State<AppVault>) -> Result<Str
 // ── Pin commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_pins(map_id: i32, vault: State<AppVault>) -> Result<Vec<Pin>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_pins(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<Pin>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     pins::table
         .filter(pins::map_id.eq(map_id))
         .load::<Pin>(conn)
@@ -264,10 +264,10 @@ pub fn create_pin(
     description: Option<String>,
     category_id: Option<i32>,
     note_id: Option<i32>,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Pin, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let new_pin = NewPin {
         map_id,
         x,
@@ -285,9 +285,9 @@ pub fn create_pin(
 }
 
 #[tauri::command]
-pub fn update_pin(pin: Pin, vault: State<AppVault>) -> Result<Pin, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn update_pin(pin: Pin, ledger: State<AppLedger>) -> Result<Pin, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::update(pins::table.find(pin.id))
         .set(&pin)
         .returning(Pin::as_returning())
@@ -296,9 +296,9 @@ pub fn update_pin(pin: Pin, vault: State<AppVault>) -> Result<Pin, String> {
 }
 
 #[tauri::command]
-pub fn delete_pin(pin_id: i32, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn delete_pin(pin_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(pins::table.find(pin_id))
         .execute(conn)
         .map_err(|e| e.to_string())
@@ -307,9 +307,9 @@ pub fn delete_pin(pin_id: i32, vault: State<AppVault>) -> Result<usize, String> 
 // ── Category commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_pin_categories(vault: State<AppVault>) -> Result<Vec<PinCategory>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_pin_categories(ledger: State<AppLedger>) -> Result<Vec<PinCategory>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     pin_categories::table
         .load::<PinCategory>(conn)
         .map_err(|e| e.to_string())
@@ -332,10 +332,10 @@ pub fn get_pin_categories_for_map_from_conn(
 #[tauri::command]
 pub fn get_pin_categories_for_map(
     map_id: i32,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<Vec<PinCategory>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     get_pin_categories_for_map_from_conn(map_id, conn)
 }
 
@@ -345,10 +345,10 @@ pub fn create_pin_category(
     name: String,
     icon: String,
     color: String,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<PinCategory, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let new_cat = NewPinCategory {
         map_id,
         name: &name,
@@ -363,9 +363,9 @@ pub fn create_pin_category(
 }
 
 #[tauri::command]
-pub fn update_pin_category(category: PinCategory, vault: State<AppVault>) -> Result<PinCategory, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn update_pin_category(category: PinCategory, ledger: State<AppLedger>) -> Result<PinCategory, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::update(pin_categories::table.find(category.id))
         .set(&category)
         .returning(PinCategory::as_returning())
@@ -374,9 +374,9 @@ pub fn update_pin_category(category: PinCategory, vault: State<AppVault>) -> Res
 }
 
 #[tauri::command]
-pub fn delete_pin_category(category_id: i32, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn delete_pin_category(category_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(pin_categories::table.find(category_id))
         .execute(conn)
         .map_err(|e| e.to_string())
@@ -385,9 +385,9 @@ pub fn delete_pin_category(category_id: i32, vault: State<AppVault>) -> Result<u
 // ── Annotation commands ───────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_annotations(map_id: i32, vault: State<AppVault>) -> Result<Vec<MapAnnotation>, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn get_annotations(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<MapAnnotation>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     map_annotations::table
         .filter(map_annotations::map_id.eq(map_id))
         .load::<MapAnnotation>(conn)
@@ -409,10 +409,10 @@ pub fn create_annotation(
     stroke_width: i32,
     font_size: i32,
     opacity: f32,
-    vault: State<AppVault>,
+    ledger: State<AppLedger>,
 ) -> Result<MapAnnotation, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let new_ann = NewMapAnnotation {
         map_id,
         kind: &kind,
@@ -436,9 +436,9 @@ pub fn create_annotation(
 }
 
 #[tauri::command]
-pub fn update_annotation(annotation: MapAnnotation, vault: State<AppVault>) -> Result<MapAnnotation, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn update_annotation(annotation: MapAnnotation, ledger: State<AppLedger>) -> Result<MapAnnotation, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::update(map_annotations::table.find(annotation.id))
         .set(&annotation)
         .returning(MapAnnotation::as_returning())
@@ -447,9 +447,9 @@ pub fn update_annotation(annotation: MapAnnotation, vault: State<AppVault>) -> R
 }
 
 #[tauri::command]
-pub fn delete_annotation(annotation_id: i32, vault: State<AppVault>) -> Result<usize, String> {
-    let mut state = vault.lock().map_err(|_| "Vault lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No vault open")?;
+pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(map_annotations::table.find(annotation_id))
         .execute(conn)
         .map_err(|e| e.to_string())

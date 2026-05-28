@@ -10,7 +10,7 @@ All app state lives in `src/lib/stores/` as Svelte 5 rune-based modules (`.svelt
 
 Key stores:
 
-- `vault.svelte.ts` — tracks open vault path; triggers other stores to reload when vault opens/closes
+- `ledger.svelte.ts` — tracks open ledger path; triggers other stores to reload when ledger opens/closes
 - `notes.svelte.ts` — note list + content cache; reads `.md` files from disk via Tauri
 - `scenes.svelte.ts` — scenes + per-scene slot cache
 - `audio-engine.svelte.ts` — complex playback state machine bridging Web Audio API (local files) and Spotify Web Playback SDK
@@ -19,7 +19,7 @@ Key stores:
 
 SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fallback: 'index.html'`). Routes:
 
-- `/` — vault splash or vault home
+- `/` — ledger splash or ledger home
 - `/note/[id]` — TipTap Markdown editor
 - `/scene` — all scenes grid
 - `/scene/[id]` — scene detail (audio slots)
@@ -27,7 +27,7 @@ SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fall
 
 ## Component Structure
 
-- `AppShell.svelte` — root layout when vault is open; wraps sidebar + main content
+- `AppShell.svelte` — root layout when ledger is open; wraps sidebar + main content
 - `sidebar/AppSidebar.svelte` — file tree, scene list, action buttons
 - `sidebar/FileTree.svelte` — recursive tree with context menu (rename/delete)
 - `editor/Editor.svelte` — TipTap wrapper with Markdown extension
@@ -37,18 +37,18 @@ SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fall
 
 `src-tauri/src/commands/` contains one file per domain:
 
-- `vault.rs` — open/close vault, initializes DB connection and runs migrations
+- `ledger.rs` — open/close ledger, initializes DB connection and runs migrations
 - `notes.rs` — CRUD for notes; content is stored as raw `.md` files on disk, metadata in SQLite
 - `scenes.rs` — scenes and scene slots (audio config)
 - `maps.rs` — maps, pins, pin categories
-- `media.rs` — copies audio/image files into the vault's media directory
+- `media.rs` — copies audio/image files into the ledger's media directory
 - `spotify.rs` — OAuth flow, token storage, token refresh
 
-`VaultState` (in `vault.rs`) is a `Mutex<Option<AppVault>>` managed by Tauri state. Commands guard against uninitialized vault with early returns.
+`LedgerState` (in `ledger.rs`) is a `Mutex<Option<AppLedger>>` managed by Tauri state. Commands guard against uninitialized ledger with early returns.
 
 ## Database
 
-SQLite at `<vault_path>/.grimoire/grimoire.db`. Diesel ORM with migrations in `src-tauri/migrations/`. Edit migrations, not `schema.rs` directly.
+SQLite at `<ledger_path>/.grimoire/grimoire.db`. Diesel ORM with migrations in `src-tauri/migrations/`. Edit migrations, not `schema.rs` directly.
 
 ## Key Libraries
 

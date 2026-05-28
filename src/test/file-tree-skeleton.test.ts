@@ -1,19 +1,19 @@
 import { render, waitFor, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { vault } from "../lib/stores/vault.svelte";
+import { ledger } from "../lib/stores/ledger.svelte";
 import AppShell from "../lib/components/AppShell.svelte";
 
 afterEach(async () => {
   cleanup();
   vi.clearAllMocks();
-  await vault.closeVault();
+  await ledger.closeLedger();
 });
 
 describe("File tree skeleton", () => {
   it("shows MenuSkeleton elements in the sidebar while the file tree is loading", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_vault_path") return "/fake/vault";
+      if (cmd === "get_ledger_path") return "/fake/ledger";
       if (cmd === "get_accent_preset") return null;
       if (cmd === "get_density_level") return null;
       if (cmd === "get_notes") return [];
@@ -24,7 +24,7 @@ describe("File tree skeleton", () => {
       return null;
     });
 
-    await vault.checkExistingVault();
+    await ledger.checkExistingLedger();
     const { container } = render(AppShell);
 
     await waitFor(() => {
