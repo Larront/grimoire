@@ -35,8 +35,25 @@ impl DerivedFacets {
 }
 
 pub struct ReconcileOutcome {
-    #[allow(dead_code)] // acting on this flag is deferred to a later slice
     pub search_stale: bool,
+}
+
+pub fn stale_marker_path(ledger_path: &std::path::Path) -> std::path::PathBuf {
+    ledger_path.join(".grimoire").join("search.stale")
+}
+
+/// Write the persisted stale marker (best-effort; ignores I/O errors).
+pub fn write_search_stale_marker(ledger_path: &std::path::Path) {
+    let marker = stale_marker_path(ledger_path);
+    if let Some(parent) = marker.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&marker, "");
+}
+
+/// Remove the persisted stale marker (best-effort; ignores I/O errors).
+pub fn clear_search_stale_marker(ledger_path: &std::path::Path) {
+    let _ = std::fs::remove_file(stale_marker_path(ledger_path));
 }
 
 /// Write all derived indexes for `note` in a single atomic SQLite transaction,
@@ -543,6 +560,33 @@ mod tests {
 
         let outcome = remove(&mut conn, Some(&index), note.id, &note.path).unwrap();
         assert!(!outcome.search_stale, "valid Tantivy delete must not be stale");
+    }
+
+    // ── stale marker utilities ────────────────────────────────────────────────
+
+    #[test]
+    fn write_search_stale_marker_creates_file() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
+        write_search_stale_marker(dir.path());
+        assert!(stale_marker_path(dir.path()).exists(), "marker file must be created");
+    }
+
+    #[test]
+    fn clear_search_stale_marker_removes_file() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
+        write_search_stale_marker(dir.path());
+        clear_search_stale_marker(dir.path());
+        assert!(!stale_marker_path(dir.path()).exists(), "marker file must be removed");
+    }
+
+    #[test]
+    fn clear_search_stale_marker_is_noop_when_absent() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
+        clear_search_stale_marker(dir.path()); // must not panic
+        assert!(!stale_marker_path(dir.path()).exists());
     }
 
     #[test]

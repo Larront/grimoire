@@ -118,7 +118,10 @@ pub fn create_note(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    note_index::reconcile(conn, index, &created, "", None)?;
+    let outcome = note_index::reconcile(conn, index, &created, "", None)?;
+    if outcome.search_stale {
+        note_index::write_search_stale_marker(&ledger_path);
+    }
 
     Ok(created)
 }
@@ -211,7 +214,10 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path))
         .unwrap_or_default();
 
-    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
+    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
+    if outcome.search_stale {
+        note_index::write_search_stale_marker(&ledger_path);
+    }
 
     Ok(updated)
 }
@@ -261,7 +267,10 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
 
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path)).unwrap_or_default();
 
-    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
+    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
+    if outcome.search_stale {
+        note_index::write_search_stale_marker(&ledger_path);
+    }
 
     Ok(RenameNoteResult {
         note: updated,
@@ -284,7 +293,10 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, Stri
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
 
-    note_index::remove(conn, index, note_id, &note.path)?;
+    let outcome = note_index::remove(conn, index, note_id, &note.path)?;
+    if outcome.search_stale {
+        note_index::write_search_stale_marker(&ledger_path);
+    }
 
     let deleted = diesel::delete(notes.find(note_id))
         .execute(conn)
@@ -324,7 +336,10 @@ pub fn write_note_content(
         .optional()
         .map_err(|e| e.to_string())?;
     if let Some(ref note) = maybe_note {
-        note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
+        let outcome = note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
+        if outcome.search_stale {
+            note_index::write_search_stale_marker(&ledger_path);
+        }
     }
 
     Ok(())
