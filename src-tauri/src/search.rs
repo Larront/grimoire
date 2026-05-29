@@ -233,15 +233,20 @@ fn parse_modified_at(s: &str) -> i64 {
     0
 }
 
-fn note_doc(schema: &Schema, note: &Note, body_text: &str, tags: &[String]) -> TantivyDocument {
-    let kind_f = schema.get_field("kind").unwrap();
-    let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id_f = schema.get_field("entity_id").unwrap();
-    let path_f = schema.get_field("path").unwrap();
-    let title_f = schema.get_field("title").unwrap();
-    let body_f = schema.get_field("body").unwrap();
-    let tags_f = schema.get_field("tags").unwrap();
-    let modified_at_f = schema.get_field("modified_at").unwrap();
+fn note_doc(
+    schema: &Schema,
+    note: &Note,
+    body_text: &str,
+    tags: &[String],
+) -> Result<TantivyDocument, String> {
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
+    let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
+    let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
+    let body_f = schema.get_field("body").map_err(|e| e.to_string())?;
+    let tags_f = schema.get_field("tags").map_err(|e| e.to_string())?;
+    let modified_at_f = schema.get_field("modified_at").map_err(|e| e.to_string())?;
 
     let ts = parse_modified_at(&note.modified_at);
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
@@ -257,16 +262,16 @@ fn note_doc(schema: &Schema, note: &Note, body_text: &str, tags: &[String]) -> T
         doc.add_text(tags_f, &tag.to_lowercase());
     }
     doc.add_date(modified_at_f, tantivy_dt);
-    doc
+    Ok(doc)
 }
 
-fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
-    let kind_f = schema.get_field("kind").unwrap();
-    let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id_f = schema.get_field("entity_id").unwrap();
-    let path_f = schema.get_field("path").unwrap();
-    let title_f = schema.get_field("title").unwrap();
-    let modified_at_f = schema.get_field("modified_at").unwrap();
+fn map_doc(schema: &Schema, map: &Map) -> Result<TantivyDocument, String> {
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
+    let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
+    let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
+    let modified_at_f = schema.get_field("modified_at").map_err(|e| e.to_string())?;
 
     let ts = parse_modified_at(&map.modified_at);
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
@@ -278,16 +283,16 @@ fn map_doc(schema: &Schema, map: &Map) -> TantivyDocument {
     doc.add_text(path_f, "");
     doc.add_text(title_f, &map.title);
     doc.add_date(modified_at_f, tantivy_dt);
-    doc
+    Ok(doc)
 }
 
-fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
-    let kind_f = schema.get_field("kind").unwrap();
-    let doc_key_f = schema.get_field("doc_key").unwrap();
-    let entity_id_f = schema.get_field("entity_id").unwrap();
-    let path_f = schema.get_field("path").unwrap();
-    let title_f = schema.get_field("title").unwrap();
-    let modified_at_f = schema.get_field("modified_at").unwrap();
+fn scene_doc(schema: &Schema, scene: &Scene) -> Result<TantivyDocument, String> {
+    let kind_f = schema.get_field("kind").map_err(|e| e.to_string())?;
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let entity_id_f = schema.get_field("entity_id").map_err(|e| e.to_string())?;
+    let path_f = schema.get_field("path").map_err(|e| e.to_string())?;
+    let title_f = schema.get_field("title").map_err(|e| e.to_string())?;
+    let modified_at_f = schema.get_field("modified_at").map_err(|e| e.to_string())?;
 
     let ts = parse_modified_at(&scene.created_at);
     let tantivy_dt = TantivyDateTime::from_timestamp_micros(ts);
@@ -300,7 +305,7 @@ fn scene_doc(schema: &Schema, scene: &Scene) -> TantivyDocument {
     // Scene name is stored in the title field per ADR-0004
     doc.add_text(title_f, &scene.name);
     doc.add_date(modified_at_f, tantivy_dt);
-    doc
+    Ok(doc)
 }
 
 // ── Index lifecycle ───────────────────────────────────────────────────────────
@@ -330,17 +335,17 @@ pub fn rebuild_index(
         let body_text = extract_plain_text(&content);
         let tags = frontmatter::read_tags(&content);
         writer
-            .add_document(note_doc(&schema, note, &body_text, &tags))
+            .add_document(note_doc(&schema, note, &body_text, &tags)?)
             .map_err(|e| e.to_string())?;
     }
     for map in maps {
         writer
-            .add_document(map_doc(&schema, map))
+            .add_document(map_doc(&schema, map)?)
             .map_err(|e| e.to_string())?;
     }
     for scene in scenes {
         writer
-            .add_document(scene_doc(&schema, scene))
+            .add_document(scene_doc(&schema, scene)?)
             .map_err(|e| e.to_string())?;
     }
     writer.commit().map_err(|e| e.to_string())?;
@@ -369,7 +374,7 @@ fn remove_doc(index: &Index, doc_key: &str) -> Result<(), String> {
 
 pub fn index_note(index: &Index, note: &Note, body_text: &str, tags: &[String]) -> Result<(), String> {
     let schema = index.schema();
-    upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text, tags))
+    upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text, tags)?)
 }
 
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
@@ -378,7 +383,7 @@ pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
 
 pub fn index_map(index: &Index, map: &Map) -> Result<(), String> {
     let schema = index.schema();
-    upsert_doc(index, &format!("map:{}", map.id), map_doc(&schema, map))
+    upsert_doc(index, &format!("map:{}", map.id), map_doc(&schema, map)?)
 }
 
 pub fn remove_map(index: &Index, map_id: i32) -> Result<(), String> {
@@ -387,7 +392,7 @@ pub fn remove_map(index: &Index, map_id: i32) -> Result<(), String> {
 
 pub fn index_scene(index: &Index, scene: &Scene) -> Result<(), String> {
     let schema = index.schema();
-    upsert_doc(index, &format!("scene:{}", scene.id), scene_doc(&schema, scene))
+    upsert_doc(index, &format!("scene:{}", scene.id), scene_doc(&schema, scene)?)
 }
 
 pub fn remove_scene(index: &Index, scene_id: i32) -> Result<(), String> {

@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod ledger;
+mod note_index;
 mod search;
 
 use commands::graph::*;

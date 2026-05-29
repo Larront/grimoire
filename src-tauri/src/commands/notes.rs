@@ -1,8 +1,7 @@
 use crate::commands::frontmatter;
-use crate::commands::links::{
-    extract_wikilinks, rewrite_backlinks_on_rename_on_conn, upsert_note_aliases, upsert_note_links,
-};
+use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::commands::tags::upsert_note_tags;
+use crate::note_index;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
 use crate::ledger::AppLedger;
@@ -320,22 +319,19 @@ pub fn write_note_content(
     let full_path = validate_parent_path(&ledger_path, &note_path)?;
     fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    // Borrow connection and search_index as separate fields of *state so the
+    // borrow checker allows both to be live when calling reconcile.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
     let maybe_note = notes
         .filter(path.eq(&note_path))
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
     if let Some(ref note) = maybe_note {
-        let links = extract_wikilinks(&content);
-        upsert_note_links(conn, note.id, &links)?;
-        let aliases = frontmatter::read_aliases(&content);
-        upsert_note_aliases(conn, note.id, &aliases)?;
-    }
-    if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
-        let body_text = crate::search::extract_plain_text(&content);
-        let tags = frontmatter::read_tags(&content);
-        let _ = crate::search::index_note(index, &note, &body_text, &tags);
+        note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
     }
 
     Ok(())
