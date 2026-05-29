@@ -105,6 +105,33 @@ pub fn reconcile(
     Ok(ReconcileOutcome { search_stale })
 }
 
+/// Explicitly clear all three Derived Index tables for `note_id`/`note_path`
+/// and remove the note's Search Index document, then return a `ReconcileOutcome`.
+///
+/// Callers must call this while the `notes` row still exists so that the clears
+/// are provably not relying on FK cascade — the cascade is a harmless no-op after.
+pub fn remove(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    note_id: i32,
+    note_path: &str,
+) -> Result<ReconcileOutcome, String> {
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path))).execute(c)?;
+        diesel::delete(nl::note_links.filter(nl::source_id.eq(note_id))).execute(c)?;
+        diesel::delete(na::note_aliases.filter(na::note_id.eq(note_id))).execute(c)?;
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let search_stale = match index {
+        Some(idx) => crate::search::remove_note(idx, note_id).is_err(),
+        None => true,
+    };
+
+    Ok(ReconcileOutcome { search_stale })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -461,6 +488,61 @@ mod tests {
         // note_aliases must be re-asserted
         let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
         assert_eq!(aliases, vec!["The Keeper"], "note_aliases must be re-asserted on rename");
+    }
+
+    // ── remove ───────────────────────────────────────────────────────────────
+
+    /// Acceptance criterion: rows must be gone BEFORE the `notes` row is deleted,
+    /// proving remove() does not rely on FK cascade.
+    #[test]
+    fn remove_clears_all_three_indexes_before_notes_row_deleted() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        // Populate all three indexes via reconcile
+        let content = "---\ntags: [npc]\naliases: [The Ash]\n---\nSee [[dragon.md]].";
+        reconcile(&mut conn, None, &note, content, None).unwrap();
+
+        // Verify indexes are populated
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(!tags.is_empty(), "setup: note_tags must be populated");
+
+        // Call remove() — notes row still exists at this point
+        remove(&mut conn, None, note.id, &note.path).unwrap();
+
+        // All three indexes must be empty NOW, before deleting the notes row
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(tags.is_empty(), "note_tags must be cleared by remove() explicitly");
+
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert!(links.is_empty(), "note_links must be cleared by remove() explicitly");
+
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert!(aliases.is_empty(), "note_aliases must be cleared by remove() explicitly");
+    }
+
+    #[test]
+    fn remove_returns_search_stale_true_when_no_index() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        let outcome = remove(&mut conn, None, note.id, &note.path).unwrap();
+        assert!(outcome.search_stale);
+    }
+
+    #[test]
+    fn remove_with_valid_index_returns_search_stale_false() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        let dir = TempDir::new().unwrap();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let outcome = remove(&mut conn, Some(&index), note.id, &note.path).unwrap();
+        assert!(!outcome.search_stale, "valid Tantivy delete must not be stale");
     }
 
     #[test]

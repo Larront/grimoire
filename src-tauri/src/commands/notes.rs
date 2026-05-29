@@ -273,7 +273,10 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
 pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
 
     let note: Note = notes.find(note_id).first(conn).map_err(|e| e.to_string())?;
     let full_path = validate_path(&ledger_path, &note.path)?;
@@ -281,15 +284,11 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, Stri
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
 
-    upsert_note_tags(conn, &note.path, &[])?;
+    note_index::remove(conn, index, note_id, &note.path)?;
 
     let deleted = diesel::delete(notes.find(note_id))
         .execute(conn)
         .map_err(|e| e.to_string())?;
-
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::remove_note(index, note_id);
-    }
 
     Ok(deleted)
 }
