@@ -211,8 +211,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path))
         .unwrap_or_default();
 
-    let old_path = old_note.path.clone();
-    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_path))?;
+    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
 
     Ok(updated)
 }
