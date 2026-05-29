@@ -388,6 +388,37 @@ mod tests {
         assert_eq!(tags, vec!["npc"]);
     }
 
+    // ── regression: update_note wikilink hole ────────────────────────────────
+
+    /// Before #65, update_note never refreshed note_links; only write_note_content
+    /// called reconcile. This test documents the invariant: calling reconcile with
+    /// prev_path: Some(old) (the update_note pattern) updates note_links correctly.
+    #[test]
+    fn update_via_reconcile_refreshes_note_links_regression() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        // Initial state: no wikilinks (simulates create_note with empty content)
+        reconcile(&mut conn, None, &note, "", None).unwrap();
+        let initial_links: Vec<String> =
+            nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert!(initial_links.is_empty(), "new note must start with no links");
+
+        // Simulate update_note: content changes to add wikilinks
+        let updated_content = "See [[dragon.md]] and [[castle.md]].";
+        reconcile(&mut conn, None, &note, updated_content, Some("ash.md")).unwrap();
+
+        let mut links: Vec<String> =
+            nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        links.sort();
+        assert_eq!(
+            links,
+            vec!["castle.md", "dragon.md"],
+            "note_links must be refreshed after content update"
+        );
+    }
+
     #[test]
     fn prev_path_none_no_re_key_attempted() {
         let mut conn = test_conn();

@@ -80,7 +80,6 @@ pub fn create_note(
 ) -> Result<Note, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     // Determine the parent directory and resolve any filename conflicts
     // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
@@ -108,15 +107,18 @@ pub fn create_note(
         modified_at: &now,
     };
 
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
     let created: Note = diesel::insert_into(notes)
         .values(&new_note)
         .returning(Note::as_returning())
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &created, "", &[]);
-    }
+    note_index::reconcile(conn, index, &created, "", None)?;
 
     Ok(created)
 }
@@ -178,7 +180,11 @@ pub fn create_note_from_template(
 pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
 
     // Fetch the current record to detect path changes
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
@@ -193,12 +199,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
         }
-        // Re-key tag-index rows to the new path (folder rename has its own bulk handler).
-        diesel::sql_query("UPDATE note_tags SET note_path = ? WHERE note_path = ?")
-            .bind::<diesel::sql_types::Text, _>(&note.path)
-            .bind::<diesel::sql_types::Text, _>(&old_note.path)
-            .execute(conn)
-            .map_err(|e| e.to_string())?;
+        // note_tags re-key handled inside reconcile via prev_path
     }
 
     let updated: Note = diesel::update(notes.find(note.id))
@@ -209,12 +210,9 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
 
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path))
         .unwrap_or_default();
-    let body_text = crate::search::extract_plain_text(&raw_content);
-    let tags = frontmatter::read_tags(&raw_content);
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &updated, &body_text, &tags);
-    }
+    let old_path = old_note.path.clone();
+    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_path))?;
 
     Ok(updated)
 }
