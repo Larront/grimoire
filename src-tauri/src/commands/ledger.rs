@@ -1,9 +1,7 @@
 use crate::commands::import::{reconcile_notes_with_disk, FailedImport};
-use crate::commands::links::rebuild_note_links_from_ledger;
-use crate::commands::tags::rebuild_note_tags_from_ledger;
 use crate::commands::templates::inject_builtin_templates;
 use crate::db::establish_connection;
-use crate::db::models::{Map, NewPinCategory, Note, Scene};
+use crate::db::models::{Map, NewPinCategory, Scene};
 use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
@@ -74,18 +72,17 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
     // tag/link/search rebuild passes so they see fully-populated rows.
     let import_report = reconcile_notes_with_disk(&ledger_path, &mut conn)?;
 
-    // Rebuild the tag index from a fresh frontmatter scan. Cheap for typical
-    // ledger sizes; guarantees the index stays in sync with disk even if a
-    // previous session crashed mid-write or `.grimoire/` was wiped.
-    rebuild_note_tags_from_ledger(&ledger_path, &mut conn)?;
-    rebuild_note_links_from_ledger(&ledger_path, &mut conn)?;
-
-    // Rebuild the Tantivy search index. Non-fatal: a failure just leaves
-    // search unavailable until the next manual rebuild or ledger reopen.
-    let all_notes: Vec<Note> = notes::table.load::<Note>(&mut conn).unwrap_or_default();
+    // Single walk: parse each .md file once into DerivedFacets and populate
+    // note_tags, note_links, note_aliases, and the Tantivy Search Index.
+    // SQLite inserts are chunked/bulk; search failure is non-fatal (ADR-0004).
     let all_maps: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap_or_default();
     let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(&mut conn).unwrap_or_default();
-    let search_index = crate::search::rebuild_index(&ledger_path, &all_notes, &all_maps, &all_scenes).ok();
+    let search_index = crate::note_index::rebuild_all_from_ledger(
+        &ledger_path,
+        &mut conn,
+        &all_maps,
+        &all_scenes,
+    )?;
     // Per ADR-0004: a successful rebuild clears any persisted stale marker
     // (written by reconcile/remove on a Tantivy failure); a failure leaves it
     // in place so the next launch retries.

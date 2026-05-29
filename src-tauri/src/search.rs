@@ -353,6 +353,47 @@ pub fn rebuild_index(
     Ok(index)
 }
 
+/// Rebuild the Tantivy index using pre-extracted note content (body_text and tags
+/// already parsed by DerivedFacets). Used by the unified open_ledger rebuild path
+/// to avoid re-reading each note file a second time.
+pub fn rebuild_index_from_note_data(
+    ledger_path: &Path,
+    note_data: &[(Note, String, Vec<String>)],
+    maps: &[Map],
+    scenes: &[Scene],
+) -> Result<Index, String> {
+    let dir_path = index_dir(ledger_path);
+    if dir_path.exists() {
+        std::fs::remove_dir_all(&dir_path).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(&dir_path).map_err(|e| e.to_string())?;
+
+    let schema = make_schema();
+    let dir = MmapDirectory::open(&dir_path).map_err(|e| e.to_string())?;
+    let index = Index::open_or_create(dir, schema.clone()).map_err(|e| e.to_string())?;
+    register_tokenizer(&index);
+
+    let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
+    for (note, body_text, tags) in note_data {
+        writer
+            .add_document(note_doc(&schema, note, body_text, tags)?)
+            .map_err(|e| e.to_string())?;
+    }
+    for map in maps {
+        writer
+            .add_document(map_doc(&schema, map)?)
+            .map_err(|e| e.to_string())?;
+    }
+    for scene in scenes {
+        writer
+            .add_document(scene_doc(&schema, scene)?)
+            .map_err(|e| e.to_string())?;
+    }
+    writer.commit().map_err(|e| e.to_string())?;
+
+    Ok(index)
+}
+
 fn upsert_doc(index: &Index, doc_key: &str, doc: TantivyDocument) -> Result<(), String> {
     let schema = index.schema();
     let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;

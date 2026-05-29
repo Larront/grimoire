@@ -140,6 +140,143 @@ pub fn reconcile(
     Ok(ReconcileOutcome { search_stale })
 }
 
+/// Walk the ledger once, parse each `.md` file into `DerivedFacets` exactly once,
+/// and populate all four derived indexes (note_tags, note_links, note_aliases,
+/// Tantivy Search). SQLite inserts are chunked/bulk inside a single transaction.
+/// The Search rebuild is non-fatal — failure returns `Ok(None)`.
+pub fn rebuild_all_from_ledger(
+    ledger_path: &std::path::Path,
+    conn: &mut SqliteConnection,
+    maps: &[crate::db::models::Map],
+    scenes: &[crate::db::models::Scene],
+) -> Result<Option<tantivy::Index>, String> {
+    use crate::db::schema::notes::dsl as notes_dsl;
+
+    let note_rows: Vec<crate::db::models::Note> =
+        notes_dsl::notes.load(conn).map_err(|e| e.to_string())?;
+
+    let path_to_note: std::collections::HashMap<String, &crate::db::models::Note> =
+        note_rows.iter().map(|note| (note.path.clone(), note)).collect();
+
+    let mut tag_rows: Vec<(String, String)> = Vec::new();
+    let mut link_rows: Vec<(i32, String)> = Vec::new();
+    let mut alias_rows: Vec<(i32, String)> = Vec::new();
+    let mut note_data: Vec<(crate::db::models::Note, String, Vec<String>)> = Vec::new();
+
+    collect_all_facets(
+        ledger_path,
+        "",
+        &path_to_note,
+        &mut tag_rows,
+        &mut link_rows,
+        &mut alias_rows,
+        &mut note_data,
+    )?;
+
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        diesel::delete(nt::note_tags).execute(c)?;
+        diesel::delete(nl::note_links).execute(c)?;
+        diesel::delete(na::note_aliases).execute(c)?;
+
+        let mut seen_tags: BTreeSet<(String, String)> = BTreeSet::new();
+        let unique_tags: Vec<_> = tag_rows
+            .into_iter()
+            .filter(|(path, tag)| seen_tags.insert((path.clone(), tag.to_lowercase())))
+            .collect();
+        for chunk in unique_tags.chunks(100) {
+            let vals: Vec<_> = chunk
+                .iter()
+                .map(|(path, tag)| (nt::note_path.eq(path.as_str()), nt::tag.eq(tag.as_str())))
+                .collect();
+            diesel::insert_into(nt::note_tags).values(&vals).execute(c)?;
+        }
+
+        for chunk in link_rows.chunks(100) {
+            let vals: Vec<_> = chunk
+                .iter()
+                .map(|(sid, tp)| (nl::source_id.eq(*sid), nl::target_path.eq(tp.as_str())))
+                .collect();
+            diesel::insert_into(nl::note_links).values(&vals).execute(c)?;
+        }
+
+        let mut seen_aliases: BTreeSet<(i32, String)> = BTreeSet::new();
+        let unique_aliases: Vec<_> = alias_rows
+            .into_iter()
+            .filter(|(nid, alias)| seen_aliases.insert((*nid, alias.to_lowercase())))
+            .collect();
+        for chunk in unique_aliases.chunks(100) {
+            let vals: Vec<_> = chunk
+                .iter()
+                .map(|(nid, alias)| (na::note_id.eq(*nid), na::alias.eq(alias.as_str())))
+                .collect();
+            diesel::insert_into(na::note_aliases).values(&vals).execute(c)?;
+        }
+
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let search_index =
+        crate::search::rebuild_index_from_note_data(ledger_path, &note_data, maps, scenes).ok();
+
+    Ok(search_index)
+}
+
+fn collect_all_facets(
+    dir: &std::path::Path,
+    relative: &str,
+    path_to_note: &std::collections::HashMap<String, &crate::db::models::Note>,
+    tag_rows: &mut Vec<(String, String)>,
+    link_rows: &mut Vec<(i32, String)>,
+    alias_rows: &mut Vec<(i32, String)>,
+    note_data: &mut Vec<(crate::db::models::Note, String, Vec<String>)>,
+) -> Result<(), String> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let entry_path = entry.path();
+        let child_rel = if relative.is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{}", relative, name)
+        };
+        if entry_path.is_dir() {
+            collect_all_facets(
+                &entry_path,
+                &child_rel,
+                path_to_note,
+                tag_rows,
+                link_rows,
+                alias_rows,
+                note_data,
+            )?;
+        } else if name.ends_with(".md") {
+            if let Ok(content) = std::fs::read_to_string(&entry_path) {
+                let facets = DerivedFacets::extract(&content);
+                for tag in &facets.tags {
+                    tag_rows.push((child_rel.clone(), tag.clone()));
+                }
+                if let Some(&note) = path_to_note.get(&child_rel) {
+                    for target in &facets.links {
+                        link_rows.push((note.id, target.clone()));
+                    }
+                    for alias in &facets.aliases {
+                        alias_rows.push((note.id, alias.clone()));
+                    }
+                    note_data.push((note.clone(), facets.body_text, facets.tags));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Explicitly clear all three Derived Index tables for `note_id`/`note_path`
 /// and remove the note's Search Index document, then return a `ReconcileOutcome`.
 ///
@@ -605,6 +742,96 @@ mod tests {
         std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
         clear_search_stale_marker(dir.path()); // must not panic
         assert!(!stale_marker_path(dir.path()).exists());
+    }
+
+    // ── rebuild_all_from_ledger ───────────────────────────────────────────────
+
+    #[test]
+    fn rebuild_all_populates_tags_links_aliases_from_single_walk() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("ash.md"),
+            "---\ntags: [npc, allied]\naliases: [Captain Ash]\n---\nSee [[dragon.md]].",
+        )
+        .unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, &make_note(1, "ash.md"));
+
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        let mut tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        tags.sort();
+        assert_eq!(tags, vec!["allied", "npc"]);
+
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["dragon.md"]);
+
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert_eq!(aliases, vec!["Captain Ash"]);
+    }
+
+    #[test]
+    fn rebuild_all_replaces_stale_entries_on_second_call() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("a.md"), "---\ntags: [old]\n---\n[[old.md]].").unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, &make_note(1, "a.md"));
+
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        std::fs::write(dir.path().join("a.md"), "---\ntags: [new]\n---\n[[new.md]].").unwrap();
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert_eq!(tags, vec!["new"]);
+
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["new.md"]);
+    }
+
+    #[test]
+    fn rebuild_all_skips_hidden_directories() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join(".grimoire")).unwrap();
+        std::fs::write(
+            dir.path().join(".grimoire").join("hidden.md"),
+            "---\ntags: [should_not_appear]\n---\n",
+        )
+        .unwrap();
+
+        let mut conn = test_conn();
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        let rows: Vec<(String, String)> = nt::note_tags.load(&mut conn).unwrap();
+        assert!(rows.is_empty(), "hidden directory must be skipped");
+    }
+
+    #[test]
+    fn rebuild_all_note_without_db_row_skips_links_and_aliases() {
+        let dir = TempDir::new().unwrap();
+        // File on disk but no corresponding notes row — links/aliases can't be keyed
+        std::fs::write(
+            dir.path().join("ghost.md"),
+            "---\ntags: [orphan]\naliases: [Ghost]\n---\nSee [[other.md]].",
+        )
+        .unwrap();
+
+        let mut conn = test_conn();
+        // Do NOT insert a notes row for ghost.md
+
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        // Tags are path-keyed so they are written even without a DB row
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert_eq!(tags, vec!["orphan"], "tags must be written even for unknown notes");
+
+        // Links and aliases require a note ID, so they must be absent
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert!(links.is_empty(), "links must not be written without a DB row");
+
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert!(aliases.is_empty(), "aliases must not be written without a DB row");
     }
 
     #[test]
