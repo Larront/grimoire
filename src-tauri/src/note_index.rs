@@ -56,6 +56,24 @@ pub fn clear_search_stale_marker(ledger_path: &std::path::Path) {
     let _ = std::fs::remove_file(stale_marker_path(ledger_path));
 }
 
+/// Persist the stale marker when a reconcile/remove outcome reports that the
+/// best-effort Tantivy write failed. No-op otherwise. This is the command
+/// layer's hook onto the staleness the seam only *reports* (per ADR-0004).
+pub fn mark_stale_if_needed(outcome: &ReconcileOutcome, ledger_path: &std::path::Path) {
+    if outcome.search_stale {
+        write_search_stale_marker(ledger_path);
+    }
+}
+
+/// Reconcile the persisted stale marker against a launch-time rebuild result:
+/// a successful rebuild clears the marker; a failed rebuild leaves it in place
+/// so the next launch retries. Clearing an absent marker is a harmless no-op.
+pub fn clear_stale_marker_if_rebuilt(ledger_path: &std::path::Path, rebuild_succeeded: bool) {
+    if rebuild_succeeded {
+        clear_search_stale_marker(ledger_path);
+    }
+}
+
 /// Write all derived indexes for `note` in a single atomic SQLite transaction,
 /// then update Tantivy on a best-effort basis.
 ///

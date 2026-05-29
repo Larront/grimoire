@@ -82,16 +82,14 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
 
     // Rebuild the Tantivy search index. Non-fatal: a failure just leaves
     // search unavailable until the next manual rebuild or ledger reopen.
-    // Per ADR-0004: if a persisted stale marker exists (written by reconcile/remove
-    // on Tantivy failure), clear it after a successful rebuild; leave it on failure.
-    let had_stale_marker = crate::note_index::stale_marker_path(&ledger_path).exists();
     let all_notes: Vec<Note> = notes::table.load::<Note>(&mut conn).unwrap_or_default();
     let all_maps: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap_or_default();
     let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(&mut conn).unwrap_or_default();
     let search_index = crate::search::rebuild_index(&ledger_path, &all_notes, &all_maps, &all_scenes).ok();
-    if had_stale_marker && search_index.is_some() {
-        crate::note_index::clear_search_stale_marker(&ledger_path);
-    }
+    // Per ADR-0004: a successful rebuild clears any persisted stale marker
+    // (written by reconcile/remove on a Tantivy failure); a failure leaves it
+    // in place so the next launch retries.
+    crate::note_index::clear_stale_marker_if_rebuilt(&ledger_path, search_index.is_some());
 
     let note_count: i64 = notes::table
         .count()
@@ -157,19 +155,11 @@ mod tests {
         let ledger_path = tmp.path();
         std::fs::create_dir_all(ledger_path.join(".grimoire")).unwrap();
 
-        // Simulate: a previous session had a Tantivy write failure
+        // A previous session left a stale marker after a Tantivy write failure.
         crate::note_index::write_search_stale_marker(ledger_path);
-        assert!(
-            crate::note_index::stale_marker_path(ledger_path).exists(),
-            "marker must exist before open"
-        );
 
-        // Simulate: open_ledger rebuilds successfully → clear the marker
-        let had_stale_marker = crate::note_index::stale_marker_path(ledger_path).exists();
-        let rebuild_succeeded = true;
-        if had_stale_marker && rebuild_succeeded {
-            crate::note_index::clear_search_stale_marker(ledger_path);
-        }
+        // open_ledger's launch-time reconciliation, with a rebuild that succeeded.
+        crate::note_index::clear_stale_marker_if_rebuilt(ledger_path, true);
 
         assert!(
             !crate::note_index::stale_marker_path(ledger_path).exists(),
@@ -185,12 +175,8 @@ mod tests {
 
         crate::note_index::write_search_stale_marker(ledger_path);
 
-        // Simulate: open_ledger rebuild fails → marker stays
-        let had_stale_marker = crate::note_index::stale_marker_path(ledger_path).exists();
-        let rebuild_succeeded = false;
-        if had_stale_marker && rebuild_succeeded {
-            crate::note_index::clear_search_stale_marker(ledger_path);
-        }
+        // open_ledger's launch-time reconciliation, with a rebuild that failed.
+        crate::note_index::clear_stale_marker_if_rebuilt(ledger_path, false);
 
         assert!(
             crate::note_index::stale_marker_path(ledger_path).exists(),

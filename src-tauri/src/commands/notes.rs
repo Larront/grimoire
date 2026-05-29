@@ -119,9 +119,7 @@ pub fn create_note(
         .map_err(|e| e.to_string())?;
 
     let outcome = note_index::reconcile(conn, index, &created, "", None)?;
-    if outcome.search_stale {
-        note_index::write_search_stale_marker(&ledger_path);
-    }
+    note_index::mark_stale_if_needed(&outcome, &ledger_path);
 
     Ok(created)
 }
@@ -215,9 +213,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
         .unwrap_or_default();
 
     let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    if outcome.search_stale {
-        note_index::write_search_stale_marker(&ledger_path);
-    }
+    note_index::mark_stale_if_needed(&outcome, &ledger_path);
 
     Ok(updated)
 }
@@ -268,9 +264,7 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path)).unwrap_or_default();
 
     let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    if outcome.search_stale {
-        note_index::write_search_stale_marker(&ledger_path);
-    }
+    note_index::mark_stale_if_needed(&outcome, &ledger_path);
 
     Ok(RenameNoteResult {
         note: updated,
@@ -294,9 +288,7 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, Stri
     }
 
     let outcome = note_index::remove(conn, index, note_id, &note.path)?;
-    if outcome.search_stale {
-        note_index::write_search_stale_marker(&ledger_path);
-    }
+    note_index::mark_stale_if_needed(&outcome, &ledger_path);
 
     let deleted = diesel::delete(notes.find(note_id))
         .execute(conn)
@@ -337,9 +329,7 @@ pub fn write_note_content(
         .map_err(|e| e.to_string())?;
     if let Some(ref note) = maybe_note {
         let outcome = note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
-        if outcome.search_stale {
-            note_index::write_search_stale_marker(&ledger_path);
-        }
+        note_index::mark_stale_if_needed(&outcome, &ledger_path);
     }
 
     Ok(())
