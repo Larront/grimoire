@@ -8,7 +8,7 @@
 
 use crate::commands::frontmatter;
 use crate::commands::links::extract_wikilinks;
-use crate::db::models::Note;
+use crate::db::models::{Map, Note, Scene};
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::note_tags::dsl as nt;
@@ -140,6 +140,17 @@ pub fn reconcile(
     Ok(ReconcileOutcome { search_stale })
 }
 
+/// The per-file rows accumulated by a single ledger walk, ready for bulk insert.
+/// Tags are path-keyed (collected for every `.md` file); links, aliases, and the
+/// search `note_data` are note_id-keyed and only collected when a DB row exists.
+#[derive(Default)]
+struct CollectedFacets {
+    tag_rows: Vec<(String, String)>,
+    link_rows: Vec<(i32, String)>,
+    alias_rows: Vec<(i32, String)>,
+    note_data: Vec<(Note, String, Vec<String>)>,
+}
+
 /// Walk the ledger once, parse each `.md` file into `DerivedFacets` exactly once,
 /// and populate all four derived indexes (note_tags, note_links, note_aliases,
 /// Tantivy Search). SQLite inserts are chunked/bulk inside a single transaction.
@@ -147,31 +158,18 @@ pub fn reconcile(
 pub fn rebuild_all_from_ledger(
     ledger_path: &std::path::Path,
     conn: &mut SqliteConnection,
-    maps: &[crate::db::models::Map],
-    scenes: &[crate::db::models::Scene],
+    maps: &[Map],
+    scenes: &[Scene],
 ) -> Result<Option<tantivy::Index>, String> {
     use crate::db::schema::notes::dsl as notes_dsl;
 
-    let note_rows: Vec<crate::db::models::Note> =
-        notes_dsl::notes.load(conn).map_err(|e| e.to_string())?;
+    let note_rows: Vec<Note> = notes_dsl::notes.load(conn).map_err(|e| e.to_string())?;
 
-    let path_to_note: std::collections::HashMap<String, &crate::db::models::Note> =
+    let path_to_note: std::collections::HashMap<String, &Note> =
         note_rows.iter().map(|note| (note.path.clone(), note)).collect();
 
-    let mut tag_rows: Vec<(String, String)> = Vec::new();
-    let mut link_rows: Vec<(i32, String)> = Vec::new();
-    let mut alias_rows: Vec<(i32, String)> = Vec::new();
-    let mut note_data: Vec<(crate::db::models::Note, String, Vec<String>)> = Vec::new();
-
-    collect_all_facets(
-        ledger_path,
-        "",
-        &path_to_note,
-        &mut tag_rows,
-        &mut link_rows,
-        &mut alias_rows,
-        &mut note_data,
-    )?;
+    let mut facets = CollectedFacets::default();
+    collect_all_facets(ledger_path, "", &path_to_note, &mut facets)?;
 
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         diesel::delete(nt::note_tags).execute(c)?;
@@ -179,7 +177,8 @@ pub fn rebuild_all_from_ledger(
         diesel::delete(na::note_aliases).execute(c)?;
 
         let mut seen_tags: BTreeSet<(String, String)> = BTreeSet::new();
-        let unique_tags: Vec<_> = tag_rows
+        let unique_tags: Vec<_> = facets
+            .tag_rows
             .into_iter()
             .filter(|(path, tag)| seen_tags.insert((path.clone(), tag.to_lowercase())))
             .collect();
@@ -191,7 +190,7 @@ pub fn rebuild_all_from_ledger(
             diesel::insert_into(nt::note_tags).values(&vals).execute(c)?;
         }
 
-        for chunk in link_rows.chunks(100) {
+        for chunk in facets.link_rows.chunks(100) {
             let vals: Vec<_> = chunk
                 .iter()
                 .map(|(sid, tp)| (nl::source_id.eq(*sid), nl::target_path.eq(tp.as_str())))
@@ -200,7 +199,8 @@ pub fn rebuild_all_from_ledger(
         }
 
         let mut seen_aliases: BTreeSet<(i32, String)> = BTreeSet::new();
-        let unique_aliases: Vec<_> = alias_rows
+        let unique_aliases: Vec<_> = facets
+            .alias_rows
             .into_iter()
             .filter(|(nid, alias)| seen_aliases.insert((*nid, alias.to_lowercase())))
             .collect();
@@ -217,7 +217,8 @@ pub fn rebuild_all_from_ledger(
     .map_err(|e| e.to_string())?;
 
     let search_index =
-        crate::search::rebuild_index_from_note_data(ledger_path, &note_data, maps, scenes).ok();
+        crate::search::rebuild_index_from_note_data(ledger_path, &facets.note_data, maps, scenes)
+            .ok();
 
     Ok(search_index)
 }
@@ -225,11 +226,8 @@ pub fn rebuild_all_from_ledger(
 fn collect_all_facets(
     dir: &std::path::Path,
     relative: &str,
-    path_to_note: &std::collections::HashMap<String, &crate::db::models::Note>,
-    tag_rows: &mut Vec<(String, String)>,
-    link_rows: &mut Vec<(i32, String)>,
-    alias_rows: &mut Vec<(i32, String)>,
-    note_data: &mut Vec<(crate::db::models::Note, String, Vec<String>)>,
+    path_to_note: &std::collections::HashMap<String, &Note>,
+    facets: &mut CollectedFacets,
 ) -> Result<(), String> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -247,29 +245,23 @@ fn collect_all_facets(
             format!("{}/{}", relative, name)
         };
         if entry_path.is_dir() {
-            collect_all_facets(
-                &entry_path,
-                &child_rel,
-                path_to_note,
-                tag_rows,
-                link_rows,
-                alias_rows,
-                note_data,
-            )?;
+            collect_all_facets(&entry_path, &child_rel, path_to_note, facets)?;
         } else if name.ends_with(".md") {
             if let Ok(content) = std::fs::read_to_string(&entry_path) {
-                let facets = DerivedFacets::extract(&content);
-                for tag in &facets.tags {
-                    tag_rows.push((child_rel.clone(), tag.clone()));
+                let extracted = DerivedFacets::extract(&content);
+                for tag in &extracted.tags {
+                    facets.tag_rows.push((child_rel.clone(), tag.clone()));
                 }
                 if let Some(&note) = path_to_note.get(&child_rel) {
-                    for target in &facets.links {
-                        link_rows.push((note.id, target.clone()));
+                    for target in &extracted.links {
+                        facets.link_rows.push((note.id, target.clone()));
                     }
-                    for alias in &facets.aliases {
-                        alias_rows.push((note.id, alias.clone()));
+                    for alias in &extracted.aliases {
+                        facets.alias_rows.push((note.id, alias.clone()));
                     }
-                    note_data.push((note.clone(), facets.body_text, facets.tags));
+                    facets
+                        .note_data
+                        .push((note.clone(), extracted.body_text, extracted.tags));
                 }
             }
         }
