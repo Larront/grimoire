@@ -419,6 +419,50 @@ mod tests {
         );
     }
 
+    /// rename_note regression: reconcile with prev_path: Some(old) re-asserts all
+    /// four indexes for the renamed note — old-path note_tags cleared, new-path
+    /// note_tags written, note_links and note_aliases re-asserted from content.
+    #[test]
+    fn rename_via_reconcile_reasserts_all_four_indexes_regression() {
+        let mut conn = test_conn();
+        // Note is now at new.md after the rename
+        let note = make_note(1, "new.md");
+        insert_note(&mut conn, &note);
+
+        // Seed old-path tags that must be cleared by reconcile(prev_path: Some("old.md"))
+        conn.batch_execute(
+            "INSERT INTO note_tags (note_path, tag) VALUES ('old.md', 'stale')",
+        )
+        .unwrap();
+
+        let content = "---\ntags: [keeper]\naliases: [The Keeper]\n---\nSee [[dragon.md]].";
+        reconcile(&mut conn, None, &note, content, Some("old.md")).unwrap();
+
+        // old.md tags must be gone
+        let old_tags: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("old.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert!(old_tags.is_empty(), "old-path note_tags must be cleared on rename");
+
+        // new.md tags must be written
+        let new_tags: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("new.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(new_tags, vec!["keeper"]);
+
+        // note_links must be re-asserted
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["dragon.md"], "note_links must be re-asserted on rename");
+
+        // note_aliases must be re-asserted
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert_eq!(aliases, vec!["The Keeper"], "note_aliases must be re-asserted on rename");
+    }
+
     #[test]
     fn prev_path_none_no_re_key_attempted() {
         let mut conn = test_conn();

@@ -229,7 +229,11 @@ pub struct RenameNoteResult {
 pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteResult, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
@@ -244,11 +248,7 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
         }
-        diesel::sql_query("UPDATE note_tags SET note_path = ? WHERE note_path = ?")
-            .bind::<diesel::sql_types::Text, _>(&note.path)
-            .bind::<diesel::sql_types::Text, _>(&old_note.path)
-            .execute(conn)
-            .map_err(|e| e.to_string())?;
+        // note_tags re-key handled inside reconcile via prev_path
         updated_count =
             rewrite_backlinks_on_rename_on_conn(&ledger_path, conn, &old_note.path, &note.path)?;
     }
@@ -260,11 +260,8 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
         .map_err(|e| e.to_string())?;
 
     let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path)).unwrap_or_default();
-    let body_text = crate::search::extract_plain_text(&raw_content);
-    let tags = frontmatter::read_tags(&raw_content);
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &updated, &body_text, &tags);
-    }
+
+    note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
 
     Ok(RenameNoteResult {
         note: updated,
