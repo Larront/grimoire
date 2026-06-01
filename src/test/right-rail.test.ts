@@ -50,6 +50,8 @@ describe("right rail responsive behaviour", () => {
       writable: true,
       value: desktopMatchMedia,
     });
+    // Rail only renders when a note pane is active
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
     const dockedRail = container.querySelector(
@@ -173,6 +175,8 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
       writable: true,
       value: desktopMatchMedia,
     });
+    // Rail only renders inside NotePane, so we need an active note tab
+    tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
     const sidebar = container.querySelector(
@@ -222,12 +226,14 @@ describe("rail visibility on non-note panes", () => {
       writable: true,
       value: desktopMatchMedia,
     });
+    // With the new architecture, the rail lives inside NotePane, so when the
+    // active tab is a map pane (no NotePane rendered), the rail is not in the DOM.
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { container } = render(AppShell);
     const rail = container.querySelector(
       '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
-    expect(rail.getAttribute("data-state")).toBe("closed");
+    );
+    expect(rail).toBeNull();
   });
 
   it("desktop rail collapses when switching from note to map pane", async () => {
@@ -238,16 +244,21 @@ describe("rail visibility on non-note panes", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     const { container, getByTestId } = render(AppShell);
 
+    // Open the rail while on the note pane
     await fireEvent.click(getByTestId("right-rail-trigger"));
-    const rail = container.querySelector(
+    const railWhileNote = container.querySelector(
       '[data-slot="right-rail"][data-mobile="false"]',
     )!;
-    expect(rail.getAttribute("data-state")).toBe("open");
+    expect(railWhileNote.getAttribute("data-state")).toBe("open");
 
+    // Switch to a map pane — NotePane is unmounted, so the rail element leaves the DOM
     await act(() => {
       tabs.openTab({ type: "map", id: 2, title: "Map" });
     });
-    expect(rail.getAttribute("data-state")).toBe("closed");
+    const railAfterSwitch = container.querySelector(
+      '[data-slot="right-rail"][data-mobile="false"]',
+    );
+    expect(railAfterSwitch).toBeNull();
   });
 
   it("desktop rail re-opens when switching back to note pane", async () => {
@@ -258,15 +269,20 @@ describe("rail visibility on non-note panes", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     const { container, getByTestId } = render(AppShell);
 
+    // Open the rail on the note pane — the RightRailState in AppShell records open=true
     await fireEvent.click(getByTestId("right-rail-trigger"));
 
+    // Switch to map (NotePane unmounts, rail leaves DOM, but leftRail.open stays true)
     await act(() => {
       tabs.openTab({ type: "map", id: 2, title: "Map" });
     });
+
+    // Switch back to note — NotePane re-mounts and renders the rail using leftRail.open
     await act(() => {
       tabs.openTab({ type: "note", id: 1, title: "Note" });
     });
 
+    // leftRail.open is still true, so the re-mounted rail should be open
     const rail = container.querySelector(
       '[data-slot="right-rail"][data-mobile="false"]',
     )!;
