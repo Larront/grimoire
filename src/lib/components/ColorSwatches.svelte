@@ -1,16 +1,11 @@
 <script lang="ts">
   interface Props {
     value?: string | null;
-    presets?: string[];
+    presets: string[];
     onchange: (color: string) => void;
   }
 
-  const DEFAULT_PRESETS = [
-    "#4a90c4", "#6a9b87", "#b89a5e", "#8b3a3a",
-    "#6b4e8a", "#5a6b7a", "#c4b8a0", "#3d4a52",
-  ];
-
-  let { value = null, presets = DEFAULT_PRESETS, onchange }: Props = $props();
+  let { value = null, presets, onchange }: Props = $props();
 
   const isCustom = $derived(!!value && !presets.includes(value));
 </script>
