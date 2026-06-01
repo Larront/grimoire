@@ -18,4 +18,4 @@ $prompt = $prompt.Replace('{{ISSUE_NUMBER}}', $IssueNumber)
 $prompt = $prompt.Replace('{{ISSUE_TITLE}}', $issueTitle)
 $prompt = $prompt.Replace('{{BRANCH}}', $Branch)
 
-claude --permission-mode acceptEdits $prompt
+claude --permission-mode acceptEdits $prompt --model sonnet
