@@ -49,11 +49,11 @@
 
   // Track whether initial map data has loaded; used to gate store writes so
   // the initial null-clear that happens at load-start doesn't overwrite saved state.
-  let _mapLoaded = $state(false);
+  let mapLoaded = $state(false);
 
   // Persist selection to the per-pane store so it survives tab switches.
   $effect(() => {
-    if (!_mapLoaded) return;
+    if (!mapLoaded) return;
     paneDetailState.setMapSelection(pane, mapId, {
       pinId: selectedPin?.id ?? null,
       annotationId: selectedAnnotation?.id ?? null,
@@ -88,7 +88,7 @@
     if (!m) return;
 
     isLoadingData = true;
-    _mapLoaded = false;
+    mapLoaded = false;
     selectedPin = null;
     selectedAnnotation = null;
     imageDataUrl = null;
@@ -115,7 +115,7 @@
         const saved = paneDetailState.getMapSelection(pane, m.id);
         selectedPin = p.find((pin) => pin.id === saved.pinId) ?? null;
         selectedAnnotation = a.find((ann) => ann.id === saved.annotationId) ?? null;
-        _mapLoaded = true;
+        mapLoaded = true;
       })
       .catch(console.error)
       .finally(() => {
