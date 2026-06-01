@@ -18,7 +18,7 @@
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
   import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
-  import AnnotationDetailPanel from "$lib/components/map/AnnotationDetailPanel.svelte";
+  import AnnotationDetails from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
@@ -263,6 +263,12 @@
       console.error("delete annotation failed:", e);
     }
   }
+
+  const KIND_LABELS: Record<AnnotationKind, string> = {
+    text: 'Text Label',
+    rect: 'Rectangle',
+    circle: 'Circle',
+  };
 
   // ── Tool helpers ───────────────────────────────────────────────────────────
   function setAnnotationMode(mode: AnnotationKind) {
@@ -525,16 +531,23 @@
     {#if selectedAnnotation && !placingMode}
       <div
         transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-2xl shadow-2xl border border-border
-               flex flex-col overflow-hidden"
+        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-2xl shadow-2xl
+               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
       >
-        <AnnotationDetailPanel
-          annotation={selectedAnnotation}
-          unlocked={unlockedAnnotationId !== null}
-          onToggleLock={toggleAnnotationLock}
-          onUpdate={handleAnnotationUpdate}
-          onDelete={handleAnnotationDelete}
-        />
+        <DetailPanel
+          title={KIND_LABELS[selectedAnnotation.kind]}
+          onclose={() => { selectedAnnotation = null; }}
+        >
+          {#snippet children()}
+            <AnnotationDetails
+              annotation={selectedAnnotation!}
+              unlocked={unlockedAnnotationId !== null}
+              onToggleLock={toggleAnnotationLock}
+              onUpdate={handleAnnotationUpdate}
+              onDelete={handleAnnotationDelete}
+            />
+          {/snippet}
+        </DetailPanel>
       </div>
     {/if}
   </div>
