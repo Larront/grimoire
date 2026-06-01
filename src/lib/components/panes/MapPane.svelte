@@ -18,7 +18,7 @@
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
   import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
-  import AnnotationDetails from "$lib/components/map/AnnotationDetails.svelte";
+  import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
@@ -263,12 +263,6 @@
       console.error("delete annotation failed:", e);
     }
   }
-
-  const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: 'Text Label',
-    rect: 'Rectangle',
-    circle: 'Circle',
-  };
 
   // ── Tool helpers ───────────────────────────────────────────────────────────
   function setAnnotationMode(mode: AnnotationKind) {

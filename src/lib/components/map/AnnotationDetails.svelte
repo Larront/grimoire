@@ -1,5 +1,15 @@
+<script module lang="ts">
+  import type { AnnotationKind } from "$lib/types/ledger";
+
+  export const KIND_LABELS: Record<AnnotationKind, string> = {
+    text: 'Text Label',
+    rect: 'Rectangle',
+    circle: 'Circle',
+  };
+</script>
+
 <script lang="ts">
-  import type { MapAnnotation, AnnotationKind } from "$lib/types/ledger";
+  import type { MapAnnotation } from "$lib/types/ledger";
   import { Lock, LockOpen } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
@@ -23,12 +33,6 @@
   async function save(patch: Partial<MapAnnotation>) {
     await onUpdate({ ...annotation, ...patch });
   }
-
-  const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: 'Text Label',
-    rect: 'Rectangle',
-    circle: 'Circle',
-  };
 
   const PRESET_COLORS = [
     '#e2e8f0', '#94a3b8', '#f8fafc',
