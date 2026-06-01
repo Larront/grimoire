@@ -18,8 +18,9 @@
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
   import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
-  import PinDetailPanel from "$lib/components/map/PinDetailPanel.svelte";
   import AnnotationDetailPanel from "$lib/components/map/AnnotationDetailPanel.svelte";
+  import PinDetails from "$lib/components/map/PinDetails.svelte";
+  import DetailPanel from "$lib/components/DetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { fly } from "svelte/transition";
 
@@ -495,22 +496,28 @@
         notes.notes.find((n: Note) => n.id === selectedPin?.note_id) ?? null}
       <div
         transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-2xl shadow-2xl border border-border
-               flex flex-col overflow-hidden"
+        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-2xl shadow-2xl
+               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
       >
-        <PinDetailPanel
-          pin={selectedPin}
-          {linkedNote}
-          unlocked={unlockedPinId !== null}
-          onToggleLock={togglePinLock}
-          onUpdate={async (updated: Pin) => {
-            try {
-              const saved: Pin = await invoke("update_pin", { pin: updated });
-              pins = pins.map((p) => (p.id === saved.id ? saved : p));
-              selectedPin = saved;
-            } finally {}
-          }}
-        />
+        <DetailPanel
+          title={selectedPin.title || "Pin"}
+          onclose={() => { selectedPin = null; }}
+        >
+          {#snippet children()}
+            <PinDetails
+              pin={selectedPin!}
+              {linkedNote}
+              unlocked={unlockedPinId !== null}
+              onToggleLock={togglePinLock}
+              onUpdate={async (updated: Pin) => {
+                const saved: Pin = await invoke("update_pin", { pin: updated });
+                pins = pins.map((p) => (p.id === saved.id ? saved : p));
+                selectedPin = saved;
+              }}
+              onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
+            />
+          {/snippet}
+        </DetailPanel>
       </div>
     {/if}
 
