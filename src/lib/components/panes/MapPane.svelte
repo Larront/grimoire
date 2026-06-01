@@ -22,6 +22,7 @@
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { fly } from "svelte/transition";
 
   interface Props {
@@ -45,6 +46,19 @@
   let selectedAnnotation = $state<MapAnnotation | null>(null);
   let placingMode = $state(false);
   let annotationMode = $state<AnnotationKind | null>(null);
+
+  // Track whether initial map data has loaded; used to gate store writes so
+  // the initial null-clear that happens at load-start doesn't overwrite saved state.
+  let _mapLoaded = $state(false);
+
+  // Persist selection to the per-pane store so it survives tab switches.
+  $effect(() => {
+    if (!_mapLoaded) return;
+    paneDetailState.setMapSelection(pane, mapId, {
+      pinId: selectedPin?.id ?? null,
+      annotationId: selectedAnnotation?.id ?? null,
+    });
+  });
 
   // Lock state — ephemeral, not persisted. Items are locked by default.
   // _unlocked* hold the ID of the item the user explicitly unlocked.
@@ -74,6 +88,7 @@
     if (!m) return;
 
     isLoadingData = true;
+    _mapLoaded = false;
     selectedPin = null;
     selectedAnnotation = null;
     imageDataUrl = null;
@@ -96,6 +111,11 @@
         categories = c;
         annotations = a;
         imageDataUrl = url;
+        // Restore pane-local selection (persists across tab switches).
+        const saved = paneDetailState.getMapSelection(pane, m.id);
+        selectedPin = p.find((pin) => pin.id === saved.pinId) ?? null;
+        selectedAnnotation = a.find((ann) => ann.id === saved.annotationId) ?? null;
+        _mapLoaded = true;
       })
       .catch(console.error)
       .finally(() => {
@@ -503,20 +523,18 @@
           title={selectedPin.title || "Pin"}
           onclose={() => { selectedPin = null; }}
         >
-          {#snippet children()}
-            <PinDetails
-              pin={selectedPin!}
-              {linkedNote}
-              unlocked={unlockedPinId !== null}
-              onToggleLock={togglePinLock}
-              onUpdate={async (updated: Pin) => {
-                const saved: Pin = await invoke("update_pin", { pin: updated });
-                pins = pins.map((p) => (p.id === saved.id ? saved : p));
-                selectedPin = saved;
-              }}
-              onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
-            />
-          {/snippet}
+          <PinDetails
+            pin={selectedPin!}
+            {linkedNote}
+            unlocked={unlockedPinId !== null}
+            onToggleLock={togglePinLock}
+            onUpdate={async (updated: Pin) => {
+              const saved: Pin = await invoke("update_pin", { pin: updated });
+              pins = pins.map((p) => (p.id === saved.id ? saved : p));
+              selectedPin = saved;
+            }}
+            onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
+          />
         </DetailPanel>
       </div>
     {/if}
@@ -532,15 +550,13 @@
           title={KIND_LABELS[selectedAnnotation.kind]}
           onclose={() => { selectedAnnotation = null; }}
         >
-          {#snippet children()}
-            <AnnotationDetails
-              annotation={selectedAnnotation!}
-              unlocked={unlockedAnnotationId !== null}
-              onToggleLock={toggleAnnotationLock}
-              onUpdate={handleAnnotationUpdate}
-              onDelete={handleAnnotationDelete}
-            />
-          {/snippet}
+          <AnnotationDetails
+            annotation={selectedAnnotation!}
+            unlocked={unlockedAnnotationId !== null}
+            onToggleLock={toggleAnnotationLock}
+            onUpdate={handleAnnotationUpdate}
+            onDelete={handleAnnotationDelete}
+          />
         </DetailPanel>
       </div>
     {/if}

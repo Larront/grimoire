@@ -63,7 +63,7 @@ describe("right rail responsive behaviour", () => {
   it("right rail trigger renders in the header when active tab is a note", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
-    expect(getByTestId("right-rail-trigger")).toBeTruthy();
+    expect(getByTestId("left-rail-trigger")).toBeTruthy();
   });
 
   it("trigger toggles the docked rail closed and open on desktop", async () => {
@@ -79,10 +79,10 @@ describe("right rail responsive behaviour", () => {
     )!;
     expect(rail.getAttribute("data-state")).toBe("closed");
 
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
     expect(rail.getAttribute("data-state")).toBe("open");
 
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
     expect(rail.getAttribute("data-state")).toBe("closed");
   });
 
@@ -94,7 +94,7 @@ describe("right rail responsive behaviour", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { getByTestId } = render(AppShell);
 
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
 
     const overlayRail = document.body.querySelector(
       '[data-slot="right-rail"][data-mobile="true"]',
@@ -123,7 +123,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     ).toBeTruthy();
 
     // Open right rail overlay
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
 
     // Sidebar overlay should now be closed, right rail overlay open
     expect(
@@ -147,7 +147,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     const { getByTestId } = render(AppShell);
 
     // Open right rail overlay first
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
     expect(
       document.body.querySelector(
         '[data-slot="right-rail"][data-mobile="true"]',
@@ -195,30 +195,34 @@ describe("rail visibility on non-note panes", () => {
   it("toggle is hidden when active tab is a map pane", () => {
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
   it("toggle is hidden when active tab is a scene pane", () => {
     tabs.openTab({ type: "scene", id: 1, title: "Chapter 1" });
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
   it("toggle is hidden when active tab is a scenes dashboard", () => {
     tabs.openTab({ type: "scenes", id: 0, title: "Scenes" });
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
   it("toggle is hidden when there are no tabs", () => {
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("toggle is visible when active tab is a note", () => {
+  it("left-pane toggle is visible when active tab is a note", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { queryByTestId } = render(AppShell);
-    expect(queryByTestId("right-rail-trigger")).not.toBeNull();
+    expect(queryByTestId("left-rail-trigger")).not.toBeNull();
   });
 
   it("desktop rail has data-state=closed on a map pane", () => {
@@ -245,7 +249,7 @@ describe("rail visibility on non-note panes", () => {
     const { container, getByTestId } = render(AppShell);
 
     // Open the rail while on the note pane
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
     const railWhileNote = container.querySelector(
       '[data-slot="right-rail"][data-mobile="false"]',
     )!;
@@ -270,7 +274,7 @@ describe("rail visibility on non-note panes", () => {
     const { container, getByTestId } = render(AppShell);
 
     // Open the rail on the note pane — the RightRailState in AppShell records open=true
-    await fireEvent.click(getByTestId("right-rail-trigger"));
+    await fireEvent.click(getByTestId("left-rail-trigger"));
 
     // Switch to map (NotePane unmounts, rail leaves DOM, but leftRail.open stays true)
     await act(() => {
@@ -289,20 +293,29 @@ describe("rail visibility on non-note panes", () => {
     expect(rail.getAttribute("data-state")).toBe("open");
   });
 
-  it("in split view, toggle is hidden when focused pane is map", () => {
+  it("in split view with note left + map right, only left-rail-trigger is shown regardless of focus", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     tabs.openTab({ type: "map", id: 1, title: "Map" }, "right");
-    // After opening right pane with map, focusedPane = "right"
+    // Right pane (map) is now focused — left-pane trigger still appears independently
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).not.toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("in split view, toggle is shown when focused pane is note", () => {
+  it("in split view with note in both panes, both rail triggers are visible", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
-    tabs.openTab({ type: "map", id: 1, title: "Map" }, "right");
-    tabs.setFocusedPane("left"); // focus the note pane
+    tabs.openTabOpposite({ type: "note", id: 2, title: "Other Note" });
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).not.toBeNull();
     expect(queryByTestId("right-rail-trigger")).not.toBeNull();
+  });
+
+  it("in split view, left-rail-trigger shows even when right pane is focused", () => {
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    tabs.openTabOpposite({ type: "note", id: 2, title: "Other Note" });
+    tabs.setFocusedPane("right");
+    const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).not.toBeNull();
   });
 
   it("mobile toggle is absent on a non-note pane (rail cannot be opened)", () => {
@@ -312,6 +325,7 @@ describe("rail visibility on non-note panes", () => {
     });
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { queryByTestId } = render(AppShell);
+    expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 });
@@ -339,8 +353,8 @@ async function openRailWithNote(
   tabs.openTab({ type: "note", id: 1, title: "Aldric" });
   await act(() => notes.load());
   const result = render(AppShell);
-  // Open the rail on desktop
-  await fireEvent.click(result.getByTestId("right-rail-trigger"));
+  // Open the rail on desktop (note is in left pane)
+  await fireEvent.click(result.getByTestId("left-rail-trigger"));
   return result;
 }
 

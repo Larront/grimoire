@@ -18,9 +18,6 @@
   const leftRail = new RightRailState();
   const rightRail = new RightRailState();
 
-  const focusedPaneIsNote = $derived(tabs.activeTab?.type === 'note');
-
-  // Determine which pane is focused and whether it's a note
   const leftPaneIsNote = $derived(tabs.left?.tabs[tabs.left?.activeIndex ?? 0]?.type === 'note');
   const rightPaneIsNote = $derived(
     tabs.right !== null && (tabs.right?.tabs[tabs.right?.activeIndex ?? 0]?.type === 'note')
@@ -93,10 +90,10 @@
                 </div>
                 {@render navButtons('left')}
                 <TabBar pane="left" />
-                {#if tabs.focusedPane === 'left' && leftPaneIsNote}
+                {#if leftPaneIsNote}
                   <div class="ml-auto shrink-0 px-2">
                     <button
-                      data-testid="right-rail-trigger"
+                      data-testid="left-rail-trigger"
                       onclick={leftRail.toggle}
                       class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       aria-label="Toggle details panel"
@@ -135,7 +132,7 @@
                 <div class="flex items-center border-b border-sidebar-border">
                   {@render navButtons('right')}
                   <TabBar pane="right" />
-                  {#if tabs.focusedPane === 'right' && rightPaneIsNote}
+                  {#if rightPaneIsNote}
                     <div class="ml-auto shrink-0 px-2">
                       <button
                         data-testid="right-rail-trigger"
