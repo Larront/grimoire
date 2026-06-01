@@ -199,7 +199,6 @@
   let detailAliasesLoadError = $state(false);
   let detailAliasCollisions = $state<AliasCollision[]>([]);
   let detailBacklinks = $state<BacklinkNote[]>([]);
-  let detailLinksLoadedForId = $state<number | null>(null);
   let detailOutboundLinks = $state<OutboundLink[]>([]);
 
   $effect(() => {
@@ -211,7 +210,6 @@
       detailBacklinks = [];
       detailOutboundLinks = [];
       detailLoadedForPath = null;
-      detailLinksLoadedForId = null;
       detailTagsLoadError = false;
       detailAliasesLoadError = false;
       return;
@@ -224,9 +222,6 @@
     detailAliasesLoadError = false;
     detailAliasCollisions = [];
     detailSaveStatus = 'idle';
-    if (nId !== detailLinksLoadedForId) {
-      detailLinksLoadedForId = nId;
-    }
     invoke<string[]>('read_note_tags', { notePath: targetPath })
       .then((loaded) => { if (detailLoadedForPath !== targetPath) return; detailTags = loaded; })
       .catch(() => { detailTags = []; detailTagsLoadError = true; });
@@ -296,6 +291,25 @@
     tabs.openTab({ type: 'note', id, title });
   }
 </script>
+
+{#snippet detailPanel(onclose: () => void)}
+  <DetailPanel title="Details" {onclose} saveStatus={detailSaveStatus} onRetrySave={retryDetailSave}>
+    <NoteDetails
+      {note}
+      bind:tags={detailTags}
+      allTags={detailAllTags}
+      bind:aliases={detailAliases}
+      aliasCollisions={detailAliasCollisions}
+      backlinks={detailBacklinks}
+      outboundLinks={detailOutboundLinks}
+      tagsLoadError={detailTagsLoadError}
+      aliasesLoadError={detailAliasesLoadError}
+      onTagsChange={handleTagsChange}
+      onAliasesChange={handleAliasesChange}
+      onNavigateNote={navigateToNote}
+    />
+  </DetailPanel>
+{/snippet}
 
 <!-- ── Rename confirmation dialog ──────────────────────────────────────────── -->
 <AlertDialog.Root bind:open={renameDialogOpen}>
@@ -378,22 +392,7 @@
       class="hidden w-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-linear data-[state=open]:w-[300px] lg:flex lg:flex-col"
     >
       <div class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle">
-        <DetailPanel title="Details" onclose={rail.toggle} saveStatus={detailSaveStatus} onRetrySave={retryDetailSave}>
-          <NoteDetails
-            {note}
-            bind:tags={detailTags}
-            allTags={detailAllTags}
-            bind:aliases={detailAliases}
-            aliasCollisions={detailAliasCollisions}
-            backlinks={detailBacklinks}
-            outboundLinks={detailOutboundLinks}
-            tagsLoadError={detailTagsLoadError}
-            aliasesLoadError={detailAliasesLoadError}
-            onTagsChange={handleTagsChange}
-            onAliasesChange={handleAliasesChange}
-            onNavigateNote={navigateToNote}
-          />
-        </DetailPanel>
+        {@render detailPanel(rail.toggle)}
       </div>
     </aside>
   {/if}
@@ -415,22 +414,7 @@
         <Sheet.Title>Details panel</Sheet.Title>
         <Sheet.Description>Document metadata and details.</Sheet.Description>
       </Sheet.Header>
-      <DetailPanel title="Details" onclose={() => rail?.setOpenMobile(false)} saveStatus={detailSaveStatus} onRetrySave={retryDetailSave}>
-        <NoteDetails
-          {note}
-          bind:tags={detailTags}
-          allTags={detailAllTags}
-          bind:aliases={detailAliases}
-          aliasCollisions={detailAliasCollisions}
-          backlinks={detailBacklinks}
-          outboundLinks={detailOutboundLinks}
-          tagsLoadError={detailTagsLoadError}
-          aliasesLoadError={detailAliasesLoadError}
-          onTagsChange={handleTagsChange}
-          onAliasesChange={handleAliasesChange}
-          onNavigateNote={navigateToNote}
-        />
-      </DetailPanel>
+      {@render detailPanel(() => rail?.setOpenMobile(false))}
     </Sheet.Content>
   </Sheet.Root>
 {/if}
