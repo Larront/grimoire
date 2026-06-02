@@ -12,6 +12,7 @@
     isImageFile,
   } from "$lib/editor/image-block";
   import { SceneBlock } from "$lib/editor/scene-block.svelte";
+  import { TimelineBlock, preprocessTimelineBlocks } from "$lib/editor/timeline-block";
   import { SlashCommand } from "$lib/editor/slash-command";
   import { WikiLink, preprocessWikiLinks } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
@@ -83,7 +84,7 @@
   }
 
   onMount(() => {
-    const preprocessed = preprocessWikiLinks(preprocessImageAttrs(initialContent));
+    const preprocessed = preprocessWikiLinks(preprocessImageAttrs(preprocessTimelineBlocks(initialContent)));
 
     editor = new Editor({
       element,
@@ -92,6 +93,7 @@
         Markdown,
         ImageBlock,
         SceneBlock,
+        TimelineBlock,
         SlashCommand.configure({
           onSlashCommand: (state) => {
             slashState = state;

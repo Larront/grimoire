@@ -130,6 +130,22 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     group: "Insert",
+    label: "Timeline",
+    keywords: ["timeline", "events", "chronology", "history"],
+    icon: "CalendarDays",
+    command: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: "timelineBlock",
+          attrs: { events: [{ date: "", title: "First event", description: "" }] },
+        })
+        .run(),
+  },
+  {
+    group: "Insert",
     label: "Image",
     keywords: ["img", "photo", "picture", "embed"],
     icon: "Image",
