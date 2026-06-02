@@ -1,3 +1,5 @@
+import { untrack } from 'svelte';
+
 type PaneId = 'left' | 'right';
 
 export interface MapSelection {
@@ -17,7 +19,10 @@ function createPaneDetailState() {
   }
 
   function setMapSelection(pane: PaneId, mapId: number, sel: MapSelection): void {
-    selections = { ...selections, [selKey(pane, mapId)]: sel };
+    // untrack the read of the prior map: callers persist from inside a $effect,
+    // so reading `selections` here would subscribe that effect to its own write
+    // (effect_update_depth_exceeded). Only the write should be observable.
+    selections = { ...untrack(() => selections), [selKey(pane, mapId)]: sel };
   }
 
   function reset(): void {
