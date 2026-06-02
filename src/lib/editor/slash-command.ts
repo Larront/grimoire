@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/core";
 import Suggestion from "@tiptap/suggestion";
 import { PluginKey } from "prosemirror-state";
 import { insertImageFromFile } from "./image-block";
+import { createBlankEvent } from "./timeline-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .deleteRange(range)
         .insertContent({
           type: "timelineBlock",
-          attrs: { events: [{ date: "", title: "", description: "" }] },
+          attrs: { events: [createBlankEvent()] },
         })
         .run(),
   },

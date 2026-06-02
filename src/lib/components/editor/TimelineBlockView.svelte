@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TimelineEvent } from "$lib/editor/timeline-block";
+  import { createBlankEvent, type TimelineEvent } from "$lib/editor/timeline-block";
   import { tick } from "svelte";
 
   let {
@@ -42,14 +42,13 @@
   }
 
   function deleteEvent(i: number) {
-    _events = (_events as TimelineEvent[]).filter((_, idx) => idx !== i);
+    _events = _events.filter((_, idx) => idx !== i);
     editingIndex = -1;
     onCommit($state.snapshot(_events) as TimelineEvent[]);
   }
 
   function addEvent() {
-    const newEvent: TimelineEvent = { date: "", title: "", description: "" };
-    _events = [...(_events as TimelineEvent[]), newEvent];
+    _events = [..._events, createBlankEvent()];
     editingIndex = _events.length - 1;
   }
 
