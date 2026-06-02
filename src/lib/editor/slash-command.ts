@@ -140,7 +140,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .deleteRange(range)
         .insertContent({
           type: "timelineBlock",
-          attrs: { events: [{ date: "", title: "First event", description: "" }] },
+          attrs: { events: [{ date: "", title: "", description: "" }] },
         })
         .run(),
   },

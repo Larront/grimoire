@@ -3,6 +3,7 @@ import {
   parseTimelineBody,
   serializeTimelineEvents,
   preprocessTimelineBlocks,
+  createBlankEvent,
   type TimelineEvent,
 } from "$lib/editor/timeline-block";
 
@@ -290,5 +291,52 @@ describe("round-trip", () => {
     );
     const md2 = serializeTimelineEvents(parsed);
     expect(md2).toBe(md1);
+  });
+
+  it("empty events array round-trips to empty array (empty state)", () => {
+    expect(roundTrip([])).toEqual([]);
+  });
+
+  it("add event: appending to array round-trips with N+1 events", () => {
+    const before: TimelineEvent[] = [{ date: "Day 1", title: "Alpha", description: "" }];
+    const after = [...before, createBlankEvent()];
+    const result = roundTrip(after);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(before[0]);
+    expect(result[1]).toEqual(createBlankEvent());
+  });
+
+  it("delete event: removing from array round-trips with N-1 events", () => {
+    const events: TimelineEvent[] = [
+      { date: "Day 1", title: "Alpha", description: "" },
+      { date: "Day 2", title: "Beta", description: "Notes." },
+    ];
+    const after = events.filter((_, i) => i !== 0);
+    const result = roundTrip(after);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(events[1]);
+  });
+
+  it("edit event: mutating a field round-trips with updated value", () => {
+    const events: TimelineEvent[] = [{ date: "", title: "Old title", description: "" }];
+    const edited = events.map((e, i) => (i === 0 ? { ...e, title: "New title", date: "Year 1" } : e));
+    const result = roundTrip(edited);
+    expect(result[0].title).toBe("New title");
+    expect(result[0].date).toBe("Year 1");
+  });
+});
+
+// ─── createBlankEvent ─────────────────────────────────────────────────────────
+
+describe("createBlankEvent", () => {
+  it("returns an event with all fields empty", () => {
+    expect(createBlankEvent()).toEqual({ date: "", title: "", description: "" });
+  });
+
+  it("returns a new object each call (no shared reference)", () => {
+    const a = createBlankEvent();
+    const b = createBlankEvent();
+    a.title = "mutated";
+    expect(b.title).toBe("");
   });
 });

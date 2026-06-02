@@ -12,6 +12,17 @@ export interface TimelineEvent {
 
 interface TimelineBlockViewExports {
   setAttrs: (events: TimelineEvent[]) => void;
+  openEdit: (index: number) => void;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export function createBlankEvent(): TimelineEvent {
+  return { date: "", title: "", description: "" };
+}
+
+function isBlankEvent(e: TimelineEvent): boolean {
+  return !e.date && !e.title && !e.description;
 }
 
 // ─── Parse ────────────────────────────────────────────────────────────────────
@@ -22,7 +33,7 @@ interface TimelineBlockViewExports {
  * "Date: " and "Title: " set those fields and all other lines are description.
  */
 export function parseTimelineBody(body: string): TimelineEvent[] {
-  const rawRecords = body.split(/\n\n+/).map((r) => r.trim()).filter(Boolean);
+  const rawRecords = body.split(/\n\n+/).filter((r) => r.trim());
   return rawRecords.map((record) => {
     let date = "";
     let title = "";
@@ -133,11 +144,30 @@ export const TimelineBlock = Node.create({
       const dom = document.createElement("div");
       dom.setAttribute("contenteditable", "false");
 
+      const events = node.attrs.events as TimelineEvent[];
+
+      function onCommit(newEvents: TimelineEvent[]) {
+        const pos = typeof getPos === "function" ? getPos() : undefined;
+        if (pos == null) return;
+        editor
+          .chain()
+          .command(({ tr }) => {
+            tr.setNodeMarkup(pos, null, { events: newEvents });
+            return true;
+          })
+          .run();
+      }
+
       const raw = mount(TimelineBlockView, {
         target: dom,
-        props: { events: node.attrs.events as TimelineEvent[] },
+        props: { events, onCommit },
       });
       const component = raw as unknown as TimelineBlockViewExports;
+
+      // Fresh /timeline insert: one blank event → open it in edit mode immediately
+      if (events.length === 1 && isBlankEvent(events[0])) {
+        component.openEdit(0);
+      }
 
       return {
         dom,
