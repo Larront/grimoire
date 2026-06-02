@@ -191,7 +191,7 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 
 ---
 
-### Phase 7 — Templates 🟢 Current
+### Phase 7 — Templates ✅ Complete
 
 **Deliverables:**
 
@@ -221,24 +221,41 @@ Search is hosted in the existing command palette (`AppSearch.svelte`). Both the 
 
 ---
 
-### Phase 8 — Timeline
+### Phase 8 — Timeline 🟢 Current
+
+Design grilled and resolved 2026-06-02 (see [ADR-0007](./adr/0007-timeline-fenced-markdown-block.md) and the Timeline decision rows in `CONTEXT.md`).
 
 **Deliverables:**
 
-- `/timeline` slash command in TipTap inserts a timeline block
-- Add, edit, remove events inline within the block
-- Events have: date label, title, optional description
-- Horizontal scrolling for long timelines
-- Fantasy-appropriate styling within the warm design system
+- `/timeline` slash command inserts a timeline block (atom TipTap node, like SceneBlock/ImageBlock)
+- Timeline serializes inline into the note's markdown as a fenced ` ```timeline ` code block — blank-line-separated records of labeled lines (`Date:` / `Title:` + description lines). `Title:` required; date and description optional. Stays legible and hand-editable in any markdown tool (ledger portability)
+- Vertical spine layout (events stacked down a connecting rail), each event collapsible — date + title always visible, description expands on click (reuses SceneBlock's `grid-rows` reduced-motion expand)
+- Display-by-default, edit-on-demand: events render as a read-only chronicle; clicking an event flips it to edit fields
+- Event title and description carry literal `[[wikilinks]]` authored via the same `[[` autocomplete; rendered clickable in display mode (reuses Editor.svelte's delegated click/hover handler). Links feed the Link Index, Backlinks, and Graph automatically — `extract_wikilinks` already scans code fences
+- Per-event up/down nudge + straight delete (no confirm; undo via Ctrl+Z). Insertion points in every gap (bottom always-visible, between-events revealed on hover/focus, keyboard-focusable) for adding events at any position
+- Fresh `/timeline` starts with one blank event in edit mode (title focused); empty state appears only after all events deleted
+- Typography: title Metamorphous, description Nunito, date label Metamorphous (small, `--primary`-tinted); warm design system, light + dark mode
+- Field edits commit to the node on blur (clean single-step undo)
+
+**Out of scope (Phase 8):**
+
+- Horizontal-track layout — superseded by the vertical spine (nested horizontal scroll fights the note's vertical scroll and cramps descriptions)
+- True nested-ProseMirror editable content inside events — event fields are literal `[[...]]`-bearing strings; nested node schema deferred
+- Drag-to-reorder events — up/down + insertion points cover reordering; drag fights ProseMirror's atom `stopEvent`
+- Rich markdown in events beyond wikilinks (bold/italic/headings); multi-paragraph descriptions (blank line is the event separator)
+- Auto-resolve-event-title-to-note-by-name — linking is explicit `[[...]]` only
+- Chronological sorting — date labels are free-text, not parsed dates; order is GM-arranged
 
 **Success criteria:**
 
 - A session log note can have a campaign timeline embedded inline
+- Clicking a `[[linked]]` event title navigates to that note; the note's Backlinks and the Graph show the timeline's link with no extra indexing work
+- The raw `.md` opened in Obsidian/VS Code shows the timeline as a legible, hand-editable fenced block
 - Timeline renders correctly in both light and dark mode
 
 ---
 
-### Phase 9 — Backlinks + Graph
+### Phase 9 — Backlinks + Graph ✅ Complete
 
 Depends on Phase 5 (Tags) being complete — the graph uses tags as a clustering signal.
 
