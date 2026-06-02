@@ -56,19 +56,29 @@
     commit();
   }
 
+  function expand(i: number) {
+    const s = new Set(expandedSet);
+    s.add(i);
+    expandedSet = s;
+  }
+
   function startEdit(i: number) {
-    // Auto-expand event when entering edit mode so description is visible
-    if (!expandedSet.has(i)) {
-      const s = new Set(expandedSet);
-      s.add(i);
-      expandedSet = s;
-    }
+    expand(i); // auto-expand so the description is visible in edit mode
     editingIndex = i;
   }
 
   function toggleExpand(i: number) {
     const s = new Set(expandedSet);
     if (s.has(i)) s.delete(i); else s.add(i);
+    expandedSet = s;
+  }
+
+  // Swap the expanded state of two indices after reordering them
+  function swapExpanded(a: number, b: number) {
+    const s = new Set(expandedSet);
+    const aExp = s.has(a), bExp = s.has(b);
+    if (bExp) s.add(a); else s.delete(a);
+    if (aExp) s.add(b); else s.delete(b);
     expandedSet = s;
   }
 
@@ -100,24 +110,14 @@
   function nudgeUp(i: number) {
     if (i <= 0) return;
     _events = moveEventUp($state.snapshot(_events) as TimelineEvent[], i);
-    // Swap expanded states for indices i and i-1
-    const s = new Set(expandedSet);
-    const aExp = s.has(i), bExp = s.has(i - 1);
-    aExp ? s.add(i - 1) : s.delete(i - 1);
-    bExp ? s.add(i) : s.delete(i);
-    expandedSet = s;
+    swapExpanded(i, i - 1);
     onCommit($state.snapshot(_events) as TimelineEvent[]);
   }
 
   function nudgeDown(i: number) {
     if (i >= _events.length - 1) return;
     _events = moveEventDown($state.snapshot(_events) as TimelineEvent[], i);
-    // Swap expanded states for indices i and i+1
-    const s = new Set(expandedSet);
-    const aExp = s.has(i), bExp = s.has(i + 1);
-    aExp ? s.add(i + 1) : s.delete(i + 1);
-    bExp ? s.add(i) : s.delete(i);
-    expandedSet = s;
+    swapExpanded(i, i + 1);
     onCommit($state.snapshot(_events) as TimelineEvent[]);
   }
 
@@ -196,10 +196,7 @@
   }
 
   export function openEdit(index: number) {
-    const s = new Set(expandedSet);
-    s.add(index);
-    expandedSet = s;
-    editingIndex = index;
+    startEdit(index);
   }
 </script>
 
