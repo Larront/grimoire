@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { MediaQuery } from "svelte/reactivity";
+  import { fly } from "svelte/transition";
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
@@ -16,6 +18,7 @@
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import NoteDetails from "$lib/components/NoteDetails.svelte";
   import type { AliasCollision, BacklinkNote, OutboundLink } from "$lib/components/NoteDetails.svelte";
+  import { DOCK_THRESHOLD, floatTransition } from "$lib/utils/dock-threshold";
 
   interface Props {
     noteId: number;
@@ -188,6 +191,22 @@
     }
   }
 
+  // ── Pane width measurement (dock vs float decision) ─────────────────────
+  const reducedMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
+  let containerEl = $state<HTMLDivElement | undefined>(undefined);
+  let paneWidth = $state(0);
+
+  $effect(() => {
+    if (!containerEl) return;
+    const ro = new ResizeObserver((entries) => {
+      paneWidth = entries[0]?.contentRect.width ?? 0;
+    });
+    ro.observe(containerEl);
+    return () => ro.disconnect();
+  });
+
+  const isDocked = $derived(paneWidth >= DOCK_THRESHOLD);
+
   // ── Detail panel state ───────────────────────────────────────────────────
   let detailTags = $state<string[]>([]);
   let detailAllTags = $state<string[]>([]);
@@ -342,7 +361,7 @@
   </AlertDialog.Portal>
 </AlertDialog.Root>
 
-<div class="flex flex-1 min-h-0">
+<div bind:this={containerEl} class="relative flex flex-1 min-h-0">
   <!-- Note content area -->
   <div class="flex-1 min-w-0">
     {#if notes.isLoading}
@@ -383,18 +402,31 @@
     {/if}
   </div>
 
-  <!-- Docked detail panel (only on desktop when rail is provided and not mobile) -->
-  {#if rail && !rail.isMobile}
+  <!-- Docked detail panel — visible when pane is wide enough (≥820px) -->
+  {#if rail && !rail.isMobile && isDocked}
     <aside
       data-slot="right-rail"
       data-mobile="false"
       data-state={rail.open ? 'open' : 'closed'}
-      class="hidden w-0 shrink-0 overflow-hidden transition-[width] duration-200 ease-linear data-[state=open]:w-[300px] lg:flex lg:flex-col"
+      class="flex w-0 shrink-0 flex-col overflow-hidden motion-reduce:transition-none transition-[width] duration-200 ease-linear data-[state=open]:w-[300px]"
     >
       <div class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle">
         {@render detailPanel(rail.toggle)}
       </div>
     </aside>
+  {/if}
+
+  <!-- Floating detail panel — visible when pane is narrow (<820px, non-mobile).
+       Guard paneWidth > 0 avoids a brief flash before the ResizeObserver fires. -->
+  {#if rail?.open && !rail.isMobile && !isDocked && paneWidth > 0}
+    <div
+      data-float="true"
+      transition:fly={floatTransition(reducedMotion.current)}
+      class="absolute top-4 right-4 z-50 w-80 bg-background rounded-2xl shadow-2xl
+             border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
+    >
+      {@render detailPanel(rail.toggle)}
+    </div>
   {/if}
 </div>
 
