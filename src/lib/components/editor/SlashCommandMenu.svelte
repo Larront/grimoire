@@ -11,6 +11,7 @@
     Minus,
     Image,
     Music2,
+    CalendarDays,
   } from "@lucide/svelte";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 
@@ -27,6 +28,7 @@
     Minus,
     Image,
     Music2,
+    CalendarDays,
   };
 
   interface Props {
