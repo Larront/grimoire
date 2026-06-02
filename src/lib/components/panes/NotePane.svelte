@@ -18,7 +18,7 @@
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import NoteDetails from "$lib/components/NoteDetails.svelte";
   import type { AliasCollision, BacklinkNote, OutboundLink } from "$lib/components/NoteDetails.svelte";
-  import { DOCK_THRESHOLD, floatTransition } from "$lib/utils/dock-threshold";
+  import { getDockMode, floatTransition } from "$lib/utils/dock-threshold";
 
   interface Props {
     noteId: number;
@@ -205,7 +205,7 @@
     return () => ro.disconnect();
   });
 
-  const isDocked = $derived(paneWidth >= DOCK_THRESHOLD);
+  const isDocked = $derived(getDockMode(paneWidth) === "docked");
 
   // ── Detail panel state ───────────────────────────────────────────────────
   let detailTags = $state<string[]>([]);
