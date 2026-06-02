@@ -65,13 +65,10 @@
     onCommit($state.snapshot(_events) as TimelineEvent[]);
   }
 
-  // Gap at index g is visible when:
-  // - bottom gap (g === _events.length): always visible
-  // - top gap (g === 0): only when hovering event 0
-  // - between gap (g > 0): when hovering event g-1 or event g
+  // A gap before event g is hover-revealed when hovering either event it sits
+  // between (event g-1 or event g). The trailing append gap is always visible
+  // and rendered separately, so it does not go through here.
   function gapVisible(g: number): boolean {
-    if (g === _events.length) return true;
-    if (g === 0) return hoveredIndex === 0;
     return hoveredIndex === g - 1 || hoveredIndex === g;
   }
 
@@ -85,28 +82,34 @@
   }
 </script>
 
+{#snippet insertionPoint(index: number, label: string, visible: boolean)}
+  <button
+    type="button"
+    class="insertion-point w-full flex items-center gap-1 h-5 mb-0.5 rounded transition-opacity duration-100 focus-visible:opacity-100 focus-visible:pointer-events-auto"
+    class:opacity-0={!visible}
+    class:pointer-events-none={!visible}
+    onclick={() => insertAt(index)}
+    aria-label={label}
+  >
+    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
+    <span class="text-[10px] text-muted-foreground/60 px-1 leading-none">+</span>
+    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
+  </button>
+{/snippet}
+
 <div class="timeline-block my-1 select-none" contenteditable="false">
   {#if _events.length === 0}
     <div class="text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>
   {/if}
 
-  <!-- Gap above first event (hover-revealed, focus-visible) -->
-  {#if _events.length > 0}
-    <button
-      type="button"
-      class="insertion-point w-full flex items-center gap-1 h-5 mb-0.5 rounded opacity-0 pointer-events-none transition-opacity duration-100 focus-visible:opacity-100 focus-visible:pointer-events-auto"
-      class:opacity-100={gapVisible(0)}
-      class:pointer-events-auto={gapVisible(0)}
-      onclick={() => insertAt(0)}
-      aria-label="Insert event at top"
-    >
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-      <span class="text-[10px] text-muted-foreground/60 px-1 leading-none">+</span>
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    </button>
-  {/if}
-
   {#each _events as event, i (i)}
+    <!-- Gap before event i (hover-revealed, focus-visible) -->
+    {@render insertionPoint(
+      i,
+      i === 0 ? "Insert event at top" : `Insert event after position ${i}`,
+      gapVisible(i),
+    )}
+
     <div
       class="timeline-event relative pr-14"
       role="group"
@@ -192,33 +195,8 @@
         </div>
       {/if}
     </div>
-
-    <!-- Gap after event i: between events when not last, always-visible bottom when last -->
-    <button
-      type="button"
-      class="insertion-point w-full flex items-center gap-1 h-5 mb-0.5 rounded transition-opacity duration-100 focus-visible:opacity-100"
-      class:opacity-0={!gapVisible(i + 1)}
-      class:pointer-events-none={!gapVisible(i + 1)}
-      onclick={() => insertAt(i + 1)}
-      aria-label={i === _events.length - 1 ? "Add event" : `Insert event after position ${i + 1}`}
-    >
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-      <span class="text-[10px] text-muted-foreground/60 px-1 leading-none">+</span>
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    </button>
   {/each}
 
-  <!-- Bottom insertion point for empty timeline (always visible) -->
-  {#if _events.length === 0}
-    <button
-      type="button"
-      class="insertion-point w-full flex items-center gap-1 h-5 rounded"
-      onclick={() => insertAt(0)}
-      aria-label="Add event"
-    >
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-      <span class="text-[10px] text-muted-foreground/60 px-1 leading-none">+</span>
-      <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    </button>
-  {/if}
+  <!-- Trailing gap: appends to the end; always visible (subsumes the empty-state add) -->
+  {@render insertionPoint(_events.length, "Add event", true)}
 </div>
