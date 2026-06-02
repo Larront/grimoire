@@ -1033,6 +1033,58 @@ mod tests {
         );
     }
 
+    // ── timeline fence — extract and rewrite ────────────────────────────────
+
+    #[test]
+    fn extract_wikilinks_finds_links_inside_timeline_fence() {
+        let content = "```timeline\nDate: [[Calendar.md]]\nTitle: [[The Shattering.md]]\nSee [[Aldric.md]] for context.\n```";
+        let links = extract_wikilinks(content);
+        assert!(
+            links.contains(&"Calendar.md".to_string()),
+            "expected Calendar.md in {links:?}"
+        );
+        assert!(
+            links.contains(&"The Shattering.md".to_string()),
+            "expected The Shattering.md in {links:?}"
+        );
+        assert!(
+            links.contains(&"Aldric.md".to_string()),
+            "expected Aldric.md in {links:?}"
+        );
+    }
+
+    #[test]
+    fn rewrite_backlinks_rewrites_inside_timeline_fence() {
+        let dir = TempDir::new().unwrap();
+        let content = "```timeline\nDate: Year 1\nTitle: [[target.md]]\nSee also [[target.md|display]].\n```";
+        fs::write(dir.path().join("note.md"), content).unwrap();
+        fs::write(dir.path().join("target.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "note.md", "Note");
+        insert_note(&mut conn, 2, "target.md", "Target");
+        upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
+
+        let count =
+            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "target.md", "renamed.md")
+                .unwrap();
+
+        assert_eq!(count, 1, "note.md should have been rewritten");
+        let updated = fs::read_to_string(dir.path().join("note.md")).unwrap();
+        assert!(
+            updated.contains("[[renamed.md]]"),
+            "bare link should be rewritten: {updated}"
+        );
+        assert!(
+            updated.contains("[[renamed.md|display]]"),
+            "aliased link should be rewritten: {updated}"
+        );
+        assert!(
+            !updated.contains("[[target.md"),
+            "old path should not remain: {updated}"
+        );
+    }
+
     // ── get_alias_collisions_on_conn ─────────────────────────────────────────
 
     #[test]

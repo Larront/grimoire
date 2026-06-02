@@ -49,6 +49,48 @@ export function moveEventDown(events: TimelineEvent[], index: number): TimelineE
   return result;
 }
 
+// ─── Display rendering ───────────────────────────────────────────────────────
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Converts `[[...]]` wikilinks in a plain text string to `data-wiki-link` spans
+ * suitable for rendering with {@html} in display mode. Plain-text segments are
+ * HTML-escaped; the generated spans match the shape that Editor.svelte's delegated
+ * handleClick / handleMouseover handlers expect.
+ */
+export function renderTimelineText(text: string): string {
+  const re = /\[\[([^\]]+)\]\]/g;
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    parts.push(escapeHtml(text.slice(lastIndex, match.index)));
+
+    const rawInner = match[1].trim();
+    const pipeIdx = rawInner.indexOf("|");
+    const path = pipeIdx >= 0 ? rawInner.slice(0, pipeIdx).trim() : rawInner;
+    const title =
+      pipeIdx >= 0
+        ? rawInner.slice(pipeIdx + 1).trim()
+        : (path.split("/").pop()?.replace(/\.md$/, "") ?? path);
+
+    const escapedPath = path.replace(/"/g, "&quot;");
+    const escapedTitle = title.replace(/"/g, "&quot;");
+    parts.push(
+      `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapeHtml(title)}</span>`,
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  parts.push(escapeHtml(text.slice(lastIndex)));
+  return parts.join("");
+}
+
 // ─── Parse ────────────────────────────────────────────────────────────────────
 
 /**

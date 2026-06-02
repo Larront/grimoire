@@ -7,6 +7,7 @@ import {
   insertEventAt,
   moveEventUp,
   moveEventDown,
+  renderTimelineText,
   type TimelineEvent,
 } from "$lib/editor/timeline-block";
 
@@ -474,5 +475,70 @@ describe("moveEventDown", () => {
     const up = moveEventUp(events, 2);
     const down = moveEventDown(up, 1);
     expect(down).toEqual(events);
+  });
+});
+
+// ─── renderTimelineText ───────────────────────────────────────────────────────
+
+describe("renderTimelineText", () => {
+  it("plain text passes through unchanged", () => {
+    expect(renderTimelineText("The Shattering")).toBe("The Shattering");
+  });
+
+  it("empty string returns empty string", () => {
+    expect(renderTimelineText("")).toBe("");
+  });
+
+  it("[[Path]] becomes a data-wiki-link span with correct data attributes", () => {
+    const result = renderTimelineText("[[The Shattering]]");
+    expect(result).toContain("data-wiki-link");
+    expect(result).toContain('data-path="The Shattering"');
+    expect(result).toContain('data-title="The Shattering"');
+  });
+
+  it("path with .md extension strips extension from display title", () => {
+    const result = renderTimelineText("[[Characters/Aldric.md]]");
+    expect(result).toContain('data-path="Characters/Aldric.md"');
+    expect(result).toContain('data-title="Aldric"');
+  });
+
+  it("nested path — title is the last segment without extension", () => {
+    const result = renderTimelineText("[[World/Events/The Shattering.md]]");
+    expect(result).toContain('data-path="World/Events/The Shattering.md"');
+    expect(result).toContain('data-title="The Shattering"');
+  });
+
+  it("plain text before and after link is preserved", () => {
+    const result = renderTimelineText("See [[Aldric]] for details");
+    expect(result).toContain("See ");
+    expect(result).toContain("data-wiki-link");
+    expect(result).toContain(" for details");
+  });
+
+  it("multiple links in one string produces multiple spans", () => {
+    const result = renderTimelineText("[[Alpha]] and [[Beta]]");
+    expect((result.match(/data-wiki-link/g) ?? []).length).toBe(2);
+    expect(result).toContain('data-path="Alpha"');
+    expect(result).toContain('data-path="Beta"');
+  });
+
+  it("HTML special chars in plain text segments are escaped", () => {
+    const result = renderTimelineText("A <b> title & more");
+    expect(result).not.toContain("<b>");
+    expect(result).toContain("&lt;b&gt;");
+    expect(result).toContain("&amp;");
+  });
+
+  it("pipe-separated display text uses the display alias as title", () => {
+    const result = renderTimelineText("[[Characters/Aldric.md|Aldric the Great]]");
+    expect(result).toContain('data-path="Characters/Aldric.md"');
+    expect(result).toContain('data-title="Aldric the Great"');
+    expect(result).toContain("Aldric the Great");
+  });
+
+  it("no [[...]] means no span elements", () => {
+    const result = renderTimelineText("Just a plain description.");
+    expect(result).not.toContain("<span");
+    expect(result).not.toContain("data-wiki-link");
   });
 });
