@@ -38,7 +38,7 @@ describe("ColorSwatches", () => {
     });
     const buttons = Array.from(container.querySelectorAll('button[type="button"]'));
     const selected = buttons[1]; // "#00ff00" is index 1
-    expect(selected.className).toContain("border-accent");
+    expect(selected.className).toContain("border-primary");
   });
 
   it("renders a custom color input (type=color inside label)", () => {
@@ -64,6 +64,6 @@ describe("ColorSwatches", () => {
       props: { value: "#abcdef", presets: PRESETS, onchange: vi.fn() },
     });
     const label = container.querySelector("label") as HTMLElement;
-    expect(label.className).toContain("border-accent");
+    expect(label.className).toContain("border-primary");
   });
 });

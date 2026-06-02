@@ -125,7 +125,7 @@
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
     class="flex-1 bg-transparent font-heading text-xl font-semibold text-foreground
-           border-none outline-none border-b border-transparent focus:border-accent
+           border-none outline-none border-b border-transparent focus:border-primary
            pb-1 transition-colors"
     placeholder="Name this pin"
   />
@@ -134,7 +134,7 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock pin" : "Unlock to drag"}
     class="mt-1 p-1.5 rounded-md transition-colors cursor-pointer shrink-0
-           {unlocked ? 'text-accent hover:text-accent/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-4 h-4" />
@@ -152,7 +152,7 @@
         <span class="font-heading text-sm font-semibold text-foreground">{linkedNote.title}</span>
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
-          class="p-1 text-accent hover:text-accent/70 transition-colors cursor-pointer"
+          class="p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
           title="Open note"
         >
           <ExternalLink class="w-3.5 h-3.5" />
@@ -172,7 +172,7 @@
     <div class="flex flex-col gap-1">
       <input
         bind:value={noteSearchQuery}
-        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 font-mono text-[10px] text-foreground outline-none focus:border-accent"
+        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 font-mono text-[10px] text-foreground outline-none focus:border-primary"
         placeholder="Search notes…"
       />
       {#if noteSearchQuery.trim()}
@@ -213,7 +213,7 @@
       save({ category_id: id });
     }}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-           font-mono text-[10px] text-foreground outline-none focus:border-accent cursor-pointer"
+           font-mono text-[10px] text-foreground outline-none focus:border-primary cursor-pointer"
   >
     <option value="">Uncategorized</option>
     {#each categories as cat (cat.id)}
@@ -233,7 +233,7 @@
     }}
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
-           font-mono text-[10px] text-foreground outline-none focus:border-accent resize-none leading-relaxed"
+           font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
     placeholder="Add notes about this location…"
   ></textarea>
 </DetailSection>
@@ -261,8 +261,8 @@
                 title={shape}
                 class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
                        {pin.shape === shape
-                  ? 'border-accent bg-primary-subtle'
-                  : 'border-background-border hover:border-accent/50 hover:bg-primary-subtle/50'}"
+                  ? 'border-primary bg-primary-subtle'
+                  : 'border-background-border hover:border-primary/50 hover:bg-primary-subtle/50'}"
                 style="color:{pin.shape === shape ? resolvedColor : 'var(--color-foreground-muted)'}"
               >
                 <svg viewBox="0 0 16 16" width="16" height="16">
@@ -285,7 +285,7 @@
                 title={key}
                 class="h-8 flex items-center justify-center rounded-md border transition-colors cursor-pointer
                        {pin.icon === key
-                  ? 'border-accent bg-primary-subtle text-accent'
+                  ? 'border-primary bg-primary-subtle text-primary'
                   : 'border-transparent hover:border-background-border hover:bg-primary-subtle/50 text-foreground-muted'}"
               >
                 <Component size={14} />

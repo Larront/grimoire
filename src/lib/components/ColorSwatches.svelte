@@ -17,14 +17,14 @@
       onclick={() => onchange(color)}
       title={color}
       class="w-6 h-6 rounded-full border-2 transition-all cursor-pointer
-             {value === color ? 'border-accent scale-110' : 'border-transparent hover:border-background-border'}"
+             {value === color ? 'border-primary scale-110' : 'border-transparent hover:border-background-border'}"
       style="background-color:{color}"
     ></button>
   {/each}
   <label
     title="Custom color"
     class="w-6 h-6 rounded-full border-2 cursor-pointer flex items-center justify-center overflow-hidden
-           {isCustom ? 'border-accent scale-110' : 'border-background-border hover:border-accent/50 bg-background-subtle'}"
+           {isCustom ? 'border-primary scale-110' : 'border-background-border hover:border-primary/50 bg-background-subtle'}"
     style={isCustom ? `background-color:${value}` : ""}
   >
     {#if !isCustom}

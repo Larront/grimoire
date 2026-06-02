@@ -51,7 +51,7 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock annotation" : "Unlock to drag"}
     class="p-1.5 rounded-md transition-colors cursor-pointer
-           {unlocked ? 'text-accent hover:text-accent/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-3.5 h-3.5" />
@@ -77,7 +77,7 @@
         if (e.key === 'Enter') (e.target as HTMLElement).blur();
       }}
       class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-             font-mono text-[10px] text-foreground outline-none focus:border-accent"
+             font-mono text-[10px] text-foreground outline-none focus:border-primary"
       placeholder="Label text"
     />
   </DetailSection>
@@ -92,7 +92,7 @@
       step="2"
       value={annotation.font_size}
       oninput={(e) => save({ font_size: Number((e.target as HTMLInputElement).value) })}
-      class="w-full accent-accent cursor-pointer"
+      class="w-full accent-primary cursor-pointer"
     />
   </DetailSection>
 {:else}
@@ -106,7 +106,7 @@
       step="0.05"
       value={annotation.opacity}
       oninput={(e) => save({ opacity: Number((e.target as HTMLInputElement).value) })}
-      class="w-full accent-accent cursor-pointer"
+      class="w-full accent-primary cursor-pointer"
     />
   </DetailSection>
 
