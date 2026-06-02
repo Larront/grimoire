@@ -135,25 +135,18 @@
   function acceptSuggestion(item: NoteSearchResult) {
     if (!suggestion) return;
     const { eventIndex, field, triggerStart } = suggestion;
-    const el = field === "title" ? titleInputs[eventIndex] : descTextareas[eventIndex];
-    const currentValue =
-      field === "title" ? _events[eventIndex].title : _events[eventIndex].description;
-    const cursor = el?.selectionStart ?? currentValue.length;
+    const inputs = field === "title" ? titleInputs : descTextareas;
+    const currentValue = _events[eventIndex][field];
+    const cursor = inputs[eventIndex]?.selectionStart ?? currentValue.length;
     const before = currentValue.slice(0, triggerStart);
     const after = currentValue.slice(cursor);
     const inserted = `[[${item.path}]]`;
-    const newValue = before + inserted + after;
-    if (field === "title") {
-      _events[eventIndex] = { ..._events[eventIndex], title: newValue };
-    } else {
-      _events[eventIndex] = { ..._events[eventIndex], description: newValue };
-    }
+    _events[eventIndex] = { ..._events[eventIndex], [field]: before + inserted + after };
     suggestion = null;
     const newCursor = triggerStart + inserted.length;
     tick().then(() => {
-      const fieldEl = field === "title" ? titleInputs[eventIndex] : descTextareas[eventIndex];
-      fieldEl?.focus();
-      fieldEl?.setSelectionRange(newCursor, newCursor);
+      inputs[eventIndex]?.focus();
+      inputs[eventIndex]?.setSelectionRange(newCursor, newCursor);
     });
   }
 
