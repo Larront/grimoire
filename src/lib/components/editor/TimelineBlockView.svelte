@@ -20,8 +20,9 @@
   // Set of expanded event indices (description visible)
   let expandedSet = $state(new Set<number>());
 
-  let titleInputs: (HTMLInputElement | undefined)[] = [];
-  let descTextareas: (HTMLTextAreaElement | undefined)[] = [];
+  // Only one event is editable at a time (editingIndex), so single refs suffice.
+  let titleInput = $state<HTMLInputElement>();
+  let descTextarea = $state<HTMLTextAreaElement>();
 
   interface SuggestionState {
     items: NoteSearchResult[];
@@ -38,7 +39,7 @@
     const idx = editingIndex;
     if (idx < 0 || idx >= _events.length) return;
     tick().then(() => {
-      titleInputs[idx]?.focus();
+      titleInput?.focus();
     });
   });
 
@@ -50,10 +51,15 @@
 
   function handleFocusOut(e: FocusEvent, i: number) {
     if (editingIndex !== i) return;
-    const related = e.relatedTarget as Node | null;
     const container = e.currentTarget as HTMLElement;
-    if (related && container.contains(related)) return;
-    commit();
+    // Defer: during the display→edit swap the clicked button unmounts and fires
+    // focusout before the new input is focused (relatedTarget is null at that
+    // instant). Check where focus actually landed once it has settled.
+    setTimeout(() => {
+      if (editingIndex !== i) return;
+      if (container.contains(document.activeElement)) return;
+      commit();
+    });
   }
 
   function expand(i: number) {
@@ -65,6 +71,13 @@
   function startEdit(i: number) {
     expand(i); // auto-expand so the description is visible in edit mode
     editingIndex = i;
+  }
+
+  // Header click: if it landed on a wikilink, let it bubble to Editor.svelte's
+  // delegated navigation handler instead of entering edit mode.
+  function editFromHeader(e: MouseEvent, i: number) {
+    if ((e.target as HTMLElement).closest("[data-wiki-link]")) return;
+    startEdit(i);
   }
 
   function toggleExpand(i: number) {
@@ -175,9 +188,9 @@
   function acceptSuggestion(item: NoteSearchResult) {
     if (!suggestion) return;
     const { eventIndex, field, triggerStart } = suggestion;
-    const inputs = field === "title" ? titleInputs : descTextareas;
+    const input = field === "title" ? titleInput : descTextarea;
     const currentValue = _events[eventIndex][field];
-    const cursor = inputs[eventIndex]?.selectionStart ?? currentValue.length;
+    const cursor = input?.selectionStart ?? currentValue.length;
     const before = currentValue.slice(0, triggerStart);
     const after = currentValue.slice(cursor);
     const inserted = `[[${item.path}]]`;
@@ -185,8 +198,8 @@
     suggestion = null;
     const newCursor = triggerStart + inserted.length;
     tick().then(() => {
-      inputs[eventIndex]?.focus();
-      inputs[eventIndex]?.setSelectionRange(newCursor, newCursor);
+      input?.focus();
+      input?.setSelectionRange(newCursor, newCursor);
     });
   }
 
@@ -296,7 +309,7 @@
         {#if editingIndex === i}
           <!-- Edit mode: all fields visible -->
           <input
-            bind:this={titleInputs[i]}
+            bind:this={titleInput}
             bind:value={event.title}
             type="text"
             placeholder="Title"
@@ -313,7 +326,7 @@
                    text-primary/70 mb-1 focus-visible:border-primary"
           />
           <textarea
-            bind:this={descTextareas[i]}
+            bind:this={descTextarea}
             bind:value={event.description}
             placeholder="Description (optional)"
             rows={2}
@@ -331,7 +344,7 @@
               type="button"
               class="flex-1 min-w-0 text-left rounded
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
-              onclick={() => startEdit(i)}
+              onclick={(e) => editFromHeader(e, i)}
               onkeydown={(e) => e.key === 'Enter' && startEdit(i)}
               aria-label={`Edit event: ${event.title || 'Untitled'}`}
             >

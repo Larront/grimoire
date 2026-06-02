@@ -95,21 +95,26 @@ export function renderTimelineText(text: string): string {
 
 /**
  * Parses the body of a fenced ```timeline block into TimelineEvent records.
- * Records are blank-line-separated; within a record, lines starting with
- * "Date: " and "Title: " set those fields and all other lines are description.
+ * Records are blank-line-separated. Within a record, the header is the leading
+ * lines: an optional "Date: " line followed by the "Title: " line (the order the
+ * serializer always emits). The "Title: " line ends the header — every line after
+ * it is description, even if it starts with "Date: " or "Title: ", so description
+ * content that happens to look like a label round-trips without being clobbered.
  */
 export function parseTimelineBody(body: string): TimelineEvent[] {
   const rawRecords = body.split(/\n\n+/).filter((r) => r.trim());
   return rawRecords.map((record) => {
     let date = "";
     let title = "";
+    let titleSeen = false;
     const descLines: string[] = [];
 
     for (const line of record.split("\n")) {
-      if (line.startsWith("Date: ")) {
+      if (!titleSeen && line.startsWith("Date: ")) {
         date = line.slice(6);
-      } else if (line.startsWith("Title: ")) {
+      } else if (!titleSeen && line.startsWith("Title: ")) {
         title = line.slice(7);
+        titleSeen = true;
       } else {
         descLines.push(line);
       }

@@ -99,18 +99,25 @@ describe("parseTimelineBody", () => {
     expect(result[1].title).toBe("Beta");
   });
 
-  it("description lines that look like Date/Title for other events are not confused", () => {
+  it("Date:/Title: lines after the title are description, not fields", () => {
     const body = "Title: Alpha\nDate: not a date field\nTitle: also description";
-    // Second Date: and Title: are description lines because they come after the first Title:
-    // Actually, our parser processes line by line regardless of order — Date:/Title: label lines
-    // always set their field; other lines are always description.
+    // The Title: line ends the header; everything after it is description, even
+    // when it starts with a Date:/Title: label. This protects description content.
     const result = parseTimelineBody(body);
     expect(result).toHaveLength(1);
-    // The last Title: sets title to "also description" — that's the spec behavior
-    // (labeled lines always win regardless of position within a record)
-    expect(result[0].title).toBe("also description");
-    expect(result[0].date).toBe("not a date field");
-    expect(result[0].description).toBe("");
+    expect(result[0].title).toBe("Alpha");
+    expect(result[0].date).toBe("");
+    expect(result[0].description).toBe("Date: not a date field\nTitle: also description");
+  });
+
+  it("description whose first line looks like a label is not clobbered", () => {
+    // Event has no date, so the serializer emits only "Title: " then the description.
+    const body = "Title: \nDate: only a description line";
+    const result = parseTimelineBody(body);
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe("");
+    expect(result[0].date).toBe("");
+    expect(result[0].description).toBe("Date: only a description line");
   });
 });
 
@@ -280,6 +287,14 @@ describe("round-trip", () => {
   it("wikilinks survive", () => {
     const events: TimelineEvent[] = [
       { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "See [[Highvale]]." },
+    ];
+    expect(roundTrip(events)).toEqual(events);
+  });
+
+  it("description lines that look like Date:/Title: labels survive", () => {
+    const events: TimelineEvent[] = [
+      { date: "", title: "Alpha", description: "Title: a quote\nDate: yesterday" },
+      { date: "", title: "", description: "Date: starts with a label" },
     ];
     expect(roundTrip(events)).toEqual(events);
   });
