@@ -516,7 +516,7 @@
         notes.notes.find((n: Note) => n.id === selectedPin?.note_id) ?? null}
       <div
         transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-2xl shadow-2xl
+        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-lg shadow-2xl
                border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
       >
         <DetailPanel
@@ -543,7 +543,7 @@
     {#if selectedAnnotation && !placingMode}
       <div
         transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-2xl shadow-2xl
+        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-lg shadow-2xl
                border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
       >
         <DetailPanel

@@ -422,7 +422,7 @@
     <div
       data-float="true"
       transition:fly={floatTransition(reducedMotion.current)}
-      class="absolute top-4 right-4 z-50 w-80 bg-background rounded-2xl shadow-2xl
+      class="absolute top-4 right-4 z-50 w-80 bg-background rounded-lg shadow-2xl
              border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
     >
       {@render detailPanel(rail.toggle)}

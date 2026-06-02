@@ -124,7 +124,7 @@
     onkeydown={(e) => {
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
-    class="flex-1 bg-transparent font-heading text-xl font-semibold text-foreground
+    class="flex-1 min-w-0 bg-transparent font-heading text-xl font-semibold text-foreground
            border-none outline-none border-b border-transparent focus:border-primary
            pb-1 transition-colors"
     placeholder="Name this pin"
@@ -148,11 +148,11 @@
 <DetailSection label="Linked Note" sectionKey="linked-note">
   {#if linkedNote}
     <div class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <span class="font-heading text-sm font-semibold text-foreground">{linkedNote.title}</span>
+      <div class="flex items-center justify-between gap-2">
+        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground">{linkedNote.title}</span>
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
-          class="p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
+          class="shrink-0 p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
           title="Open note"
         >
           <ExternalLink class="w-3.5 h-3.5" />

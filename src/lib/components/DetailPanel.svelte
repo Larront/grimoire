@@ -23,7 +23,7 @@
   }: Props = $props();
 </script>
 
-<div data-slot="detail-panel" class="flex h-full flex-col">
+<div data-slot="detail-panel" class="flex min-h-0 flex-1 flex-col">
   <div class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-background-border px-(--pad-x)">
     <span class="font-heading text-(--font-body) font-medium text-foreground">{title}</span>
     {#if saveStatus === 'saved'}
