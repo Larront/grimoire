@@ -6,14 +6,41 @@ import SearchPalette from "../lib/components/SearchPalette.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 
+const SAMPLE_PATH = "/app-data/sample-world";
+
+const RECENT_LEDGER = {
+  path: "/worlds/my-campaign",
+  name: "My Campaign",
+  note_count: 5,
+  scene_count: 0,
+  map_count: 0,
+  last_opened: new Date().toISOString(),
+};
+
+function mockSampleInvoke(recents: (typeof RECENT_LEDGER)[] = []) {
+  vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+    if (cmd === "get_recent_ledgers") return recents;
+    if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
+    if (cmd === "open_ledger")
+      return { path: SAMPLE_PATH, note_count: 3, scene_count: 0, map_count: 0, failed_imports: [] };
+    if (cmd === "get_notes") return [];
+    return null;
+  });
+}
+
 async function flush() {
   await act(async () => {
     await Promise.resolve();
   });
 }
 
-async function openPalette() {
+async function openPaletteAndSearch(query: string) {
+  const { getByPlaceholderText } = render(SearchPalette);
   await fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  await flush();
+  await fireEvent.input(getByPlaceholderText("Type a command or search..."), {
+    target: { value: query },
+  });
   await flush();
 }
 
@@ -21,20 +48,7 @@ async function openPalette() {
 
 describe("sample replay — returning Splash", () => {
   beforeEach(() => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_recent_ledgers")
-        return [
-          {
-            path: "/worlds/my-campaign",
-            name: "My Campaign",
-            note_count: 5,
-            scene_count: 0,
-            map_count: 0,
-            last_opened: new Date().toISOString(),
-          },
-        ];
-      return null;
-    });
+    mockSampleInvoke([RECENT_LEDGER]);
   });
 
   afterEach(async () => {
@@ -50,31 +64,6 @@ describe("sample replay — returning Splash", () => {
   });
 
   it("replay link invokes exploreSample when clicked", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "get_recent_ledgers")
-        return [
-          {
-            path: "/worlds/my-campaign",
-            name: "My Campaign",
-            note_count: 5,
-            scene_count: 0,
-            map_count: 0,
-            last_opened: new Date().toISOString(),
-          },
-        ];
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      if (cmd === "get_notes") return [];
-      return null;
-    });
-
     const { getByTestId } = render(HomePage);
     await flush();
 
@@ -89,6 +78,10 @@ describe("sample replay — returning Splash", () => {
 // ── Command Palette — Explore example world ──────────────────────────────────
 
 describe("sample replay — command palette", () => {
+  beforeEach(() => {
+    mockSampleInvoke();
+  });
+
   afterEach(async () => {
     cleanup();
     tabs.closeAll("left");
@@ -97,38 +90,14 @@ describe("sample replay — command palette", () => {
   });
 
   it("lists an 'Explore example world' command when searching", async () => {
-    const { getByPlaceholderText } = render(SearchPalette);
-    await openPalette();
-    await fireEvent.input(getByPlaceholderText("Type a command or search..."), {
-      target: { value: "explore" },
-    });
-    await flush();
+    await openPaletteAndSearch("explore");
     expect(
       document.body.querySelector('[data-testid="cmd-explore-sample"]'),
     ).toBeTruthy();
   });
 
   it("'Explore example world' command calls exploreSample", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      if (cmd === "get_notes") return [];
-      return null;
-    });
-
-    const { getByPlaceholderText } = render(SearchPalette);
-    await openPalette();
-    await fireEvent.input(getByPlaceholderText("Type a command or search..."), {
-      target: { value: "explore" },
-    });
-    await flush();
+    await openPaletteAndSearch("explore");
 
     const btn = document.body.querySelector(
       '[data-testid="cmd-explore-sample"]',
