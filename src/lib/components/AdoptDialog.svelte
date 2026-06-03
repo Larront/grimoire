@@ -4,6 +4,7 @@
   import { Folder, LoaderCircle } from "@lucide/svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
 
   let { open: dialogOpen = $bindable(false) }: { open: boolean } = $props();
 
@@ -22,27 +23,8 @@
   }
 
   function validate(): boolean {
-    const trimmed = name.trim();
-
-    if (!trimmed) {
-      nameError = "Please enter a ledger name.";
-      return false;
-    }
-    if (/[/\\:*?"<>|]/.test(trimmed)) {
-      nameError = 'Name contains invalid characters ( / \\ : * ? " < > | ).';
-      return false;
-    }
-    if (trimmed === "." || trimmed === "..") {
-      nameError = "Invalid ledger name.";
-      return false;
-    }
-    if (!parent) {
-      nameError = "Please choose a storage location.";
-      return false;
-    }
-
-    nameError = null;
-    return true;
+    nameError = validateLedgerName(name, parent);
+    return nameError === null;
   }
 
   async function handleChooseLocation() {
@@ -54,7 +36,7 @@
       });
       if (selected && typeof selected === "string") {
         parent = selected;
-        if (nameError === "Please choose a storage location.") nameError = null;
+        if (nameError === MISSING_LOCATION_ERROR) nameError = null;
       }
     } finally {
       isPickingLocation = false;

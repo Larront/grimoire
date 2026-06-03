@@ -8,6 +8,7 @@
   import type { Note } from "$lib/types/ledger";
   import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
 
   let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
@@ -96,7 +97,7 @@
       });
       if (selected && typeof selected === "string") {
         newLedgerParent = selected;
-        if (nameError === "Please choose a storage location.") nameError = null;
+        if (nameError === MISSING_LOCATION_ERROR) nameError = null;
       }
     } finally {
       isPickingLocation = false;
@@ -104,25 +105,9 @@
   }
 
   async function handleCreateLedger() {
-    nameError = null;
     const name = newLedgerName.trim();
-
-    if (!name) {
-      nameError = "Please enter a ledger name.";
-      return;
-    }
-    if (/[/\\:*?"<>|]/.test(name)) {
-      nameError = 'Name contains invalid characters ( / \\ : * ? " < > | ).';
-      return;
-    }
-    if (name === "." || name === "..") {
-      nameError = "Invalid ledger name.";
-      return;
-    }
-    if (!newLedgerParent) {
-      nameError = "Please choose a storage location.";
-      return;
-    }
+    nameError = validateLedgerName(name, newLedgerParent);
+    if (nameError) return;
 
     openingPath = "__creating__";
     errorMsg = null;
