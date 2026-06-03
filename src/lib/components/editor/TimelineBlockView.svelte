@@ -3,7 +3,48 @@
   import { tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import type { NoteSearchResult } from "$lib/editor/wiki-link";
-  import { FileText, ChevronDown } from "@lucide/svelte";
+  import { notes } from "$lib/stores/notes.svelte";
+  import { FileText, ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
+
+  // Wikilink stub-vs-resolved styling. A link is "known" if it would navigate —
+  // i.e. its path matches a note, or (mirroring Editor.svelte's click handler) it
+  // resolves via an alias. Alias lookups are async, so results are cached here and
+  // consulted by isKnownPath. A path that hasn't resolved yet defaults to known
+  // (full accent) so a real link is never briefly shown as a faded, unclickable
+  // stub; only paths that fail both checks settle to broken.
+  let linkResolution = $state(new Map<string, boolean>());
+
+  const isKnownPath = (path: string) => linkResolution.get(path) ?? true;
+
+  $effect(() => {
+    const paths = new Set<string>();
+    for (const ev of _events) {
+      for (const field of [ev.date, ev.title, ev.description]) {
+        for (const m of field.matchAll(/\[\[([^\]]+)\]\]/g)) {
+          const inner = m[1].trim();
+          const pipe = inner.indexOf("|");
+          paths.add((pipe >= 0 ? inner.slice(0, pipe) : inner).trim());
+        }
+      }
+    }
+    const noteList = notes.notes; // tracked: re-resolve when the ledger's notes load/change
+    let cancelled = false;
+    (async () => {
+      const next = new Map<string, boolean>();
+      for (const p of paths) {
+        if (noteList.some((n) => n.path === p)) {
+          next.set(p, true);
+        } else {
+          const resolved = await invoke("resolve_note_by_alias", { alias: p }).catch(() => null);
+          next.set(p, resolved != null);
+        }
+      }
+      if (!cancelled) linkResolution = next;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
 
   let {
     events,
@@ -216,16 +257,16 @@
 {#snippet insertionPoint(index: number, label: string, visible: boolean)}
   <button
     type="button"
-    class="insertion-point w-full flex items-center gap-1 h-5 rounded transition-opacity duration-100
+    class="insertion-point w-full flex items-center gap-1 h-5 rounded transition-opacity duration-150 motion-reduce:transition-none
            focus-visible:opacity-100 focus-visible:pointer-events-auto
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
     class:opacity-0={!visible}
     class:pointer-events-none={!visible}
     onclick={() => insertAt(index)}
     aria-label={label}
   >
     <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    <span class="text-[10px] text-muted-foreground/60 px-1 leading-none">+</span>
+    <Plus size={11} class="text-muted-foreground/60 shrink-0" aria-hidden="true" />
     <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
   </button>
 {/snippet}
@@ -247,64 +288,73 @@
 
     <!-- Event row: spine column + content column -->
     <div
-      class="timeline-event flex items-start gap-2"
+      class="timeline-event group flex items-start gap-2"
       role="group"
       aria-label={`Event ${i + 1}`}
       onfocusout={(e) => handleFocusOut(e, i)}
       onmouseenter={() => (hoveredIndex = i)}
       onmouseleave={() => (hoveredIndex = null)}
     >
-      <!-- Spine column: dot + connecting line to next event -->
-      <div class="flex flex-col items-center w-4 flex-none self-stretch pt-[2px]">
-        <div
-          class="size-[9px] rounded-full border border-primary/50 bg-background shrink-0 mt-[7px] z-10"
-          aria-hidden="true"
-        ></div>
+      <!-- Spine column: continuous line + node. The connecting line starts under the
+           node and extends past the row bottom (-bottom-[34px]) to bridge the 20px
+           insertion gap and meet the next node, which paints over its tail. The last
+           event draws no descending line. The node turns Crimson only while editing —
+           the timeline's single use of the accent. -->
+      <div class="relative w-4 flex-none self-stretch" aria-hidden="true">
         {#if i < _events.length - 1}
-          <div class="flex-1 w-px bg-border/50 mt-1" aria-hidden="true"></div>
+          <div
+            class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[34px] w-px bg-muted-foreground/25"
+          ></div>
         {/if}
+        <div
+          class="absolute left-1/2 -translate-x-1/2 top-[9px] size-[9px] rounded-full border bg-background
+                 {editingIndex === i ? 'border-primary' : 'border-muted-foreground/50'}"
+        ></div>
       </div>
 
       <!-- Content column -->
       <div class="flex-1 min-w-0 pb-2 relative pr-14">
-        <!-- Up / down nudge controls -->
-        <div class="absolute top-0 right-6 flex flex-col">
+        <!-- Up / down nudge controls — revealed on hover / keyboard focus -->
+        <div
+          class="absolute top-0 right-6 flex flex-col opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+                 group-hover:opacity-100 group-focus-within:opacity-100"
+        >
           <button
             type="button"
-            class="text-[9px] text-muted-foreground leading-none p-0.5 transition-opacity
-                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
-            class:opacity-20={i === 0}
-            class:cursor-not-allowed={i === 0}
-            class:cursor-pointer={i !== 0}
+            class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
+                   disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
+                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
             disabled={i === 0}
             onclick={() => nudgeUp(i)}
-            tabindex="-1"
             aria-label="Move event up"
-          >▲</button>
+          >
+            <ChevronUp size={13} />
+          </button>
           <button
             type="button"
-            class="text-[9px] text-muted-foreground leading-none p-0.5 transition-opacity
-                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
-            class:opacity-20={i === _events.length - 1}
-            class:cursor-not-allowed={i === _events.length - 1}
-            class:cursor-pointer={i !== _events.length - 1}
+            class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
+                   disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
+                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
             disabled={i === _events.length - 1}
             onclick={() => nudgeDown(i)}
-            tabindex="-1"
             aria-label="Move event down"
-          >▼</button>
+          >
+            <ChevronDown size={13} />
+          </button>
         </div>
 
-        <!-- Delete button -->
+        <!-- Delete button — revealed on hover / keyboard focus -->
         <button
           type="button"
-          class="absolute top-0 right-0 text-muted-foreground hover:text-destructive text-xs
-                 leading-none p-0.5 cursor-pointer rounded
-                 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          class="absolute top-0 right-0 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
+                 opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+                 group-hover:opacity-100 group-focus-within:opacity-100
+                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
           onclick={() => deleteEvent(i)}
-          tabindex="-1"
           aria-label="Delete event"
-        >×</button>
+        >
+          <X size={13} />
+        </button>
 
         {#if editingIndex === i}
           <!-- Edit mode: all fields visible -->
@@ -323,7 +373,7 @@
             type="text"
             placeholder="Date (optional)"
             class="w-full bg-transparent border-b border-border text-[11px] outline-none font-heading
-                   text-primary/70 mb-1 focus-visible:border-primary"
+                   text-muted-foreground mb-1 focus-visible:border-primary"
           />
           <textarea
             bind:this={descTextarea}
@@ -343,20 +393,24 @@
             <button
               type="button"
               class="flex-1 min-w-0 text-left rounded
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1"
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               onclick={(e) => editFromHeader(e, i)}
               onkeydown={(e) => e.key === 'Enter' && startEdit(i)}
-              aria-label={`Edit event: ${event.title || 'Untitled'}`}
+              aria-label={`Edit event: ${event.title || 'Untitled event'}`}
             >
               {#if event.date}
-                <!-- Date label: Metamorphous, small, --primary-tinted -->
-                <div class="font-heading text-[11px] leading-tight text-primary/70 mb-0.5">
-                  {@html renderTimelineText(event.date)}
+                <!-- Date label: Metamorphous, small, ember-muted -->
+                <div class="font-heading text-[11px] leading-tight text-muted-foreground mb-0.5">
+                  {@html renderTimelineText(event.date, isKnownPath)}
                 </div>
               {/if}
               <!-- Title: Metamorphous (world voice) -->
-              <div class="font-heading text-sm leading-snug text-foreground">
-                {@html renderTimelineText(event.title || '(Untitled event)')}
+              <div
+                class="font-heading text-sm leading-snug {event.title
+                  ? 'text-foreground'
+                  : 'text-muted-foreground/60 italic'}"
+              >
+                {#if event.title}{@html renderTimelineText(event.title, isKnownPath)}{:else}Untitled event{/if}
               </div>
             </button>
 
@@ -365,15 +419,15 @@
               <button
                 type="button"
                 class="shrink-0 mt-1 p-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground
-                       transition-colors focus-visible:outline-none focus-visible:ring-2
-                       focus-visible:ring-primary focus-visible:ring-offset-1"
+                       transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2
+                       focus-visible:ring-primary focus-visible:ring-offset-2"
                 onclick={() => toggleExpand(i)}
                 aria-label={expandedSet.has(i) ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
                 aria-expanded={expandedSet.has(i)}
               >
                 <ChevronDown
                   size={12}
-                  class="transition-transform duration-200 {expandedSet.has(i) ? 'rotate-180' : ''}"
+                  class="transition-transform duration-150 motion-reduce:transition-none {expandedSet.has(i) ? 'rotate-180' : ''}"
                 />
               </button>
             {/if}
@@ -382,14 +436,14 @@
           <!-- Collapsible description: grid-rows slide (snaps under prefers-reduced-motion) -->
           {#if event.description}
             <div
-              class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out"
+              class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
               style="grid-template-rows: {expandedSet.has(i) ? '1fr' : '0fr'}"
               aria-hidden={!expandedSet.has(i)}
             >
               <div class="min-h-0">
                 <!-- Description: Nunito (reading prose voice) -->
                 <div class="font-sans text-xs text-muted-foreground whitespace-pre-wrap pt-1 pb-1">
-                  {@html renderTimelineText(event.description)}
+                  {@html renderTimelineText(event.description, isKnownPath)}
                 </div>
               </div>
             </div>

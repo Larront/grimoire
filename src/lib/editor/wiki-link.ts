@@ -1,6 +1,33 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
 import { invoke } from "@tauri-apps/api/core";
 import Suggestion from "@tiptap/suggestion";
+import { Plugin, PluginKey } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
+
+interface WikiBrokenState {
+  broken: Set<string>;
+  deco: DecorationSet;
+}
+
+// Editor.svelte resolves which wikilink targets don't exist and pushes the set of
+// broken paths through this key; the plugin below turns that into node decorations
+// (data-broken) so stubs render faded. Resolution lives in the component because it
+// needs the reactive notes store and async alias lookups, which a plugin can't reach.
+export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink");
+
+// Splits the inside of a [[...]] link into its target path and display title.
+// `path|display` uses the explicit alias; otherwise the title is the last path
+// segment with any .md extension stripped.
+export function parseWikiTarget(raw: string): { path: string; title: string } {
+  const inner = raw.trim();
+  const pipe = inner.indexOf("|");
+  const path = (pipe >= 0 ? inner.slice(0, pipe) : inner).trim();
+  const title =
+    pipe >= 0
+      ? inner.slice(pipe + 1).trim()
+      : (path.split("/").pop()?.replace(/\.md$/, "") ?? path);
+  return { path, title };
+}
 
 export interface WikiLinkSuggestionState {
   items: NoteSearchResult[];
@@ -85,21 +112,16 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   },
 
   addNodeView() {
+    // Color and cursor are driven by CSS off [data-wiki-link] / [data-broken] so the
+    // editor and the timeline's {@html} links share one styling source. The broken
+    // marker is applied by the decoration plugin below, not by the node view.
     return ({ node }) => {
       const dom = document.createElement("span");
-
-      const applyClasses = (el: HTMLElement) => {
-        const broken = el.dataset.broken !== undefined;
-        el.className = broken
-          ? "inline-flex items-center text-foreground-muted line-through cursor-default select-none whitespace-nowrap"
-          : "inline-flex items-center text-primary cursor-pointer select-none whitespace-nowrap";
-      };
-
+      dom.className = "inline-flex items-center select-none whitespace-nowrap";
       dom.dataset.wikiLink = "";
       dom.dataset.path = node.attrs.path ?? "";
       dom.dataset.title = node.attrs.title ?? "";
       dom.textContent = node.attrs.title ?? node.attrs.path ?? "?";
-      applyClasses(dom);
 
       return {
         dom,
@@ -109,7 +131,6 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           dom.dataset.title = updatedNode.attrs.title ?? "";
           dom.textContent =
             updatedNode.attrs.title ?? updatedNode.attrs.path ?? "?";
-          applyClasses(dom);
           return true;
         },
       };
@@ -121,10 +142,54 @@ export const WikiLink = Node.create<WikiLinkOptions>({
     return `[[${node.attrs.path}]]`;
   },
 
+  // Typing a complete [[target]] (closing the brackets yourself) commits a literal
+  // link to exactly what you typed — a stub when the target doesn't exist yet —
+  // instead of accepting whatever the suggestion popup happened to highlight. This
+  // gives a deterministic escape hatch from loose autocomplete matches.
+  addInputRules() {
+    return [
+      nodeInputRule({
+        find: /\[\[[^[\]]+\]\]$/,
+        type: this.type,
+        getAttributes: (match) => parseWikiTarget(match[0].slice(2, -2)),
+      }),
+    ];
+  },
+
   addProseMirrorPlugins() {
     const onSuggestion = this.options.onSuggestion;
 
+    // Decorates wikiLink nodes whose path is in the broken set (fed via meta) with
+    // data-broken. Rebuilds when a new set arrives or the doc changes; otherwise the
+    // existing DecorationSet is mapped forward untouched.
+    const brokenLinkPlugin = new Plugin<WikiBrokenState>({
+      key: wikiBrokenLinkKey,
+      state: {
+        init: () => ({ broken: new Set<string>(), deco: DecorationSet.empty }),
+        apply(tr, value, _oldState, newState) {
+          const meta = tr.getMeta(wikiBrokenLinkKey) as Set<string> | undefined;
+          if (!meta && !tr.docChanged) return value;
+          const broken = meta ?? value.broken;
+          const decos: Decoration[] = [];
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name !== "wikiLink") return;
+            const path = node.attrs.path as string | null;
+            if (path && broken.has(path)) {
+              decos.push(Decoration.node(pos, pos + node.nodeSize, { "data-broken": "" }));
+            }
+          });
+          return { broken, deco: DecorationSet.create(newState.doc, decos) };
+        },
+      },
+      props: {
+        decorations(state) {
+          return wikiBrokenLinkKey.getState(state)?.deco;
+        },
+      },
+    });
+
     return [
+      brokenLinkPlugin,
       Suggestion({
         editor: this.editor,
         char: "[[",

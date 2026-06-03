@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isImageFile, preprocessImageAttrs, serializeImageNode } from "$lib/editor/image-block";
+import { ImageBlock, isImageFile, preprocessImageAttrs, serializeImageNode } from "$lib/editor/image-block";
 
 function makeFile(name: string, type: string): File {
   return new File([], name, { type });
@@ -99,78 +99,78 @@ describe("preprocessImageAttrs", () => {
 
 // ─── serializeImageNode ──────────────────────────────────────────────────────
 
-type SerializeState = { write: (s: string) => void; closeBlock: (n: unknown) => void };
-
-function makeState() {
-  const written: string[] = [];
-  const state: SerializeState & { written: string[] } = {
-    written,
-    write: (s: string) => written.push(s),
-    closeBlock: () => {},
-  };
-  return state;
-}
-
 describe("serializeImageNode", () => {
   it("no attrs, no caption → ![](src)", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: null, align: "center", width: "100%" } });
-    expect(s.written[0]).toBe("![](images/a.png)");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "center", width: "100%" } }))
+      .toBe("![](images/a.png)");
   });
 
   it("caption only → ![caption](src) (no attrs block)", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "100%" } });
-    expect(s.written[0]).toBe("![portrait](images/a.png)");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "100%" } }))
+      .toBe("![portrait](images/a.png)");
   });
 
   it("align only → ![](src){align=left}", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: null, align: "left", width: "100%" } });
-    expect(s.written[0]).toBe("![](images/a.png){align=left}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "left", width: "100%" } }))
+      .toBe("![](images/a.png){align=left}");
   });
 
   it("width only → ![](src){width=60%}", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: null, align: "center", width: "60%" } });
-    expect(s.written[0]).toBe("![](images/a.png){width=60%}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "center", width: "60%" } }))
+      .toBe("![](images/a.png){width=60%}");
   });
 
   it("caption + align → ![caption](src){align=right}", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "portrait", align: "right", width: "100%" } });
-    expect(s.written[0]).toBe("![portrait](images/a.png){align=right}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "right", width: "100%" } }))
+      .toBe("![portrait](images/a.png){align=right}");
   });
 
   it("caption + width → ![caption](src){width=50%}", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "50%" } });
-    expect(s.written[0]).toBe("![portrait](images/a.png){width=50%}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "50%" } }))
+      .toBe("![portrait](images/a.png){width=50%}");
   });
 
   it("caption + align + width → ![caption](src){align=left width=75%}", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "portrait", align: "left", width: "75%" } });
-    expect(s.written[0]).toBe("![portrait](images/a.png){align=left width=75%}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "left", width: "75%" } }))
+      .toBe("![portrait](images/a.png){align=left width=75%}");
   });
 
   it("empty string alt treated same as null", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" } });
-    expect(s.written[0]).toBe("![](images/a.png)");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" } }))
+      .toBe("![](images/a.png)");
   });
 
   it("special chars in caption are preserved exactly", () => {
     const caption = 'café [brackets] (parens) "quotes"';
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: caption, align: "center", width: "100%" } });
-    expect(s.written[0]).toBe(`![${caption}](images/a.png)`);
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: caption, align: "center", width: "100%" } }))
+      .toBe(`![${caption}](images/a.png)`);
   });
 
   it("unicode caption survives", () => {
-    const s = makeState();
-    serializeImageNode(s, { attrs: { src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" } });
-    expect(s.written[0]).toBe("![人物の肖像](images/a.png){align=left width=60%}");
+    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" } }))
+      .toBe("![人物の肖像](images/a.png){align=left width=60%}");
+  });
+});
+
+// ─── Extension markdown serializer wiring ────────────────────────────────────
+//
+// @tiptap/markdown reads a node's serializer from the `renderMarkdown` extension
+// field (via getExtensionField), NOT from `storage.markdown.serialize`. If this
+// field is missing or misnamed, getMarkdown() drops the custom align/width attrs
+// (and for non-builtin nodes, the whole node) on save.
+describe("ImageBlock renderMarkdown", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderMarkdown = (ImageBlock.config as any).renderMarkdown as
+    | ((node: { attrs: { src: string; alt: string | null; align: string; width: string } }) => string)
+    | undefined;
+
+  it("exposes a renderMarkdown serializer (the field @tiptap/markdown reads)", () => {
+    expect(typeof renderMarkdown).toBe("function");
+  });
+
+  it("serializes align/width attrs that would otherwise be lost", () => {
+    const attrs = { src: "images/a.png", alt: "portrait", align: "left", width: "75%" };
+    expect(renderMarkdown!({ attrs })).toBe("![portrait](images/a.png){align=left width=75%}");
   });
 });
 
@@ -178,9 +178,7 @@ describe("serializeImageNode", () => {
 
 describe("markdown round-trip (serialize → preprocess)", () => {
   function roundTrip(attrs: { src: string; alt: string | null; align: string; width: string }): string {
-    const s = makeState();
-    serializeImageNode(s, { attrs });
-    return preprocessImageAttrs(s.written[0]);
+    return preprocessImageAttrs(serializeImageNode({ attrs }));
   }
 
   it("caption + align + width", () => {

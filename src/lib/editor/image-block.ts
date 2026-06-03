@@ -36,28 +36,27 @@ export function preprocessImageAttrs(markdown: string): string {
 
 // ─── Markdown serializer ─────────────────────────────────────────────────────
 
-export function serializeImageNode(
-  state: {
-    write: (s: string) => void;
-    closeBlock: (n: unknown) => void;
-  },
-  node: {
-    attrs: {
-      src: string;
-      alt: string | null;
-      align: string;
-      width: string;
-    };
-  },
-) {
+/**
+ * Serializes an image node to markdown, encoding non-default align/width as a
+ * trailing `{align=… width=…}` attr block that preprocessImageAttrs() reverses
+ * on load. Returns the string directly so it can be wired into the extension's
+ * `renderMarkdown` field — the hook @tiptap/markdown actually reads.
+ */
+export function serializeImageNode(node: {
+  attrs: {
+    src: string;
+    alt: string | null;
+    align: string;
+    width: string;
+  };
+}): string {
   const { src, alt, align, width } = node.attrs;
   let md = `![${alt ?? ""}](${src})`;
   const parts: string[] = [];
   if (align !== "center") parts.push(`align=${align}`);
   if (width !== "100%") parts.push(`width=${width}`);
   if (parts.length) md += `{${parts.join(" ")}}`;
-  state.write(md);
-  state.closeBlock(node);
+  return md;
 }
 
 // ─── Extension ────────────────────────────────────────────────────────────────
@@ -84,12 +83,11 @@ export const ImageBlock = Image.extend({
     };
   },
 
-  addStorage() {
-    return {
-      markdown: {
-        serialize: serializeImageNode,
-      },
-    };
+  // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
+  renderMarkdown(node: {
+    attrs: { src: string; alt: string | null; align: string; width: string };
+  }) {
+    return serializeImageNode(node);
   },
 
   addNodeView() {

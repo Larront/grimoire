@@ -60,8 +60,15 @@ function escapeHtml(str: string): string {
  * suitable for rendering with {@html} in display mode. Plain-text segments are
  * HTML-escaped; the generated spans match the shape that Editor.svelte's delegated
  * handleClick / handleMouseover handlers expect.
+ *
+ * `isKnownPath` resolves whether a link points at an existing note. Links it
+ * rejects get a `data-broken` marker so they can be styled as faded-accent stubs
+ * (full-accent for resolved links). When omitted, no link is marked broken.
  */
-export function renderTimelineText(text: string): string {
+export function renderTimelineText(
+  text: string,
+  isKnownPath?: (path: string) => boolean,
+): string {
   const re = /\[\[([^\]]+)\]\]/g;
   const parts: string[] = [];
   let lastIndex = 0;
@@ -80,8 +87,9 @@ export function renderTimelineText(text: string): string {
 
     const escapedPath = path.replace(/"/g, "&quot;");
     const escapedTitle = title.replace(/"/g, "&quot;");
+    const brokenAttr = isKnownPath && !isKnownPath(path) ? " data-broken" : "";
     parts.push(
-      `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapeHtml(title)}</span>`,
+      `<span data-wiki-link${brokenAttr} data-path="${escapedPath}" data-title="${escapedTitle}">${escapeHtml(title)}</span>`,
     );
 
     lastIndex = match.index + match[0].length;
@@ -196,18 +204,9 @@ export const TimelineBlock = Node.create({
     ];
   },
 
-  addStorage() {
-    return {
-      markdown: {
-        serialize(
-          state: { write: (s: string) => void; closeBlock: (n: unknown) => void },
-          node: { attrs: { events: TimelineEvent[] } },
-        ) {
-          state.write(serializeTimelineEvents(node.attrs.events));
-          state.closeBlock(node);
-        },
-      },
-    };
+  // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
+  renderMarkdown(node: { attrs: { events: TimelineEvent[] } }) {
+    return serializeTimelineEvents(node.attrs.events);
   },
 
   addNodeView() {

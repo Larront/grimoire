@@ -14,7 +14,7 @@
   import { SceneBlock } from "$lib/editor/scene-block.svelte";
   import { TimelineBlock, preprocessTimelineBlocks } from "$lib/editor/timeline-block";
   import { SlashCommand } from "$lib/editor/slash-command";
-  import { WikiLink, preprocessWikiLinks } from "$lib/editor/wiki-link";
+  import { WikiLink, preprocessWikiLinks, wikiBrokenLinkKey } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -36,6 +36,8 @@
   let element = $state<HTMLDivElement>();
   let editor = $state<Editor | null>(null);
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  // Bumped on every doc edit so the broken-link resolver re-runs when links change.
+  let docVersion = $state(0);
 
   // ── Overlay state ────────────────────────────────────────────────────────────
   let slashState = $state<SlashCommandSuggestionState | null>(null);
@@ -108,6 +110,7 @@
       content: preprocessed,
       contentType: "markdown",
       onUpdate: () => {
+        docVersion++;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 500);
       },
@@ -129,6 +132,38 @@
     if (!editor) return;
     await onSave(editor.getMarkdown());
   }
+
+  // Resolve which wikilink targets don't exist — path miss AND alias miss, the same
+  // test handleClick uses to navigate — and feed the set to the broken-link plugin so
+  // stubs render faded. Unresolved-yet links stay full accent (never flash as stubs).
+  function refreshBrokenLinks() {
+    const ed = editor;
+    if (!ed) return;
+    const paths = new Set<string>();
+    ed.state.doc.descendants((n) => {
+      if (n.type.name === "wikiLink" && n.attrs.path) paths.add(n.attrs.path as string);
+    });
+    const noteList = notes.notes;
+    (async () => {
+      const broken = new Set<string>();
+      for (const p of paths) {
+        if (noteList.some((n) => n.path === p)) continue;
+        const resolved = await invoke("resolve_note_by_alias", { alias: p }).catch(() => null);
+        if (resolved == null) broken.add(p);
+      }
+      // Guard against a torn-down / swapped editor after the await.
+      if (editor === ed) ed.view.dispatch(ed.state.tr.setMeta(wikiBrokenLinkKey, broken));
+    })();
+  }
+
+  // Re-resolve when the editor mounts, the doc changes (docVersion), or the ledger's
+  // notes load/change (notes.notes). The meta-only dispatch above doesn't change the
+  // doc, so it neither bumps docVersion nor re-triggers this effect.
+  $effect(() => {
+    notes.notes;
+    docVersion;
+    if (editor) refreshBrokenLinks();
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {

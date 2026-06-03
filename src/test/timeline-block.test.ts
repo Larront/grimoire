@@ -8,6 +8,7 @@ import {
   moveEventUp,
   moveEventDown,
   renderTimelineText,
+  TimelineBlock,
   type TimelineEvent,
 } from "$lib/editor/timeline-block";
 
@@ -345,6 +346,30 @@ describe("round-trip", () => {
   });
 });
 
+// ─── Extension markdown serializer wiring ────────────────────────────────────
+//
+// @tiptap/markdown reads a node's serializer from the `renderMarkdown` extension
+// field (via getExtensionField), NOT from `storage.markdown.serialize`. If this
+// field is missing or misnamed, getMarkdown() drops the node and the timeline
+// silently fails to save — vanishing on the next load.
+describe("TimelineBlock renderMarkdown", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderMarkdown = (TimelineBlock.config as any).renderMarkdown as
+    | ((node: { attrs: { events: TimelineEvent[] } }) => string)
+    | undefined;
+
+  it("exposes a renderMarkdown serializer (the field @tiptap/markdown reads)", () => {
+    expect(typeof renderMarkdown).toBe("function");
+  });
+
+  it("serializes node attrs to the fenced timeline block", () => {
+    const events: TimelineEvent[] = [
+      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted." },
+    ];
+    expect(renderMarkdown!({ attrs: { events } })).toBe(serializeTimelineEvents(events));
+  });
+});
+
 // ─── createBlankEvent ─────────────────────────────────────────────────────────
 
 describe("createBlankEvent", () => {
@@ -555,5 +580,38 @@ describe("renderTimelineText", () => {
     const result = renderTimelineText("Just a plain description.");
     expect(result).not.toContain("<span");
     expect(result).not.toContain("data-wiki-link");
+  });
+
+  it("no resolver: links are never marked broken", () => {
+    expect(renderTimelineText("[[Aldric]]")).not.toContain("data-broken");
+  });
+
+  it("resolver: unresolved path gets data-broken (faded-accent stub)", () => {
+    const result = renderTimelineText("[[Ghost]]", () => false);
+    expect(result).toContain("data-wiki-link data-broken");
+    expect(result).toContain('data-path="Ghost"');
+  });
+
+  it("resolver: resolved path has no data-broken (full accent)", () => {
+    const result = renderTimelineText("[[Aldric]]", () => true);
+    expect(result).toContain("data-wiki-link");
+    expect(result).not.toContain("data-broken");
+  });
+
+  it("resolver receives the path, not the display title", () => {
+    const seen: string[] = [];
+    renderTimelineText("[[Characters/Aldric.md|Aldric the Great]]", (p) => {
+      seen.push(p);
+      return true;
+    });
+    expect(seen).toEqual(["Characters/Aldric.md"]);
+  });
+
+  it("resolver: mixed resolved and broken links in one string", () => {
+    const known = new Set(["Alpha"]);
+    const result = renderTimelineText("[[Alpha]] then [[Beta]]", (p) => known.has(p));
+    // Alpha resolved (no marker), Beta broken (one marker)
+    expect((result.match(/data-broken/g) ?? []).length).toBe(1);
+    expect(result).toMatch(/data-path="Beta"[^>]*/);
   });
 });

@@ -556,8 +556,18 @@ input[type="range"]:disabled {
 
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
 
+/* Wikilinks read as accent everywhere they appear — editor node views and the
+   timeline's {@html} spans alike. Resolved links are full accent; unresolved stubs
+   ([data-broken], set by the editor's decoration plugin or renderTimelineText) are
+   faded accent. Color/cursor live here so both render paths share one source. */
 [data-wiki-link] {
+  color: var(--primary);
   cursor: pointer;
+}
+
+[data-wiki-link][data-broken] {
+  color: color-mix(in oklab, var(--primary) 45%, transparent);
+  cursor: default;
 }
 
 /* ── Search-match pulse ───────────────────────────────────────── */
