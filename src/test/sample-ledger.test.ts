@@ -4,6 +4,23 @@ import { ledger } from "../lib/stores/ledger.svelte";
 
 // ── ledger store — exploreSample ─────────────────────────────────────────────
 
+const SAMPLE_PATH = "/app-data/sample-world";
+
+function mockSampleInvoke() {
+  vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+    if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
+    if (cmd === "open_ledger")
+      return {
+        path: SAMPLE_PATH,
+        note_count: 3,
+        scene_count: 0,
+        map_count: 0,
+        failed_imports: [],
+      };
+    return null;
+  });
+}
+
 describe("ledger store — exploreSample", () => {
   beforeEach(async () => {
     // Start each test from a clean closed state
@@ -12,18 +29,7 @@ describe("ledger store — exploreSample", () => {
   });
 
   it("sets isSample to true after exploreSample", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      return null;
-    });
+    mockSampleInvoke();
 
     const ok = await ledger.exploreSample();
 
@@ -32,18 +38,7 @@ describe("ledger store — exploreSample", () => {
   });
 
   it("does not call add_recent_ledger during exploreSample", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      return null;
-    });
+    mockSampleInvoke();
 
     await ledger.exploreSample();
 
@@ -52,41 +47,19 @@ describe("ledger store — exploreSample", () => {
   });
 
   it("opens the ledger path returned by explore_sample_ledger", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      return null;
-    });
+    mockSampleInvoke();
 
     await ledger.exploreSample();
 
-    const openCall = vi.mocked(invoke).mock.calls.find(
-      ([cmd]) => cmd === "open_ledger",
-    );
+    const openCall = vi
+      .mocked(invoke)
+      .mock.calls.find(([cmd]) => cmd === "open_ledger");
     expect(openCall).toBeDefined();
-    expect(openCall![1]).toEqual({ path: "/app-data/sample-world" });
+    expect(openCall![1]).toEqual({ path: SAMPLE_PATH });
   });
 
   it("clears isSample when closeLedger is called", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "explore_sample_ledger") return "/app-data/sample-world";
-      if (cmd === "open_ledger")
-        return {
-          path: "/app-data/sample-world",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-        };
-      return null;
-    });
+    mockSampleInvoke();
 
     await ledger.exploreSample();
     expect(ledger.isSample).toBe(true);

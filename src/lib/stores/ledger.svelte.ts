@@ -47,6 +47,25 @@ function createLedgerStore() {
   let density = $state<DensityLevel>("balanced");
   let isSample = $state(false);
 
+  /** Invokes open_ledger, updates store state, and surfaces failed imports. */
+  async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
+    const result = await invoke<OpenLedgerResult>("open_ledger", {
+      path: ledgerPath,
+    });
+
+    path = result.path;
+    isOpen = true;
+
+    if (result.failed_imports.length > 0) {
+      failedImportsModal.failures = result.failed_imports;
+      toastImportFailures(result.failed_imports, () => {
+        failedImportsModal.open = true;
+      });
+    }
+
+    return result;
+  }
+
   async function openLedger(selectedPath?: string): Promise<boolean> {
     isLoading = true;
     error = null;
@@ -64,19 +83,7 @@ function createLedgerStore() {
         return false;
       }
 
-      const result = await invoke<OpenLedgerResult>("open_ledger", {
-        path: ledgerPath,
-      });
-
-      path = result.path;
-      isOpen = true;
-
-      if (result.failed_imports.length > 0) {
-        failedImportsModal.failures = result.failed_imports;
-        toastImportFailures(result.failed_imports, () => {
-          failedImportsModal.open = true;
-        });
-      }
+      const result = await openAtPath(ledgerPath);
 
       // Record in recent ledgers (fire-and-forget).
       // Item counts in this entry are set at open time and refreshed on the next open_ledger call.
@@ -109,18 +116,8 @@ function createLedgerStore() {
     error = null;
     try {
       const sandboxPath = await invoke<string>("explore_sample_ledger");
-      const result = await invoke<OpenLedgerResult>("open_ledger", {
-        path: sandboxPath,
-      });
-      path = result.path;
-      isOpen = true;
+      await openAtPath(sandboxPath);
       isSample = true;
-      if (result.failed_imports.length > 0) {
-        failedImportsModal.failures = result.failed_imports;
-        toastImportFailures(result.failed_imports, () => {
-          failedImportsModal.open = true;
-        });
-      }
       return true;
     } catch (e) {
       error = String(e);
