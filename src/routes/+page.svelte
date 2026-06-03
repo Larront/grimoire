@@ -6,7 +6,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { tabs } from "$lib/stores/tabs.svelte";
   import type { Note } from "$lib/types/ledger";
-  import { Folder, Plus, LoaderCircle } from "@lucide/svelte";
+  import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
 
   let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
@@ -72,6 +72,18 @@
     mode = "idle";
     nameError = null;
     errorMsg = null;
+  }
+
+  async function handleExploreSample() {
+    openingPath = "__sample__";
+    errorMsg = null;
+    try {
+      await ledger.exploreSample();
+    } catch (e) {
+      errorMsg = String(e);
+    } finally {
+      openingPath = null;
+    }
   }
 
   async function handleChooseLocation() {
@@ -354,7 +366,28 @@
       <div
         class="flex flex-col gap-2.5 mt-8 w-70 relative z-10 splash-fade-delay-2"
       >
+        <!-- Primary: Explore sample -->
         <Button
+          onclick={handleExploreSample}
+          class="justify-start gap-2.5 h-auto py-3 px-4"
+          disabled={openingPath !== null}
+        >
+          {#if openingPath === "__sample__"}
+            <LoaderCircle class="w-4 h-4 animate-spin shrink-0" />
+          {:else}
+            <BookOpen class="w-4 h-4 shrink-0" />
+          {/if}
+          <div class="text-left">
+            <div class="text-sm font-semibold">Explore an example world</div>
+            <div class="text-[10px] opacity-70 font-normal">
+              A small campaign to wander before you build your own
+            </div>
+          </div>
+        </Button>
+
+        <!-- Secondary: Create / Open -->
+        <Button
+          variant="secondary"
           onclick={startCreate}
           class="justify-start gap-2.5 h-auto py-3 px-4"
           disabled={openingPath !== null}
@@ -369,7 +402,7 @@
         </Button>
 
         <Button
-          variant="secondary"
+          variant="ghost"
           onclick={handleOpenExisting}
           class="justify-start gap-2.5 h-auto py-3 px-4"
           disabled={openingPath !== null}
@@ -463,6 +496,20 @@
           Create New Ledger
         </Button>
       </div>
+
+      <!-- Quiet replay link for returning users -->
+      <button
+        class="font-sans text-[11px] text-foreground-faint mt-5 relative z-10
+               hover:text-muted-foreground transition-colors duration-150
+               disabled:opacity-50"
+        onclick={handleExploreSample}
+        disabled={openingPath !== null}
+      >
+        {#if openingPath === "__sample__"}
+          <LoaderCircle class="w-3 h-3 animate-spin inline mr-1" />
+        {/if}
+        New to Grimoire? Explore an example world
+      </button>
     {/if}
 
     <!-- Operation-level error -->

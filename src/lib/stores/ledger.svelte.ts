@@ -45,6 +45,7 @@ function createLedgerStore() {
   let error = $state<string | null>(null);
   let accent = $state<AccentPreset>("accent-crimson");
   let density = $state<DensityLevel>("balanced");
+  let isSample = $state(false);
 
   async function openLedger(selectedPath?: string): Promise<boolean> {
     isLoading = true;
@@ -103,6 +104,32 @@ function createLedgerStore() {
     }
   }
 
+  async function exploreSample(): Promise<boolean> {
+    isLoading = true;
+    error = null;
+    try {
+      const sandboxPath = await invoke<string>("explore_sample_ledger");
+      const result = await invoke<OpenLedgerResult>("open_ledger", {
+        path: sandboxPath,
+      });
+      path = result.path;
+      isOpen = true;
+      isSample = true;
+      if (result.failed_imports.length > 0) {
+        failedImportsModal.failures = result.failed_imports;
+        toastImportFailures(result.failed_imports, () => {
+          failedImportsModal.open = true;
+        });
+      }
+      return true;
+    } catch (e) {
+      error = String(e);
+      return false;
+    } finally {
+      isLoading = false;
+    }
+  }
+
   function setDensity(level: DensityLevel): void {
     density = level;
     invoke("save_density_level", { level }).catch(console.error);
@@ -130,6 +157,7 @@ function createLedgerStore() {
     }
     path = null;
     isOpen = false;
+    isSample = false;
     accent = "accent-crimson";
     density = "balanced";
     error = null;
@@ -174,7 +202,11 @@ function createLedgerStore() {
     get density() {
       return density;
     },
+    get isSample() {
+      return isSample;
+    },
     openLedger,
+    exploreSample,
     closeLedger,
     checkExistingLedger,
     getRecentLedgers,

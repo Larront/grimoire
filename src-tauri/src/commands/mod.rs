@@ -10,6 +10,7 @@ pub mod notes;
 pub mod preferences;
 pub mod recent;
 pub mod recent_ledgers;
+pub mod sample;
 pub mod scenes;
 pub mod spotify;
 pub mod tags;
