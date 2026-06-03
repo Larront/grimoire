@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronDown, FolderOpen } from "@lucide/svelte";
+  import { BookOpen, ChevronDown, FolderOpen, Heart } from "@lucide/svelte";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { buttonVariants } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
@@ -31,7 +31,30 @@
   }
 </script>
 
-<div class="relative w-full">
+{#if ledger.isSample}
+  <div class="flex flex-col gap-1 w-full px-1">
+    <div
+      data-testid="sample-world-marker"
+      class="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/10"
+    >
+      <BookOpen class="size-3.5 shrink-0 text-primary" />
+      <span class="text-xs font-medium text-primary">Example World</span>
+    </div>
+    <button
+      type="button"
+      data-testid="make-mine-btn"
+      onclick={() => {}}
+      class={cn(
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "w-full justify-start gap-2 px-2 text-xs text-primary/70 hover:text-primary"
+      )}
+    >
+      <Heart class="size-3.5 shrink-0" />
+      Make this world mine
+    </button>
+  </div>
+{:else}
+  <div class="relative w-full">
   <button
     type="button"
     aria-label="Ledger selector"
@@ -90,4 +113,5 @@
       </button>
     </div>
   {/if}
-</div>
+  </div>
+{/if}

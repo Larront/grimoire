@@ -46,6 +46,7 @@ function createLedgerStore() {
   let accent = $state<AccentPreset>("accent-crimson");
   let density = $state<DensityLevel>("balanced");
   let isSample = $state(false);
+  let pendingStartHere = $state(false);
 
   /** Invokes open_ledger, updates store state, and surfaces failed imports. */
   async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
@@ -118,6 +119,7 @@ function createLedgerStore() {
       const sandboxPath = await invoke<string>("explore_sample_ledger");
       await openAtPath(sandboxPath);
       isSample = true;
+      pendingStartHere = true;
       return true;
     } catch (e) {
       error = String(e);
@@ -155,6 +157,7 @@ function createLedgerStore() {
     path = null;
     isOpen = false;
     isSample = false;
+    pendingStartHere = false;
     accent = "accent-crimson";
     density = "balanced";
     error = null;
@@ -201,6 +204,12 @@ function createLedgerStore() {
     },
     get isSample() {
       return isSample;
+    },
+    get pendingStartHere() {
+      return pendingStartHere;
+    },
+    clearPendingStartHere() {
+      pendingStartHere = false;
     },
     openLedger,
     exploreSample,

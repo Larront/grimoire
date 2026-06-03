@@ -71,4 +71,17 @@ describe("ledger store — exploreSample", () => {
   it("isSample is false by default", async () => {
     expect(ledger.isSample).toBe(false);
   });
+
+  it("sets pendingStartHere to true after exploreSample", async () => {
+    mockSampleInvoke();
+    await ledger.exploreSample();
+    expect(ledger.pendingStartHere).toBe(true);
+  });
+
+  it("clears pendingStartHere when closeLedger is called", async () => {
+    mockSampleInvoke();
+    await ledger.exploreSample();
+    await ledger.closeLedger();
+    expect(ledger.pendingStartHere).toBe(false);
+  });
 });

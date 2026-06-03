@@ -6,6 +6,8 @@
   import SearchPalette from "./SearchPalette.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
+  import SampleBanner from "./SampleBanner.svelte";
+  import SampleEffects from "./SampleEffects.svelte";
   import * as Sidebar from "./ui/sidebar";
   import { RightRailState } from "$lib/stores/right-rail.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -73,6 +75,7 @@
       failures={failedImportsModal.failures}
     />
     <SearchPalette />
+    <SampleEffects />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar />
       <main class="flex min-w-0 flex-1 flex-col">
@@ -84,6 +87,7 @@
               class="relative flex flex-col flex-1 min-w-0 min-h-0"
               role="none"
             >
+              <SampleBanner />
               <div class="flex items-center border-b border-sidebar-border">
                 <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />
