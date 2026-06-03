@@ -14,7 +14,7 @@
     </p>
     <button
       aria-label="Dismiss banner"
-      onclick={() => appPrefs.dismissSampleBanner()}
+      onclick={() => appPrefs.setSampleBannerDismissed(true)}
       class="shrink-0 rounded p-0.5 text-primary/60 hover:bg-primary/10 hover:text-primary/80 transition-colors"
     >
       <X class="size-3.5" />

@@ -58,9 +58,6 @@ function createAppPrefs() {
     get sampleBannerDismissed() {
       return sampleBannerDismissed;
     },
-    dismissSampleBanner() {
-      setSampleBannerDismissed(true);
-    },
     setSampleBannerDismissed,
   };
 }

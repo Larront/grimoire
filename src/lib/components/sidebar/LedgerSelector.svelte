@@ -55,33 +55,51 @@
   </div>
 {:else}
   <div class="relative w-full">
-  <button
-    type="button"
-    aria-label="Ledger selector"
-    aria-haspopup="true"
-    aria-expanded={open}
-    onclick={handleToggle}
-    class={cn(
-      buttonVariants({ variant: "ghost", size: "sm" }),
-      "w-full justify-start gap-2 px-2 text-left"
-    )}
-  >
-    <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
-    <span class="flex-1 truncate text-(--font-ui)">{ledgerName}</span>
-    <ChevronDown
+    <button
+      type="button"
+      aria-label="Ledger selector"
+      aria-haspopup="true"
+      aria-expanded={open}
+      onclick={handleToggle}
       class={cn(
-        "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
-        open && "rotate-180"
+        buttonVariants({ variant: "ghost", size: "sm" }),
+        "w-full justify-start gap-2 px-2 text-left"
       )}
-    />
-  </button>
-
-  {#if open}
-    <div
-      class="absolute bottom-full left-0 z-50 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg"
-      role="menu"
     >
-      {#each recentLedgers as v (v.path)}
+      <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
+      <span class="flex-1 truncate text-(--font-ui)">{ledgerName}</span>
+      <ChevronDown
+        class={cn(
+          "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
+          open && "rotate-180"
+        )}
+      />
+    </button>
+
+    {#if open}
+      <div
+        class="absolute bottom-full left-0 z-50 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg"
+        role="menu"
+      >
+        {#each recentLedgers as v (v.path)}
+          <button
+            type="button"
+            role="menuitem"
+            class={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
+            )}
+            onclick={() => switchLedger(v.path)}
+          >
+            <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
+            <span class="truncate">{v.name}</span>
+          </button>
+        {/each}
+
+        {#if recentLedgers.length > 0}
+          <div class="my-1 h-px bg-border" role="separator"></div>
+        {/if}
+
         <button
           type="button"
           role="menuitem"
@@ -89,29 +107,11 @@
             buttonVariants({ variant: "ghost", size: "sm" }),
             "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
           )}
-          onclick={() => switchLedger(v.path)}
+          onclick={openNewLedger}
         >
-          <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
-          <span class="truncate">{v.name}</span>
+          Open new ledger
         </button>
-      {/each}
-
-      {#if recentLedgers.length > 0}
-        <div class="my-1 h-px bg-border" role="separator"></div>
-      {/if}
-
-      <button
-        type="button"
-        role="menuitem"
-        class={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
-        )}
-        onclick={openNewLedger}
-      >
-        Open new ledger
-      </button>
-    </div>
-  {/if}
+      </div>
+    {/if}
   </div>
 {/if}
