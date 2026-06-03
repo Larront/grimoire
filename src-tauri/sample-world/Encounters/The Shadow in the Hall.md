@@ -3,7 +3,7 @@ tags: [encounter]
 ---
 # The Shadow in the Hall
 
-A hunting encounter in the lower halls of [[Locations/The Ember Keep.md|The Ember Keep]]. Something that survived [[Lore/The War of Embers.md|the War of Embers]] has been here for three centuries and does not welcome visitors.
+A hunting encounter in the lower halls of [[Locations/The Ember Keep.md]]. Something that survived [[Lore/The War of Embers.md]] has been here for three centuries and does not welcome visitors.
 
 ## Description
 
@@ -18,8 +18,8 @@ The party enters the lower halls and realises they are not alone. The thing move
 ## Loot
 
 - A stone tablet fragment with partial puzzle-lock notation (unintelligible without the other fragments).
-- A sealed vial labelled in the Order's script — recognisable to [[Characters/Aldric Vane.md|Aldric Vane]], who will not explain how.
+- A sealed vial labelled in the Order's script — recognisable to [[Characters/Aldric Vane.md]], who will not explain how.
 
 ## Notes
 
-The encounter works best after the party has spoken with [[Mira]] and [[Characters/Aldric Vane.md|Aldric Vane]], when the Lurker's hesitation can mean something.
+The encounter works best after the party has spoken with [[Mira]] and [[Characters/Aldric Vane.md]], when the Lurker's hesitation can mean something.

@@ -4,7 +4,7 @@ aliases: [Mira, the Herbalist]
 ---
 # Mira Ashvale
 
-A weathered herbalist who trades in remedies and quiet information. She has mapped every road through the [[Lore/The Ashfen Marshes.md|Ashfen Marshes]] and trusts no one who has not bled for their knowledge.
+A weathered herbalist who trades in remedies and quiet information. She has mapped every road through the [[Lore/The Ashfen Marshes.md]] and trusts no one who has not bled for their knowledge.
 
 ## Description
 
@@ -16,8 +16,8 @@ Pragmatic. She helps people who help themselves. She does not warn the same pers
 
 ## Background
 
-Born in [[Locations/Thornhaven Village.md|Thornhaven]], she has wandered the Ashfen for twenty years. She knows the puzzle-lock on the [[Locations/The Ember Keep.md|Ember Keep]] library — or at least claims she does. Her ancestor was inside the keep during the sealing.
+Born in [[Locations/Thornhaven Village.md]], she has wandered the Ashfen for twenty years. She knows the puzzle-lock on the [[Locations/The Ember Keep.md]] library — or at least claims she does. Her ancestor was inside the keep during the sealing.
 
 ## Notes
 
-She keeps camp within sight of the keep's western approach. She has not moved it in three years. She and [[Characters/Aldric Vane.md|Aldric Vane]] have an uneasy truce built on mutual knowledge.
+She keeps camp within sight of the keep's western approach. She has not moved it in three years. She and [[Characters/Aldric Vane.md]] have an uneasy truce built on mutual knowledge.

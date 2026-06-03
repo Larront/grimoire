@@ -3,7 +3,7 @@ tags: [location]
 ---
 # The Ember Keep
 
-A crumbling fortress on the eastern edge of the [[Lore/The Ashfen Marshes.md|Ashfen Marshes]], built and held by [[The Order of Embers]] before the [[Lore/The War of Embers.md|War of Embers]].
+A crumbling fortress on the eastern edge of the [[Lore/The Ashfen Marshes.md]], built and held by [[The Order of Embers]] before the [[Lore/The War of Embers.md]].
 
 ## Description
 
@@ -17,8 +17,8 @@ The upper towers collapsed in the siege. The lower halls remain intact, though s
 
 ## NPCs
 
-[[Mira]] camps within sight of the western approach, close enough to watch, far enough to run. [[Characters/Aldric Vane.md|Aldric Vane]] visited four years ago and has refused to discuss what he found.
+[[Mira]] camps within sight of the western approach, close enough to watch, far enough to run. [[Characters/Aldric Vane.md]] visited four years ago and has refused to discuss what he found.
 
 ## Notes
 
-No one from [[Locations/Thornhaven Village.md|Thornhaven]] will spend the night inside. The inn's regulars do not explain why; they assume everyone already knows.
+No one from [[Locations/Thornhaven Village.md]] will spend the night inside. The inn's regulars do not explain why; they assume everyone already knows.
