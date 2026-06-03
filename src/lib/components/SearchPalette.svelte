@@ -486,6 +486,13 @@
   });
 
   $effect(() => {
+    if (searchPalette.openToTemplatePicker) {
+      searchPalette.openToTemplatePicker = false;
+      cmdCreateNoteFromTemplate();
+    }
+  });
+
+  $effect(() => {
     if (searchPalette.open) {
       invoke<RecentEntityResult[]>("get_recent_entities")
         .then((res) => { recentEntities = res ?? []; })

@@ -7,6 +7,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import type { Note } from "$lib/types/ledger";
   import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
 
   let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
@@ -213,6 +214,18 @@
               New note
             {/if}
           </Button>
+          {#if notes.noteCount === 0}
+            <button
+              data-testid="start-from-template"
+              onclick={() => {
+                searchPalette.open = true;
+                searchPalette.openToTemplatePicker = true;
+              }}
+              class="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              …or start from a template
+            </button>
+          {/if}
         </div>
       {/if}
 
