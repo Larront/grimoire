@@ -103,7 +103,10 @@
       if (node.primary_tag && !assignments.has(node.primary_tag)) {
         const style = styles.get(node.primary_tag);
         if (!style?.color) {
-          assignments.set(node.primary_tag, ACCENT_CYCLE[cycleIdx % ACCENT_CYCLE.length]);
+          assignments.set(
+            node.primary_tag,
+            ACCENT_CYCLE[cycleIdx % ACCENT_CYCLE.length],
+          );
           cycleIdx++;
         }
       }
@@ -223,7 +226,10 @@
   async function toggleFilterTag(tag: string) {
     const current = tagStylesMap.get(tag) ?? { color: null, hidden: false };
     const hidden = !current.hidden;
-    tagStylesMap = new Map(tagStylesMap).set(tag, { color: current.color, hidden });
+    tagStylesMap = new Map(tagStylesMap).set(tag, {
+      color: current.color,
+      hidden,
+    });
     await invoke("set_tag_graph_style", { tag, color: current.color, hidden });
     updateCyVisibility();
   }
@@ -327,10 +333,16 @@
 
     type Animatable = {
       data(k: string): unknown;
-      animate(opts: { style: { opacity: number } }, params: { duration: number; queue: boolean }): void;
+      animate(
+        opts: { style: { opacity: number } },
+        params: { duration: number; queue: boolean },
+      ): void;
     };
     const fade = (ele: Animatable, opacity: number) =>
-      ele.animate({ style: { opacity } }, { duration: DIM_FADE_MS, queue: false });
+      ele.animate(
+        { style: { opacity } },
+        { duration: DIM_FADE_MS, queue: false },
+      );
 
     cy.nodes().forEach((n: unknown) => {
       const node = n as Animatable;
@@ -349,13 +361,22 @@
 
   async function createNoteFromStub(label: string) {
     try {
-      const newNote = await invoke<{ id: number; title: string }>("create_note", {
-        noteTitle: label,
-        notePath: label,
-        noteParentPath: null,
-      });
+      const newNote = await invoke<{ id: number; title: string }>(
+        "create_note",
+        {
+          noteTitle: label,
+          notePath: label,
+          noteParentPath: null,
+        },
+      );
       await notes.load();
-      tabs.openTab({ type: "note", id: newNote.id, title: newNote.title, rename: true });
+      // navigateOpen so the Graph view is on the back stack after creating the note.
+      tabs.navigateOpen({
+        type: "note",
+        id: newNote.id,
+        title: newNote.title,
+        rename: true,
+      });
     } catch (e) {
       console.error("create_note from stub failed:", e);
     }
@@ -419,11 +440,21 @@
       const nodeCount = rawData.nodes.length;
 
       // ── Physics knobs (d3-force) ──────────────────────────────────────────────
-      // linkDistance      spring rest length — how far apart linked nodes settle
-      // linkStrength      spring stiffness — higher snaps links to rest length harder
-      // manyBodyStrength  node repulsion — more negative pushes everything apart more
-      // velocityDecay     damping — 0 = bouncy/floaty, 1 = stiff/dead-stop
-      // collideRadius     hard minimum spacing so node circles don't overlap
+      // linkDistance        spring rest length — how far apart linked nodes settle
+      // manyBodyStrength    node repulsion — more negative pushes everything apart
+      // manyBodyDistanceMax caps repulsion range so distant nodes stop perturbing
+      //                     one another — lets the layout settle instead of drifting
+      // velocityDecay       damping — 0 = bouncy/floaty, 1 = stiff/dead-stop
+      // alphaDecay          cooling rate — higher reaches a dead stop sooner
+      // collideRadius       hard minimum spacing so node circles don't overlap
+      //
+      // Obsidian feel: firm, well-damped forces that snap into place, then cool to
+      // a FULL stop in ~2.5s. We keep `infinite: true` only so the plugin leaves
+      // its grab/free handlers wired for reheat-on-drag; the alphaTarget(0) reset
+      // on `free` (below) undoes the plugin's habit of pinning alphaTarget at ~0.33
+      // forever after the first drag — that pin is what made the graph jiggle
+      // endlessly and never resolve. linkStrength is left unset so d3 uses its
+      // degree-based default (links to hubs are softer, so hubs don't get yanked).
       const layout = {
         name: "d3-force",
         animate: true,
@@ -431,11 +462,14 @@
         // Resolve edge source/target by the node's `id` field, not d3's default
         // array index — our edges reference nodes by string id.
         linkId: (d: { id: string }) => d.id,
-        linkDistance: 90,
-        linkStrength: 1,
-        manyBodyStrength: -300,
-        velocityDecay: 0.4,
-        collideRadius: 24,
+        alphaDecay: 0.04,
+        velocityDecay: 0.5,
+        linkDistance: 160,
+        manyBodyStrength: -500,
+        manyBodyDistanceMax: 800,
+        // Size-aware so big (high-backlink) nodes get more breathing room than the
+        // flat radius did — `size` is the node diameter, +12px of padding/gap.
+        collideRadius: (d: { size: number }) => d.size / 2 + 12,
       } as unknown as LayoutOptions;
 
       cy = cytoscape({
@@ -454,12 +488,33 @@
           })),
           edges: rawData.edges.map((e) => ({ data: e })),
         },
-        layout,
+        layout: { name: "preset" },
         style: buildStyleArray(),
         userZoomingEnabled: true,
         userPanningEnabled: true,
         minZoom: 0.1,
         maxZoom: 10,
+      });
+
+      // Run the force sim explicitly (rather than via the constructor's `layout`
+      // option) so we keep a handle on it. The preset layout above just seeds the
+      // ring positions; d3-force relaxes them from there.
+      const sim = cy.layout(layout);
+      sim.run();
+
+      // The plugin pins the sim's alphaTarget at ~0.33 on every grab AND free and
+      // never lowers it, so once you drag a node the graph reheats and then never
+      // cools back down. Resetting alphaTarget to 0 on release lets the drag reheat
+      // the layout (neighbors follow live) and then settle to a dead stop.
+      cy.on("free", "node", () => {
+        // Defer past the plugin's own `free` handler (which sets alphaTarget to
+        // ~0.33), then lower the target so the sim cools to rest.
+        requestAnimationFrame(() => {
+          const d3sim = (
+            sim as unknown as { simulation?: { alphaTarget(v: number): void } }
+          ).simulation;
+          d3sim?.alphaTarget(0);
+        });
       });
 
       cy.fit(undefined, 60);
@@ -473,10 +528,12 @@
         const entity_id = node.data("entity_id") as number | undefined;
         const label = node.data("label") as string;
 
+        // navigateOpen (not openTab) so the Graph tab is pushed onto the pane's
+        // back stack — the toolbar Back button then returns here from the note/map.
         if (kind === "note" && entity_id != null) {
-          tabs.openTab({ type: "note", id: entity_id, title: label });
+          tabs.navigateOpen({ type: "note", id: entity_id, title: label });
         } else if (kind === "map" && entity_id != null) {
-          tabs.openTab({ type: "map", id: entity_id, title: label });
+          tabs.navigateOpen({ type: "map", id: entity_id, title: label });
         } else if (kind === "stub") {
           createNoteFromStub(label);
         }
@@ -515,12 +572,16 @@
   });
 </script>
 
-<div class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
+<div
+  class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background"
+>
   <!-- Toolbar overlay — search input + filter toggle, anchored top-right -->
   <div class="absolute top-2 right-2 z-20 flex items-center gap-1">
     <!-- Search input -->
     <div class="relative flex items-center">
-      <Search class="pointer-events-none absolute left-2 size-3 text-foreground-muted" />
+      <Search
+        class="pointer-events-none absolute left-2 size-3 text-foreground-muted"
+      />
       <input
         data-testid="graph-search"
         type="text"
@@ -538,7 +599,9 @@
       aria-pressed={filterOpen}
       type="button"
       onclick={() => (filterOpen = !filterOpen)}
-      class="flex size-7 items-center justify-center rounded bg-background/80 text-foreground-muted hover:text-foreground shadow border border-border transition-colors {filterOpen ? 'bg-primary/10 text-primary' : ''}"
+      class="flex size-7 items-center justify-center rounded bg-background/80 text-foreground-muted hover:text-foreground shadow border border-border transition-colors {filterOpen
+        ? 'bg-primary/10 text-primary'
+        : ''}"
     >
       <Filter class="size-4" />
     </button>
@@ -550,7 +613,9 @@
       data-testid="filter-panel"
       class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border shadow-lg p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
     >
-      <p class="text-xs font-semibold text-foreground-muted uppercase tracking-wider">
+      <p
+        class="text-xs font-semibold text-foreground-muted uppercase tracking-wider"
+      >
         Filter by tag
       </p>
 
@@ -570,9 +635,13 @@
           <a
             data-testid="filter-edit-{tag}"
             href="#settings-graph"
-            onclick={(e) => { e.preventDefault(); openGraphSettings(); }}
+            onclick={(e) => {
+              e.preventDefault();
+              openGraphSettings();
+            }}
             class="text-xs text-foreground-muted hover:text-foreground shrink-0 transition-colors"
-          >Edit →</a>
+            >Edit →</a
+          >
 
           <!-- Show/hide toggle -->
           <button
@@ -582,17 +651,27 @@
             aria-checked={!isFilterTagHidden(tag)}
             aria-label="Show {tag} in graph"
             onclick={() => toggleFilterTag(tag)}
-            class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(tag) ? 'bg-primary' : 'bg-input'}"
+            class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(
+              tag,
+            )
+              ? 'bg-primary'
+              : 'bg-input'}"
           >
             <span
-              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(tag) ? 'translate-x-3' : 'translate-x-0'}"
+              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(
+                tag,
+              )
+                ? 'translate-x-3'
+                : 'translate-x-0'}"
             ></span>
           </button>
         </div>
       {/each}
 
       <!-- Untagged row (separator) -->
-      <div class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1">
+      <div
+        class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1"
+      >
         <!-- Swatch uses muted color -->
         <span
           data-testid="filter-swatch-__untagged__"
@@ -600,7 +679,9 @@
           style="background-color: {getMutedColor()}"
         ></span>
 
-        <span class="flex-1 text-sm text-foreground-muted truncate">Untagged</span>
+        <span class="flex-1 text-sm text-foreground-muted truncate"
+          >Untagged</span
+        >
 
         <!-- Show/hide toggle for untagged notes -->
         <button
@@ -610,10 +691,18 @@
           aria-checked={!isFilterTagHidden("")}
           aria-label="Show untagged notes in graph"
           onclick={() => toggleFilterTag("")}
-          class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden('') ? 'bg-primary' : 'bg-input'}"
+          class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(
+            '',
+          )
+            ? 'bg-primary'
+            : 'bg-input'}"
         >
           <span
-            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden('') ? 'translate-x-3' : 'translate-x-0'}"
+            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(
+              '',
+            )
+              ? 'translate-x-3'
+              : 'translate-x-0'}"
           ></span>
         </button>
       </div>
@@ -628,11 +717,15 @@
   ></div>
 
   {#if loading}
-    <div class="absolute inset-0 flex items-center justify-center bg-background/80 text-muted-foreground z-10">
+    <div
+      class="absolute inset-0 flex items-center justify-center bg-background/80 text-muted-foreground z-10"
+    >
       <span class="text-sm">Loading graph…</span>
     </div>
   {:else if error}
-    <div class="absolute inset-0 flex items-center justify-center text-destructive z-10">
+    <div
+      class="absolute inset-0 flex items-center justify-center text-destructive z-10"
+    >
       <span class="text-sm">Failed to load graph: {error}</span>
     </div>
   {/if}

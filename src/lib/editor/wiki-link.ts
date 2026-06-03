@@ -117,7 +117,10 @@ export const WikiLink = Node.create<WikiLinkOptions>({
     // marker is applied by the decoration plugin below, not by the node view.
     return ({ node }) => {
       const dom = document.createElement("span");
-      dom.className = "inline-flex items-center select-none whitespace-nowrap";
+      // Plain inline (not inline-flex): a flex box centers its content on the
+      // cross-axis, which lifts the label off the surrounding text baseline.
+      // The link is just a text label, so let it flow inline like normal text.
+      dom.className = "select-none whitespace-nowrap";
       dom.dataset.wikiLink = "";
       dom.dataset.path = node.attrs.path ?? "";
       dom.dataset.title = node.attrs.title ?? "";

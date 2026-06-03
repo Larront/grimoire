@@ -563,6 +563,7 @@ input[type="range"]:disabled {
 [data-wiki-link] {
   color: var(--primary);
   cursor: pointer;
+  vertical-align: -0.03em;
 }
 
 [data-wiki-link][data-broken] {
@@ -573,8 +574,12 @@ input[type="range"]:disabled {
 /* ── Search-match pulse ───────────────────────────────────────── */
 
 @keyframes search-match-pulse {
-  0% { background-color: var(--primary-subtle); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: var(--primary-subtle);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 [data-search-pulse="1"] ::selection {

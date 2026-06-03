@@ -35,6 +35,9 @@ const tapHandlers: TapHandler[] = [];
 const mouseoverHandlers: Array<(e: { target: MockNode }) => void> = [];
 const mouseoutHandlers: Array<() => void> = [];
 let cytoscapeOptions: unknown = null;
+// Captures the options passed to cy.layout(...) — the force sim is now run there
+// rather than via the constructor's `layout` option.
+let runLayoutOptions: unknown = null;
 let mockNodes: CyNode[] = [];
 let mockEdges: CyEdge[] = [];
 const mockFit = vi.fn();
@@ -138,6 +141,12 @@ vi.mock("cytoscape", () => {
       destroy: mockDestroy,
       style: mockStyleFn,
       animate: mockAnimate,
+      // The component now runs the force layout explicitly via cy.layout(...).run()
+      // and reaches into layout.simulation.alphaTarget on node release.
+      layout: (opts: unknown) => {
+        runLayoutOptions = opts;
+        return { run: vi.fn(), simulation: { alphaTarget: vi.fn() } };
+      },
       getElementById: (id: string) => {
         const node = nodeMap.get(id);
         return { length: node ? 1 : 0 };
@@ -157,6 +166,7 @@ vi.mock("cytoscape", () => {
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: {
     openTab: vi.fn(),
+    navigateOpen: vi.fn(),
     get activeTab() {
       return null;
     },
@@ -287,6 +297,7 @@ beforeEach(() => {
   mouseoverHandlers.length = 0;
   mouseoutHandlers.length = 0;
   cytoscapeOptions = null;
+  runLayoutOptions = null;
   mockNodes = [];
   mockEdges = [];
   nodeStyleStores.clear();
@@ -296,6 +307,7 @@ beforeEach(() => {
   mockStyleFn.mockClear();
   mockAnimate.mockClear();
   vi.mocked(tabs.openTab).mockClear();
+  vi.mocked(tabs.navigateOpen).mockClear();
   vi.mocked(notes.load).mockClear();
   setupInvoke();
   mockComputedStyle();
@@ -337,15 +349,13 @@ describe("GraphPane – shell", () => {
     });
   });
 
-  it("initialises cytoscape with the d3-force spring layout after data loads", async () => {
+  it("runs the d3-force spring layout via cy.layout() after data loads", async () => {
     render(GraphPane);
     await waitFor(() => {
-      expect(cytoscapeOptions).toBeTruthy();
-      const opts = cytoscapeOptions as {
-        layout: { name: string; infinite: boolean };
-      };
-      expect(opts.layout.name).toBe("d3-force");
-      expect(opts.layout.infinite).toBe(true);
+      expect(runLayoutOptions).toBeTruthy();
+      const opts = runLayoutOptions as { name: string; infinite: boolean };
+      expect(opts.name).toBe("d3-force");
+      expect(opts.infinite).toBe(true);
     });
   });
 
@@ -579,7 +589,7 @@ describe("GraphPane – style re-apply on theme/accent change", () => {
 // ── Node click navigation ──────────────────────────────────────────────────────
 
 describe("GraphPane – node click navigation", () => {
-  it("clicking a note node opens the note in the active pane", async () => {
+  it("clicking a note node navigates to the note (pushing Graph onto back stack)", async () => {
     render(GraphPane);
     await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
 
@@ -596,14 +606,14 @@ describe("GraphPane – node click navigation", () => {
     };
     tapHandlers[0]({ target: noteNode });
 
-    expect(tabs.openTab).toHaveBeenCalledWith({
+    expect(tabs.navigateOpen).toHaveBeenCalledWith({
       type: "note",
       id: 1,
       title: "My Note",
     });
   });
 
-  it("clicking a map node opens the map in the active pane", async () => {
+  it("clicking a map node navigates to the map (pushing Graph onto back stack)", async () => {
     render(GraphPane);
     await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
 
@@ -620,7 +630,7 @@ describe("GraphPane – node click navigation", () => {
     };
     tapHandlers[0]({ target: mapNode });
 
-    expect(tabs.openTab).toHaveBeenCalledWith({
+    expect(tabs.navigateOpen).toHaveBeenCalledWith({
       type: "map",
       id: 10,
       title: "World Map",
@@ -652,7 +662,7 @@ describe("GraphPane – node click navigation", () => {
     });
   });
 
-  it("clicking a stub node opens the new note with rename: true", async () => {
+  it("clicking a stub node navigates to the new note with rename: true", async () => {
     render(GraphPane);
     await waitFor(() => expect(tapHandlers.length).toBeGreaterThan(0));
 
@@ -669,7 +679,7 @@ describe("GraphPane – node click navigation", () => {
     tapHandlers[0]({ target: stubNode });
 
     await waitFor(() => {
-      expect(tabs.openTab).toHaveBeenCalledWith(
+      expect(tabs.navigateOpen).toHaveBeenCalledWith(
         expect.objectContaining({ type: "note", id: 99, rename: true }),
       );
     });
