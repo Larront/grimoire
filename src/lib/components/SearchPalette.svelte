@@ -16,6 +16,7 @@
     LayoutTemplate,
     FileDown,
     Network,
+    BookOpen,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -248,6 +249,11 @@
     }
   }
 
+  async function cmdExploreSample() {
+    searchPalette.open = false;
+    await ledger.exploreSample();
+  }
+
   async function cmdSaveNoteAsTemplate() {
     const note = activeNote;
     if (!note) return;
@@ -274,6 +280,7 @@
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
     { label: "Switch ledger…", testid: "cmd-switch-ledger", noteOnly: false, icon: FolderOpen, action: cmdSwitchLedger },
     { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },
+    { label: "Explore example world", testid: "cmd-explore-sample", noteOnly: false, icon: BookOpen, action: cmdExploreSample },
   ];
 
   const visibleRecent = $derived(searchQuery.length === 0 ? recentEntities.slice(0, 5) : []);

@@ -512,6 +512,7 @@
 
       <!-- Quiet replay link for returning users -->
       <button
+        data-testid="splash-explore-sample"
         class="font-sans text-[11px] text-foreground-faint mt-5 relative z-10
                hover:text-muted-foreground transition-colors duration-150
                disabled:opacity-50"
