@@ -3,8 +3,10 @@
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { buttonVariants } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
+  import AdoptDialog from "$lib/components/AdoptDialog.svelte";
 
   let open = $state(false);
+  let adoptOpen = $state(false);
   let recentLedgers = $state<RecentLedger[]>([]);
 
   const ledgerName = $derived(
@@ -43,7 +45,7 @@
     <button
       type="button"
       data-testid="make-mine-btn"
-      onclick={() => {}}
+      onclick={() => { adoptOpen = true; }}
       class={cn(
         buttonVariants({ variant: "ghost", size: "sm" }),
         "w-full justify-start gap-2 px-2 text-xs text-primary/70 hover:text-primary"
@@ -115,3 +117,5 @@
     {/if}
   </div>
 {/if}
+
+<AdoptDialog bind:open={adoptOpen} />

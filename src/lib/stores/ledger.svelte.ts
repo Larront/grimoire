@@ -112,6 +112,22 @@ function createLedgerStore() {
     }
   }
 
+  async function adopt(parent: string, name: string): Promise<boolean> {
+    isLoading = true;
+    error = null;
+    try {
+      const destPath = await invoke<string>("adopt_sample_ledger", { parent, name });
+      await openLedger(destPath);
+      isSample = false;
+      return true;
+    } catch (e) {
+      error = String(e);
+      return false;
+    } finally {
+      isLoading = false;
+    }
+  }
+
   async function exploreSample(): Promise<boolean> {
     isLoading = true;
     error = null;
@@ -212,6 +228,7 @@ function createLedgerStore() {
       pendingStartHere = false;
     },
     openLedger,
+    adopt,
     exploreSample,
     closeLedger,
     checkExistingLedger,

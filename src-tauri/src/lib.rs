@@ -45,6 +45,7 @@ pub fn run() {
             add_recent_ledger,
             remove_recent_ledger,
             explore_sample_ledger,
+            adopt_sample_ledger,
             create_note,
             create_note_from_template,
             get_notes,

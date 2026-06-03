@@ -190,6 +190,27 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     Ok(sample_dst.to_string_lossy().to_string())
 }
 
+/// Copies the current (possibly-edited) sandbox at `app_data_dir/sample-world/` to
+/// `parent/name/` and returns the destination path. The frontend follows up with the
+/// vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
+#[tauri::command]
+pub fn adopt_sample_ledger(parent: String, name: String, app: AppHandle) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+    let sandbox = app_data_dir.join("sample-world");
+
+    if !sandbox.exists() {
+        return Err("No sample sandbox found to adopt — explore the sample first.".to_string());
+    }
+
+    let dest = Path::new(&parent).join(&name);
+    copy_dir_tree(&sandbox, &dest)?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
