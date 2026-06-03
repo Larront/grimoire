@@ -8,7 +8,7 @@ use diesel::prelude::*;
 use std::path::PathBuf;
 use tauri::State;
 
-fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(), String> {
+pub(crate) fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(), String> {
     let count: i64 = pin_categories::table
         .filter(pin_categories::map_id.is_null())
         .count()
