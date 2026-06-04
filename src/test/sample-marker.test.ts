@@ -90,6 +90,7 @@ describe("sample banner", () => {
   beforeEach(async () => {
     await ledger.closeLedger();
     vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockResolvedValue(null);
     appPrefs.setSampleBannerDismissed(false);
     localStorage.removeItem(SAMPLE_TABS_KEY);
   });
@@ -136,6 +137,16 @@ describe("sample banner", () => {
     await flush();
 
     expect(appPrefs.sampleBannerDismissed).toBe(true);
+
+    // Dismissal is persisted through the Rust-side app prefs, not webview storage
+    const saveCall = vi
+      .mocked(invoke)
+      .mock.calls.findLast(([cmd]) => cmd === "save_app_prefs");
+    expect(saveCall).toBeDefined();
+    expect(
+      (saveCall![1] as { prefs: { sampleBannerDismissed: boolean } }).prefs
+        .sampleBannerDismissed,
+    ).toBe(true);
   });
 
   it("does not show banner when ledger is not a sample", async () => {

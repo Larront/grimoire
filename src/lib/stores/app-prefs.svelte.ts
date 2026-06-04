@@ -1,49 +1,87 @@
-const REDUCE_MOTION_KEY = "grimoire-reduce-motion";
-const CONFIRM_RENAME_LINKS_KEY = "grimoire-confirm-rename-links";
-const SAMPLE_BANNER_DISMISSED_KEY = "grimoire-sample-banner-dismissed";
+import { invoke } from "@tauri-apps/api/core";
+
+interface AppPrefsData {
+  reduceMotion: boolean;
+  confirmRenameLinks: boolean;
+  sampleBannerDismissed: boolean;
+}
+
+// Pre-migration webview localStorage keys. Read once on load() to carry old
+// values into the Rust-side app-prefs file, then removed.
+const LEGACY_KEYS: Record<keyof AppPrefsData, string> = {
+  reduceMotion: "grimoire-reduce-motion",
+  confirmRenameLinks: "grimoire-confirm-rename-links",
+  sampleBannerDismissed: "grimoire-sample-banner-dismissed",
+};
 
 function createAppPrefs() {
-  let reduceMotion = $state(
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(REDUCE_MOTION_KEY) === "true"
-      : false,
-  );
+  let reduceMotion = $state(false);
+  let confirmRenameLinks = $state(false);
+  let sampleBannerDismissed = $state(false);
+  let loaded = false;
 
-  let confirmRenameLinks = $state(
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(CONFIRM_RENAME_LINKS_KEY) === "true"
-      : false,
-  );
+  function snapshot(): AppPrefsData {
+    return { reduceMotion, confirmRenameLinks, sampleBannerDismissed };
+  }
 
-  let sampleBannerDismissed = $state(
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(SAMPLE_BANNER_DISMISSED_KEY) === "true"
-      : false,
-  );
+  /** Persist the full prefs snapshot to the Rust-side app-prefs file (fire-and-forget). */
+  function persist() {
+    invoke("save_app_prefs", { prefs: snapshot() }).catch(console.error);
+  }
+
+  /** Fold any pre-migration localStorage values into state; returns true if any were found. */
+  function migrateLegacyKeys(): boolean {
+    if (typeof window === "undefined") return false;
+    let migrated = false;
+    for (const [pref, key] of Object.entries(LEGACY_KEYS) as [
+      keyof AppPrefsData,
+      string,
+    ][]) {
+      const value = window.localStorage.getItem(key);
+      if (value === null) continue;
+      migrated = true;
+      if (value === "true") {
+        if (pref === "reduceMotion") reduceMotion = true;
+        if (pref === "confirmRenameLinks") confirmRenameLinks = true;
+        if (pref === "sampleBannerDismissed") sampleBannerDismissed = true;
+      }
+      window.localStorage.removeItem(key);
+    }
+    return migrated;
+  }
+
+  /** Load persisted prefs from Rust. Called once at app startup. */
+  async function load(): Promise<void> {
+    if (loaded) return;
+    loaded = true;
+    try {
+      const saved = await invoke<AppPrefsData | null>("get_app_prefs");
+      if (saved) {
+        reduceMotion = saved.reduceMotion ?? false;
+        confirmRenameLinks = saved.confirmRenameLinks ?? false;
+        sampleBannerDismissed = saved.sampleBannerDismissed ?? false;
+      }
+      if (migrateLegacyKeys()) {
+        persist();
+      }
+    } catch (e) {
+      console.error("[app-prefs] failed to load app prefs:", e);
+    }
+  }
 
   function setReduceMotion(value: boolean) {
     reduceMotion = value;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(REDUCE_MOTION_KEY, String(value));
-    }
+    persist();
   }
 
   function setConfirmRenameLinks(value: boolean) {
     confirmRenameLinks = value;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(CONFIRM_RENAME_LINKS_KEY, String(value));
-    }
+    persist();
   }
 
   function setSampleBannerDismissed(value: boolean) {
     sampleBannerDismissed = value;
-    if (typeof window !== "undefined") {
-      if (value) {
-        window.localStorage.setItem(SAMPLE_BANNER_DISMISSED_KEY, "true");
-      } else {
-        window.localStorage.removeItem(SAMPLE_BANNER_DISMISSED_KEY);
-      }
-    }
+    persist();
   }
 
   return {
@@ -59,6 +97,7 @@ function createAppPrefs() {
       return sampleBannerDismissed;
     },
     setSampleBannerDismissed,
+    load,
   };
 }
 

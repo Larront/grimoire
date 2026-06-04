@@ -1,3 +1,4 @@
+pub mod app_prefs;
 pub mod frontmatter;
 pub mod graph;
 pub mod import;

@@ -4,6 +4,7 @@ mod ledger;
 mod note_index;
 mod search;
 
+use commands::app_prefs::*;
 use commands::graph::*;
 use commands::graph_styles::*;
 use commands::ledger::*;
@@ -37,6 +38,8 @@ pub fn run() {
             get_ledger_path,
             open_ledger,
             close_ledger,
+            get_app_prefs,
+            save_app_prefs,
             save_accent_preset,
             get_accent_preset,
             save_density_level,
