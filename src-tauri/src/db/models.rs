@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(
     Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+    specta::Type,
 )]
 #[diesel(table_name = notes)]
 pub struct Note {

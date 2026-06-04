@@ -65,6 +65,7 @@ pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Pa
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_notes(ledger: State<AppLedger>) -> Result<Vec<Note>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -72,6 +73,7 @@ pub fn get_notes(ledger: State<AppLedger>) -> Result<Vec<Note>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_note(
     note_title: String,
     note_path: String,
@@ -298,6 +300,7 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, Stri
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn read_note_content(note_path: String, ledger: State<AppLedger>) -> Result<String, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();

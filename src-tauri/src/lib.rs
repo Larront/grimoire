@@ -24,9 +24,44 @@ use commands::tree::*;
 
 use crate::ledger::{AppLedger, LedgerState};
 
+/// Export-only tauri-specta builder (ADR-0009). It collects the specta-annotated
+/// commands purely so their TypeScript bindings can be generated; the runtime
+/// invoke handler remains `generate_handler!` below (the source of truth), which
+/// already serves these commands. Throw mode → generated commands return
+/// `Promise<T>` and call `invoke` directly, so no handler swap is needed and the
+/// migration can proceed command-by-command.
+#[cfg(debug_assertions)]
+fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    use commands::notes::{create_note, get_notes, read_note_content};
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .commands(tauri_specta::collect_commands![
+            get_notes,
+            read_note_content,
+            create_note,
+        ])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     dotenvy::dotenv().ok();
+
+    // ADR-0009: regenerate committed TS bindings from the annotated commands.
+    // Runs on every debug launch; `GRIMOIRE_EXPORT_ONLY=1 cargo run` exports and
+    // exits before creating a window (headless-friendly generation).
+    #[cfg(debug_assertions)]
+    {
+        specta_builder()
+            .export(
+                specta_typescript::Typescript::default(),
+                "../src/lib/bindings.gen.ts",
+            )
+            .expect("failed to export specta bindings");
+        if std::env::var("GRIMOIRE_EXPORT_ONLY").is_ok() {
+            return;
+        }
+    }
+
     let client_id = std::env::var("SPOTIFY_CLIENT_ID").unwrap_or_default();
 
     tauri::Builder::default()

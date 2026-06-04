@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { ledger } from "./ledger.svelte";
 import type { Note } from "$lib/types/ledger";
 
@@ -11,7 +11,7 @@ function createNotesStore() {
     isLoading = true;
     error = null;
     try {
-      notes = await invoke<Note[]>("get_notes");
+      notes = await api.getNotes();
     } catch (e) {
       error = String(e);
     } finally {
@@ -23,7 +23,7 @@ function createNotesStore() {
     try {
       const note = notes.find((n) => n.id === id);
       if (!note) return null;
-      return await invoke<string>("read_note_content", { notePath: note.path });
+      return await api.readNoteContent(note.path);
     } catch (e) {
       error = String(e);
       return null;
