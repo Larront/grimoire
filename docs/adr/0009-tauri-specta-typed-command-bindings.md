@@ -95,3 +95,32 @@ error posture.
 - **Commands returning raw bytes** (e.g. image/audio blobs via
   `tauri::ipc::Response`) can't be typed by specta and stay hand-wrapped in the
   command wrapper, routed to a raw `invoke` — the same carve-out Whispering uses.
+
+## Migration outcome (2026-06-05)
+
+The full migration landed across five commits: all 103 commands annotated, 102
+in the generated bindings, all ~150 frontend call sites routed through `$lib/api`.
+Findings worth recording for the next contributor:
+
+- **Arity carve-out.** `create_annotation` (14 params) exceeds tauri-specta's
+  `SpectaFn` arity limit. It stays raw in `generate_handler!` and is hand-typed
+  in `$lib/api` with an object argument. A 15th typed command would need the same
+  treatment, or a struct-arg refactor.
+- **BigInt guard.** specta forbids exporting `usize`/`i64`/`u64`. Row-count
+  command returns were changed `usize → u32`; count *fields* on returned structs
+  keep their Diesel type with a `#[specta(type = i32)]` render override. All such
+  values are well within JS-safe integer range.
+- **Float nullability.** specta renders `f32`/`f64` as `number | null` (guarding
+  NaN/Infinity → JSON null). The exporter's `enable_lossless_floats` is not
+  reachable through tauri-specta's export call in specta-typescript 0.0.12, so
+  non-null float fields are narrowed to the refined `$lib/types/ledger` types with
+  a documented `as` cast at the api seam.
+- **Refined unions.** Where the frontend types are stricter than Rust expresses
+  (`PinShape`/`PinIcon`/`AnnotationKind`/graph-node `kind` unions vs Rust
+  `String`), generated bindings are `string`; call sites narrow with a cast at the
+  api seam. The lasting fix (Rust enums mapped to the SQLite `TEXT` columns) was
+  judged too invasive for this migration.
+- **Two parallel type definitions remain.** `$lib/types/ledger` (refined) and the
+  generated `bindings.gen.ts` (loose) coexist. They are structurally compatible;
+  the casts above bridge the refinement gap. Collapsing to one source of truth is
+  possible later (Rust enums + generated types as canonical) but out of scope.
