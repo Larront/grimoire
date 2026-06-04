@@ -300,7 +300,7 @@
           {/if}
           <div class="text-left">
             <div class="text-sm font-semibold">Explore an example world</div>
-            <div class="text-[10px] opacity-70 font-normal">
+            <div class="text-[11px] opacity-70 font-normal">
               A small campaign to wander before you build your own
             </div>
           </div>
@@ -316,7 +316,7 @@
           <Plus class="w-4 h-4 shrink-0" />
           <div class="text-left">
             <div class="text-sm font-semibold">Create New Ledger</div>
-            <div class="text-[10px] opacity-70 font-normal">
+            <div class="text-[11px] opacity-70 font-normal">
               Start fresh with an empty ledger
             </div>
           </div>
@@ -335,7 +335,7 @@
           {/if}
           <div class="text-left">
             <div class="text-sm font-semibold">Open Existing Ledger</div>
-            <div class="text-[10px] opacity-70 font-normal">
+            <div class="text-[11px] opacity-70 font-normal">
               Browse for an existing ledger
             </div>
           </div>
@@ -421,8 +421,8 @@
       <!-- Quiet replay link for returning users -->
       <button
         data-testid="splash-explore-sample"
-        class="font-sans text-[11px] text-foreground-faint mt-5 relative z-10
-               hover:text-muted-foreground transition-colors duration-150
+        class="font-sans text-[11px] text-muted-foreground mt-5 relative z-10
+               hover:text-foreground transition-colors duration-150
                disabled:opacity-50"
         onclick={handleExploreSample}
         disabled={openingPath !== null}

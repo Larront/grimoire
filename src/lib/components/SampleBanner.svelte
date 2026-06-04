@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ledger } from "$lib/stores/ledger.svelte";
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
-  import { X } from "@lucide/svelte";
+  import { BookOpen, X } from "@lucide/svelte";
 </script>
 
 {#if ledger.isSample && !appPrefs.sampleBannerDismissed}
@@ -9,13 +9,17 @@
     data-testid="sample-banner"
     class="flex items-center justify-between gap-3 border-b border-primary/20 bg-primary/8 px-4 py-2"
   >
-    <p class="text-xs text-primary/80">
-      You're exploring an example world — poke around freely, nothing here affects your real ledgers.
-    </p>
+    <!-- The accent rides on the icon and border; the prose stays neutral -->
+    <div class="flex items-center gap-2 min-w-0">
+      <BookOpen class="size-3.5 shrink-0 text-primary" />
+      <p class="text-xs text-muted-foreground">
+        You're exploring an example world. Poke around freely; nothing here affects your real ledgers.
+      </p>
+    </div>
     <button
       aria-label="Dismiss banner"
       onclick={() => appPrefs.setSampleBannerDismissed(true)}
-      class="shrink-0 rounded p-0.5 text-primary/60 hover:bg-primary/10 hover:text-primary/80 transition-colors"
+      class="shrink-0 rounded p-1 text-muted-foreground hover:bg-primary/10 hover:text-foreground transition-colors"
     >
       <X class="size-3.5" />
     </button>
