@@ -84,4 +84,15 @@ describe("ledger store — exploreSample", () => {
     await ledger.closeLedger();
     expect(ledger.pendingStartHere).toBe(false);
   });
+
+  it("throws and sets error when exploring fails", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "explore_sample_ledger") throw "Failed to resolve resource dir";
+      return null;
+    });
+
+    await expect(ledger.exploreSample()).rejects.toBeTruthy();
+    expect(ledger.error).toContain("Failed to resolve resource dir");
+    expect(ledger.isSample).toBe(false);
+  });
 });

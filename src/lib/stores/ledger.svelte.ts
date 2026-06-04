@@ -105,8 +105,7 @@ function createLedgerStore() {
       return true;
     } catch (e) {
       error = String(e);
-      console.log(error);
-      return false;
+      throw e;
     } finally {
       isLoading = false;
     }
@@ -117,12 +116,18 @@ function createLedgerStore() {
     error = null;
     try {
       const destPath = await invoke<string>("adopt_sample_ledger", { parent, name });
-      await openLedger(destPath);
+      const opened = await openLedger(destPath);
+      if (!opened) {
+        // openLedger only resolves false (without throwing) when no path was
+        // chosen in the dialog — impossible here, but guard so isSample is
+        // never cleared while the sandbox is still the open ledger.
+        throw new Error("Failed to open the adopted ledger.");
+      }
       isSample = false;
       return true;
     } catch (e) {
       error = String(e);
-      return false;
+      throw e;
     } finally {
       isLoading = false;
     }
@@ -139,7 +144,7 @@ function createLedgerStore() {
       return true;
     } catch (e) {
       error = String(e);
-      return false;
+      throw e;
     } finally {
       isLoading = false;
     }

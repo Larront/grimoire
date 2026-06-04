@@ -1,7 +1,7 @@
 import { render, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import HomePage from "../routes/+page.svelte";
+import PaneContent from "../lib/components/PaneContent.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { notes } from "../lib/stores/notes.svelte";
 
@@ -44,6 +44,9 @@ afterEach(async () => {
   vi.mocked(invoke).mockResolvedValue(null);
 });
 
+// The empty-ledger home renders inside the pane layer (PaneContent) when a
+// ledger is open with no notes and no tab focused — the route page itself is
+// replaced by AppShell as soon as a ledger opens.
 describe("empty-ledger home — template affordance", () => {
   beforeEach(async () => {
     mockOpenLedger([]);
@@ -52,9 +55,15 @@ describe("empty-ledger home — template affordance", () => {
   });
 
   it("renders the 'or start from a template' affordance when ledger is empty", async () => {
-    const { getByTestId } = render(HomePage);
+    const { getByTestId } = render(PaneContent, { props: { pane: "left" } });
     await flush();
     expect(getByTestId("start-from-template")).toBeTruthy();
+  });
+
+  it("renders the first-note prompt when ledger is empty", async () => {
+    const { getByText } = render(PaneContent, { props: { pane: "left" } });
+    await flush();
+    expect(getByText("Every world begins with its first note.")).toBeTruthy();
   });
 
   it("does not render the template affordance when ledger has notes", async () => {
@@ -62,8 +71,12 @@ describe("empty-ledger home — template affordance", () => {
     await notes.load();
     await flush();
 
-    const { queryByTestId } = render(HomePage);
+    const { queryByTestId, getByText } = render(PaneContent, {
+      props: { pane: "left" },
+    });
     await flush();
     expect(queryByTestId("start-from-template")).toBeNull();
+    // Populated ledger with no focused tab falls back to the plain placeholder
+    expect(getByText("No tab open")).toBeTruthy();
   });
 });

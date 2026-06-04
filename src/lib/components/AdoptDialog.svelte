@@ -11,6 +11,7 @@
   let name = $state("");
   let parent = $state<string | null>(null);
   let nameError = $state<string | null>(null);
+  let adoptError = $state<string | null>(null);
   let isAdopting = $state(false);
   let isPickingLocation = $state(false);
 
@@ -18,6 +19,7 @@
     name = "";
     parent = null;
     nameError = null;
+    adoptError = null;
     isAdopting = false;
     isPickingLocation = false;
   }
@@ -46,10 +48,14 @@
   async function handleConfirm() {
     if (!validate()) return;
     isAdopting = true;
+    adoptError = null;
     try {
       await ledger.adopt(parent!, name.trim());
       dialogOpen = false;
       reset();
+    } catch (e) {
+      // Stay open so the GM can retry with a different name or location
+      adoptError = `Couldn't adopt this world: ${e}`;
     } finally {
       isAdopting = false;
     }
@@ -126,13 +132,14 @@
           </button>
         </div>
 
-        <!-- Validation error -->
-        {#if nameError}
+        <!-- Validation / adoption error -->
+        {#if nameError || adoptError}
           <p
+            data-testid="adopt-error"
             class="font-sans text-[11px] text-destructive leading-snug"
             role="alert"
           >
-            {nameError}
+            {nameError ?? adoptError}
           </p>
         {/if}
       </div>

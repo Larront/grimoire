@@ -4,6 +4,7 @@
   import { buttonVariants } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import AdoptDialog from "$lib/components/AdoptDialog.svelte";
+  import { toastError } from "$lib/toast";
 
   let open = $state(false);
   let adoptOpen = $state(false);
@@ -24,12 +25,20 @@
 
   async function switchLedger(path: string) {
     open = false;
-    await ledger.openLedger(path);
+    try {
+      await ledger.openLedger(path);
+    } catch (e) {
+      toastError(`Couldn't open ledger: ${e}`);
+    }
   }
 
   async function openNewLedger() {
     open = false;
-    await ledger.openLedger();
+    try {
+      await ledger.openLedger();
+    } catch (e) {
+      toastError(`Couldn't open ledger: ${e}`);
+    }
   }
 </script>
 

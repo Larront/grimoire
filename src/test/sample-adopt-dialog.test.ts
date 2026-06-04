@@ -143,4 +143,31 @@ describe("adopt dialog — LedgerSelector", () => {
 
     expect(ledger.isSample).toBe(false);
   });
+
+  it("a failed adopt keeps the dialog open and shows the error", async () => {
+    vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
+    const { getByTestId, getByPlaceholderText } = render(LedgerSelector);
+    await flush();
+
+    fireEvent.click(getByTestId("make-mine-btn"));
+    await flush();
+
+    fireEvent.input(getByPlaceholderText("My World"), { target: { value: ADOPT_NAME } });
+    fireEvent.click(getByTestId("adopt-choose-location-btn"));
+    await flush();
+
+    // Make the backend adopt fail
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "adopt_sample_ledger") throw "No sample sandbox found to adopt";
+      return null;
+    });
+
+    fireEvent.click(getByTestId("adopt-confirm-btn"));
+    await flush();
+    await flush();
+
+    expect(getByTestId("adopt-dialog")).toBeTruthy();
+    expect(getByTestId("adopt-error").textContent).toContain("No sample sandbox found");
+    expect(ledger.isSample).toBe(true);
+  });
 });

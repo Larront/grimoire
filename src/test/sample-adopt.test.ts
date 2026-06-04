@@ -98,4 +98,27 @@ describe("ledger store — adopt", () => {
     const result = await ledger.adopt(ADOPT_PARENT, ADOPT_NAME);
     expect(result).toBe(true);
   });
+
+  it("throws and keeps isSample when the adopt command fails", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "adopt_sample_ledger") throw "No sample sandbox found to adopt";
+      return null;
+    });
+
+    await expect(ledger.adopt(ADOPT_PARENT, ADOPT_NAME)).rejects.toBeTruthy();
+    expect(ledger.isSample).toBe(true);
+    expect(ledger.error).toContain("No sample sandbox found");
+  });
+
+  it("throws and keeps isSample when opening the adopted ledger fails", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "adopt_sample_ledger") return ADOPT_PATH;
+      if (cmd === "open_ledger") throw "Failed to open ledger";
+      return null;
+    });
+
+    await expect(ledger.adopt(ADOPT_PARENT, ADOPT_NAME)).rejects.toBeTruthy();
+    // The GM is still in the sandbox — the sample treatment must not vanish
+    expect(ledger.isSample).toBe(true);
+  });
 });

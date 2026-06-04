@@ -198,7 +198,7 @@
 
   function cmdSwitchLedger() {
     searchPalette.open = false;
-    ledger.openLedger();
+    ledger.openLedger().catch((e) => toastError(`Couldn't open ledger: ${e}`));
   }
 
   async function cmdRebuildIndex() {
@@ -251,7 +251,11 @@
 
   async function cmdExploreSample() {
     searchPalette.open = false;
-    await ledger.exploreSample();
+    try {
+      await ledger.exploreSample();
+    } catch (e) {
+      toastError(`Couldn't open the example world: ${e}`);
+    }
   }
 
   async function cmdSaveNoteAsTemplate() {

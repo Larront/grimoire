@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { tabs, type Tab } from '$lib/stores/tabs.svelte';
+	import { notes } from '$lib/stores/notes.svelte';
 	import type { RightRailState } from '$lib/stores/right-rail.svelte';
+	import LedgerHome from './panes/LedgerHome.svelte';
 	import NotePane from './panes/NotePane.svelte';
 	import MapPane from './panes/MapPane.svelte';
 	import ScenePane from './panes/ScenePane.svelte';
@@ -27,12 +29,17 @@
 	role="none"
 >
 	{#if !activeTab || activeTab.type === 'empty'}
-		<div class="flex flex-1 items-center justify-center text-muted-foreground">
-			<div class="text-center space-y-2">
-				<p class="text-sm font-medium">No tab open</p>
-				<p class="text-xs text-muted-foreground/60">Open a note, map, or scene from the sidebar</p>
+		{#if !notes.isLoading && notes.noteCount === 0}
+			<!-- Brand-new ledger: first-note home instead of the bare placeholder -->
+			<LedgerHome />
+		{:else}
+			<div class="flex flex-1 items-center justify-center text-muted-foreground">
+				<div class="text-center space-y-2">
+					<p class="text-sm font-medium">No tab open</p>
+					<p class="text-xs text-muted-foreground/60">Open a note, map, or scene from the sidebar</p>
+				</div>
 			</div>
-		</div>
+		{/if}
 	{:else if activeTab.type === 'note'}
 		{#key activeTab.id}
 			<NotePane

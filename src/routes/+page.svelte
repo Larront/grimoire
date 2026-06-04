@@ -1,20 +1,15 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
-  import { notes } from "$lib/stores/notes.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { tabs } from "$lib/stores/tabs.svelte";
-  import type { Note } from "$lib/types/ledger";
   import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
-  import { searchPalette } from "$lib/stores/search.svelte";
   import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
 
   let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
   let openingPath = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
-  let isCreatingNote = $state(false);
 
   // Create ledger form
   let mode = $state<"idle" | "creating">("idle");
@@ -22,8 +17,6 @@
   let newLedgerParent = $state<string | null>(null);
   let nameError = $state<string | null>(null);
   let isPickingLocation = $state(false);
-
-  const ledgerName = $derived(ledger.path?.split(/[\\/]/).pop() ?? "My Ledger");
 
   $effect(() => {
     if (!ledger.isOpen) {
@@ -135,29 +128,6 @@
     return `${months}mo ago`;
   }
 
-  async function handleCreateFirstNote() {
-    isCreatingNote = true;
-    errorMsg = null;
-    try {
-      const newNote = await invoke<Note>("create_note", {
-        noteTitle: "Untitled",
-        notePath: "Untitled.md",
-        noteParentPath: null,
-      });
-      await notes.load();
-      tabs.openTab({
-        type: "note",
-        id: newNote.id,
-        title: "Untitled",
-        rename: true,
-      });
-    } catch (e) {
-      errorMsg = String(e);
-    } finally {
-      isCreatingNote = false;
-    }
-  }
-
   function formatLedgerStats(v: RecentLedger): string {
     const parts: string[] = [];
     if (v.note_count > 0)
@@ -170,59 +140,12 @@
   }
 </script>
 
-{#if ledger.isOpen}
-  <!-- ── Ledger home (new ledger) ────────────────────────────────── -->
-  <div class="flex flex-col items-center justify-center h-full">
-    <div
-      class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade"
-    >
-      <h1
-        class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight"
-      >
-        {ledgerName}
-      </h1>
+{#if !ledger.isOpen}
+  <!-- ── Splash screen ──────────────────────────────────────────────
+       This page renders only while no ledger is open; once one opens the
+       layout swaps to AppShell (the empty-ledger home lives in LedgerHome,
+       rendered from PaneContent). -->
 
-      {#if !notes.isLoading}
-        <div class="flex flex-col items-center gap-6">
-          <p class="font-sans text-sm italic text-foreground-muted text-center">
-            Every world begins with its first note.
-          </p>
-          <Button
-            onclick={handleCreateFirstNote}
-            disabled={isCreatingNote}
-            class="gap-2"
-          >
-            {#if isCreatingNote}
-              <LoaderCircle class="w-3.5 h-3.5 animate-spin" />
-              Creating...
-            {:else}
-              New note
-            {/if}
-          </Button>
-          {#if notes.noteCount === 0}
-            <button
-              data-testid="start-from-template"
-              onclick={() => {
-                searchPalette.open = true;
-                searchPalette.openToTemplatePicker = true;
-              }}
-              class="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              …or start from a template
-            </button>
-          {/if}
-        </div>
-      {/if}
-
-      {#if errorMsg}
-        <p class="font-sans text-xs text-destructive text-center" role="alert">
-          {errorMsg}
-        </p>
-      {/if}
-    </div>
-  </div>
-{:else}
-  <!-- ── Splash screen ──────────────────────────────────────────── -->
   <div
     class="flex flex-col items-center justify-center min-h-screen overflow-hidden relative"
   >
