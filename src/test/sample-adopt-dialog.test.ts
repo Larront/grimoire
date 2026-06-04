@@ -11,7 +11,8 @@ const ADOPT_NAME = "Ashfen Chronicles";
 const ADOPT_PATH = `${ADOPT_PARENT}/${ADOPT_NAME}`;
 
 function mockSampleInvoke() {
-  vi.mocked(invoke).mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+  vi.mocked(invoke).mockImplementation(async (cmd: string, rawArgs?: unknown) => {
+    const args = rawArgs as Record<string, unknown> | undefined;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
       return { path: (args as { path?: string })?.path ?? SAMPLE_PATH, note_count: 10, scene_count: 0, map_count: 1, failed_imports: [] };

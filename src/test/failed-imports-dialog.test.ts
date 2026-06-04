@@ -127,7 +127,7 @@ describe("failed imports — toast triggered by open_ledger", () => {
     await ledger.openLedger("/vault");
     expect(failedImportsModal.open).toBe(false);
 
-    const opts = vi.mocked(sonner).mock.calls[0][1] as {
+    const opts = vi.mocked(sonner).mock.calls[0][1] as unknown as {
       action: { onClick: () => void };
     };
     flushSync(() => opts.action.onClick());

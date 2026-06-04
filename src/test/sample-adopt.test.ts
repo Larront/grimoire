@@ -25,7 +25,8 @@ function mockSampleInvoke() {
 }
 
 function mockAdoptInvoke() {
-  vi.mocked(invoke).mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+  vi.mocked(invoke).mockImplementation(async (cmd: string, rawArgs?: unknown) => {
+    const args = rawArgs as Record<string, unknown> | undefined;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "adopt_sample_ledger") return ADOPT_PATH;
     if (cmd === "open_ledger")

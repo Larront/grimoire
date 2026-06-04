@@ -75,7 +75,7 @@ describe("toastImportFailures", () => {
       [{ path: "foo.md", reason: "err" }],
       onShowDetails,
     );
-    const opts = vi.mocked(sonner).mock.calls[0][1] as {
+    const opts = vi.mocked(sonner).mock.calls[0][1] as unknown as {
       action: { onClick: () => void };
     };
     opts.action.onClick();
