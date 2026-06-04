@@ -4,7 +4,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import type { Note } from "$lib/types/ledger";
   import { LoaderCircle } from "@lucide/svelte";
 
@@ -17,11 +17,7 @@
     isCreatingNote = true;
     errorMsg = null;
     try {
-      const newNote = await invoke<Note>("create_note", {
-        noteTitle: "Untitled",
-        notePath: "Untitled.md",
-        noteParentPath: null,
-      });
+      const newNote = await api.createNote("Untitled", "Untitled.md", null);
       await notes.load();
       tabs.openTab({
         type: "note",

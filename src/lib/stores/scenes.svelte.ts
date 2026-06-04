@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import { ledger } from "./ledger.svelte";
-import type { SceneSlot, SceneWithCount } from "$lib/types/ledger";
+import { api } from "$lib/api";
+import type { Scene, SceneSlot, SceneWithCount } from "$lib/types/ledger";
 
 interface CreateSlotParams {
   source: string;
@@ -33,7 +33,7 @@ function createScenesStore() {
     isLoading = true;
     error = null;
     try {
-      scenes = await invoke<SceneWithCount[]>("get_scenes_with_slot_counts");
+      scenes = await api.getScenesWithSlotCounts();
     } catch (e) {
       error = String(e);
     } finally {
@@ -45,9 +45,11 @@ function createScenesStore() {
     if (slotCache.has(sceneId)) {
       return slotCache.get(sceneId)!;
     }
-    const raw = await invoke<SceneSlot[]>("get_scene_slots", { sceneId });
-    // Cast is_loop integer (0/1) to boolean
-    const slots = raw.map((s) => ({ ...s, loop: !!s.loop }));
+    const raw = await api.getSceneSlots(sceneId);
+    // Cast is_loop integer (0/1) to boolean. `as SceneSlot[]` narrows the
+    // generated `volume: number | null` (specta's NaN-guard on floats) to the
+    // ledger type's `number` — volumes are never null.
+    const slots = raw.map((s) => ({ ...s, loop: !!s.loop })) as SceneSlot[];
     slotCache.set(sceneId, slots);
     return slots;
   }
@@ -58,57 +60,57 @@ function createScenesStore() {
 
   // --- Scene mutations ---
 
-  async function createScene(name: string): Promise<SceneWithCount> {
-    const scene = await invoke<SceneWithCount>("create_scene", { name });
+  async function createScene(name: string): Promise<Scene> {
+    const scene = await api.createScene(name);
     await load();
     return scene;
   }
 
   async function deleteScene(id: number): Promise<void> {
-    await invoke("delete_scene", { id });
+    await api.deleteScene(id);
     await load();
   }
 
   async function updateScene(id: number, name: string): Promise<void> {
-    await invoke("update_scene", { id, name });
+    await api.updateScene(id, name);
     await load();
   }
 
   async function toggleFavorite(id: number): Promise<void> {
-    await invoke("toggle_scene_favorite", { id });
+    await api.toggleSceneFavorite(id);
     await load();
   }
 
   async function applyThumbnailColor(id: number, color: string | null): Promise<void> {
     const scene = scenes.find((s) => s.id === id);
-    await invoke("update_scene_thumbnail", {
+    await api.updateSceneThumbnail(
       id,
-      thumbnailColor: color,
-      thumbnailIcon: scene?.thumbnail_icon ?? null,
-      thumbnailPath: scene?.thumbnail_path ?? null,
-    });
+      scene?.thumbnail_path ?? null,
+      color,
+      scene?.thumbnail_icon ?? null,
+    );
     await load();
   }
 
   async function applyThumbnailIcon(id: number, icon: string | null): Promise<void> {
     const scene = scenes.find((s) => s.id === id);
-    await invoke("update_scene_thumbnail", {
+    await api.updateSceneThumbnail(
       id,
-      thumbnailColor: scene?.thumbnail_color ?? null,
-      thumbnailIcon: icon,
-      thumbnailPath: scene?.thumbnail_path ?? null,
-    });
+      scene?.thumbnail_path ?? null,
+      scene?.thumbnail_color ?? null,
+      icon,
+    );
     await load();
   }
 
   async function setThumbnailImage(id: number, path: string | null): Promise<void> {
     const scene = scenes.find((s) => s.id === id);
-    await invoke("update_scene_thumbnail", {
+    await api.updateSceneThumbnail(
       id,
-      thumbnailColor: scene?.thumbnail_color ?? null,
-      thumbnailIcon: scene?.thumbnail_icon ?? null,
-      thumbnailPath: path,
-    });
+      path,
+      scene?.thumbnail_color ?? null,
+      scene?.thumbnail_icon ?? null,
+    );
     await load();
   }
 
@@ -117,7 +119,16 @@ function createScenesStore() {
   // so callers can update local state in one await rather than three steps.
 
   async function addSlot(sceneId: number, params: CreateSlotParams): Promise<SceneSlot[]> {
-    await invoke("create_scene_slot", { sceneId, ...params });
+    await api.createSceneSlot(
+      sceneId,
+      params.source,
+      params.sourceId,
+      params.label,
+      params.volume,
+      params.loop,
+      params.slotOrder,
+      params.shuffle,
+    );
     invalidateSlots(sceneId);
     const slots = await getSlots(sceneId);
     await load(); // refresh slot_count on parent scene
@@ -125,7 +136,7 @@ function createScenesStore() {
   }
 
   async function deleteSlot(sceneId: number, slotId: number): Promise<SceneSlot[]> {
-    await invoke("delete_scene_slot", { id: slotId });
+    await api.deleteSceneSlot(slotId);
     invalidateSlots(sceneId);
     const slots = await getSlots(sceneId);
     await load(); // refresh slot_count on parent scene
@@ -133,7 +144,14 @@ function createScenesStore() {
   }
 
   async function updateSlot(sceneId: number, slotId: number, params: UpdateSlotParams): Promise<SceneSlot[]> {
-    await invoke("update_scene_slot", { id: slotId, ...params });
+    await api.updateSceneSlot(
+      slotId,
+      params.label,
+      params.volume,
+      params.loop,
+      params.slotOrder,
+      params.shuffle,
+    );
     invalidateSlots(sceneId);
     return getSlots(sceneId);
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { setMode, userPrefersMode } from 'mode-watcher';
-  import { invoke } from '@tauri-apps/api/core';
+  import { api } from '$lib/api';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as AlertDialog from '$lib/components/ui/alert-dialog';
   import { Button } from '$lib/components/ui/button';
@@ -35,7 +35,7 @@
   async function handleRestoreTemplates() {
     isRestoring = true;
     try {
-      await invoke('restore_builtin_templates');
+      await api.restoreBuiltinTemplates();
       await templates.load();
       toastSuccess('Default templates restored');
     } catch (e) {
@@ -60,8 +60,8 @@
     if (open && !hasLoadedGraph) {
       hasLoadedGraph = true;
       Promise.all([
-        invoke<string[]>('list_all_tags'),
-        invoke<Record<string, TagStyle>>('get_tag_graph_styles'),
+        api.listAllTags(),
+        api.getTagGraphStyles(),
       ])
         .then(([tags, styles]) => {
           allTags = tags ?? [];
@@ -79,14 +79,14 @@
   async function setTagColor(tag: string, color: string | null) {
     const current = tagStyles[tag] ?? { color: null, hidden: false };
     tagStyles[tag] = { color, hidden: current.hidden };
-    await invoke('set_tag_graph_style', { tag, color, hidden: current.hidden });
+    await api.setTagGraphStyle(tag, color, current.hidden);
   }
 
   async function toggleTagVisibility(tag: string) {
     const current = tagStyles[tag] ?? { color: null, hidden: false };
     const hidden = !current.hidden;
     tagStyles[tag] = { color: current.color, hidden };
-    await invoke('set_tag_graph_style', { tag, color: current.color, hidden });
+    await api.setTagGraphStyle(tag, current.color, hidden);
   }
 
   async function handleConnect() {

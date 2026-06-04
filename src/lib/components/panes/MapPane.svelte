@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { open } from "@tauri-apps/plugin-dialog";
   import { maps } from "$lib/stores/maps.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -107,14 +107,17 @@
     placingMode = false;
     annotationMode = null;
 
+    // Generated types widen the refined ledger types (nullable floats from
+    // specta's NaN-guard; `string` instead of the PinShape/PinIcon/Annotation
+    // unions). The backend only ever emits valid values, so narrow at the seam.
     const ipcFetches = Promise.all([
-      invoke<Pin[]>("get_pins", { mapId: m.id }),
-      invoke<PinCategory[]>("get_pin_categories"),
-      invoke<MapAnnotation[]>("get_annotations", { mapId: m.id }),
+      api.getPins(m.id) as Promise<Pin[]>,
+      api.getPinCategories() as Promise<PinCategory[]>,
+      api.getAnnotations(m.id) as Promise<MapAnnotation[]>,
     ]);
 
     const imageFetch = m.image_path
-      ? invoke<string>("get_map_image_data_url", { mapId: m.id })
+      ? api.getMapImageDataUrl(m.id)
       : Promise.resolve(null);
 
     Promise.all([ipcFetches, imageFetch])
@@ -158,7 +161,7 @@
     const trimmed = draftTitle.trim();
     if (trimmed === mapData.title) { renamingTitle = false; return; }
     try {
-      await invoke("update_map", { map: { ...mapData, title: trimmed } });
+      await api.updateMap({ ...mapData, title: trimmed });
       await maps.load();
     } catch { /* ignore */ } finally {
       renamingTitle = false;
@@ -178,9 +181,9 @@
 
     isAssigningImage = true;
     try {
-      await invoke("assign_map_image", { mapId: mapData.id, sourceImagePath: picked, destFolder: null });
+      await api.assignMapImage(mapData.id, picked, null);
       await maps.load();
-      imageDataUrl = await invoke<string>("get_map_image_data_url", { mapId: mapData.id });
+      imageDataUrl = await api.getMapImageDataUrl(mapData.id);
     } catch (e) {
       console.error("assign image failed:", e);
     } finally {
@@ -192,15 +195,7 @@
   async function handlePinPlace(x: number, y: number) {
     if (!mapData) return;
     try {
-      const pin = await invoke<Pin>("create_pin", {
-        mapId: mapData.id,
-        x,
-        y,
-        title: "New Pin",
-        description: null,
-        categoryId: null,
-        noteId: null,
-      });
+      const pin = await api.createPin(mapData.id, x, y, "New Pin", null, null, null) as Pin;
       pins = [pin, ...pins];
       selectedPin = pin;
       placingMode = false;
@@ -211,7 +206,7 @@
 
   async function handlePinMove(pin: Pin, x: number, y: number) {
     try {
-      const result = await invoke<Pin>("update_pin", { pin: { ...pin, x, y } });
+      const result = await api.updatePin({ ...pin, x, y }) as Pin;
       pins = pins.map((p) => (p.id === result.id ? result : p));
       if (selectedPin?.id === result.id) selectedPin = result;
     } catch (e) {
@@ -231,7 +226,7 @@
   }) {
     if (!mapData) return;
     try {
-      const ann = await invoke<MapAnnotation>("create_annotation", {
+      const ann = await api.createAnnotation({
         mapId: mapData.id,
         kind: data.kind,
         x: data.x,
@@ -245,7 +240,7 @@
         strokeWidth: 2,
         fontSize: 16,
         opacity: 0.2,
-      });
+      }) as MapAnnotation;
       annotations = [ann, ...annotations];
       selectedAnnotation = ann;
       selectedPin = null;
@@ -266,9 +261,7 @@
     const existing = annotations.find((a) => a.id === id);
     if (!existing) return;
     try {
-      const result = await invoke<MapAnnotation>("update_annotation", {
-        annotation: { ...existing, ...updates },
-      });
+      const result = await api.updateAnnotation({ ...existing, ...updates }) as MapAnnotation;
       annotations = annotations.map((a) => (a.id === result.id ? result : a));
       if (selectedAnnotation?.id === result.id) selectedAnnotation = result;
     } catch (e) {
@@ -278,7 +271,7 @@
 
   async function handleAnnotationUpdate(updated: MapAnnotation) {
     try {
-      const result = await invoke<MapAnnotation>("update_annotation", { annotation: updated });
+      const result = await api.updateAnnotation(updated) as MapAnnotation;
       annotations = annotations.map((a) => (a.id === result.id ? result : a));
       selectedAnnotation = result;
     } catch (e) {
@@ -288,7 +281,7 @@
 
   async function handleAnnotationDelete(id: number) {
     try {
-      await invoke("delete_annotation", { annotationId: id });
+      await api.deleteAnnotation(id);
       annotations = annotations.filter((a) => a.id !== id);
       if (selectedAnnotation?.id === id) selectedAnnotation = null;
     } catch (e) {
@@ -546,7 +539,7 @@
             onTagsChange={pinDetails.savePinTags}
             onToggleLock={togglePinLock}
             onUpdate={async (updated: Pin) => {
-              const saved: Pin = await invoke("update_pin", { pin: updated });
+              const saved: Pin = await api.updatePin(updated) as Pin;
               pins = pins.map((p) => (p.id === saved.id ? saved : p));
               selectedPin = saved;
             }}

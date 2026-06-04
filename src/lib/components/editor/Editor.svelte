@@ -3,7 +3,7 @@
   import { Editor } from "@tiptap/core";
   import { StarterKit } from "@tiptap/starter-kit";
   import { Markdown } from "@tiptap/markdown";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
 
   import {
     ImageBlock,
@@ -148,7 +148,7 @@
       const broken = new Set<string>();
       for (const p of paths) {
         if (noteList.some((n) => n.path === p)) continue;
-        const resolved = await invoke("resolve_note_by_alias", { alias: p }).catch(() => null);
+        const resolved = await api.resolveNoteByAlias(p).catch(() => null);
         if (resolved == null) broken.add(p);
       }
       // Guard against a torn-down / swapped editor after the await.
@@ -206,10 +206,7 @@
     }
 
     try {
-      const resolved = await invoke<{ id: number; title: string; path: string } | null>(
-        "resolve_note_by_alias",
-        { alias: path },
-      );
+      const resolved = await api.resolveNoteByAlias(path);
       if (resolved) tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
     } catch {
       // stub note or no ledger open — do nothing
@@ -226,7 +223,7 @@
       const note = notes.notes.find((n) => n.path === path);
       if (!note) return;
       try {
-        const raw = await invoke<string>("read_note_content", { notePath: path });
+        const raw = await api.readNoteContent(path);
         const { body } = parseFrontmatter(raw);
         const r = link.getBoundingClientRect();
         wikiPreview = {

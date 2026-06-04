@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createBlankEvent, insertEventAt, moveEventUp, moveEventDown, renderTimelineText, type TimelineEvent } from "$lib/editor/timeline-block";
   import { tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import type { NoteSearchResult } from "$lib/editor/wiki-link";
   import { notes } from "$lib/stores/notes.svelte";
   import { FileText, ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
@@ -35,7 +35,7 @@
         if (noteList.some((n) => n.path === p)) {
           next.set(p, true);
         } else {
-          const resolved = await invoke("resolve_note_by_alias", { alias: p }).catch(() => null);
+          const resolved = await api.resolveNoteByAlias(p).catch(() => null);
           next.set(p, resolved != null);
         }
       }
@@ -192,7 +192,7 @@
     const between = textBeforeCursor.slice(lastOpen + 2);
     if (between.includes("]]")) { suggestion = null; return; }
     const query = between;
-    const items = await invoke<NoteSearchResult[]>("search_notes", { query }).catch(() => []);
+    const items = await api.searchNotes(query).catch(() => []);
     const rect = el.getBoundingClientRect();
     suggestion = {
       items,

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { MediaQuery } from "svelte/reactivity";
   import { fly } from "svelte/transition";
   import { notes } from "$lib/stores/notes.svelte";
@@ -45,7 +45,7 @@
       // Capture and consume the pending search query for scroll-to-match
       highlightQuery = searchPalette.activeQuery;
       searchPalette.activeQuery = "";
-      invoke<string>("read_note_content", { notePath: note.path }).then((c) => {
+      api.readNoteContent(note.path).then((c) => {
         if (lastFetchedId !== targetId) return;
         const parsed = parseFrontmatter(c);
         body = parsed.body;
@@ -94,7 +94,7 @@
     if (appPrefs.confirmRenameLinks) {
       let count = 0;
       try {
-        count = await invoke<number>("get_note_backlink_count", { notePath: note.path });
+        count = await api.getNoteBacklinkCount(note.path);
       } catch {
         count = 0;
       }
@@ -114,17 +114,13 @@
     isSavingTitle = true;
     try {
       if (updateLinks) {
-        const result = await invoke<{ note: unknown; updated_count: number }>("rename_note", {
-          note: { ...note, title, path: newPath },
-        });
+        const result = await api.renameNote({ ...note, title, path: newPath });
         if (result.updated_count > 0) {
           const n = result.updated_count;
           toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
         }
       } else {
-        await invoke("update_note", {
-          note: { ...note, title, path: newPath },
-        });
+        await api.updateNote({ ...note, title, path: newPath });
       }
       await notes.load();
     } catch (e) {
@@ -181,10 +177,7 @@
     lastMarkdown = markdown;
     if (!note || isSavingTitle) return;
     try {
-      await invoke("write_note_content", {
-        notePath: note.path,
-        content: markdown,
-      });
+      await api.writeNoteContent(note.path, markdown);
       linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);

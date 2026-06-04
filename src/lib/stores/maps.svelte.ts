@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { ledger } from "./ledger.svelte";
+import { api } from "$lib/api";
 import type { Map } from "$lib/types/ledger";
 
 function createMapsStore() {
@@ -11,7 +11,7 @@ function createMapsStore() {
     isLoading = true;
     error = null;
     try {
-      maps = await invoke<Map[]>("get_maps");
+      maps = await api.getMaps();
     } catch (e) {
       error = String(e);
     } finally {
@@ -26,7 +26,7 @@ function createMapsStore() {
     const m = maps.find((x) => x.id === mapId);
     if (!m || m.image_path) return;
     try {
-      await invoke("delete_map", { mapId });
+      await api.deleteMap(mapId);
       await load();
     } catch (e) {
       console.error("prune imageless map failed:", e);

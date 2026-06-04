@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { setMode, userPrefersMode } from "mode-watcher";
   import { toastError, toastSuccess } from "$lib/toast";
   import {
@@ -140,11 +140,7 @@
   async function cmdCreateNote() {
     searchPalette.open = false;
     try {
-      const newNote = await invoke<Note>("create_note", {
-        noteTitle: "Untitled",
-        notePath: "Untitled.md",
-        noteParentPath: null,
-      });
+      const newNote = await api.createNote("Untitled", "Untitled.md", null);
       await notes.load();
       tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
     } catch (e) {
@@ -155,9 +151,7 @@
   async function cmdCreateScene() {
     searchPalette.open = false;
     try {
-      const newScene = await invoke<{ id: number; name: string }>("create_scene", {
-        name: "Untitled Scene",
-      });
+      const newScene = await api.createScene("Untitled Scene");
       await scenes.load();
       tabs.openTab({ type: "scene", id: newScene.id, title: newScene.name });
     } catch (e) {
@@ -168,9 +162,7 @@
   async function cmdCreateMap() {
     searchPalette.open = false;
     try {
-      const newMap = await invoke<LedgerMap>("create_map_empty", {
-        title: "Untitled Map",
-      });
+      const newMap = await api.createMapEmpty("Untitled Map");
       await maps.load();
       tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map" });
     } catch (e) {
@@ -204,7 +196,7 @@
   async function cmdRebuildIndex() {
     searchPalette.open = false;
     try {
-      await invoke("rebuild_search_index");
+      await api.rebuildSearchIndex();
       toastSuccess("Search index rebuilt");
     } catch (e) {
       console.error("rebuild_search_index failed:", e);
@@ -215,7 +207,7 @@
   async function cmdCreateTemplate() {
     searchPalette.open = false;
     try {
-      const entry = await invoke<TemplateEntry>("create_template");
+      const entry = await api.createTemplate();
       await templates.load();
       tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
     } catch (e) {
@@ -225,7 +217,7 @@
 
   async function cmdCreateNoteFromTemplate() {
     try {
-      const list = await invoke<TemplateEntry[]>("list_templates");
+      const list = await api.listTemplates();
       templateList = list ?? [];
       templatePickerMode = true;
       searchQuery = "";
@@ -238,10 +230,7 @@
     templatePickerMode = false;
     searchPalette.open = false;
     try {
-      const newNote = await invoke<Note>("create_note_from_template", {
-        templatePath: template.path,
-        noteParentPath: null,
-      });
+      const newNote = await api.createNoteFromTemplate(template.path, null);
       await notes.load();
       tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
     } catch (e) {
@@ -263,7 +252,7 @@
     if (!note) return;
     searchPalette.open = false;
     try {
-      await invoke<TemplateEntry>("save_note_as_template", { notePath: note.path });
+      await api.saveNoteAsTemplate(note.path);
       await templates.load();
     } catch (e) {
       console.error("save_note_as_template failed:", e);
@@ -364,7 +353,7 @@
   function openNote(result: NoteSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    invoke("record_recent", { kind: "note", id: result.id, title: result.title }).catch(() => {});
+    api.recordRecent("note", result.id, result.title).catch(() => {});
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
     const tab = { type: "note" as const, id: result.id, title: result.title };
@@ -376,7 +365,7 @@
   function openMap(result: MapSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    invoke("record_recent", { kind: "map", id: result.id, title: result.title }).catch(() => {});
+    api.recordRecent("map", result.id, result.title).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "map" as const, id: result.id, title: result.title };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
@@ -387,7 +376,7 @@
   function openScene(result: SceneSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    invoke("record_recent", { kind: "scene", id: result.id, title: result.name }).catch(() => {});
+    api.recordRecent("scene", result.id, result.name).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "scene" as const, id: result.id, title: result.name };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
@@ -398,7 +387,7 @@
   function openRecent(entity: RecentEntityResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    invoke("record_recent", { kind: entity.entity_kind, id: entity.entity_id, title: entity.title }).catch(() => {});
+    api.recordRecent(entity.entity_kind, entity.entity_id, entity.title).catch(() => {});
     searchPalette.open = false;
     const tab = {
       type: entity.entity_kind as "note" | "map" | "scene",
@@ -461,7 +450,7 @@
     }
     debounceTimer = setTimeout(async () => {
       try {
-        const res = await invoke<SearchAllResult>("search_all", { query: q });
+        const res = await api.searchAll(q);
         noteResults = res?.notes ?? [];
         mapResults = res?.maps ?? [];
         sceneResults = res?.scenes ?? [];
@@ -505,7 +494,7 @@
 
   $effect(() => {
     if (searchPalette.open) {
-      invoke<RecentEntityResult[]>("get_recent_entities")
+      api.getRecentEntities()
         .then((res) => { recentEntities = res ?? []; })
         .catch(() => { recentEntities = []; });
     }
@@ -522,14 +511,14 @@
     const path = note.path;
     if (path === loadedForPath) return;
     loadedForPath = path;
-    invoke<string[]>("read_note_tags", { notePath: path })
+    api.readNoteTags(path)
       .then((loaded) => {
         if (loadedForPath === path) tags = loaded;
       })
       .catch(() => {
         tags = [];
       });
-    invoke<string[]>("list_all_tags")
+    api.listAllTags()
       .then((t) => {
         allTags = t ?? [];
       })
@@ -542,7 +531,7 @@
     const note = activeNote;
     if (!note) return;
     try {
-      await invoke("write_note_tags", { notePath: note.path, tags: next });
+      await api.writeNoteTags(note.path, next);
     } catch (e) {
       console.error("write_note_tags failed:", e);
     }

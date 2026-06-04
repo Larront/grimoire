@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { api } from "$lib/api";
 import { toastImportFailures } from "$lib/toast";
 
 export type AccentPreset =
@@ -50,9 +50,7 @@ function createLedgerStore() {
 
   /** Invokes open_ledger, updates store state, and surfaces failed imports. */
   async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
-    const result = await invoke<OpenLedgerResult>("open_ledger", {
-      path: ledgerPath,
-    });
+    const result = await api.openLedger(ledgerPath);
 
     path = result.path;
     isOpen = true;
@@ -91,15 +89,13 @@ function createLedgerStore() {
       // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
       // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
       const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
-      invoke("add_recent_ledger", {
-        entry: {
-          path: result.path,
-          name,
-          note_count: result.note_count,
-          scene_count: result.scene_count,
-          map_count: result.map_count,
-          last_opened: new Date().toISOString(),
-        },
+      api.addRecentLedger({
+        path: result.path,
+        name,
+        note_count: result.note_count,
+        scene_count: result.scene_count,
+        map_count: result.map_count,
+        last_opened: new Date().toISOString(),
       }).catch(console.error);
 
       return true;
@@ -115,7 +111,7 @@ function createLedgerStore() {
     isLoading = true;
     error = null;
     try {
-      const destPath = await invoke<string>("adopt_sample_ledger", { parent, name });
+      const destPath = await api.adoptSampleLedger(parent, name);
       const opened = await openLedger(destPath);
       if (!opened) {
         // openLedger only resolves false (without throwing) when no path was
@@ -137,7 +133,7 @@ function createLedgerStore() {
     isLoading = true;
     error = null;
     try {
-      const sandboxPath = await invoke<string>("explore_sample_ledger");
+      const sandboxPath = await api.exploreSampleLedger();
       await openAtPath(sandboxPath);
       isSample = true;
       pendingStartHere = true;
@@ -152,17 +148,17 @@ function createLedgerStore() {
 
   function setDensity(level: DensityLevel): void {
     density = level;
-    invoke("save_density_level", { level }).catch(console.error);
+    api.saveDensityLevel(level).catch(console.error);
   }
 
   function setAccent(preset: AccentPreset): void {
     accent = preset;
-    invoke("save_accent_preset", { preset }).catch(console.error);
+    api.saveAccentPreset(preset).catch(console.error);
   }
 
   async function getRecentLedgers(): Promise<RecentLedger[]> {
     try {
-      return (await invoke<RecentLedger[]>("get_recent_ledgers")) ?? [];
+      return (await api.getRecentLedgers()) ?? [];
     } catch {
       return [];
     }
@@ -170,7 +166,7 @@ function createLedgerStore() {
 
   async function closeLedger(): Promise<void> {
     try {
-      await invoke("close_ledger");
+      await api.closeLedger();
     } catch (e) {
       // Log but do not block frontend close — we still clear local state
       console.warn("[ledger] close_ledger command failed:", e);
@@ -186,19 +182,19 @@ function createLedgerStore() {
 
   async function checkExistingLedger(): Promise<void> {
     try {
-      const existingPath = await invoke<string | null>("get_ledger_path");
+      const existingPath = await api.getLedgerPath();
       if (existingPath) {
         path = existingPath;
         isOpen = true;
       }
-      const savedAccent = await invoke<AccentPreset | null>(
-        "get_accent_preset",
-      ).catch(() => null);
-      if (savedAccent) accent = savedAccent;
-      const savedDensity = await invoke<DensityLevel | null>(
-        "get_density_level",
-      ).catch(() => null);
-      if (savedDensity) density = savedDensity;
+      const savedAccent = await api
+        .getAccentPreset()
+        .catch(() => null);
+      if (savedAccent) accent = savedAccent as AccentPreset;
+      const savedDensity = await api
+        .getDensityLevel()
+        .catch(() => null);
+      if (savedDensity) density = savedDensity as DensityLevel;
     } catch {
       // No ledger open — normal on first launch
     }

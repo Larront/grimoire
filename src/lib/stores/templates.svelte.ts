@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { ledger } from "./ledger.svelte";
+import { api } from "$lib/api";
 import type { TemplateEntry } from "$lib/types/ledger";
 
 function createTemplatesStore() {
@@ -9,7 +9,7 @@ function createTemplatesStore() {
   async function load() {
     isLoading = true;
     try {
-      templatesList = (await invoke<TemplateEntry[]>("list_templates")) ?? [];
+      templatesList = (await api.listTemplates()) ?? [];
     } catch (e) {
       console.error("list_templates failed:", e);
     } finally {

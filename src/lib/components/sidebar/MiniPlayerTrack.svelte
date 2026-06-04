@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import type { SceneSlot } from "$lib/types/ledger";
@@ -72,14 +72,14 @@
   async function handleVolumeChange(e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: value,
-        loop: slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !!slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        value,
+        slot.loop,
+        slot.slot_order,
+        !!slot.shuffle,
+      );
     } catch (err) {
       console.error("Failed to save volume:", err);
     }
@@ -87,14 +87,14 @@
 
   async function toggleLoop() {
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: currentVolume,
-        loop: !slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !!slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        currentVolume,
+        !slot.loop,
+        slot.slot_order,
+        !!slot.shuffle,
+      );
       if (audioEngine.activeSceneId) {
         scenes.invalidateSlots(audioEngine.activeSceneId);
       }
@@ -105,14 +105,14 @@
 
   async function toggleShuffle() {
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: currentVolume,
-        loop: slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        currentVolume,
+        slot.loop,
+        slot.slot_order,
+        !slot.shuffle,
+      );
       if (audioEngine.activeSceneId) {
         scenes.invalidateSlots(audioEngine.activeSceneId);
       }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
@@ -23,7 +23,7 @@
       lastFetchedPath = targetPath;
       body = null;
       isLoading = true;
-      invoke<string>("read_template", { path: targetPath }).then((content) => {
+      api.readTemplate(targetPath).then((content) => {
         if (lastFetchedPath !== targetPath) return;
         const parsed = parseFrontmatter(content);
         frontmatterTags = parsed.tags;
@@ -53,7 +53,7 @@
     isSavingTitle = true;
     const currentPath = templatePath;
     try {
-      await invoke("rename_template", { path: currentPath, newName: trimmed });
+      await api.renameTemplate(currentPath, trimmed);
       const newPath = currentPath.replace(/[^/]+\.md$/, `${trimmed}.md`);
       tabs.updateTemplateTab(currentPath, trimmed, newPath);
       await templates.load();
@@ -79,7 +79,7 @@
     if (isSavingTitle) return;
     try {
       const content = serializeFrontmatter(frontmatterTags, markdown);
-      await invoke("write_template", { path: templatePath, content });
+      await api.writeTemplate(templatePath, content);
     } catch (e) {
       console.error("content save failed:", e);
     }

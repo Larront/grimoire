@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { ledger } from "./ledger.svelte";
 import { scenes } from "./scenes.svelte";
 import type { SceneSlot } from "$lib/types/ledger";
@@ -78,9 +78,7 @@ class LocalSlotPlayer implements SlotPlayer {
     this.currentVolume = initialVolume;
 
     // Load audio via asset protocol — avoids transferring large files over the command bridge
-    const absolutePath = await invoke<string>("get_audio_absolute_path", {
-      relativePath: slot.source_id,
-    });
+    const absolutePath = await api.getAudioAbsolutePath(slot.source_id);
     const assetUrl = convertFileSrc(absolutePath);
     const response = await fetch(assetUrl);
     const buffer = await this.localCtx.ctx.decodeAudioData(await response.arrayBuffer());
@@ -171,7 +169,7 @@ class SpotifyContext {
       name: "Notaret",
       getOAuthToken: async (cb: (token: string) => void) => {
         try {
-          const token = await invoke<string>("spotify_get_access_token");
+          const token = await api.spotifyGetAccessToken();
           cb(token);
         } catch {
           cb("");
@@ -216,17 +214,17 @@ class SpotifyContext {
       sourceUri.startsWith("spotify:playlist:") ||
       sourceUri.startsWith("spotify:album:");
     // All Spotify Web API calls are made from Rust — token never crosses IPC bridge
-    await invoke("spotify_play_track", {
-      sourceId: sourceUri,
-      useContext: usesContext,
-      loopMode: slot.loop,
-      shuffle: !!slot.shuffle,
-      deviceId: this.deviceId,
-    });
+    await api.spotifyPlayTrack(
+      sourceUri,
+      usesContext,
+      slot.loop,
+      !!slot.shuffle,
+      this.deviceId!, // initialize() above guarantees it's set
+    );
   }
 
   async resume(): Promise<void> {
-    if (this.deviceId) await invoke("spotify_resume", { deviceId: this.deviceId });
+    if (this.deviceId) await api.spotifyResume(this.deviceId);
   }
 
   async pause(): Promise<void> {
@@ -234,11 +232,11 @@ class SpotifyContext {
   }
 
   async skipNext(): Promise<void> {
-    if (this.deviceId) await invoke("spotify_skip_next", { deviceId: this.deviceId });
+    if (this.deviceId) await api.spotifySkipNext(this.deviceId);
   }
 
   async skipPrev(): Promise<void> {
-    if (this.deviceId) await invoke("spotify_skip_prev", { deviceId: this.deviceId });
+    if (this.deviceId) await api.spotifySkipPrev(this.deviceId);
   }
 
   disconnect(): void {

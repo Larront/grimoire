@@ -1,5 +1,5 @@
 import Image from "@tiptap/extension-image";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { mount, unmount } from "svelte";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
@@ -179,13 +179,13 @@ export async function insertImageFromHandle(
   let src: string;
 
   if (filePath) {
-    src = await invoke<string>("copy_image_file", { absolutePath: filePath });
+    src = await api.copyImageFile(filePath);
   } else {
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    src = await invoke<string>("save_image_bytes", {
+    src = await api.saveImageBytes(
       bytes,
-      filename: file.name || `pasted-image.${mimeToExt(file.type)}`,
-    });
+      file.name || `pasted-image.${mimeToExt(file.type)}`,
+    );
   }
 
   editor
@@ -202,7 +202,7 @@ export async function insertImageFromFile(
   absolutePath: string,
   editor: Editor,
 ): Promise<void> {
-  const src = await invoke<string>("copy_image_file", { absolutePath });
+  const src = await api.copyImageFile(absolutePath);
   editor
     .chain()
     .focus()

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Rename from "$lib/components/ui/rename";
@@ -53,7 +53,7 @@
   async function refresh() {
     if (!ledger.isOpen) return;
     try {
-      tree = await invoke<FileNode>("get_file_tree");
+      tree = await api.getFileTree();
     } catch (e) {
       console.error("FileTree refresh failed:", e);
     }
@@ -76,7 +76,7 @@
     maps.maps;
     if (ledger.isOpen) {
       treeLoading = true;
-      invoke<FileNode>("get_file_tree")
+      api.getFileTree()
         .then((result) => (tree = result))
         .catch((e) => console.error("FileTree tree sync failed:", e))
         .finally(() => (treeLoading = false));
@@ -85,9 +85,7 @@
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
-      const newMap = await invoke<LedgerMap>("create_map_empty", {
-        title: "Untitled Map",
-      });
+      const newMap = await api.createMapEmpty("Untitled Map");
       await maps.load();
       refresh();
       tabs.openTab({ type: 'map', id: newMap.id, title: 'Untitled Map' });
@@ -98,11 +96,11 @@
 
   async function handleNewNote(parentNode: FileNode | null) {
     try {
-      const newNote = await invoke<Note>("create_note", {
-        noteTitle: "Untitled",
-        notePath: `${parentNode ? parentNode.path + "/Untitled.md" : "Untitled.md"}`,
-        noteParentPath: parentNode ? parentNode.path : null,
-      });
+      const newNote = await api.createNote(
+        "Untitled",
+        `${parentNode ? parentNode.path + "/Untitled.md" : "Untitled.md"}`,
+        parentNode ? parentNode.path : null,
+      );
       await notes.load();
       refresh();
       tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
@@ -113,9 +111,9 @@
 
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
-      await invoke("create_folder", {
-        folderPath: `${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`,
-      });
+      await api.createFolder(
+        `${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`,
+      );
       refresh();
     } catch (e) {
       console.error("create folder failed:", e);
@@ -124,7 +122,7 @@
 
   async function handleCreateTemplate() {
     try {
-      const entry = await invoke<TemplateEntry>("create_template");
+      const entry = await api.createTemplate();
       await templates.load();
       tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
     } catch (e) {
@@ -150,7 +148,7 @@
       return false;
     }
     try {
-      await invoke("rename_template", { path: tmpl.path, newName: newName.trim() });
+      await api.renameTemplate(tmpl.path, newName.trim());
       const newPath = tmpl.path.replace(/[^/]+\.md$/, `${newName.trim()}.md`);
       tabs.updateTemplateTab(tmpl.path, newName.trim(), newPath);
       await templates.load();
@@ -164,7 +162,7 @@
 
   function deleteTemplate(tmpl: TemplateEntry) {
     toastUndo(`"${tmpl.display_name}" deleted`, async () => {
-      await invoke("delete_template", { path: tmpl.path });
+      await api.deleteTemplate(tmpl.path);
       await templates.load();
     });
   }

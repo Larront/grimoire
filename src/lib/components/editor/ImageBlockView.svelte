@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import {
     AlignLeft,
     AlignCenter,
@@ -65,7 +66,7 @@
   $effect(() => {
     imageUrl = null;
     loadError = false;
-    invoke<string>("get_image_absolute_path", { relativePath: _src })
+    api.getImageAbsolutePath(_src)
       .then((abs) => {
         imageUrl = convertFileSrc(abs);
       })
@@ -103,9 +104,7 @@
     });
     if (typeof picked !== "string") return;
     try {
-      const newSrc = await invoke<string>("copy_image_file", {
-        absolutePath: picked,
-      });
+      const newSrc = await api.copyImageFile(picked);
       onSrcReplace?.(newSrc);
     } catch {
       // mirror other insertion routes: swallow; no node mutation

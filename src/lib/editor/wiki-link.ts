@@ -1,5 +1,5 @@
 import { Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import Suggestion from "@tiptap/suggestion";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
@@ -200,7 +200,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
 
         items: async ({ query }: { query: string }) => {
           try {
-            return await invoke<NoteSearchResult[]>("search_notes", { query });
+            return await api.searchNotes(query);
           } catch {
             return [];
           }

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 
 interface AppPrefsData {
   reduceMotion: boolean;
@@ -26,7 +26,7 @@ function createAppPrefs() {
 
   /** Persist the full prefs snapshot to the Rust-side app-prefs file (fire-and-forget). */
   function persist() {
-    invoke("save_app_prefs", { prefs: snapshot() }).catch(console.error);
+    api.saveAppPrefs(snapshot()).catch(console.error);
   }
 
   /** Fold any pre-migration localStorage values into state; returns true if any were found. */
@@ -55,7 +55,7 @@ function createAppPrefs() {
     if (loaded) return;
     loaded = true;
     try {
-      const saved = await invoke<AppPrefsData | null>("get_app_prefs");
+      const saved = await api.getAppPrefs();
       if (saved) {
         reduceMotion = saved.reduceMotion ?? false;
         confirmRenameLinks = saved.confirmRenameLinks ?? false;

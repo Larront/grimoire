@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -57,7 +58,7 @@
   $effect(() => {
     const path = scene?.thumbnail_path;
     if (path) {
-      invoke<string>("get_audio_absolute_path", { relativePath: path })
+      api.getAudioAbsolutePath(path)
         .then((abs) => { thumbnailUrl = convertFileSrc(abs); })
         .catch(() => { thumbnailUrl = null; });
     } else {
@@ -217,14 +218,14 @@
   async function handleSlotVolumeChange(slot: SceneSlot, e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: value,
-        loop: slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !!slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        value,
+        slot.loop,
+        slot.slot_order,
+        !!slot.shuffle,
+      );
     } catch (err) {
       console.error("Failed to save volume:", err);
       toastError("Failed to save volume.");
@@ -437,9 +438,7 @@
       let sourceId: string;
       let source: string;
       if (addTab === "local") {
-        sourceId = await invoke<string>("copy_audio_file", {
-          absolutePath: addSourcePath,
-        });
+        sourceId = await api.copyAudioFile(addSourcePath);
         source = "local";
       } else {
         const parsed = parseSpotifyInput(addSpotifyUri.trim());
@@ -449,7 +448,7 @@
         // Auto-fetch label from Spotify if user didn't provide one
         if (!addLabel.trim()) {
           try {
-            const token = await invoke<string>("spotify_get_access_token");
+            const token = await api.spotifyGetAccessToken();
             const apiType = parsed.type === "track" ? "tracks" : parsed.type === "playlist" ? "playlists" : "albums";
             const fields = parsed.type === "playlist" ? "?fields=name" : "";
             const res = await fetch(`https://api.spotify.com/v1/${apiType}/${parsed.id}${fields}`, {

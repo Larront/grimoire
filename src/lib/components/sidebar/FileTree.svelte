@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import type { FileNode, Note } from "$lib/types/ledger";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Sidebar from "$lib/components/ui/sidebar";
@@ -47,7 +47,7 @@
     toastUndo(`"${target.name}" deleted`, async () => {
       if (target.note_id === null) return;
       tabs.closeTabByTypeAndId('note', target.note_id!);
-      await invoke("delete_note", { noteId: target.note_id });
+      await api.deleteNote(target.note_id);
       await notes.load();
       refresh();
     });
@@ -57,7 +57,7 @@
     toastUndo(`"${target.name}" deleted`, async () => {
       if (target.map_id === null) return;
       tabs.closeTabByTypeAndId('map', target.map_id!);
-      await invoke("delete_map", { mapId: target.map_id });
+      await api.deleteMap(target.map_id);
       await maps.load();
       refresh();
     });
@@ -70,7 +70,7 @@
           tabs.closeTabByTypeAndId('note', id);
         }
       }
-      await invoke("delete_folder", { folderPath: target.path });
+      await api.deleteFolder(target.path);
       await notes.load();
       refresh();
     });
@@ -95,10 +95,7 @@
     }
     try {
       if (target.is_dir) {
-        await invoke("rename_folder", {
-          oldPath: target.path,
-          newPath: newName.trim(),
-        });
+        await api.renameFolder(target.path, newName.trim());
         refresh();
       }
       renamingPath = null;

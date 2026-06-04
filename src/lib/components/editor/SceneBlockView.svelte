@@ -22,7 +22,7 @@
     ExternalLink,
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import type { SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
@@ -238,14 +238,14 @@
   async function handleSlotVolumeChange(e: Event, slot: SceneSlot) {
     const value = parseFloat((e.target as HTMLInputElement).value);
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: value,
-        loop: slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !!slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        value,
+        slot.loop,
+        slot.slot_order,
+        !!slot.shuffle,
+      );
     } catch (err) {
       console.error("Failed to save slot volume:", err);
     }
@@ -268,14 +268,14 @@
 
   async function toggleLoop(slot: SceneSlot) {
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
-        loop: !slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !!slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
+        !slot.loop,
+        slot.slot_order,
+        !!slot.shuffle,
+      );
       if (_sceneId !== null) {
         scenes.invalidateSlots(_sceneId);
         await reloadSlots(_sceneId);
@@ -287,14 +287,14 @@
 
   async function toggleShuffle(slot: SceneSlot) {
     try {
-      await invoke("update_scene_slot", {
-        id: slot.id,
-        label: slot.label,
-        volume: audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
-        loop: slot.loop,
-        slotOrder: slot.slot_order,
-        shuffle: !slot.shuffle,
-      });
+      await api.updateSceneSlot(
+        slot.id,
+        slot.label,
+        audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
+        slot.loop,
+        slot.slot_order,
+        !slot.shuffle,
+      );
       if (_sceneId !== null) {
         scenes.invalidateSlots(_sceneId);
         await reloadSlots(_sceneId);

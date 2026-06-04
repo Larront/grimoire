@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -133,7 +134,7 @@
       if (!activeIds.has(Number(key))) delete thumbnailUrls[Number(key)];
     }
     for (const scene of scenesWithImages) {
-      invoke<string>("get_audio_absolute_path", { relativePath: scene.thumbnail_path! })
+      api.getAudioAbsolutePath(scene.thumbnail_path!)
         .then((abs) => { if (abs) thumbnailUrls[scene.id] = convertFileSrc(abs); })
         .catch(() => { delete thumbnailUrls[scene.id]; });
     }

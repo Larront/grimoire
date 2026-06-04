@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import { open } from "@tauri-apps/plugin-dialog";
   import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
   import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
@@ -20,7 +20,7 @@
 
   $effect(() => {
     if (!ledger.isOpen) {
-      invoke<RecentLedger[]>("get_recent_ledgers")
+      api.getRecentLedgers()
         .then((ledgers) => {
           recentLedgers = ledgers;
         })

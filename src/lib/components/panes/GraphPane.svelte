@@ -8,7 +8,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { api } from "$lib/api";
   import type { Core, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
@@ -230,7 +230,7 @@
       color: current.color,
       hidden,
     });
-    await invoke("set_tag_graph_style", { tag, color: current.color, hidden });
+    await api.setTagGraphStyle(tag, current.color, hidden);
     updateCyVisibility();
   }
 
@@ -361,14 +361,7 @@
 
   async function createNoteFromStub(label: string) {
     try {
-      const newNote = await invoke<{ id: number; title: string }>(
-        "create_note",
-        {
-          noteTitle: label,
-          notePath: label,
-          noteParentPath: null,
-        },
-      );
+      const newNote = await api.createNote(label, label, null);
       await notes.load();
       // navigateOpen so the Graph view is on the back stack after creating the note.
       tabs.navigateOpen({
@@ -399,9 +392,9 @@
   onMount(async () => {
     try {
       const [rawData, rawTagStyles, tags] = await Promise.all([
-        invoke<GraphData>("get_graph_data"),
-        invoke<Record<string, TagStyle>>("get_tag_graph_styles"),
-        invoke<string[]>("list_all_tags"),
+        api.getGraphData(),
+        api.getTagGraphStyles(),
+        api.listAllTags(),
       ]);
 
       // Build tag styles map
@@ -411,7 +404,10 @@
       allTags = tags ?? [];
 
       // Build accent cycle assignments (encounter order across nodes)
-      accentAssignments = buildAccentAssignments(rawData.nodes, tagStylesMap);
+      // Generated node `kind` is `string`; the local GraphNodeData refines it to
+      // a "map"|"note"|"stub" union. The backend only ever emits those values.
+      const graphNodes = rawData.nodes as GraphNodeData[];
+      accentAssignments = buildAccentAssignments(graphNodes, tagStylesMap);
 
       // Compute max backlink count for proportional sizing
       const maxBacklinks = rawData.nodes.reduce(
@@ -475,7 +471,7 @@
       cy = cytoscape({
         container,
         elements: {
-          nodes: rawData.nodes.map((n, i) => ({
+          nodes: graphNodes.map((n, i) => ({
             data: {
               ...n,
               color: computeNodeColor(n.kind, n.primary_tag),

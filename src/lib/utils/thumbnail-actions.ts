@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { open } from "@tauri-apps/plugin-dialog";
 import { remove } from "@tauri-apps/plugin-fs";
 import { scenes } from "$lib/stores/scenes.svelte";
@@ -6,7 +6,7 @@ import { scenes } from "$lib/stores/scenes.svelte";
 async function deleteOldThumbnailFile(path: string | null): Promise<void> {
   if (!path) return;
   try {
-    const abs = await invoke<string>("get_audio_absolute_path", { relativePath: path });
+    const abs = await api.getAudioAbsolutePath(path);
     if (abs) await remove(abs);
   } catch { /* non-critical */ }
 }
@@ -18,7 +18,7 @@ export async function changeThumbnail(sceneId: number): Promise<void> {
   });
   if (!picked || typeof picked !== "string") return;
   const oldPath = scenes.scenes.find((s) => s.id === sceneId)?.thumbnail_path ?? null;
-  const relativePath = await invoke<string>("copy_thumbnail_file", { absolutePath: picked });
+  const relativePath = await api.copyThumbnailFile(picked);
   await scenes.setThumbnailImage(sceneId, relativePath);
   await deleteOldThumbnailFile(oldPath);
 }
