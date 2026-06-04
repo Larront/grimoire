@@ -157,6 +157,7 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
 /// The frontend follows up with `open_ledger` (which rebuilds derived indexes)
 /// and skips `add_recent_ledger` to keep the sample ephemeral.
 #[tauri::command]
+#[specta::specta]
 pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     let resource_dir = app
         .path()
@@ -194,6 +195,7 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
 /// `parent/name/` and returns the destination path. The frontend follows up with the
 /// vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
 #[tauri::command]
+#[specta::specta]
 pub fn adopt_sample_ledger(parent: String, name: String, app: AppHandle) -> Result<String, String> {
     let app_data_dir = app
         .path()

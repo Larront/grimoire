@@ -15,7 +15,7 @@ use tauri::State;
 
 // ── Data types ────────────────────────────────────────────────────────────────
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct GraphNodeData {
     pub id: String,
     pub label: String,
@@ -30,14 +30,14 @@ pub struct GraphNodeData {
     pub backlink_count: i32,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct GraphEdgeData {
     pub id: String,
     pub source: String,
     pub target: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct GraphData {
     pub nodes: Vec<GraphNodeData>,
     pub edges: Vec<GraphEdgeData>,
@@ -235,6 +235,7 @@ pub fn get_graph_data_on_conn(
 // ── Tauri command ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_graph_data(ledger: State<AppLedger>) -> Result<GraphData, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;

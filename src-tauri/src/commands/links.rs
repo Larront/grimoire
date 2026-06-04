@@ -338,7 +338,7 @@ pub fn get_alias_collisions(
     get_alias_collisions_on_conn(conn, note_id)
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct ResolvedNote {
     pub id: i32,
     pub title: String,
@@ -401,6 +401,7 @@ pub fn resolve_note_by_alias_on_conn(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn resolve_note_by_alias(
     alias: String,
     ledger: State<AppLedger>,
@@ -539,7 +540,8 @@ struct BacklinkCountRow {
 }
 
 #[tauri::command]
-pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
     let row = diesel::sql_query(
@@ -548,7 +550,7 @@ pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> R
     .bind::<diesel::sql_types::Text, _>(&note_path)
     .load::<BacklinkCountRow>(conn)
     .map_err(|e| e.to_string())?;
-    Ok(row.into_iter().next().map(|r| r.cnt as usize).unwrap_or(0))
+    Ok(row.into_iter().next().map(|r| r.cnt as u32).unwrap_or(0))
 }
 
 #[tauri::command]

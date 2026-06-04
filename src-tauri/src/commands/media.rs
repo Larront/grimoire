@@ -76,6 +76,7 @@ pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Re
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn copy_image_file(absolute_path: String, ledger: State<AppLedger>) -> Result<String, String> {
     let state = ledger.lock().map_err(|e| e.to_string())?;
     copy_image_file_to(state.path.as_deref(), &absolute_path)
@@ -100,6 +101,7 @@ pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> R
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_image_bytes(
     bytes: Vec<u8>,
     filename: String,
@@ -112,6 +114,7 @@ pub fn save_image_bytes(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_image_absolute_path(
     relative_path: String,
     ledger: State<AppLedger>,

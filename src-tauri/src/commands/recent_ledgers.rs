@@ -7,17 +7,20 @@ use tauri::Manager;
 const MAX_RECENT_LEDGERS: usize = 10;
 const RECENT_LEDGERS_FILE: &str = "recent-ledgers.json";
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Deserialize, Clone)]
 pub struct RecentLedger {
     pub path: String,
     pub name: String,
+    #[specta(type = i32)]
     pub note_count: usize,
+    #[specta(type = i32)]
     pub scene_count: usize,
+    #[specta(type = i32)]
     pub map_count: usize,
     pub last_opened: String, // ISO 8601
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, specta::Type, Deserialize, Default)]
 struct RecentLedgersFile {
     ledgers: Vec<RecentLedger>,
 }
@@ -52,6 +55,7 @@ fn write_recent_ledgers_file(app: &AppHandle, data: &RecentLedgersFile) -> Resul
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_recent_ledgers(app: AppHandle) -> Result<Vec<RecentLedger>, String> {
     let mut data = read_recent_ledgers_file(&app)?;
     // Filter out ledgers whose directories no longer exist
@@ -62,6 +66,7 @@ pub fn get_recent_ledgers(app: AppHandle) -> Result<Vec<RecentLedger>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn add_recent_ledger(app: AppHandle, entry: RecentLedger) -> Result<(), String> {
     let mut data = read_recent_ledgers_file(&app)?;
     // Remove existing entry for this path (if any) so we can re-insert at front
@@ -74,6 +79,7 @@ pub fn add_recent_ledger(app: AppHandle, entry: RecentLedger) -> Result<(), Stri
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn remove_recent_ledger(app: AppHandle, path: String) -> Result<(), String> {
     let mut data = read_recent_ledgers_file(&app)?;
     data.ledgers.retain(|v| v.path != path);

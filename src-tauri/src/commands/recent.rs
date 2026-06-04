@@ -5,7 +5,7 @@ use diesel::prelude::*;
 use serde::Serialize;
 use tauri::State;
 
-#[derive(Queryable, Selectable, Serialize, Debug, Clone)]
+#[derive(Queryable, Selectable, Serialize, specta::Type, Debug, Clone)]
 #[diesel(table_name = crate::db::schema::recent_entities)]
 pub struct RecentEntityResult {
     pub entity_kind: String,
@@ -59,6 +59,7 @@ pub(crate) fn load_recent(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn record_recent(
     kind: String,
     id: i32,
@@ -73,6 +74,7 @@ pub fn record_recent(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_recent_entities(ledger: State<AppLedger>) -> Result<Vec<RecentEntityResult>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;

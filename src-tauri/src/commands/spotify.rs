@@ -90,6 +90,7 @@ fn persist_auth(auth: &TokenResponse, conn: &mut SqliteConnection) -> Result<(),
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn spotify_get_auth_status(
     ledger: State<AppLedger>,
 ) -> Result<Option<SpotifyAuthStatus>, String> {
@@ -106,6 +107,7 @@ pub fn spotify_get_auth_status(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_start_auth_flow(
     ledger: State<'_, AppLedger>,
     app: AppHandle,
@@ -206,6 +208,7 @@ pub async fn spotify_start_auth_flow(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_exchange_code(
     code: String,
     state: String,
@@ -254,6 +257,7 @@ pub async fn spotify_exchange_code(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_refresh_token(
     ledger: State<'_, AppLedger>,
 ) -> Result<SpotifyAuthStatus, String> {
@@ -292,6 +296,7 @@ pub async fn spotify_refresh_token(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<String, String> {
     let (client_id, auth) = {
         let mut state = ledger.lock().map_err(|e| e.to_string())?;
@@ -330,6 +335,7 @@ pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<St
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn spotify_revoke(ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -377,6 +383,7 @@ async fn get_token_and_client(ledger: &State<'_, AppLedger>) -> Result<(String, 
 // ---- New Spotify Web API commands (all HTTP calls stay in Rust) ----
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_play_track(
     source_id: String,
     use_context: bool,
@@ -447,6 +454,7 @@ pub async fn spotify_play_track(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_resume(
     device_id: String,
     ledger: State<'_, AppLedger>,
@@ -466,6 +474,7 @@ pub async fn spotify_resume(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_skip_next(
     device_id: String,
     ledger: State<'_, AppLedger>,
@@ -484,6 +493,7 @@ pub async fn spotify_skip_next(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spotify_skip_prev(
     device_id: String,
     ledger: State<'_, AppLedger>,

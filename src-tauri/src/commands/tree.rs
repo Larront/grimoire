@@ -12,7 +12,7 @@ use std::fs;
 use std::path::Path;
 use tauri::State;                     // used in Tauri command wrappers (Tasks 2–4)
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct FileNode {
     pub name: String,
     pub path: String,
@@ -110,6 +110,7 @@ pub fn build_file_tree(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_file_tree(ledger: State<AppLedger>) -> Result<FileNode, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -140,6 +141,7 @@ pub fn create_folder_inner(ledger_path: &Path, folder_path: &str) -> Result<(), 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
@@ -175,6 +177,7 @@ pub fn delete_folder_inner(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -238,6 +241,7 @@ pub fn rename_folder_inner(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn rename_folder(
     old_path: String,
     new_path: String,

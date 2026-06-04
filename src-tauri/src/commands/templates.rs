@@ -2,7 +2,7 @@ use crate::ledger::AppLedger;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct TemplateEntry {
     pub display_name: String,
     pub path: String,
@@ -117,6 +117,7 @@ pub fn list_templates_for_ledger(ledger_path: &Path) -> Result<Vec<TemplateEntry
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_templates(ledger: State<AppLedger>) -> Result<Vec<TemplateEntry>, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -124,6 +125,7 @@ pub fn list_templates(ledger: State<AppLedger>) -> Result<Vec<TemplateEntry>, St
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn restore_builtin_templates(ledger: State<AppLedger>) -> Result<(), String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -222,6 +224,7 @@ pub fn write_template_content_for_ledger(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn rename_template(
     path: String,
     new_name: String,
@@ -239,6 +242,7 @@ pub fn delete_template_for_ledger(ledger_path: &Path, path: &str) -> Result<(), 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_template(ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -246,6 +250,7 @@ pub fn create_template(ledger: State<AppLedger>) -> Result<TemplateEntry, String
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn read_template(path: String, ledger: State<AppLedger>) -> Result<String, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -253,6 +258,7 @@ pub fn read_template(path: String, ledger: State<AppLedger>) -> Result<String, S
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn write_template(path: String, content: String, ledger: State<AppLedger>) -> Result<(), String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -260,6 +266,7 @@ pub fn write_template(path: String, content: String, ledger: State<AppLedger>) -
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_template(path: String, ledger: State<AppLedger>) -> Result<(), String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
@@ -319,6 +326,7 @@ pub fn save_note_as_template_for_ledger(ledger_path: &Path, note_path: &str) -> 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_note_as_template(note_path: String, ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?;

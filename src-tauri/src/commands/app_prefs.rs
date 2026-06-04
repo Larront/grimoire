@@ -8,7 +8,7 @@ const APP_PREFS_FILE: &str = "app-prefs.json";
 
 /// Global application preferences, persisted in the app data directory.
 /// Distinct from per-ledger preferences (`.grimoire/prefs.json`).
-#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Serialize, specta::Type, Deserialize, Default, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppPrefs {
     pub reduce_motion: bool,
@@ -42,12 +42,14 @@ fn write_prefs_file(path: &Path, prefs: &AppPrefs) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_app_prefs(app: AppHandle) -> Result<AppPrefs, String> {
     let path = app_prefs_path(&app)?;
     read_prefs_file(&path)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_app_prefs(app: AppHandle, prefs: AppPrefs) -> Result<(), String> {
     let path = app_prefs_path(&app)?;
     write_prefs_file(&path, &prefs)

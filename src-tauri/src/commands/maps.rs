@@ -27,6 +27,7 @@ fn resolve_map_filename(base_name: &str, ext: &str, parent_dir: &Path) -> (Strin
 // ── Map commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_map(
     title: String,
     source_image_path: String,
@@ -81,6 +82,7 @@ pub fn create_map(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_map_empty(title: String, ledger: State<AppLedger>) -> Result<Map, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -106,6 +108,7 @@ pub fn create_map_empty(title: String, ledger: State<AppLedger>) -> Result<Map, 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn assign_map_image(
     map_id: i32,
     source_image_path: String,
@@ -170,6 +173,7 @@ pub fn assign_map_image(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_maps(ledger: State<AppLedger>) -> Result<Vec<Map>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -177,6 +181,7 @@ pub fn get_maps(ledger: State<AppLedger>) -> Result<Vec<Map>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_map(map: Map, ledger: State<AppLedger>) -> Result<Map, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -194,7 +199,8 @@ pub fn update_map(map: Map, ledger: State<AppLedger>) -> Result<Map, String> {
 }
 
 #[tauri::command]
-pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -214,10 +220,11 @@ pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<usize, String
         let _ = crate::search::remove_map(index, map_id);
     }
 
-    Ok(deleted)
+    Ok(deleted as u32)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_map_image_data_url(map_id: i32, ledger: State<AppLedger>) -> Result<String, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -246,6 +253,7 @@ pub fn get_map_image_data_url(map_id: i32, ledger: State<AppLedger>) -> Result<S
 // ── Pin commands ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pins(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<Pin>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -256,6 +264,7 @@ pub fn get_pins(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<Pin>, Strin
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_pin(
     map_id: i32,
     x: f32,
@@ -285,6 +294,7 @@ pub fn create_pin(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_pin(pin: Pin, ledger: State<AppLedger>) -> Result<Pin, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -296,17 +306,20 @@ pub fn update_pin(pin: Pin, ledger: State<AppLedger>) -> Result<Pin, String> {
 }
 
 #[tauri::command]
-pub fn delete_pin(pin_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn delete_pin(pin_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(pins::table.find(pin_id))
         .execute(conn)
+        .map(|n| n as u32)
         .map_err(|e| e.to_string())
 }
 
 // ── Category commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pin_categories(ledger: State<AppLedger>) -> Result<Vec<PinCategory>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -341,6 +354,7 @@ pub fn get_pin_categories_for_map(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_pin_category(
     map_id: Option<i32>,
     name: String,
@@ -364,6 +378,7 @@ pub fn create_pin_category(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_pin_category(category: PinCategory, ledger: State<AppLedger>) -> Result<PinCategory, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -375,17 +390,20 @@ pub fn update_pin_category(category: PinCategory, ledger: State<AppLedger>) -> R
 }
 
 #[tauri::command]
-pub fn delete_pin_category(category_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn delete_pin_category(category_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(pin_categories::table.find(category_id))
         .execute(conn)
+        .map(|n| n as u32)
         .map_err(|e| e.to_string())
 }
 
 // ── Annotation commands ───────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_annotations(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<MapAnnotation>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -395,6 +413,8 @@ pub fn get_annotations(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<MapA
         .map_err(|e| e.to_string())
 }
 
+// NOTE: not #[specta::specta] — 14 params exceeds tauri-specta's SpectaFn arity
+// limit. Carved out of the typed bindings and hand-wrapped in $lib/api (ADR-0009).
 #[tauri::command]
 pub fn create_annotation(
     map_id: i32,
@@ -437,6 +457,7 @@ pub fn create_annotation(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_annotation(annotation: MapAnnotation, ledger: State<AppLedger>) -> Result<MapAnnotation, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -448,11 +469,13 @@ pub fn update_annotation(annotation: MapAnnotation, ledger: State<AppLedger>) ->
 }
 
 #[tauri::command]
-pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
     diesel::delete(map_annotations::table.find(annotation_id))
         .execute(conn)
+        .map(|n| n as u32)
         .map_err(|e| e.to_string())
 }
 

@@ -4,20 +4,136 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	getNotes: () => __TAURI_INVOKE<Note[]>("get_notes"),
-	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
+	addRecentLedger: (entry: RecentLedger) => __TAURI_INVOKE<null>("add_recent_ledger", { entry }),
+	/**
+	 *  Copies the current (possibly-edited) sandbox at `app_data_dir/sample-world/` to
+	 *  `parent/name/` and returns the destination path. The frontend follows up with the
+	 *  vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
+	 */
+	adoptSampleLedger: (parent: string, name: string) => __TAURI_INVOKE<string>("adopt_sample_ledger", { parent, name }),
+	assignMapImage: (mapId: number, sourceImagePath: string, destFolder: string | null) => __TAURI_INVOKE<Map>("assign_map_image", { mapId, sourceImagePath, destFolder }),
+	closeLedger: () => __TAURI_INVOKE<null>("close_ledger"),
+	copyAudioFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_audio_file", { absolutePath }),
+	copyImageFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_image_file", { absolutePath }),
+	copyThumbnailFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_thumbnail_file", { absolutePath }),
+	createFolder: (folderPath: string) => __TAURI_INVOKE<null>("create_folder", { folderPath }),
+	createMap: (title: string, sourceImagePath: string, destPath: string) => __TAURI_INVOKE<Map>("create_map", { title, sourceImagePath, destPath }),
+	createMapEmpty: (title: string) => __TAURI_INVOKE<Map>("create_map_empty", { title }),
 	createNote: (noteTitle: string, notePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note", { noteTitle, notePath, noteParentPath }),
-	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
-	writeNoteTags: (notePath: string, tags: string[]) => __TAURI_INVOKE<null>("write_note_tags", { notePath, tags }),
-	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
-	getNoteAliases: (noteId: number) => __TAURI_INVOKE<string[]>("get_note_aliases", { noteId }),
-	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
+	createNoteFromTemplate: (templatePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note_from_template", { templatePath, noteParentPath }),
+	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
+	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
+	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
+	createSceneSlot: (sceneId: number, source: string, sourceId: string, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("create_scene_slot", { sceneId, source, sourceId, label, volume, loop, slotOrder, shuffle }),
+	createTemplate: () => __TAURI_INVOKE<TemplateEntry>("create_template"),
+	deleteAnnotation: (annotationId: number) => __TAURI_INVOKE<number>("delete_annotation", { annotationId }),
+	deleteFolder: (folderPath: string) => __TAURI_INVOKE<null>("delete_folder", { folderPath }),
+	deleteMap: (mapId: number) => __TAURI_INVOKE<number>("delete_map", { mapId }),
+	deleteNote: (noteId: number) => __TAURI_INVOKE<number>("delete_note", { noteId }),
+	deletePin: (pinId: number) => __TAURI_INVOKE<number>("delete_pin", { pinId }),
+	deletePinCategory: (categoryId: number) => __TAURI_INVOKE<number>("delete_pin_category", { categoryId }),
+	deleteScene: (id: number) => __TAURI_INVOKE<null>("delete_scene", { id }),
+	deleteSceneSlot: (id: number) => __TAURI_INVOKE<null>("delete_scene_slot", { id }),
+	deleteTemplate: (path: string) => __TAURI_INVOKE<null>("delete_template", { path }),
+	/**
+	 *  Copies the bundled sample-world resource tree to a writable sandbox at
+	 *  `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
+	 *  database with the sample map and pins, and returns the sandbox path.
+	 *  The frontend follows up with `open_ledger` (which rebuilds derived indexes)
+	 *  and skips `add_recent_ledger` to keep the sample ephemeral.
+	 */
+	exploreSampleLedger: () => __TAURI_INVOKE<string>("explore_sample_ledger"),
+	getAccentPreset: () => __TAURI_INVOKE<string | null>("get_accent_preset"),
 	getAliasCollisions: (noteId: number) => __TAURI_INVOKE<AliasCollision[]>("get_alias_collisions", { noteId }),
+	getAnnotations: (mapId: number) => __TAURI_INVOKE<MapAnnotation[]>("get_annotations", { mapId }),
+	getAppPrefs: () => __TAURI_INVOKE<AppPrefs>("get_app_prefs"),
+	getAudioAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_audio_absolute_path", { relativePath }),
 	getBacklinks: (noteId: number) => __TAURI_INVOKE<BacklinkNote[]>("get_backlinks", { noteId }),
+	getDensityLevel: () => __TAURI_INVOKE<string | null>("get_density_level"),
+	getFileTree: () => __TAURI_INVOKE<FileNode>("get_file_tree"),
+	getGraphData: () => __TAURI_INVOKE<GraphData_Serialize>("get_graph_data"),
+	getImageAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_image_absolute_path", { relativePath }),
+	getLedgerPath: () => __TAURI_INVOKE<string | null>("get_ledger_path"),
+	getMapImageDataUrl: (mapId: number) => __TAURI_INVOKE<string>("get_map_image_data_url", { mapId }),
+	getMaps: () => __TAURI_INVOKE<Map[]>("get_maps"),
+	getNoteAliases: (noteId: number) => __TAURI_INVOKE<string[]>("get_note_aliases", { noteId }),
+	getNoteBacklinkCount: (notePath: string) => __TAURI_INVOKE<number>("get_note_backlink_count", { notePath }),
+	getNoteByPath: (notePath: string) => __TAURI_INVOKE<{
+	id: number,
+	title: string,
+	content: string,
+} | null>("get_note_by_path", { notePath }),
+	getNotes: () => __TAURI_INVOKE<Note[]>("get_notes"),
 	getOutboundLinks: (noteId: number) => __TAURI_INVOKE<OutboundLink[]>("get_outbound_links", { noteId }),
-	getPinTags: (pinId: number) => __TAURI_INVOKE<string[]>("get_pin_tags", { pinId }),
-	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
+	getPinCategories: () => __TAURI_INVOKE<PinCategory[]>("get_pin_categories"),
 	getPinCategoriesForMap: (mapId: number) => __TAURI_INVOKE<PinCategory[]>("get_pin_categories_for_map", { mapId }),
+	getPinTags: (pinId: number) => __TAURI_INVOKE<string[]>("get_pin_tags", { pinId }),
+	getPins: (mapId: number) => __TAURI_INVOKE<Pin[]>("get_pins", { mapId }),
+	getRecentEntities: () => __TAURI_INVOKE<RecentEntityResult[]>("get_recent_entities"),
+	getRecentLedgers: () => __TAURI_INVOKE<RecentLedger[]>("get_recent_ledgers"),
+	getSceneSlots: (sceneId: number) => __TAURI_INVOKE<SceneSlot[]>("get_scene_slots", { sceneId }),
+	getScenes: () => __TAURI_INVOKE<Scene[]>("get_scenes"),
+	getScenesWithSlotCounts: () => __TAURI_INVOKE<SceneWithCount[]>("get_scenes_with_slot_counts"),
+	getTagGraphStyles: () => __TAURI_INVOKE<{ [key in string]: TagGraphStyleResponse }>("get_tag_graph_styles"),
+	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
+	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
+	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
+	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
+	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
+	readTemplate: (path: string) => __TAURI_INVOKE<string>("read_template", { path }),
+	rebuildSearchIndex: () => __TAURI_INVOKE<null>("rebuild_search_index"),
+	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
+	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
+	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<null>("rename_folder", { oldPath, newPath }),
+	/**
+	 *  Like `update_note` but also rewrites all wikilinks that reference the old
+	 *  path in every other note in the ledger.  Returns the count of notes whose
+	 *  files were actually rewritten so the frontend can show a toast.
+	 */
+	renameNote: (note: Note) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note }),
+	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
+	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
+	resolveNoteByAlias: (alias: string) => __TAURI_INVOKE<{
+	id: number,
+	title: string,
+	path: string,
+} | null>("resolve_note_by_alias", { alias }),
+	restoreBuiltinTemplates: () => __TAURI_INVOKE<null>("restore_builtin_templates"),
+	saveAccentPreset: (preset: string) => __TAURI_INVOKE<void>("save_accent_preset", { preset }),
+	saveAppPrefs: (prefs: AppPrefs) => __TAURI_INVOKE<null>("save_app_prefs", { prefs }),
+	saveDensityLevel: (level: string) => __TAURI_INVOKE<void>("save_density_level", { level }),
+	saveImageBytes: (bytes: number[], filename: string) => __TAURI_INVOKE<string>("save_image_bytes", { bytes, filename }),
+	saveNoteAsTemplate: (notePath: string) => __TAURI_INVOKE<TemplateEntry>("save_note_as_template", { notePath }),
+	searchAll: (query: string) => __TAURI_INVOKE<SearchAllResult>("search_all", { query }),
+	searchNotes: (query: string) => __TAURI_INVOKE<NoteSearchResult[]>("search_notes", { query }),
+	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
+	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
+	setTagGraphStyle: (tag: string, color: string | null, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_style", { tag, color, hidden }),
+	spotifyExchangeCode: (code: string, state: string) => __TAURI_INVOKE<SpotifyAuthStatus>("spotify_exchange_code", { code, state }),
+	spotifyGetAccessToken: () => __TAURI_INVOKE<string>("spotify_get_access_token"),
+	spotifyGetAuthStatus: () => __TAURI_INVOKE<{
+	is_connected: boolean,
+	expires_at: string,
+} | null>("spotify_get_auth_status"),
+	spotifyPlayTrack: (sourceId: string, useContext: boolean, loopMode: boolean, shuffle: boolean, deviceId: string) => __TAURI_INVOKE<null>("spotify_play_track", { sourceId, useContext, loopMode, shuffle, deviceId }),
+	spotifyRefreshToken: () => __TAURI_INVOKE<SpotifyAuthStatus>("spotify_refresh_token"),
+	spotifyResume: (deviceId: string) => __TAURI_INVOKE<null>("spotify_resume", { deviceId }),
+	spotifyRevoke: () => __TAURI_INVOKE<null>("spotify_revoke"),
+	spotifySkipNext: (deviceId: string) => __TAURI_INVOKE<null>("spotify_skip_next", { deviceId }),
+	spotifySkipPrev: (deviceId: string) => __TAURI_INVOKE<null>("spotify_skip_prev", { deviceId }),
+	spotifyStartAuthFlow: () => __TAURI_INVOKE<string>("spotify_start_auth_flow"),
+	toggleSceneFavorite: (id: number) => __TAURI_INVOKE<null>("toggle_scene_favorite", { id }),
+	updateAnnotation: (annotation: MapAnnotation) => __TAURI_INVOKE<MapAnnotation>("update_annotation", { annotation }),
+	updateMap: (map: Map) => __TAURI_INVOKE<Map>("update_map", { map }),
+	updateNote: (note: Note) => __TAURI_INVOKE<Note>("update_note", { note }),
+	updatePin: (pin: Pin) => __TAURI_INVOKE<Pin>("update_pin", { pin }),
+	updatePinCategory: (category: PinCategory) => __TAURI_INVOKE<PinCategory>("update_pin_category", { category }),
+	updateScene: (id: number, name: string) => __TAURI_INVOKE<Scene>("update_scene", { id, name }),
+	updateSceneSlot: (id: number, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("update_scene_slot", { id, label, volume, loop, slotOrder, shuffle }),
+	updateSceneThumbnail: (id: number, thumbnailPath: string | null, thumbnailColor: string | null, thumbnailIcon: string | null) => __TAURI_INVOKE<Scene>("update_scene_thumbnail", { id, thumbnailPath, thumbnailColor, thumbnailIcon }),
+	writeNoteContent: (notePath: string, content: string) => __TAURI_INVOKE<null>("write_note_content", { notePath, content }),
+	writeNoteTags: (notePath: string, tags: string[]) => __TAURI_INVOKE<null>("write_note_tags", { notePath, tags }),
+	writeTemplate: (path: string, content: string) => __TAURI_INVOKE<null>("write_template", { path, content }),
 };
 
 /* Types */
@@ -27,9 +143,114 @@ export type AliasCollision = {
 	other_note_title: string,
 };
 
+/**
+ *  Global application preferences, persisted in the app data directory.
+ *  Distinct from per-ledger preferences (`.grimoire/prefs.json`).
+ */
+export type AppPrefs = {
+	reduceMotion?: boolean,
+	confirmRenameLinks?: boolean,
+	sampleBannerDismissed?: boolean,
+};
+
 export type BacklinkNote = {
 	id: number,
 	path: string,
+	title: string,
+};
+
+export type FailedImport = {
+	path: string,
+	reason: string,
+};
+
+export type FileNode = {
+	name: string,
+	path: string,
+	is_dir: boolean,
+	note_id: number | null,
+	map_id: number | null,
+	children: FileNode[],
+};
+
+export type GraphData = GraphData_Serialize | GraphData_Deserialize;
+
+export type GraphData_Deserialize = {
+	nodes: GraphNodeData_Deserialize[],
+	edges: GraphEdgeData[],
+};
+
+export type GraphData_Serialize = {
+	nodes: GraphNodeData_Serialize[],
+	edges: GraphEdgeData[],
+};
+
+export type GraphEdgeData = {
+	id: string,
+	source: string,
+	target: string,
+};
+
+export type GraphNodeData = GraphNodeData_Serialize | GraphNodeData_Deserialize;
+
+export type GraphNodeData_Deserialize = {
+	id: string,
+	label: string,
+	kind: string,
+	entity_id: number | null,
+	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	primary_tag: string | null,
+	/**
+	 *  Number of note_links rows whose target_path resolves to this note's path.
+	 *  Always 0 for map and stub nodes.
+	 */
+	backlink_count: number,
+};
+
+export type GraphNodeData_Serialize = {
+	id: string,
+	label: string,
+	kind: string,
+	entity_id?: number | null,
+	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	primary_tag?: string | null,
+	/**
+	 *  Number of note_links rows whose target_path resolves to this note's path.
+	 *  Always 0 for map and stub nodes.
+	 */
+	backlink_count: number,
+};
+
+export type Map = {
+	id: number,
+	title: string,
+	image_path: string | null,
+	image_width: number | null,
+	image_height: number | null,
+	created_at: string,
+	modified_at: string,
+};
+
+export type MapAnnotation = {
+	id: number,
+	map_id: number,
+	kind: string,
+	x: number | null,
+	y: number | null,
+	x2: number | null,
+	y2: number | null,
+	radius: number | null,
+	label: string | null,
+	color: string,
+	stroke_color: string,
+	stroke_width: number,
+	font_size: number,
+	opacity: number | null,
+	created_at: string,
+};
+
+export type MapSearchResult = {
+	id: number,
 	title: string,
 };
 
@@ -44,11 +265,48 @@ export type Note = {
 	modified_at: string,
 };
 
+export type NotePathResult = {
+	id: number,
+	title: string,
+	content: string,
+};
+
+export type NoteSearchResult = {
+	id: number,
+	title: string,
+	path: string,
+	excerpt: string | null,
+	match_count: number,
+};
+
+export type OpenLedgerResult = {
+	path: string,
+	note_count: number,
+	scene_count: number,
+	map_count: number,
+	failed_imports: FailedImport[],
+};
+
 export type OutboundLink = {
 	target_path: string,
 	resolved_id: number | null,
 	resolved_title: string | null,
 	resolved_path: string | null,
+};
+
+export type Pin = {
+	id: number,
+	map_id: number,
+	x: number | null,
+	y: number | null,
+	title: string,
+	description: string | null,
+	category_id: number | null,
+	note_id: number | null,
+	created_at: string,
+	shape: string | null,
+	icon: string | null,
+	color: string | null,
 };
 
 export type PinCategory = {
@@ -58,5 +316,97 @@ export type PinCategory = {
 	icon: string,
 	color: string,
 	shape: string,
+};
+
+export type RecentEntityResult = {
+	entity_kind: string,
+	entity_id: number,
+	title: string,
+	accessed_at: string,
+};
+
+export type RecentLedger = {
+	path: string,
+	name: string,
+	note_count: number,
+	scene_count: number,
+	map_count: number,
+	last_opened: string,
+};
+
+export type RenameNoteResult = {
+	note: Note,
+	updated_count: number,
+};
+
+export type ResolvedNote = {
+	id: number,
+	title: string,
+	path: string,
+};
+
+export type Scene = {
+	id: number,
+	name: string,
+	created_at: string,
+	favorited: number,
+	thumbnail_path: string | null,
+	thumbnail_color: string | null,
+	thumbnail_icon: string | null,
+};
+
+export type SceneSearchResult = {
+	id: number,
+	name: string,
+};
+
+export type SceneSlot = {
+	id: number,
+	scene_id: number,
+	source: string,
+	source_id: string,
+	label: string,
+	volume: number | null,
+	loop: boolean,
+	slot_order: number,
+	shuffle: boolean,
+};
+
+export type SceneWithCount = {
+	id: number,
+	name: string,
+	favorited: number,
+	created_at: string,
+	slot_count: number,
+	thumbnail_path: string | null,
+	thumbnail_color: string | null,
+	thumbnail_icon: string | null,
+};
+
+export type SearchAllResult = {
+	notes: NoteSearchResult[],
+	maps: MapSearchResult[],
+	scenes: SceneSearchResult[],
+	tags: TagFacet[],
+};
+
+export type SpotifyAuthStatus = {
+	is_connected: boolean,
+	expires_at: string,
+};
+
+export type TagFacet = {
+	name: string,
+	note_count: number,
+};
+
+export type TagGraphStyleResponse = {
+	color: string | null,
+	hidden: boolean,
+};
+
+export type TemplateEntry = {
+	display_name: string,
+	path: string,
 };
 

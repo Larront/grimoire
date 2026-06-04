@@ -32,7 +32,7 @@ use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_aut
 // ── MapAnnotation ─────────────────────────────────────────────────────────────
 
 #[derive(
-    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+    Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, AsChangeset, Identifiable,
 )]
 #[diesel(table_name = map_annotations, treat_none_as_null = true)]
 pub struct MapAnnotation {
@@ -74,7 +74,7 @@ pub struct NewMapAnnotation<'a> {
 // ── Map ──────────────────────────────────────────────────────────────────────
 
 #[derive(
-    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+    Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, AsChangeset, Identifiable,
 )]
 #[diesel(table_name = maps)]
 pub struct Map {
@@ -133,7 +133,7 @@ pub struct NewPinCategory<'a> {
 // ── Pin ───────────────────────────────────────────────────────────────────────
 
 #[derive(
-    Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+    Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, AsChangeset, Identifiable,
 )]
 #[diesel(table_name = pins, treat_none_as_null = true)]
 pub struct Pin {
@@ -166,7 +166,7 @@ pub struct NewPin<'a> {
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, Identifiable)]
+#[derive(Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, Identifiable)]
 #[diesel(table_name = scenes)]
 pub struct Scene {
     pub id: i32,
@@ -200,7 +200,7 @@ pub struct UpdateSceneThumbnail {
 
 use diesel::sql_types::{BigInt, Integer, Nullable, Text};
 
-#[derive(QueryableByName, Serialize, Deserialize, Debug)]
+#[derive(QueryableByName, Serialize, specta::Type, Deserialize, Debug)]
 pub struct SceneWithCount {
     #[diesel(sql_type = Integer)]
     pub id: i32,
@@ -211,6 +211,7 @@ pub struct SceneWithCount {
     #[diesel(sql_type = Text)]
     pub created_at: String,
     #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
     pub slot_count: i64,
     #[diesel(sql_type = Nullable<Text>)]
     pub thumbnail_path: Option<String>,
@@ -222,7 +223,7 @@ pub struct SceneWithCount {
 
 // ── SceneSlot ─────────────────────────────────────────────────────────────────
 
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug, Clone, Identifiable)]
+#[derive(Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, Identifiable)]
 #[diesel(table_name = scene_slots)]
 pub struct SceneSlot {
     pub id: i32,
@@ -285,7 +286,7 @@ pub struct NewSpotifyAuth {
 // ── SpotifyAuthStatus ─────────────────────────────────────────────────────────
 // Token-free struct returned to frontend. Safe to serialize.
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct SpotifyAuthStatus {
     pub is_connected: bool,
     pub expires_at: String,

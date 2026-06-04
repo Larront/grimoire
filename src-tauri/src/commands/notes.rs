@@ -127,6 +127,7 @@ pub fn create_note(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_note_from_template(
     template_path: String,
     note_parent_path: Option<String>,
@@ -180,6 +181,7 @@ pub fn create_note_from_template(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -220,9 +222,10 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
     Ok(updated)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 pub struct RenameNoteResult {
     pub note: Note,
+    #[specta(type = i32)]
     pub updated_count: usize,
 }
 
@@ -230,6 +233,7 @@ pub struct RenameNoteResult {
 /// path in every other note in the ledger.  Returns the count of notes whose
 /// files were actually rewritten so the frontend can show a toast.
 #[tauri::command]
+#[specta::specta]
 pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteResult, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -275,7 +279,8 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
 }
 
 #[tauri::command]
-pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, String> {
+#[specta::specta]
+pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
 
@@ -296,7 +301,7 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<usize, Stri
         .execute(conn)
         .map_err(|e| e.to_string())?;
 
-    Ok(deleted)
+    Ok(deleted as u32)
 }
 
 #[tauri::command]
@@ -309,6 +314,7 @@ pub fn read_note_content(note_path: String, ledger: State<AppLedger>) -> Result<
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn write_note_content(
     note_path: String,
     content: String,
@@ -377,6 +383,7 @@ pub fn write_note_tags(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn search_notes(query: String, ledger: State<AppLedger>) -> Result<Vec<NoteSearchResult>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
@@ -401,6 +408,7 @@ pub fn search_notes(query: String, ledger: State<AppLedger>) -> Result<Vec<NoteS
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn search_all(query: String, ledger: State<AppLedger>) -> Result<SearchAllResult, String> {
     use crate::db::schema::note_tags::dsl as nt;
     use crate::search::{parse_tag_filters, strip_tag_tokens, TagFacet};
@@ -445,6 +453,7 @@ pub fn search_all(query: String, ledger: State<AppLedger>) -> Result<SearchAllRe
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn rebuild_search_index(ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
@@ -457,7 +466,7 @@ pub fn rebuild_search_index(ledger: State<AppLedger>) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct NotePathResult {
     pub id: i32,
     pub title: String,
@@ -465,6 +474,7 @@ pub struct NotePathResult {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_note_by_path(note_path: String, ledger: State<AppLedger>) -> Result<Option<NotePathResult>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;

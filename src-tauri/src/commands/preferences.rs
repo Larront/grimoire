@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::State;
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, specta::Type, Deserialize, Default)]
 struct LedgerPrefs {
     accent_preset: Option<String>,
     density_level: Option<String>,
@@ -35,6 +35,7 @@ fn write_prefs(ledger: &AppLedger, prefs: &LedgerPrefs) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_accent_preset(preset: String, ledger: State<AppLedger>) {
     let mut prefs = read_prefs(&ledger);
     prefs.accent_preset = Some(preset);
@@ -42,11 +43,13 @@ pub fn save_accent_preset(preset: String, ledger: State<AppLedger>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_accent_preset(ledger: State<AppLedger>) -> Option<String> {
     read_prefs(&ledger).accent_preset
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_density_level(level: String, ledger: State<AppLedger>) {
     let mut prefs = read_prefs(&ledger);
     prefs.density_level = Some(level);
@@ -54,6 +57,7 @@ pub fn save_density_level(level: String, ledger: State<AppLedger>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_density_level(ledger: State<AppLedger>) -> Option<String> {
     read_prefs(&ledger).density_level
 }

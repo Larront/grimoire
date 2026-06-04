@@ -26,6 +26,7 @@ fn validate_path(ledger_root: &Path, relative: &str) -> Result<PathBuf, String> 
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_scenes(ledger: State<AppLedger>) -> Result<Vec<Scene>, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -36,6 +37,7 @@ pub fn get_scenes(ledger: State<AppLedger>) -> Result<Vec<Scene>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -53,6 +55,7 @@ pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, Str
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -70,6 +73,7 @@ pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<S
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_scene(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -85,6 +89,7 @@ pub fn delete_scene(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn toggle_scene_favorite(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -96,6 +101,7 @@ pub fn toggle_scene_favorite(id: i32, ledger: State<AppLedger>) -> Result<(), St
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_scenes_with_slot_counts(ledger: State<AppLedger>) -> Result<Vec<SceneWithCount>, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -112,6 +118,7 @@ pub fn get_scenes_with_slot_counts(ledger: State<AppLedger>) -> Result<Vec<Scene
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_scene_slots(scene_id: i32, ledger: State<AppLedger>) -> Result<Vec<SceneSlot>, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -123,6 +130,7 @@ pub fn get_scene_slots(scene_id: i32, ledger: State<AppLedger>) -> Result<Vec<Sc
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_scene_slot(
     scene_id: i32,
     source: String,
@@ -153,6 +161,7 @@ pub fn create_scene_slot(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_scene_slot(
     id: i32,
     label: String,
@@ -178,6 +187,7 @@ pub fn update_scene_slot(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_scene_slot(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -188,6 +198,7 @@ pub fn delete_scene_slot(id: i32, ledger: State<AppLedger>) -> Result<(), String
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn reorder_scene_slots(
     scene_id: i32,
     ordered_ids: Vec<i32>,
@@ -211,6 +222,7 @@ pub fn reorder_scene_slots(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Result<String, String> {
     let src = PathBuf::from(&absolute_path);
     let file_name = src
@@ -264,6 +276,7 @@ fn resolve_filename(dir: &Path, file_name: &str) -> PathBuf {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_audio_absolute_path(
     relative_path: String,
     ledger: State<AppLedger>,
@@ -278,6 +291,7 @@ pub fn get_audio_absolute_path(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_scene_thumbnail(
     id: i32,
     thumbnail_path: Option<String>,
@@ -295,6 +309,7 @@ pub fn update_scene_thumbnail(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn copy_thumbnail_file(absolute_path: String, ledger: State<AppLedger>) -> Result<String, String> {
     let src = PathBuf::from(&absolute_path);
     let file_name = src

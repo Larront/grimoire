@@ -6,13 +6,14 @@ use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct TagGraphStyleResponse {
     pub color: Option<String>,
     pub hidden: bool,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_tag_graph_styles(
     ledger: State<AppLedger>,
 ) -> Result<HashMap<String, TagGraphStyleResponse>, String> {
@@ -35,6 +36,7 @@ pub fn get_tag_graph_styles_from_conn(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_tag_graph_style(
     tag: String,
     color: Option<String>,

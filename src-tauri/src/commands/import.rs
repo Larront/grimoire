@@ -14,13 +14,13 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct FailedImport {
     pub path: String,
     pub reason: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, specta::Type, Debug)]
 pub struct ImportReport {
     pub failed: Vec<FailedImport>,
 }

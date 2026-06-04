@@ -11,34 +11,36 @@ use tantivy::{
     Index, IndexWriter, TantivyDocument,
 };
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Clone)]
 pub struct NoteSearchResult {
     pub id: i32,
     pub title: String,
     pub path: String,
     pub excerpt: Option<String>,
+    #[specta(type = i32)]
     pub match_count: usize,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Clone)]
 pub struct MapSearchResult {
     pub id: i32,
     pub title: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Clone)]
 pub struct SceneSearchResult {
     pub id: i32,
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Clone)]
 pub struct TagFacet {
     pub name: String,
+    #[specta(type = i32)]
     pub note_count: usize,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, specta::Type, Clone)]
 pub struct SearchAllResult {
     pub notes: Vec<NoteSearchResult>,
     pub maps: Vec<MapSearchResult>,

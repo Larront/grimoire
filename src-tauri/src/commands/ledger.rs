@@ -37,16 +37,20 @@ pub(crate) fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(),
     Ok(())
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct OpenLedgerResult {
     pub path: String,
+    #[specta(type = i32)]
     pub note_count: i64,
+    #[specta(type = i32)]
     pub scene_count: i64,
+    #[specta(type = i32)]
     pub map_count: i64,
     pub failed_imports: Vec<FailedImport>,
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
 
@@ -116,12 +120,14 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_ledger_path(ledger: State<AppLedger>) -> Option<String> {
     let state = ledger.lock().ok()?;
     state.path.as_ref().map(|p| p.to_string_lossy().to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn close_ledger(ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     state.connection = None;
