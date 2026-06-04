@@ -330,6 +330,7 @@ pub fn get_pin_categories_for_map_from_conn(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pin_categories_for_map(
     map_id: i32,
     ledger: State<AppLedger>,

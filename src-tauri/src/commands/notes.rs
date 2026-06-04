@@ -339,6 +339,7 @@ pub fn write_note_content(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn read_note_tags(note_path: String, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
     let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
@@ -348,6 +349,7 @@ pub fn read_note_tags(note_path: String, ledger: State<AppLedger>) -> Result<Vec
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn write_note_tags(
     note_path: String,
     tags: Vec<String>,

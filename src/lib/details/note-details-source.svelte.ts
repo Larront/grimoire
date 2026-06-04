@@ -7,7 +7,7 @@
 //
 // Must be instantiated during component init (it registers $effects) — or
 // inside $effect.root in tests.
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { untrack } from "svelte";
 import { notes } from "$lib/stores/notes.svelte";
 import { linksTick } from "$lib/stores/links-tick.svelte";
@@ -37,16 +37,16 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
   let lastFailedSave: (() => Promise<void>) | null = null;
 
   function loadLinks(noteId: number) {
-    invoke<BacklinkNote[]>("get_backlinks", { noteId })
+    api.getBacklinks(noteId)
       .then((loaded) => { backlinks = loaded ?? []; })
       .catch(() => { backlinks = []; });
-    invoke<OutboundLink[]>("get_outbound_links", { noteId })
+    api.getOutboundLinks(noteId)
       .then((loaded) => { outboundLinks = loaded ?? []; })
       .catch(() => { outboundLinks = []; });
   }
 
   async function refreshAllTags() {
-    try { allTags = (await invoke<string[]>("list_all_tags")) ?? []; }
+    try { allTags = (await api.listAllTags()) ?? []; }
     catch { allTags = []; }
   }
 
@@ -72,13 +72,13 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     aliasesLoadError = false;
     aliasCollisions = [];
     saveStatus = "idle";
-    invoke<string[]>("read_note_tags", { notePath: targetPath })
+    api.readNoteTags(targetPath)
       .then((loaded) => { if (loadedForPath !== targetPath) return; tags = loaded; })
       .catch(() => { tags = []; tagsLoadError = true; });
-    invoke<string[]>("get_note_aliases", { noteId })
+    api.getNoteAliases(noteId)
       .then((loaded) => { if (loadedForPath !== targetPath) return; aliases = loaded ?? []; })
       .catch(() => { aliases = []; aliasesLoadError = true; });
-    invoke<AliasCollision[]>("get_alias_collisions", { noteId })
+    api.getAliasCollisions(noteId)
       .then((cols) => { if (loadedForPath !== targetPath) return; aliasCollisions = cols ?? []; })
       .catch(() => { aliasCollisions = []; });
     loadLinks(noteId);
@@ -110,7 +110,7 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     if (!n) return;
     beginSave();
     try {
-      await invoke("write_note_tags", { notePath: n.path, tags: next });
+      await api.writeNoteTags(n.path, next);
       notes.load();
       refreshAllTags();
       saveSucceeded();
@@ -125,9 +125,9 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     if (!n) return;
     beginSave();
     try {
-      await invoke("set_note_aliases", { noteId: n.id, aliases: next });
+      await api.setNoteAliases(n.id, next);
       // Invariant: an alias save can create or resolve collisions — re-check.
-      const cols = await invoke<AliasCollision[]>("get_alias_collisions", { noteId: n.id });
+      const cols = await api.getAliasCollisions(n.id);
       aliasCollisions = cols ?? [];
       saveSucceeded();
     } catch {

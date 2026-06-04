@@ -32,13 +32,34 @@ use crate::ledger::{AppLedger, LedgerState};
 /// migration can proceed command-by-command.
 #[cfg(debug_assertions)]
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
-    use commands::notes::{create_note, get_notes, read_note_content};
+    use commands::links::{
+        get_alias_collisions, get_backlinks, get_note_aliases, get_outbound_links,
+        set_note_aliases,
+    };
+    use commands::maps::get_pin_categories_for_map;
+    use commands::notes::{
+        create_note, get_notes, read_note_content, read_note_tags, write_note_tags,
+    };
+    use commands::tags::{get_pin_tags, list_all_tags, set_pin_tags};
     tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .commands(tauri_specta::collect_commands![
             get_notes,
             read_note_content,
             create_note,
+            // Details Source — note slice
+            read_note_tags,
+            write_note_tags,
+            list_all_tags,
+            get_note_aliases,
+            set_note_aliases,
+            get_alias_collisions,
+            get_backlinks,
+            get_outbound_links,
+            // Details Source — pin slice
+            get_pin_tags,
+            set_pin_tags,
+            get_pin_categories_for_map,
         ])
 }
 

@@ -111,6 +111,7 @@ pub fn upsert_note_tags(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_all_tags(ledger: State<AppLedger>) -> Result<Vec<String>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -154,6 +155,7 @@ pub fn upsert_pin_tags(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pin_tags(pin_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -165,6 +167,7 @@ pub fn get_pin_tags(pin_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_pin_tags(
     pin_id: i32,
     tags: Vec<String>,

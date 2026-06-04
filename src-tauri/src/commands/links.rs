@@ -283,7 +283,7 @@ pub fn rewrite_backlinks_on_rename_on_conn(
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, specta::Type)]
 pub struct AliasCollision {
     pub alias: String,
     pub other_note_id: i32,
@@ -328,6 +328,7 @@ pub fn get_alias_collisions_on_conn(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_alias_collisions(
     note_id: i32,
     ledger: State<AppLedger>,
@@ -409,14 +410,14 @@ pub fn resolve_note_by_alias(
     resolve_note_by_alias_on_conn(conn, &alias)
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, specta::Type)]
 pub struct BacklinkNote {
     pub id: i32,
     pub path: String,
     pub title: String,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, specta::Type)]
 pub struct OutboundLink {
     pub target_path: String,
     pub resolved_id: Option<i32>,
@@ -425,6 +426,7 @@ pub struct OutboundLink {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_backlinks(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<BacklinkNote>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -469,6 +471,7 @@ struct BacklinkNoteRow {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_outbound_links(
     note_id: i32,
     ledger: State<AppLedger>,
@@ -549,6 +552,7 @@ pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> R
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_note_aliases(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -560,6 +564,7 @@ pub fn get_note_aliases(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<St
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_note_aliases(
     note_id: i32,
     aliases: Vec<String>,

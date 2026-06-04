@@ -7,9 +7,32 @@ export const commands = {
 	getNotes: () => __TAURI_INVOKE<Note[]>("get_notes"),
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	createNote: (noteTitle: string, notePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note", { noteTitle, notePath, noteParentPath }),
+	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
+	writeNoteTags: (notePath: string, tags: string[]) => __TAURI_INVOKE<null>("write_note_tags", { notePath, tags }),
+	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
+	getNoteAliases: (noteId: number) => __TAURI_INVOKE<string[]>("get_note_aliases", { noteId }),
+	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
+	getAliasCollisions: (noteId: number) => __TAURI_INVOKE<AliasCollision[]>("get_alias_collisions", { noteId }),
+	getBacklinks: (noteId: number) => __TAURI_INVOKE<BacklinkNote[]>("get_backlinks", { noteId }),
+	getOutboundLinks: (noteId: number) => __TAURI_INVOKE<OutboundLink[]>("get_outbound_links", { noteId }),
+	getPinTags: (pinId: number) => __TAURI_INVOKE<string[]>("get_pin_tags", { pinId }),
+	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
+	getPinCategoriesForMap: (mapId: number) => __TAURI_INVOKE<PinCategory[]>("get_pin_categories_for_map", { mapId }),
 };
 
 /* Types */
+export type AliasCollision = {
+	alias: string,
+	other_note_id: number,
+	other_note_title: string,
+};
+
+export type BacklinkNote = {
+	id: number,
+	path: string,
+	title: string,
+};
+
 export type Note = {
 	id: number,
 	path: string,
@@ -19,5 +42,21 @@ export type Note = {
 	parent_path: string | null,
 	archived: boolean,
 	modified_at: string,
+};
+
+export type OutboundLink = {
+	target_path: string,
+	resolved_id: number | null,
+	resolved_title: string | null,
+	resolved_path: string | null,
+};
+
+export type PinCategory = {
+	id: number,
+	map_id: number | null,
+	name: string,
+	icon: string,
+	color: string,
+	shape: string,
 };
 

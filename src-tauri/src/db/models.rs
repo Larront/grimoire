@@ -109,6 +109,7 @@ pub struct AssignImageChangeset<'a> {
 
 #[derive(
     Queryable, Selectable, Serialize, Deserialize, Debug, Clone, AsChangeset, Identifiable,
+    specta::Type,
 )]
 #[diesel(table_name = pin_categories)]
 pub struct PinCategory {

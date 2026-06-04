@@ -7,7 +7,7 @@
 //
 // Must be instantiated during component init (it registers $effects) — or
 // inside $effect.root in tests.
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "$lib/api";
 import { untrack } from "svelte";
 import type { Note, Pin, PinCategory } from "$lib/types/ledger";
 import type { SaveStatus } from "./note-details-source.svelte";
@@ -29,7 +29,7 @@ export function createPinDetailsSource(
   let lastFailedSave: (() => Promise<void>) | null = null;
 
   async function refreshAllTags() {
-    try { allTags = (await invoke<string[]>("list_all_tags")) ?? []; }
+    try { allTags = (await api.listAllTags()) ?? []; }
     catch { allTags = []; }
   }
 
@@ -45,7 +45,7 @@ export function createPinDetailsSource(
     const targetId = p.id;
     loadedForPinId = targetId;
     saveStatus = "idle";
-    invoke<string[]>("get_pin_tags", { pinId: targetId })
+    api.getPinTags(targetId)
       .then((t) => { if (loadedForPinId !== targetId) return; pinTags = t; })
       .catch(() => { pinTags = []; });
     refreshAllTags();
@@ -58,8 +58,10 @@ export function createPinDetailsSource(
     if (p.map_id === loadedForMapId) return;
     const targetMapId = p.map_id;
     loadedForMapId = targetMapId;
-    invoke<PinCategory[]>("get_pin_categories_for_map", { mapId: targetMapId })
-      .then((cats) => { if (loadedForMapId !== targetMapId) return; categories = cats; })
+    api.getPinCategoriesForMap(targetMapId)
+      // Generated `icon` is `string`; the frontend refines it to the `PinIcon`
+      // union. The runtime value is always a valid PinIcon, so narrow here.
+      .then((cats) => { if (loadedForMapId !== targetMapId) return; categories = cats as PinCategory[]; })
       .catch(() => { categories = []; });
   });
 
@@ -68,7 +70,7 @@ export function createPinDetailsSource(
     const linked = getLinkedNote();
     if (!linked) { notePreview = null; return; }
     const targetPath = linked.path;
-    invoke<string>("read_note_content", { notePath: targetPath })
+    api.readNoteContent(targetPath)
       .then((content) => {
         if (untrack(() => getLinkedNote())?.path !== targetPath) return;
         const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
@@ -87,7 +89,7 @@ export function createPinDetailsSource(
     if (!p) return;
     beginSave();
     try {
-      await invoke("set_pin_tags", { pinId: p.id, tags: next });
+      await api.setPinTags(p.id, next);
       refreshAllTags();
       lastFailedSave = null;
       saveStatus = "saved";
