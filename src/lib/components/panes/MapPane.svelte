@@ -23,6 +23,7 @@
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
+  import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
   import { fly } from "svelte/transition";
 
   interface Props {
@@ -46,6 +47,17 @@
   let selectedAnnotation = $state<MapAnnotation | null>(null);
   let placingMode = $state(false);
   let annotationMode = $state<AnnotationKind | null>(null);
+
+  // The pin Details Source owns the auxiliary-data fan-out behind PinDetails
+  // (tags, allTags, categories, note preview); the pin row stays here — the
+  // canvas needs it for rendering and drag (see CONTEXT.md — "Details Source").
+  const selectedLinkedNote = $derived(
+    notes.notes.find((n: Note) => n.id === selectedPin?.note_id) ?? null,
+  );
+  const pinDetails = createPinDetailsSource(
+    () => selectedPin,
+    () => selectedLinkedNote,
+  );
 
   // Track whether initial map data has loaded; used to gate store writes so
   // the initial null-clear that happens at load-start doesn't overwrite saved state.
@@ -512,8 +524,6 @@
 
     <!-- Selected pin panel -->
     {#if selectedPin && !placingMode && !annotationMode}
-      {@const linkedNote =
-        notes.notes.find((n: Note) => n.id === selectedPin?.note_id) ?? null}
       <div
         transition:fly={{ x: 200, duration: 100 }}
         class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-lg shadow-2xl
@@ -521,12 +531,19 @@
       >
         <DetailPanel
           title={selectedPin.title || "Pin"}
+          saveStatus={pinDetails.saveStatus}
+          onRetrySave={pinDetails.retrySave}
           onclose={() => { selectedPin = null; }}
         >
           <PinDetails
             pin={selectedPin!}
-            {linkedNote}
+            linkedNote={selectedLinkedNote}
             unlocked={unlockedPinId !== null}
+            bind:pinTags={pinDetails.pinTags}
+            allTags={pinDetails.allTags}
+            categories={pinDetails.categories}
+            notePreview={pinDetails.notePreview}
+            onTagsChange={pinDetails.savePinTags}
             onToggleLock={togglePinLock}
             onUpdate={async (updated: Pin) => {
               const saved: Pin = await invoke("update_pin", { pin: updated });

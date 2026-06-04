@@ -1,11 +1,9 @@
 import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
-import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import PinDetails from "$lib/components/map/PinDetails.svelte";
 
 afterEach(() => {
   cleanup();
-  vi.mocked(invoke).mockResolvedValue(null);
 });
 
 const basePin = {
@@ -23,10 +21,12 @@ const basePin = {
   color: null,
 };
 
+import type { PinCategory } from "$lib/types/ledger";
+
 const categories = [
   { id: 1, map_id: 5, name: "Town", icon: "house", color: "#ff0000", shape: "circle" },
   { id: 2, map_id: null, name: "Global", icon: "star", color: "#00ff00", shape: "pin" },
-];
+] as PinCategory[];
 
 const linkedNote = {
   id: 42,
@@ -39,16 +39,6 @@ const linkedNote = {
   modified_at: "2026-01-01T00:00:00Z",
 };
 
-function setupInvokeMock(cats = categories) {
-  vi.mocked(invoke).mockImplementation((cmd: string) => {
-    if (cmd === "get_pin_categories_for_map") return Promise.resolve(cats);
-    if (cmd === "get_pin_tags") return Promise.resolve([]);
-    if (cmd === "list_all_tags") return Promise.resolve([]);
-    if (cmd === "read_note_content") return Promise.resolve("Some note content");
-    return Promise.resolve(null);
-  });
-}
-
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -59,8 +49,6 @@ async function flush() {
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 describe("PinDetails — rendering", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("renders all sections", async () => {
     const { container } = render(PinDetails, {
       props: { pin: basePin, onUpdate: vi.fn() },
@@ -96,8 +84,6 @@ describe("PinDetails — rendering", () => {
 // ── Title editing ──────────────────────────────────────────────────────────────
 
 describe("PinDetails — title editing", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("calls onUpdate with new title on blur", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
@@ -125,14 +111,25 @@ describe("PinDetails — title editing", () => {
 // ── Linked note section ───────────────────────────────────────────────────────
 
 describe("PinDetails — linked note", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("shows linked note title when linkedNote is provided", async () => {
     const { getByText } = render(PinDetails, {
       props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn() },
     });
     await flush();
     expect(getByText("Aldric")).toBeTruthy();
+  });
+
+  it("shows the note preview when provided as a prop", async () => {
+    const { getByText } = render(PinDetails, {
+      props: {
+        pin: { ...basePin, note_id: 42 },
+        linkedNote,
+        notePreview: "Some note content",
+        onUpdate: vi.fn(),
+      },
+    });
+    await flush();
+    expect(getByText("Some note content")).toBeTruthy();
   });
 
   it("shows search input when no linked note", async () => {
@@ -176,14 +173,30 @@ describe("PinDetails — linked note", () => {
   });
 });
 
+// ── Tags section ──────────────────────────────────────────────────────────────
+
+describe("PinDetails — tags", () => {
+  it("calls onTagsChange when the chip editor commits a change", async () => {
+    const onTagsChange = vi.fn();
+    const { container } = render(PinDetails, {
+      props: { pin: basePin, pinTags: [], allTags: ["npc"], onTagsChange, onUpdate: vi.fn() },
+    });
+    await flush();
+    const input = container.querySelector('[data-section="tags"] input') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    await fireEvent.input(input, { target: { value: "npc" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+    await flush();
+    expect(onTagsChange).toHaveBeenCalledWith(["npc"]);
+  });
+});
+
 // ── Category section ──────────────────────────────────────────────────────────
 
 describe("PinDetails — Pin Category", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("renders a category section", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn() },
     });
     await flush();
     expect(container.querySelector('[data-section="category"]')).toBeTruthy();
@@ -191,7 +204,7 @@ describe("PinDetails — Pin Category", () => {
 
   it("shows 'Uncategorized' option in the select", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -200,9 +213,9 @@ describe("PinDetails — Pin Category", () => {
     expect(opts).toContain("Uncategorized");
   });
 
-  it("populates the select with categories from get_pin_categories_for_map", async () => {
+  it("populates the select from the categories prop", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -213,7 +226,7 @@ describe("PinDetails — Pin Category", () => {
 
   it("shows the current category_id as selected", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, onUpdate: vi.fn() },
+      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -223,7 +236,7 @@ describe("PinDetails — Pin Category", () => {
   it("calls onUpdate with new category_id when a category is selected", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate },
+      props: { pin: basePin, categories, onUpdate },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -234,7 +247,7 @@ describe("PinDetails — Pin Category", () => {
   it("calls onUpdate with category_id: null when Uncategorized is selected", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, onUpdate },
+      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -246,8 +259,6 @@ describe("PinDetails — Pin Category", () => {
 // ── Appearance section ────────────────────────────────────────────────────────
 
 describe("PinDetails — appearance section", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("renders appearance section", async () => {
     const { container } = render(PinDetails, {
       props: { pin: basePin, onUpdate: vi.fn() },
@@ -269,8 +280,6 @@ describe("PinDetails — appearance section", () => {
 // ── Lock / unlock ─────────────────────────────────────────────────────────────
 
 describe("PinDetails — lock/unlock", () => {
-  beforeEach(() => { setupInvokeMock(); });
-
   it("calls onToggleLock when lock button is clicked", async () => {
     const onToggleLock = vi.fn();
     const { container } = render(PinDetails, {

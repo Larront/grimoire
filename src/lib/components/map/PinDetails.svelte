@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
   import { ExternalLink, Lock, LockOpen, ChevronDown } from "@lucide/svelte";
@@ -13,69 +12,44 @@
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
 
+  // Controlled body (ADR-0006): all data arrives as props from the pane's
+  // pin Details Source; edits leave through onUpdate / onTagsChange.
   interface Props {
     pin: Pin;
     linkedNote?: Note | null;
     unlocked?: boolean;
+    pinTags?: string[];
+    allTags?: string[];
+    categories?: PinCategory[];
+    notePreview?: string | null;
+    onTagsChange?: (tags: string[]) => void;
     onToggleLock?: () => void;
     onUpdate: (pin: Pin) => Promise<void>;
     onOpenNote?: (id: number, title: string) => void;
   }
 
-  let { pin, linkedNote, unlocked = false, onToggleLock, onUpdate, onOpenNote }: Props = $props();
+  let {
+    pin,
+    linkedNote,
+    unlocked = false,
+    pinTags = $bindable([]),
+    allTags = [],
+    categories = [],
+    notePreview = null,
+    onTagsChange,
+    onToggleLock,
+    onUpdate,
+    onOpenNote,
+  }: Props = $props();
 
   let draftTitle = $state("");
   let draftDescription = $state("");
-  let notePreview = $state<string | null>(null);
   let noteSearchQuery = $state("");
   let appearanceOpen = $state(false);
-  let pinTags = $state<string[]>([]);
-  let allTags = $state<string[]>([]);
-  let categories = $state<PinCategory[]>([]);
 
   $effect(() => {
     draftTitle = pin.title;
     draftDescription = pin.description ?? "";
-  });
-
-  $effect(() => {
-    const id = pin.id;
-    invoke<string[]>("get_pin_tags", { pinId: id })
-      .then((t) => { pinTags = t; })
-      .catch(() => { pinTags = []; });
-  });
-
-  async function refreshAllTags() {
-    try {
-      allTags = await invoke<string[]>("list_all_tags");
-    } catch {
-      allTags = [];
-    }
-  }
-
-  $effect(() => { refreshAllTags(); });
-
-  $effect(() => {
-    const mapId = pin.map_id;
-    invoke<PinCategory[]>("get_pin_categories_for_map", { mapId })
-      .then((cats) => { categories = cats; })
-      .catch(() => { categories = []; });
-  });
-
-  async function savePinTags(tags: string[]) {
-    await invoke("set_pin_tags", { pinId: pin.id, tags });
-    await refreshAllTags();
-  }
-
-  $effect(() => {
-    const linked = linkedNote;
-    if (!linked) { notePreview = null; return; }
-    invoke<string>("read_note_content", { notePath: linked.path })
-      .then((content) => {
-        const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
-        notePreview = stripped.slice(0, 150) + (stripped.length > 150 ? "…" : "");
-      })
-      .catch(() => { notePreview = null; });
   });
 
   async function save(patch: Partial<Pin>) {
@@ -198,7 +172,7 @@
   <TagChipEditor
     bind:tags={pinTags}
     suggestions={allTags}
-    onchange={savePinTags}
+    onchange={onTagsChange}
   />
 </DetailSection>
 

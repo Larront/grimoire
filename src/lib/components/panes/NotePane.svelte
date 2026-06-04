@@ -17,7 +17,7 @@
   import type { RightRailState } from "$lib/stores/right-rail.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
   import NoteDetails from "$lib/components/NoteDetails.svelte";
-  import type { AliasCollision, BacklinkNote, OutboundLink } from "$lib/components/NoteDetails.svelte";
+  import { createNoteDetailsSource } from "$lib/details/note-details-source.svelte";
   import { getDockMode, floatTransition } from "$lib/utils/dock-threshold";
 
   interface Props {
@@ -208,103 +208,9 @@
   const isDocked = $derived(getDockMode(paneWidth) === "docked");
 
   // ── Detail panel state ───────────────────────────────────────────────────
-  let detailTags = $state<string[]>([]);
-  let detailAllTags = $state<string[]>([]);
-  let detailLoadedForPath = $state<string | null>(null);
-  let detailTagsLoadError = $state(false);
-  let detailSaveStatus = $state<'idle' | 'saved' | 'error'>('idle');
-  let detailSaveStatusTimer: ReturnType<typeof setTimeout> | null = null;
-  let detailAliases = $state<string[]>([]);
-  let detailAliasesLoadError = $state(false);
-  let detailAliasCollisions = $state<AliasCollision[]>([]);
-  let detailBacklinks = $state<BacklinkNote[]>([]);
-  let detailOutboundLinks = $state<OutboundLink[]>([]);
-
-  $effect(() => {
-    const n = note;
-    if (!n) {
-      detailTags = [];
-      detailAliases = [];
-      detailAliasCollisions = [];
-      detailBacklinks = [];
-      detailOutboundLinks = [];
-      detailLoadedForPath = null;
-      detailTagsLoadError = false;
-      detailAliasesLoadError = false;
-      return;
-    }
-    if (n.path === detailLoadedForPath) return;
-    const targetPath = n.path;
-    const nId = n.id;
-    detailLoadedForPath = targetPath;
-    detailTagsLoadError = false;
-    detailAliasesLoadError = false;
-    detailAliasCollisions = [];
-    detailSaveStatus = 'idle';
-    invoke<string[]>('read_note_tags', { notePath: targetPath })
-      .then((loaded) => { if (detailLoadedForPath !== targetPath) return; detailTags = loaded; })
-      .catch(() => { detailTags = []; detailTagsLoadError = true; });
-    invoke<string[]>('get_note_aliases', { noteId: nId })
-      .then((loaded) => { if (detailLoadedForPath !== targetPath) return; detailAliases = loaded ?? []; })
-      .catch(() => { detailAliases = []; detailAliasesLoadError = true; });
-    invoke<AliasCollision[]>('get_alias_collisions', { noteId: nId })
-      .then((cols) => { if (detailLoadedForPath !== targetPath) return; detailAliasCollisions = cols ?? []; })
-      .catch(() => { detailAliasCollisions = []; });
-    loadDetailLinks(nId);
-    refreshDetailAllTags();
-  });
-
-  $effect(() => {
-    const tick = linksTick.value;
-    if (tick === 0) return;
-    const n = untrack(() => note);
-    if (!n) return;
-    loadDetailLinks(n.id);
-  });
-
-  function loadDetailLinks(nId: number) {
-    invoke<BacklinkNote[]>('get_backlinks', { noteId: nId })
-      .then((loaded) => { detailBacklinks = loaded ?? []; })
-      .catch(() => { detailBacklinks = []; });
-    invoke<OutboundLink[]>('get_outbound_links', { noteId: nId })
-      .then((loaded) => { detailOutboundLinks = loaded ?? []; })
-      .catch(() => { detailOutboundLinks = []; });
-  }
-
-  async function refreshDetailAllTags() {
-    try { detailAllTags = (await invoke<string[]>('list_all_tags')) ?? []; }
-    catch { detailAllTags = []; }
-  }
-
-  async function handleTagsChange(next: string[]) {
-    const n = note;
-    if (!n) return;
-    if (detailSaveStatusTimer) clearTimeout(detailSaveStatusTimer);
-    detailSaveStatus = 'idle';
-    try {
-      await invoke('write_note_tags', { notePath: n.path, tags: next });
-      notes.load();
-      refreshDetailAllTags();
-      detailSaveStatus = 'saved';
-      detailSaveStatusTimer = setTimeout(() => { detailSaveStatus = 'idle'; }, 1500);
-    } catch {
-      detailSaveStatus = 'error';
-    }
-  }
-
-  async function retryDetailSave() {
-    await handleTagsChange(detailTags);
-  }
-
-  async function handleAliasesChange(next: string[]) {
-    const n = note;
-    if (!n) return;
-    try {
-      await invoke('set_note_aliases', { noteId: n.id, aliases: next });
-      const cols = await invoke<AliasCollision[]>('get_alias_collisions', { noteId: n.id });
-      detailAliasCollisions = cols ?? [];
-    } catch { /* silent */ }
-  }
+  // The Details Source owns the fetch fan-out, refresh invariants, and the
+  // save-status machine (see CONTEXT.md — "Details Source").
+  const details = createNoteDetailsSource(() => note);
 
   function navigateToNote(id: number, title: string) {
     tabs.openTab({ type: 'note', id, title });
@@ -312,19 +218,19 @@
 </script>
 
 {#snippet detailPanel(onclose: () => void)}
-  <DetailPanel title="Details" {onclose} saveStatus={detailSaveStatus} onRetrySave={retryDetailSave}>
+  <DetailPanel title="Details" {onclose} saveStatus={details.saveStatus} onRetrySave={details.retrySave}>
     <NoteDetails
       {note}
-      bind:tags={detailTags}
-      allTags={detailAllTags}
-      bind:aliases={detailAliases}
-      aliasCollisions={detailAliasCollisions}
-      backlinks={detailBacklinks}
-      outboundLinks={detailOutboundLinks}
-      tagsLoadError={detailTagsLoadError}
-      aliasesLoadError={detailAliasesLoadError}
-      onTagsChange={handleTagsChange}
-      onAliasesChange={handleAliasesChange}
+      bind:tags={details.tags}
+      allTags={details.allTags}
+      bind:aliases={details.aliases}
+      aliasCollisions={details.aliasCollisions}
+      backlinks={details.backlinks}
+      outboundLinks={details.outboundLinks}
+      tagsLoadError={details.tagsLoadError}
+      aliasesLoadError={details.aliasesLoadError}
+      onTagsChange={details.saveTags}
+      onAliasesChange={details.saveAliases}
       onNavigateNote={navigateToNote}
     />
   </DetailPanel>
