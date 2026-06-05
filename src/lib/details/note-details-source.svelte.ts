@@ -37,16 +37,16 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
   let lastFailedSave: (() => Promise<void>) | null = null;
 
   function loadLinks(noteId: number) {
-    api.getBacklinks(noteId)
+    api.silent.getBacklinks(noteId)
       .then((loaded) => { backlinks = loaded ?? []; })
       .catch(() => { backlinks = []; });
-    api.getOutboundLinks(noteId)
+    api.silent.getOutboundLinks(noteId)
       .then((loaded) => { outboundLinks = loaded ?? []; })
       .catch(() => { outboundLinks = []; });
   }
 
   async function refreshAllTags() {
-    try { allTags = (await api.listAllTags()) ?? []; }
+    try { allTags = (await api.silent.listAllTags()) ?? []; }
     catch { allTags = []; }
   }
 
@@ -72,13 +72,13 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     aliasesLoadError = false;
     aliasCollisions = [];
     saveStatus = "idle";
-    api.readNoteTags(targetPath)
+    api.silent.readNoteTags(targetPath)
       .then((loaded) => { if (loadedForPath !== targetPath) return; tags = loaded; })
       .catch(() => { tags = []; tagsLoadError = true; });
-    api.getNoteAliases(noteId)
+    api.silent.getNoteAliases(noteId)
       .then((loaded) => { if (loadedForPath !== targetPath) return; aliases = loaded ?? []; })
       .catch(() => { aliases = []; aliasesLoadError = true; });
-    api.getAliasCollisions(noteId)
+    api.silent.getAliasCollisions(noteId)
       .then((cols) => { if (loadedForPath !== targetPath) return; aliasCollisions = cols ?? []; })
       .catch(() => { aliasCollisions = []; });
     loadLinks(noteId);
@@ -110,7 +110,7 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     if (!n) return;
     beginSave();
     try {
-      await api.writeNoteTags(n.path, next);
+      await api.silent.writeNoteTags(n.path, next);
       notes.load();
       refreshAllTags();
       saveSucceeded();
@@ -125,9 +125,9 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     if (!n) return;
     beginSave();
     try {
-      await api.setNoteAliases(n.id, next);
+      await api.silent.setNoteAliases(n.id, next);
       // Invariant: an alias save can create or resolve collisions — re-check.
-      const cols = await api.getAliasCollisions(n.id);
+      const cols = await api.silent.getAliasCollisions(n.id);
       aliasCollisions = cols ?? [];
       saveSucceeded();
     } catch {

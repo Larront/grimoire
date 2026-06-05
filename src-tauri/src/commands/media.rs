@@ -30,7 +30,7 @@ fn validate_image_extension(path: &PathBuf) -> Result<(), String> {
     if SUPPORTED_EXTENSIONS.contains(&ext.as_str()) {
         Ok(())
     } else {
-        Err(format!("Unsupported image format: .{}", ext))
+        Err(format!("ERR_UNSUPPORTED_IMAGE: Unsupported image format: .{}", ext))
     }
 }
 

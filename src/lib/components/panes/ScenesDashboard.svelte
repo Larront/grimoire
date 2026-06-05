@@ -13,7 +13,6 @@
   import type { SceneWithCount } from "$lib/types/ledger";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
-  import { toastError } from "$lib/toast";
 
   function cardBg(scene: SceneWithCount): string {
     return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
@@ -38,7 +37,6 @@
       tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
     } catch (e) {
       console.error("create scene failed:", e);
-      toastError("Failed to create scene.");
     }
   }
 
@@ -69,7 +67,6 @@
       await scenes.updateScene(sceneId, trimmed);
     } catch (e) {
       console.error("rename scene failed:", e);
-      toastError("Failed to rename scene.");
     } finally {
       renamingSceneId = null;
     }
@@ -85,7 +82,6 @@
       await scenes.deleteScene(id);
     } catch (e) {
       console.error("delete scene failed:", e);
-      toastError("Failed to delete scene.");
     }
   }
 
@@ -94,7 +90,6 @@
       await scenes.toggleFavorite(scene.id);
     } catch (e) {
       console.error("toggle favorite failed:", e);
-      toastError("Failed to update favorite.");
     }
   }
 
@@ -107,7 +102,6 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
-      toastError("Failed to update color.");
     } finally {
       colorPickerScene = null;
     }
@@ -119,7 +113,6 @@
       await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
-      toastError("Failed to update icon.");
     } finally {
       iconPickerScene = null;
     }

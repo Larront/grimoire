@@ -89,14 +89,14 @@ function createLedgerStore() {
       // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
       // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
       const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
-      api.addRecentLedger({
+      api.silent.addRecentLedger({
         path: result.path,
         name,
         note_count: result.note_count,
         scene_count: result.scene_count,
         map_count: result.map_count,
         last_opened: new Date().toISOString(),
-      }).catch(console.error);
+      }).catch(() => {});
 
       return true;
     } catch (e) {
@@ -148,17 +148,17 @@ function createLedgerStore() {
 
   function setDensity(level: DensityLevel): void {
     density = level;
-    api.saveDensityLevel(level).catch(console.error);
+    api.silent.saveDensityLevel(level).catch(console.error);
   }
 
   function setAccent(preset: AccentPreset): void {
     accent = preset;
-    api.saveAccentPreset(preset).catch(console.error);
+    api.silent.saveAccentPreset(preset).catch(console.error);
   }
 
   async function getRecentLedgers(): Promise<RecentLedger[]> {
     try {
-      return (await api.getRecentLedgers()) ?? [];
+      return (await api.silent.getRecentLedgers()) ?? [];
     } catch {
       return [];
     }

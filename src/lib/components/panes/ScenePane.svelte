@@ -38,7 +38,6 @@
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { toastError } from "$lib/toast";
 
   interface Props {
     sceneId: number;
@@ -76,7 +75,6 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
-      toastError("Failed to update color.");
     } finally {
       colorPickerOpen = false;
     }
@@ -88,7 +86,6 @@
       await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
-      toastError("Failed to update icon.");
     } finally {
       iconPickerOpen = false;
     }
@@ -123,7 +120,6 @@
     } catch (e) {
       console.error("name save failed:", e);
       draftName = scene.name;
-      toastError("Failed to save scene name.");
     } finally {
       isSavingName = false;
     }
@@ -228,7 +224,6 @@
       );
     } catch (err) {
       console.error("Failed to save volume:", err);
-      toastError("Failed to save volume.");
     }
   }
 
@@ -259,7 +254,6 @@
       });
     } catch (e) {
       console.error("Failed to toggle loop:", e);
-      toastError("Failed to update loop setting.");
     }
   }
 
@@ -275,7 +269,6 @@
       });
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
-      toastError("Failed to update shuffle setting.");
     }
   }
 
@@ -306,7 +299,6 @@
       });
     } catch (e) {
       console.error("Failed to rename slot:", e);
-      toastError("Failed to rename track.");
     } finally {
       renamingSlotId = null;
     }
@@ -321,7 +313,6 @@
       slots = await scenes.deleteSlot(scene.id, deleteSlotTarget.id);
     } catch (e) {
       console.error("Failed to delete slot:", e);
-      toastError("Failed to delete track.");
     } finally {
       deleteSlotTarget = null;
     }
@@ -358,7 +349,6 @@
       spotifyAuth = await connectSpotify();
     } catch (e) {
       console.error("Spotify connection failed:", e);
-      toastError("Failed to connect Spotify.");
     } finally {
       isSpotifyConnecting = false;
     }
@@ -475,7 +465,6 @@
       resetAddDialog();
     } catch (e) {
       console.error("Failed to add track:", e);
-      toastError("Failed to add track.");
     } finally {
       isAdding = false;
     }

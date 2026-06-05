@@ -26,8 +26,7 @@
   import type { SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
-  import { toastError } from "$lib/toast";
-
+  
   let {
     sceneId,
     expanded,
@@ -71,7 +70,6 @@
       searchQuery = "";
     } catch (e) {
       console.error("create scene failed:", e);
-      toastError("Failed to create scene.");
     }
   }
 

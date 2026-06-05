@@ -199,7 +199,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
         let old_full = validate_path(&ledger_path, &old_note.path)?;
         let new_full = validate_parent_path(&ledger_path, &note.path)?;
         if new_full.exists() {
-            return Err(format!("A file already exists at '{}'", note.path));
+            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
         }
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
@@ -251,7 +251,7 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
         let old_full = validate_path(&ledger_path, &old_note.path)?;
         let new_full = validate_parent_path(&ledger_path, &note.path)?;
         if new_full.exists() {
-            return Err(format!("A file already exists at '{}'", note.path));
+            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
         }
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;

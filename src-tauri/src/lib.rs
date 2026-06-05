@@ -152,14 +152,15 @@ pub fn run() {
     // exits before creating a window (headless-friendly generation).
     #[cfg(debug_assertions)]
     {
-        // Enable lossless floats so f32/f64 fields export as `number`, not
-        // `number | null` (specta's default guards against NaN/Infinity → null).
-        // Grimoire's floats (coords, volume, opacity) are never NaN, and this
-        // matches the hand-written `$lib/types/ledger` types.
-        let ts: specta_typescript::Typescript =
-            specta_typescript::Exporter::default().enable_lossless_floats().into();
+        // Note: specta exports f32/f64 as `number | null` (its NaN/Infinity
+        // guard). Grimoire's floats are never null, so the frontend narrows them
+        // to the refined `$lib/types/ledger` types with a cast at the api seam
+        // (see ADR-0009 migration outcome) — no exporter float config needed.
         specta_builder()
-            .export(ts, "../src/lib/bindings.gen.ts")
+            .export(
+                specta_typescript::Typescript::default(),
+                "../src/lib/bindings.gen.ts",
+            )
             .expect("failed to export specta bindings");
         if std::env::var("GRIMOIRE_EXPORT_ONLY").is_ok() {
             return;

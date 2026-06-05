@@ -29,7 +29,7 @@ export function createPinDetailsSource(
   let lastFailedSave: (() => Promise<void>) | null = null;
 
   async function refreshAllTags() {
-    try { allTags = (await api.listAllTags()) ?? []; }
+    try { allTags = (await api.silent.listAllTags()) ?? []; }
     catch { allTags = []; }
   }
 
@@ -45,7 +45,7 @@ export function createPinDetailsSource(
     const targetId = p.id;
     loadedForPinId = targetId;
     saveStatus = "idle";
-    api.getPinTags(targetId)
+    api.silent.getPinTags(targetId)
       .then((t) => { if (loadedForPinId !== targetId) return; pinTags = t; })
       .catch(() => { pinTags = []; });
     refreshAllTags();
@@ -58,7 +58,7 @@ export function createPinDetailsSource(
     if (p.map_id === loadedForMapId) return;
     const targetMapId = p.map_id;
     loadedForMapId = targetMapId;
-    api.getPinCategoriesForMap(targetMapId)
+    api.silent.getPinCategoriesForMap(targetMapId)
       // Generated `icon` is `string`; the frontend refines it to the `PinIcon`
       // union. The runtime value is always a valid PinIcon, so narrow here.
       .then((cats) => { if (loadedForMapId !== targetMapId) return; categories = cats as PinCategory[]; })
@@ -70,7 +70,7 @@ export function createPinDetailsSource(
     const linked = getLinkedNote();
     if (!linked) { notePreview = null; return; }
     const targetPath = linked.path;
-    api.readNoteContent(targetPath)
+    api.silent.readNoteContent(targetPath)
       .then((content) => {
         if (untrack(() => getLinkedNote())?.path !== targetPath) return;
         const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
@@ -89,7 +89,7 @@ export function createPinDetailsSource(
     if (!p) return;
     beginSave();
     try {
-      await api.setPinTags(p.id, next);
+      await api.silent.setPinTags(p.id, next);
       refreshAllTags();
       lastFailedSave = null;
       saveStatus = "saved";

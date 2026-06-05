@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import { setMode, userPrefersMode } from "mode-watcher";
-  import { toastError, toastSuccess } from "$lib/toast";
+  import { toastSuccess } from "$lib/toast";
   import {
     Tag,
     FileText,
@@ -190,7 +190,7 @@
 
   function cmdSwitchLedger() {
     searchPalette.open = false;
-    ledger.openLedger().catch((e) => toastError(`Couldn't open ledger: ${e}`));
+    ledger.openLedger().catch((e) => console.error("open ledger failed:", e));
   }
 
   async function cmdRebuildIndex() {
@@ -200,7 +200,6 @@
       toastSuccess("Search index rebuilt");
     } catch (e) {
       console.error("rebuild_search_index failed:", e);
-      toastError("Failed to rebuild search index");
     }
   }
 
@@ -243,7 +242,7 @@
     try {
       await ledger.exploreSample();
     } catch (e) {
-      toastError(`Couldn't open the example world: ${e}`);
+      console.error("explore sample failed:", e);
     }
   }
 
@@ -353,7 +352,7 @@
   function openNote(result: NoteSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    api.recordRecent("note", result.id, result.title).catch(() => {});
+    api.silent.recordRecent("note", result.id, result.title).catch(() => {});
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
     const tab = { type: "note" as const, id: result.id, title: result.title };
@@ -365,7 +364,7 @@
   function openMap(result: MapSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    api.recordRecent("map", result.id, result.title).catch(() => {});
+    api.silent.recordRecent("map", result.id, result.title).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "map" as const, id: result.id, title: result.title };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
@@ -376,7 +375,7 @@
   function openScene(result: SceneSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    api.recordRecent("scene", result.id, result.name).catch(() => {});
+    api.silent.recordRecent("scene", result.id, result.name).catch(() => {});
     searchPalette.open = false;
     const tab = { type: "scene" as const, id: result.id, title: result.name };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
@@ -387,7 +386,7 @@
   function openRecent(entity: RecentEntityResult) {
     const mod = pendingModifier;
     pendingModifier = null;
-    api.recordRecent(entity.entity_kind, entity.entity_id, entity.title).catch(() => {});
+    api.silent.recordRecent(entity.entity_kind, entity.entity_id, entity.title).catch(() => {});
     searchPalette.open = false;
     const tab = {
       type: entity.entity_kind as "note" | "map" | "scene",

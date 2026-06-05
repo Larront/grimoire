@@ -165,7 +165,7 @@ pub fn rename_template_for_ledger(
     let new_path = canonical_dir.join(format!("{new_name}.md"));
 
     if new_path.exists() && new_path != canonical_file {
-        return Err(format!("A template named '{new_name}' already exists"));
+        return Err(format!("ERR_NAME_TAKEN: A template named '{new_name}' already exists"));
     }
 
     std::fs::rename(&canonical_file, &new_path)

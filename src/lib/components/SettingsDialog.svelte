@@ -7,7 +7,7 @@
   import { ledger, type AccentPreset, type DensityLevel } from '$lib/stores/ledger.svelte';
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
   import { templates } from '$lib/stores/templates.svelte';
-  import { toastSuccess, toastError } from '$lib/toast';
+  import { toastSuccess } from '$lib/toast';
   import {
     getSpotifyStatus,
     connectSpotify,
@@ -39,7 +39,7 @@
       await templates.load();
       toastSuccess('Default templates restored');
     } catch (e) {
-      toastError(`Failed to restore templates: ${e}`);
+      console.error("restore templates failed:", e);
     } finally {
       isRestoring = false;
       restoreDialogOpen = false;

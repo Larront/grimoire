@@ -130,8 +130,13 @@ _Avoid_: "the API" (overloaded), "stubs," "the invoke layer" (that's the wrapper
 
 ### Command Wrapper
 
-The single hand-written boundary module that re-exports the Command Bindings with the project's error posture applied (toast / Result handling) and carries the few commands specta can't type (raw-bytes responses). Frontend code imports commands from here, **never** from `bindings.gen.ts` directly. The [[details-source]] modules are its first consumers.
+The single hand-written boundary module (`$lib/api`) that re-exports the Command Bindings with the project's error posture applied and carries the few commands specta can't type (the `create_annotation` arity carve-out). Frontend code imports commands from here, **never** from `bindings.gen.ts` directly. Two surfaces (see [ADR-0010](./docs/adr/0010-command-error-posture.md)): **`api.*`** toasts a GM-friendly message on failure then rethrows; **`api.silent.*`** logs then rethrows (no toast) — for background work with its own error UI (the [[details-source]] modules) and fire-and-forget calls. Both always log and rethrow, so no command fails without a trace or silently proceeds as if it succeeded.
 _Avoid_: "service layer," "client" — it is a thin posture-and-carve-out adapter over generated code, not a service.
+
+### Error Code
+
+A stable `ERR_CODE:` prefix a Rust command puts on its error string for the small set of failures that are genuinely actionable by the GM (currently `ERR_NAME_TAKEN`, `ERR_UNSUPPORTED_IMAGE`, `ERR_SPOTIFY_AUTH`). The [[command-wrapper]] matches the prefix to friendly copy; everything else gets one generic line. A convention, not a typed enum (see ADR-0010). The raw detail is always logged, never shown to the GM.
+_Avoid_: "error enum" (it is a string convention), "error type."
 
 ### Details Source
 

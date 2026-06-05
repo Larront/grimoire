@@ -221,13 +221,13 @@ pub async fn spotify_exchange_code(
         let verifier = ledger_state
             .pending_spotify_verifier
             .take()
-            .ok_or("No pending auth flow — please start the auth flow again")?;
+            .ok_or("ERR_SPOTIFY_AUTH: No pending auth flow — please start the auth flow again")?;
         let stored_state = ledger_state
             .pending_spotify_state
             .take()
-            .ok_or("No pending auth flow — please start the auth flow again")?;
+            .ok_or("ERR_SPOTIFY_AUTH: No pending auth flow — please start the auth flow again")?;
         if stored_state != state {
-            return Err("State mismatch — possible CSRF attack".to_string());
+            return Err("ERR_SPOTIFY_AUTH: State mismatch — possible CSRF attack".to_string());
         }
         (client_id, verifier)
     };

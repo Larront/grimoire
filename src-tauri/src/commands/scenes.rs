@@ -323,7 +323,7 @@ pub fn copy_thumbnail_file(absolute_path: String, ledger: State<AppLedger>) -> R
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default();
     if !matches!(ext_lower.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif") {
-        return Err("Unsupported image format".to_string());
+        return Err("ERR_UNSUPPORTED_IMAGE: Unsupported image format".to_string());
     }
 
     let (dest, relative) = {
