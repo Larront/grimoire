@@ -46,4 +46,30 @@ describe("preprocessWikiLinks", () => {
     expect(out).toContain("data-wiki-link");
     expect(out).toContain('data-path="Blackreach"');
   });
+
+  it("bare path: data-title is the stem (no .md)", () => {
+    const out = preprocessWikiLinks("[[Places/Blackreach.md]]");
+    expect(out).toContain('data-path="Places/Blackreach.md"');
+    expect(out).toContain('data-title="Blackreach"');
+  });
+
+  it("pipe display: data-path is path only, data-title is the alias", () => {
+    const out = preprocessWikiLinks("[[Locations/The Ember Keep.md|the keep]]");
+    expect(out).toContain('data-path="Locations/The Ember Keep.md"');
+    expect(out).toContain('data-title="the keep"');
+    expect(out).toContain(">the keep<");
+  });
+
+  it("pipe display: path does not include the pipe or alias", () => {
+    const out = preprocessWikiLinks("[[Notes/Something.md|short]]");
+    expect(out).not.toContain("data-path=\"Notes/Something.md|short\"");
+    expect(out).toContain('data-path="Notes/Something.md"');
+  });
+
+  it("multiple links including one with display alias", () => {
+    const out = preprocessWikiLinks("[[Alpha]] and [[Beta/Note.md|B]]");
+    expect(out).toContain('data-path="Alpha"');
+    expect(out).toContain('data-path="Beta/Note.md"');
+    expect(out).toContain('data-title="B"');
+  });
 });

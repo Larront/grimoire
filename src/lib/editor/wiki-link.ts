@@ -48,8 +48,7 @@ export interface NoteSearchResult {
 // on watcher reloads.
 export function preprocessWikiLinks(markdown: string): string {
   return markdown.replace(/\[\[([^\]]+)\]\]/g, (_match, rawPath: string) => {
-    const path = rawPath.trim();
-    const title = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+    const { path, title } = parseWikiTarget(rawPath);
     const escapedPath = path.replace(/"/g, "&quot;");
     const escapedTitle = title.replace(/"/g, "&quot;");
     return `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapedTitle}</span>`;
@@ -141,7 +140,11 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   },
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
-  renderMarkdown(node: { attrs: { path: string } }) {
+  renderMarkdown(node: { attrs: { path: string; title: string } }) {
+    const stem = node.attrs.path.split("/").pop()?.replace(/\.md$/, "") ?? node.attrs.path;
+    if (node.attrs.title && node.attrs.title !== stem) {
+      return `[[${node.attrs.path}|${node.attrs.title}]]`;
+    }
     return `[[${node.attrs.path}]]`;
   },
 
