@@ -15,17 +15,19 @@ interface WikiBrokenState {
 // needs the reactive notes store and async alias lookups, which a plugin can't reach.
 export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink");
 
+// The display title a path falls back to when no explicit alias is given:
+// the last path segment with any .md extension stripped.
+export function wikiStem(path: string): string {
+  return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+}
+
 // Splits the inside of a [[...]] link into its target path and display title.
-// `path|display` uses the explicit alias; otherwise the title is the last path
-// segment with any .md extension stripped.
+// `path|display` uses the explicit alias; otherwise the title is the path stem.
 export function parseWikiTarget(raw: string): { path: string; title: string } {
   const inner = raw.trim();
   const pipe = inner.indexOf("|");
   const path = (pipe >= 0 ? inner.slice(0, pipe) : inner).trim();
-  const title =
-    pipe >= 0
-      ? inner.slice(pipe + 1).trim()
-      : (path.split("/").pop()?.replace(/\.md$/, "") ?? path);
+  const title = pipe >= 0 ? inner.slice(pipe + 1).trim() : wikiStem(path);
   return { path, title };
 }
 
@@ -141,8 +143,9 @@ export const WikiLink = Node.create<WikiLinkOptions>({
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: { attrs: { path: string; title: string } }) {
-    const stem = node.attrs.path.split("/").pop()?.replace(/\.md$/, "") ?? node.attrs.path;
-    if (node.attrs.title && node.attrs.title !== stem) {
+    // Round-trip the alias only when the title isn't what parseWikiTarget would
+    // derive from the path — otherwise [[path]] alone reloads to the same title.
+    if (node.attrs.title && node.attrs.title !== wikiStem(node.attrs.path)) {
       return `[[${node.attrs.path}|${node.attrs.title}]]`;
     }
     return `[[${node.attrs.path}]]`;
