@@ -14,7 +14,7 @@
   import { SceneBlock } from "$lib/editor/scene-block.svelte";
   import { TimelineBlock, preprocessTimelineBlocks } from "$lib/editor/timeline-block";
   import { SlashCommand } from "$lib/editor/slash-command";
-  import { WikiLink, preprocessWikiLinks, wikiBrokenLinkKey } from "$lib/editor/wiki-link";
+  import { WikiLink, preprocessWikiLinks, wikiBrokenLinkKey, parseWikiTarget } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -194,6 +194,13 @@
 
   // ── Wiki-link interaction ────────────────────────────────────────────────────
 
+  async function createNoteFromStub(path: string) {
+    const { title } = parseWikiTarget(path);
+    const newNote = await api.createNote(title, path, null);
+    await notes.load();
+    tabs.navigate({ type: "note", id: newNote.id, title: newNote.title });
+  }
+
   async function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
@@ -207,9 +214,13 @@
 
     try {
       const resolved = await api.resolveNoteByAlias(path);
-      if (resolved) tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
+      if (resolved) {
+        tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
+      } else {
+        await createNoteFromStub(path);
+      }
     } catch {
-      // stub note or no ledger open — do nothing
+      // no ledger open — do nothing
     }
   }
 

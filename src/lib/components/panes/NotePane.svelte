@@ -208,6 +208,14 @@
   function navigateToNote(id: number, title: string) {
     tabs.openTab({ type: 'note', id, title });
   }
+
+  async function createStubNote(targetPath: string) {
+    const lastSlash = targetPath.lastIndexOf('/');
+    const title = lastSlash >= 0 ? targetPath.slice(lastSlash + 1).replace(/\.md$/, '') : targetPath.replace(/\.md$/, '');
+    const newNote = await api.createNote(title, targetPath, null);
+    await notes.load();
+    tabs.openTab({ type: 'note', id: newNote.id, title: newNote.title });
+  }
 </script>
 
 {#snippet detailPanel(onclose: () => void)}
@@ -225,6 +233,7 @@
       onTagsChange={details.saveTags}
       onAliasesChange={details.saveAliases}
       onNavigateNote={navigateToNote}
+      onCreateStub={createStubNote}
     />
   </DetailPanel>
 {/snippet}

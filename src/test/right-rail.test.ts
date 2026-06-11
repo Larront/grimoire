@@ -611,7 +611,7 @@ describe("right rail — outbound links section", () => {
     expect(broken!.textContent).toContain("Not yet created");
   });
 
-  it("outbound broken links are not clickable", async () => {
+  it("outbound broken links are clickable buttons (click-to-create)", async () => {
     const outboundData = [
       {
         target_path: "Missing/Ghost.md",
@@ -625,9 +625,8 @@ describe("right rail — outbound links section", () => {
       return defaultInvokeImpl(cmd);
     });
     await act(() => {});
-    // Broken link should be a non-interactive element (div/span), not a button
     const broken = container.querySelector('[data-slot="outbound-broken"]')!;
-    expect(broken.tagName.toLowerCase()).not.toBe("button");
+    expect(broken.tagName.toLowerCase()).toBe("button");
   });
 
   it("outbound caps at 5 rows when there are more than 5", async () => {

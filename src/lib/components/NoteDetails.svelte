@@ -40,6 +40,7 @@
     onTagsChange?: (tags: string[]) => void;
     onAliasesChange?: (aliases: string[]) => void;
     onNavigateNote?: (id: number, title: string) => void;
+    onCreateStub?: (targetPath: string) => void;
   }
 
   let {
@@ -55,6 +56,7 @@
     onTagsChange,
     onAliasesChange,
     onNavigateNote,
+    onCreateStub,
   }: Props = $props();
 
   const LINK_CAP = 5;
@@ -176,13 +178,14 @@
               {/if}
             </button>
           {:else}
-            <div
+            <button
               data-slot="outbound-broken"
-              class="rounded px-1 py-0.5 opacity-50 cursor-default"
+              onclick={() => onCreateStub?.(link.target_path)}
+              class="w-full text-left rounded px-1 py-0.5 opacity-50 hover:opacity-75 transition-opacity duration-100 cursor-pointer"
             >
               <div class="font-heading text-[11px] text-foreground leading-snug truncate">{link.target_path}</div>
               <div class="font-mono text-[10px] text-foreground-faint italic">Not yet created</div>
-            </div>
+            </button>
           {/if}
         {/each}
         {#if hiddenOutboundCount > 0 && !outboundExpanded}

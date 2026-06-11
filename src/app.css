@@ -568,7 +568,7 @@ input[type="range"]:disabled {
 
 [data-wiki-link][data-broken] {
   color: color-mix(in oklab, var(--primary) 45%, transparent);
-  cursor: default;
+  cursor: pointer;
 }
 
 /* ── Search-match pulse ───────────────────────────────────────── */

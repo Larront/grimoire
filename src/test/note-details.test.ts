@@ -224,7 +224,7 @@ describe("NoteDetails — outbound links section", () => {
     expect(rows[0].textContent).toContain("Bard");
   });
 
-  it("renders outbound-broken for broken links (not a button)", () => {
+  it("renders outbound-broken for broken links as a clickable button", () => {
     const outboundLinks: OutboundLink[] = [
       {
         target_path: "Missing/Ghost.md",
@@ -239,7 +239,25 @@ describe("NoteDetails — outbound links section", () => {
     const broken = container.querySelector('[data-slot="outbound-broken"]')!;
     expect(broken).toBeTruthy();
     expect(broken.textContent).toContain("Not yet created");
-    expect(broken.tagName.toLowerCase()).not.toBe("button");
+    expect(broken.tagName.toLowerCase()).toBe("button");
+  });
+
+  it("clicking broken outbound row calls onCreateStub with the target_path", async () => {
+    const onCreateStub = vi.fn();
+    const outboundLinks: OutboundLink[] = [
+      {
+        target_path: "Missing/Ghost.md",
+        resolved_id: null,
+        resolved_title: null,
+        resolved_path: null,
+      },
+    ];
+    const { container } = render(NoteDetails, {
+      props: { note: testNote, outboundLinks, onCreateStub },
+    });
+    const broken = container.querySelector('[data-slot="outbound-broken"]') as HTMLElement;
+    await fireEvent.click(broken);
+    expect(onCreateStub).toHaveBeenCalledWith("Missing/Ghost.md");
   });
 
   it("caps outbound at 5 rows when there are more", () => {
