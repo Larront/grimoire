@@ -11,6 +11,7 @@
   import { toastSuccess } from "$lib/toast";
   import { LoaderCircle } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
+  import { parseWikiTarget } from "$lib/editor/wiki-link";
   import Editor from "$lib/components/editor/Editor.svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import * as Sheet from "$lib/components/ui/sheet/index.js";
@@ -210,8 +211,7 @@
   }
 
   async function createStubNote(targetPath: string) {
-    const lastSlash = targetPath.lastIndexOf('/');
-    const title = lastSlash >= 0 ? targetPath.slice(lastSlash + 1).replace(/\.md$/, '') : targetPath.replace(/\.md$/, '');
+    const { title } = parseWikiTarget(targetPath);
     const newNote = await api.createNote(title, targetPath, null);
     await notes.load();
     tabs.openTab({ type: 'note', id: newNote.id, title: newNote.title });
