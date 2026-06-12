@@ -88,11 +88,11 @@ struct NotePrimaryTagRow {
 }
 
 #[derive(QueryableByName, Debug)]
-struct BacklinkCountRow {
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    target_path: String,
+struct NoteAliasRow {
     #[diesel(sql_type = diesel::sql_types::Integer)]
-    backlink_count: i32,
+    note_id: i32,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    alias: String,
 }
 
 // ── Core logic (testable) ─────────────────────────────────────────────────────
@@ -129,16 +129,29 @@ pub fn get_graph_data_on_conn(
     .load(conn)
     .map_err(|e| e.to_string())?;
 
-    // 6. Backlink count per target path (count of incoming note_links)
-    let backlink_counts: Vec<BacklinkCountRow> = diesel::sql_query(
-        "SELECT target_path, COUNT(*) AS backlink_count FROM note_links GROUP BY target_path",
-    )
-    .load(conn)
-    .map_err(|e| e.to_string())?;
+    // 6. Aliases — used to resolve wikilinks like [[Mira]] to their note node
+    let aliases: Vec<NoteAliasRow> =
+        diesel::sql_query("SELECT note_id, alias FROM note_aliases")
+            .load(conn)
+            .map_err(|e| e.to_string())?;
 
     // Build a path→id lookup for resolving wikilinks
     let path_to_id: std::collections::HashMap<&str, i32> =
         notes.iter().map(|note| (note.path.as_str(), note.id)).collect();
+
+    // Build a case-insensitive alias→note_id lookup
+    let alias_to_id: std::collections::HashMap<String, i32> = aliases
+        .iter()
+        .map(|r| (r.alias.to_lowercase(), r.note_id))
+        .collect();
+
+    // Resolve a target_path to a note id: try exact path first, then alias
+    let resolve = |target_path: &str| -> Option<i32> {
+        path_to_id
+            .get(target_path)
+            .copied()
+            .or_else(|| alias_to_id.get(&target_path.to_lowercase()).copied())
+    };
 
     // Build a path→primary_tag lookup
     let path_to_primary_tag: std::collections::HashMap<&str, &str> = primary_tags
@@ -146,11 +159,14 @@ pub fn get_graph_data_on_conn(
         .map(|r| (r.note_path.as_str(), r.primary_tag.as_str()))
         .collect();
 
-    // Build a path→backlink_count lookup
-    let path_to_backlink_count: std::collections::HashMap<&str, i32> = backlink_counts
-        .iter()
-        .map(|r| (r.target_path.as_str(), r.backlink_count))
-        .collect();
+    // Compute backlink counts per note_id (resolving aliases)
+    let mut id_to_backlink_count: std::collections::HashMap<i32, i32> =
+        std::collections::HashMap::new();
+    for link in &links {
+        if let Some(target_id) = resolve(&link.target_path) {
+            *id_to_backlink_count.entry(target_id).or_insert(0) += 1;
+        }
+    }
 
     // Build note nodes
     let mut nodes: Vec<GraphNodeData> = notes
@@ -163,10 +179,7 @@ pub fn get_graph_data_on_conn(
             primary_tag: path_to_primary_tag
                 .get(note.path.as_str())
                 .map(|s| s.to_string()),
-            backlink_count: path_to_backlink_count
-                .get(note.path.as_str())
-                .copied()
-                .unwrap_or(0),
+            backlink_count: id_to_backlink_count.get(&note.id).copied().unwrap_or(0),
         })
         .collect();
 
@@ -182,10 +195,10 @@ pub fn get_graph_data_on_conn(
         });
     }
 
-    // Stub nodes: target_paths with no matching note
+    // Stub nodes: target_paths that don't resolve to any note (via path or alias)
     let mut seen_stubs: std::collections::HashSet<String> = std::collections::HashSet::new();
     for link in &links {
-        if !path_to_id.contains_key(link.target_path.as_str()) {
+        if resolve(&link.target_path).is_none() {
             if seen_stubs.insert(link.target_path.clone()) {
                 nodes.push(GraphNodeData {
                     id: format!("stub-{}", link.target_path),
@@ -206,7 +219,7 @@ pub fn get_graph_data_on_conn(
     // Wikilink edges (note→note or note→stub)
     for link in &links {
         let source = format!("note-{}", link.source_id);
-        let target = if let Some(&target_id) = path_to_id.get(link.target_path.as_str()) {
+        let target = if let Some(target_id) = resolve(&link.target_path) {
             format!("note-{}", target_id)
         } else {
             format!("stub-{}", link.target_path)
@@ -298,6 +311,11 @@ mod tests {
                 note_path TEXT NOT NULL,
                 tag TEXT NOT NULL,
                 PRIMARY KEY (note_path, tag)
+            );
+            CREATE TABLE note_aliases (
+                note_id INTEGER NOT NULL,
+                alias TEXT NOT NULL,
+                PRIMARY KEY (note_id, alias)
             );
         ").unwrap();
         conn
@@ -700,5 +718,189 @@ mod tests {
         let stub = data.nodes.iter().find(|n| n.kind == "stub").unwrap();
         assert_eq!(stub.backlink_count, 0);
         assert!(stub.primary_tag.is_none());
+    }
+
+    // ── Alias resolution tests ───────────────────────────────────────────────
+
+    #[test]
+    fn test_alias_link_resolves_to_note_edge_not_stub() {
+        let mut conn = setup_db();
+        // Source note
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("source.md"),
+                notes::title.eq("Source"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        // Target note with alias "Mira"
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(2),
+                notes::path.eq("Characters/Mira Ashvale.md"),
+                notes::title.eq("Mira Ashvale"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::sql_query("INSERT INTO note_aliases (note_id, alias) VALUES (2, 'Mira')")
+            .execute(&mut conn)
+            .unwrap();
+        // Link using alias as target_path
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("Mira")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+
+        // Edge must go note-1 → note-2 (not a stub)
+        assert_eq!(data.edges.len(), 1);
+        assert_eq!(data.edges[0].source, "note-1");
+        assert_eq!(data.edges[0].target, "note-2");
+
+        // No stub node for "Mira"
+        let stubs: Vec<_> = data.nodes.iter().filter(|n| n.kind == "stub").collect();
+        assert!(stubs.is_empty(), "alias-resolved target must not become a stub");
+    }
+
+    #[test]
+    fn test_alias_link_backlink_count_attributed_to_target_note() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("source.md"),
+                notes::title.eq("Source"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(2),
+                notes::path.eq("Characters/Mira Ashvale.md"),
+                notes::title.eq("Mira Ashvale"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::sql_query("INSERT INTO note_aliases (note_id, alias) VALUES (2, 'Mira')")
+            .execute(&mut conn)
+            .unwrap();
+        // One link via path, one link via alias
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("Mira")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let mira = data.nodes.iter().find(|n| n.id == "note-2").unwrap();
+        assert_eq!(mira.backlink_count, 1, "alias link should count toward target note backlinks");
+    }
+
+    #[test]
+    fn test_alias_backlink_count_combined_with_path_links() {
+        let mut conn = setup_db();
+        for (id, path, title) in [
+            (1, "src1.md", "Source 1"),
+            (2, "src2.md", "Source 2"),
+            (3, "Characters/Mira Ashvale.md", "Mira Ashvale"),
+        ] {
+            diesel::insert_into(notes::table)
+                .values((
+                    notes::id.eq(id),
+                    notes::path.eq(path),
+                    notes::title.eq(title),
+                    notes::archived.eq(false),
+                    notes::modified_at.eq(""),
+                ))
+                .execute(&mut conn)
+                .unwrap();
+        }
+        diesel::sql_query("INSERT INTO note_aliases (note_id, alias) VALUES (3, 'Mira')")
+            .execute(&mut conn)
+            .unwrap();
+        // src1 links via path, src2 links via alias
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("Characters/Mira Ashvale.md")))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(2), note_links::target_path.eq("Mira")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let mira = data.nodes.iter().find(|n| n.id == "note-3").unwrap();
+        assert_eq!(mira.backlink_count, 2, "backlink_count must sum path-links and alias-links");
+    }
+
+    #[test]
+    fn test_alias_resolution_is_case_insensitive() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("source.md"),
+                notes::title.eq("Source"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(2),
+                notes::path.eq("target.md"),
+                notes::title.eq("Target"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::sql_query("INSERT INTO note_aliases (note_id, alias) VALUES (2, 'Target Alias')")
+            .execute(&mut conn)
+            .unwrap();
+        // Link using different case
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("target alias")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        assert_eq!(data.edges[0].target, "note-2");
+        let stubs: Vec<_> = data.nodes.iter().filter(|n| n.kind == "stub").collect();
+        assert!(stubs.is_empty());
+    }
+
+    #[test]
+    fn test_genuinely_unresolvable_target_still_becomes_stub() {
+        let mut conn = setup_db();
+        diesel::insert_into(notes::table)
+            .values((
+                notes::id.eq(1),
+                notes::path.eq("source.md"),
+                notes::title.eq("Source"),
+                notes::archived.eq(false),
+                notes::modified_at.eq(""),
+            ))
+            .execute(&mut conn)
+            .unwrap();
+        diesel::insert_into(note_links::table)
+            .values((note_links::source_id.eq(1), note_links::target_path.eq("no-such-note")))
+            .execute(&mut conn)
+            .unwrap();
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let stubs: Vec<_> = data.nodes.iter().filter(|n| n.kind == "stub").collect();
+        assert_eq!(stubs.len(), 1);
+        assert_eq!(stubs[0].id, "stub-no-such-note");
     }
 }
