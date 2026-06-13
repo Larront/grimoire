@@ -8,18 +8,22 @@
 // - Frontmatter block created on first tag; removed when the last tag is
 //   removed *if no other keys remain*
 
-fn split_frontmatter(raw: &str) -> Option<(String, String)> {
-    if !raw.starts_with("---\n") {
-        return None;
-    }
-    let after_open = &raw[4..];
+/// Split `raw` into (frontmatter block, body). Tolerates CRLF line endings —
+/// files checked out or written on Windows must parse identically to LF files.
+/// The single frontmatter-splitting seam: links.rs and search.rs delegate here.
+pub(crate) fn split_frontmatter(raw: &str) -> Option<(String, String)> {
+    let after_open = raw
+        .strip_prefix("---\r\n")
+        .or_else(|| raw.strip_prefix("---\n"))?;
     let close_idx = after_open.find("\n---")?;
-    let block = &after_open[..close_idx];
+    // A CRLF file leaves a \r before the close delimiter's \n; drop it.
+    let block = after_open[..close_idx].trim_end_matches('\r');
     let after_close = &after_open[close_idx + 4..];
-    let body = match after_close.strip_prefix('\n') {
-        Some(rest) => rest.to_string(),
-        None => after_close.to_string(),
-    };
+    let body = after_close
+        .strip_prefix("\r\n")
+        .or_else(|| after_close.strip_prefix('\n'))
+        .unwrap_or(after_close)
+        .to_string();
     Some((block.to_string(), body))
 }
 
@@ -257,5 +261,31 @@ mod tests {
         let raw = "---\ntags: [npc]\naliases: [Captain Ash]\n---\nBody\n";
         assert_eq!(read_tags(raw), vec!["npc"]);
         assert_eq!(read_aliases(raw), vec!["Captain Ash"]);
+    }
+
+    // ── CRLF tolerance ────────────────────────────────────────────────────────
+    // Windows checkouts (git autocrlf) and Windows-authored vaults produce
+    // \r\n-terminated markdown; frontmatter must parse identically.
+
+    #[test]
+    fn read_tags_and_aliases_crlf_inline() {
+        let raw = "---\r\ntags: [npc]\r\naliases: [Mira, the Herbalist]\r\n---\r\nBody\r\n";
+        assert_eq!(read_tags(raw), vec!["npc"]);
+        assert_eq!(read_aliases(raw), vec!["Mira", "the Herbalist"]);
+    }
+
+    #[test]
+    fn read_tags_crlf_block_form() {
+        let raw = "---\r\ntags:\r\n  - npc\r\n  - allied\r\n---\r\nBody\r\n";
+        assert_eq!(read_tags(raw), vec!["npc", "allied"]);
+    }
+
+    #[test]
+    fn split_frontmatter_crlf_body_excludes_block() {
+        let raw = "---\r\ntags: [npc]\r\n---\r\nBody text\r\n";
+        let (block, body) = split_frontmatter(raw).expect("CRLF frontmatter must split");
+        assert!(block.contains("tags: [npc]"));
+        assert!(!block.ends_with('\r'), "trailing \\r must be trimmed from the block");
+        assert_eq!(body, "Body text\r\n");
     }
 }

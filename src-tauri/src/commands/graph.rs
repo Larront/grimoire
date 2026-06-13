@@ -135,22 +135,24 @@ pub fn get_graph_data_on_conn(
             .load(conn)
             .map_err(|e| e.to_string())?;
 
-    // Build a path→id lookup for resolving wikilinks
-    let path_to_id: std::collections::HashMap<&str, i32> =
-        notes.iter().map(|note| (note.path.as_str(), note.id)).collect();
-
-    // Build a case-insensitive alias→note_id lookup
-    let alias_to_id: std::collections::HashMap<String, i32> = aliases
-        .iter()
-        .map(|r| (r.alias.to_lowercase(), r.note_id))
-        .collect();
-
-    // Resolve a target_path to a note id: try exact path first, then alias
+    // Shared Obsidian-style resolution: exact path → filename stem / path
+    // suffix → alias (see links::TargetResolver).
+    let resolver = crate::commands::links::TargetResolver::build(
+        notes
+            .iter()
+            .map(|note| crate::commands::links::ResolvedNote {
+                id: note.id,
+                title: note.title.clone(),
+                path: note.path.clone(),
+            })
+            .collect(),
+        &aliases
+            .iter()
+            .map(|r| (r.note_id, r.alias.clone()))
+            .collect::<Vec<_>>(),
+    );
     let resolve = |target_path: &str| -> Option<i32> {
-        path_to_id
-            .get(target_path)
-            .copied()
-            .or_else(|| alias_to_id.get(&target_path.to_lowercase()).copied())
+        resolver.resolve(target_path).map(|r| r.id)
     };
 
     // Build a path→primary_tag lookup
@@ -195,11 +197,17 @@ pub fn get_graph_data_on_conn(
         });
     }
 
-    // Stub nodes: target_paths that don't resolve to any note (via path or alias)
-    let mut seen_stubs: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Stub nodes: target_paths that don't resolve to any note (via path or
+    // alias). Stub identity is case-insensitive to match link resolution —
+    // [[thornhaven]] and [[Thornhaven]] are the same missing note. The
+    // first-seen casing is kept for the node id and label.
+    let mut stub_canonical: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     for link in &links {
         if resolve(&link.target_path).is_none() {
-            if seen_stubs.insert(link.target_path.clone()) {
+            let key = link.target_path.to_lowercase();
+            if !stub_canonical.contains_key(&key) {
+                stub_canonical.insert(key, link.target_path.clone());
                 nodes.push(GraphNodeData {
                     id: format!("stub-{}", link.target_path),
                     label: link.target_path.clone(),
@@ -222,7 +230,7 @@ pub fn get_graph_data_on_conn(
         let target = if let Some(target_id) = resolve(&link.target_path) {
             format!("note-{}", target_id)
         } else {
-            format!("stub-{}", link.target_path)
+            format!("stub-{}", stub_canonical[&link.target_path.to_lowercase()])
         };
         edges.push(GraphEdgeData {
             id: format!("e-{}", edge_id),
@@ -422,6 +430,36 @@ mod tests {
         let data = get_graph_data_on_conn(&mut conn).unwrap();
         let stubs: Vec<_> = data.nodes.iter().filter(|n| n.kind == "stub").collect();
         assert_eq!(stubs.len(), 1, "stub should be deduplicated");
+    }
+
+    #[test]
+    fn test_case_variant_stubs_collapse_to_one_node() {
+        let mut conn = setup_db();
+        for (i, target) in [(1, "Thornhaven"), (2, "thornhaven")] {
+            diesel::insert_into(notes::table)
+                .values((
+                    notes::id.eq(i),
+                    notes::path.eq(format!("note{}.md", i)),
+                    notes::title.eq(format!("Note {}", i)),
+                    notes::archived.eq(false),
+                    notes::modified_at.eq(""),
+                ))
+                .execute(&mut conn)
+                .unwrap();
+            diesel::insert_into(note_links::table)
+                .values((note_links::source_id.eq(i), note_links::target_path.eq(target)))
+                .execute(&mut conn)
+                .unwrap();
+        }
+
+        let data = get_graph_data_on_conn(&mut conn).unwrap();
+        let stubs: Vec<_> = data.nodes.iter().filter(|n| n.kind == "stub").collect();
+        assert_eq!(stubs.len(), 1, "case-variant targets are the same missing note");
+
+        // Both edges must point at the single canonical stub node.
+        let stub_id = &stubs[0].id;
+        let stub_edges: Vec<_> = data.edges.iter().filter(|e| &e.target == stub_id).collect();
+        assert_eq!(stub_edges.len(), 2, "both case variants route to the canonical stub");
     }
 
     #[test]

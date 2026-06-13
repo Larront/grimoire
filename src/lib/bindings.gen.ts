@@ -93,11 +93,11 @@ export const commands = {
 	renameNote: (note: Note) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
-	resolveNoteByAlias: (alias: string) => __TAURI_INVOKE<{
+	resolveNoteTarget: (target: string) => __TAURI_INVOKE<{
 	id: number,
 	title: string,
 	path: string,
-} | null>("resolve_note_by_alias", { alias }),
+} | null>("resolve_note_target", { target }),
 	restoreBuiltinTemplates: () => __TAURI_INVOKE<null>("restore_builtin_templates"),
 	saveAccentPreset: (preset: string) => __TAURI_INVOKE<void>("save_accent_preset", { preset }),
 	saveAppPrefs: (prefs: AppPrefs) => __TAURI_INVOKE<null>("save_app_prefs", { prefs }),

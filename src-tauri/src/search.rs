@@ -58,16 +58,9 @@ pub fn extract_plain_text(content: &str) -> String {
 }
 
 fn strip_frontmatter(content: &str) -> String {
-    if !content.starts_with("---\n") {
-        return content.to_string();
-    }
-    let after_open = &content[4..];
-    if let Some(close_idx) = after_open.find("\n---") {
-        let after = &after_open[close_idx + 4..];
-        after.strip_prefix('\n').unwrap_or(after).to_string()
-    } else {
-        content.to_string()
-    }
+    crate::commands::frontmatter::split_frontmatter(content)
+        .map(|(_, body)| body)
+        .unwrap_or_else(|| content.to_string())
 }
 
 fn strip_images(text: &str) -> String {

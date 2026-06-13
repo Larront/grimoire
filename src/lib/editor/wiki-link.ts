@@ -15,10 +15,19 @@ interface WikiBrokenState {
 // needs the reactive notes store and async alias lookups, which a plugin can't reach.
 export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink");
 
+// Strip an Obsidian `#heading` / `#^block` fragment from a raw link target.
+// Resolution ignores fragments; the node's path attribute keeps them so the
+// original [[target#heading]] text round-trips to markdown unchanged.
+export function stripWikiFragment(target: string): string {
+  const hash = target.indexOf("#");
+  return (hash >= 0 ? target.slice(0, hash) : target).trim();
+}
+
 // The display title a path falls back to when no explicit alias is given:
-// the last path segment with any .md extension stripped.
+// the last path segment with any .md extension and #fragment stripped.
 export function wikiStem(path: string): string {
-  return path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+  const base = stripWikiFragment(path) || path;
+  return base.split("/").pop()?.replace(/\.md$/, "") ?? base;
 }
 
 // Splits the inside of a [[...]] link into its target path and display title.
@@ -47,14 +56,19 @@ export interface NoteSearchResult {
 
 // Converts [[path]] occurrences in a markdown string to <span data-wiki-link>
 // HTML before passing to Tiptap's setContent. Called on initial load and
-// on watcher reloads.
+// on watcher reloads. Embeds (`![[...]]`) are transclusions, not note links,
+// and pass through untouched.
 export function preprocessWikiLinks(markdown: string): string {
-  return markdown.replace(/\[\[([^\]]+)\]\]/g, (_match, rawPath: string) => {
-    const { path, title } = parseWikiTarget(rawPath);
-    const escapedPath = path.replace(/"/g, "&quot;");
-    const escapedTitle = title.replace(/"/g, "&quot;");
-    return `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapedTitle}</span>`;
-  });
+  return markdown.replace(
+    /(!?)\[\[([^\]]+)\]\]/g,
+    (match, bang: string, rawPath: string) => {
+      if (bang) return match;
+      const { path, title } = parseWikiTarget(rawPath);
+      const escapedPath = path.replace(/"/g, "&quot;");
+      const escapedTitle = title.replace(/"/g, "&quot;");
+      return `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapedTitle}</span>`;
+    },
+  );
 }
 
 interface WikiLinkOptions {

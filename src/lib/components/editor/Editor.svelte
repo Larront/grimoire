@@ -14,7 +14,13 @@
   import { SceneBlock } from "$lib/editor/scene-block.svelte";
   import { TimelineBlock, preprocessTimelineBlocks } from "$lib/editor/timeline-block";
   import { SlashCommand } from "$lib/editor/slash-command";
-  import { WikiLink, preprocessWikiLinks, wikiBrokenLinkKey, parseWikiTarget } from "$lib/editor/wiki-link";
+  import {
+    WikiLink,
+    preprocessWikiLinks,
+    wikiBrokenLinkKey,
+    parseWikiTarget,
+    stripWikiFragment,
+  } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -147,8 +153,9 @@
     (async () => {
       const broken = new Set<string>();
       for (const p of paths) {
-        if (noteList.some((n) => n.path === p)) continue;
-        const resolved = await api.resolveNoteByAlias(p).catch(() => null);
+        const target = stripWikiFragment(p);
+        if (noteList.some((n) => n.path === target)) continue;
+        const resolved = await api.resolveNoteTarget(target).catch(() => null);
         if (resolved == null) broken.add(p);
       }
       // Guard against a torn-down / swapped editor after the await.
@@ -204,20 +211,20 @@
   async function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
-    const path = link.dataset.path;
+    const target = stripWikiFragment(link.dataset.path);
 
-    const note = notes.notes.find((n) => n.path === path);
+    const note = notes.notes.find((n) => n.path === target);
     if (note) {
       tabs.navigate({ type: "note", id: note.id, title: note.title });
       return;
     }
 
     try {
-      const resolved = await api.resolveNoteByAlias(path);
+      const resolved = await api.resolveNoteTarget(target);
       if (resolved) {
         tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
       } else {
-        await createNoteFromStub(path);
+        await createNoteFromStub(target);
       }
     } catch {
       // no ledger open — do nothing
@@ -228,13 +235,16 @@
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
     const path = link.dataset.path;
+    const target = stripWikiFragment(path);
     const title = link.dataset.title ?? "";
     clearTimeout(previewTimer);
     previewTimer = setTimeout(async () => {
-      const note = notes.notes.find((n) => n.path === path);
+      const note =
+        notes.notes.find((n) => n.path === target) ??
+        (await api.silent.resolveNoteTarget(target).catch(() => null));
       if (!note) return;
       try {
-        const raw = await api.readNoteContent(path);
+        const raw = await api.readNoteContent(note.path);
         const { body } = parseFrontmatter(raw);
         const r = link.getBoundingClientRect();
         wikiPreview = {

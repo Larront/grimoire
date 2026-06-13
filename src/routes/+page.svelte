@@ -301,7 +301,7 @@
           <div class="text-left">
             <div class="text-sm font-semibold">Explore an example world</div>
             <div class="text-[11px] opacity-70 font-normal">
-              A small campaign to wander before you build your own
+              A small campaign to wander
             </div>
           </div>
         </Button>

@@ -17,16 +17,17 @@ interface MockNode {
   data(key: string): unknown;
 }
 
-type AnimateOpts = { style?: Record<string, unknown> };
 type CyNode = {
   data: (key?: string, val?: unknown) => unknown;
   style: (key?: string, val?: unknown) => unknown;
-  animate: (opts: AnimateOpts, params?: unknown) => void;
+  removeStyle: (key?: string) => void;
+  toggleClass: (name: string, toggle: boolean) => void;
 };
 type CyEdge = {
   data: (key?: string, val?: unknown) => unknown;
   style: (key?: string, val?: unknown) => unknown;
-  animate: (opts: AnimateOpts, params?: unknown) => void;
+  removeStyle: (key?: string) => void;
+  toggleClass: (name: string, toggle: boolean) => void;
   source: () => CyNode;
   target: () => CyNode;
 };
@@ -47,6 +48,9 @@ const mockAnimate = vi.fn();
 // Per-node style stores: maps node id → { display: ..., opacity: ..., ... }
 const nodeStyleStores = new Map<string, Record<string, unknown>>();
 const edgeStyleStores = new Map<string, Record<string, unknown>>();
+// Per-element class sets: maps id → Set of toggled class names (e.g. "dimmed")
+const nodeClassStores = new Map<string, Set<string>>();
+const edgeClassStores = new Map<string, Set<string>>();
 
 vi.mock("cytoscape-d3-force", () => ({ default: vi.fn() }));
 
@@ -90,10 +94,16 @@ vi.mock("cytoscape", () => {
           if (key !== undefined) return styles[key];
           return styles;
         },
-        animate: (opts: AnimateOpts) => {
-          if (opts.style) Object.assign(styles, opts.style);
+        removeStyle: (key?: string) => {
+          if (key !== undefined) delete styles[key];
+        },
+        toggleClass: (name: string, toggle: boolean) => {
+          const classes = nodeClassStores.get(id)!;
+          if (toggle) classes.add(name);
+          else classes.delete(name);
         },
       };
+      nodeClassStores.set(id, new Set());
       nodeMap.set(id, node);
       return node;
     });
@@ -121,12 +131,18 @@ vi.mock("cytoscape", () => {
           if (key !== undefined) return styles[key];
           return styles;
         },
-        animate: (opts: AnimateOpts) => {
-          if (opts.style) Object.assign(styles, opts.style);
+        removeStyle: (key?: string) => {
+          if (key !== undefined) delete styles[key];
+        },
+        toggleClass: (name: string, toggle: boolean) => {
+          const classes = edgeClassStores.get(id)!;
+          if (toggle) classes.add(name);
+          else classes.delete(name);
         },
         source: () => nodeMap.get(store.source as string) ?? nodeStore[0],
         target: () => nodeMap.get(store.target as string) ?? nodeStore[0],
       };
+      edgeClassStores.set(id, new Set());
       return edge;
     });
     mockEdges = edgeStore;
@@ -141,6 +157,7 @@ vi.mock("cytoscape", () => {
       destroy: mockDestroy,
       style: mockStyleFn,
       animate: mockAnimate,
+      batch: (cb: () => void) => cb(),
       // The component now runs the force layout explicitly via cy.layout(...).run()
       // and reaches into layout.simulation.alphaTarget on node release.
       layout: (opts: unknown) => {
@@ -1298,7 +1315,7 @@ describe("GraphPane – search", () => {
     });
   });
 
-  it("pressing Esc restores all node opacities to full", async () => {
+  it("pressing Esc removes the search opacity bypass", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
@@ -1312,12 +1329,14 @@ describe("GraphPane – search", () => {
 
     await fireEvent.keyDown(input, { key: "Escape" });
 
+    // The bypass is removed (not set to 1) so the stylesheet — including the
+    // hover .dimmed class — takes over again.
     await waitFor(() => {
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1);
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBeUndefined();
     });
   });
 
-  it("clearing the input (typing empty string) restores all node opacities", async () => {
+  it("clearing the input (typing empty string) removes the opacity bypass", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
@@ -1334,7 +1353,7 @@ describe("GraphPane – search", () => {
     await fireEvent.input(input, { target: { value: "" } });
 
     await waitFor(() => {
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1);
+      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBeUndefined();
     });
   });
 
@@ -1413,47 +1432,47 @@ describe("GraphPane – neighbor dimming on hover", () => {
     return { data: (key: string) => ({ id, kind })[key] };
   }
 
-  it("hovering a node dims non-neighbors to 0.12", async () => {
+  it("hovering a node adds the dimmed class to non-neighbors", async () => {
     render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
     // note-1 connects to note-2, map-10 and the stub; note-3 is unconnected.
     mouseoverHandlers[0]({ target: hoverNode("note-1") });
 
-    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(0.12);
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
   });
 
-  it("hovering a node keeps the node and its neighbors at full opacity", async () => {
+  it("hovering a node leaves the node and its neighbors undimmed", async () => {
     render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
     mouseoverHandlers[0]({ target: hoverNode("note-1") });
 
-    expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1); // self
-    expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(1); // neighbor
+    expect(nodeClassStores.get("note-1")?.has("dimmed")).toBe(false); // self
+    expect(nodeClassStores.get("note-2")?.has("dimmed")).toBe(false); // neighbor
   });
 
-  it("hovering dims edges not touching the focused node to 0.05", async () => {
+  it("hovering dims edges not touching the focused node", async () => {
     render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
     // map-10 only touches e-2; e-0 and e-1 should dim.
     mouseoverHandlers[0]({ target: hoverNode("map-10", "map") });
 
-    expect(edgeStyleStores.get("e-2")?.["opacity"]).toBe(1);
-    expect(edgeStyleStores.get("e-0")?.["opacity"]).toBe(0.05);
+    expect(edgeClassStores.get("e-2")?.has("dimmed")).toBe(false);
+    expect(edgeClassStores.get("e-0")?.has("dimmed")).toBe(true);
   });
 
-  it("mouseout restores all node opacities to full", async () => {
+  it("mouseout removes the dimmed class everywhere", async () => {
     render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
     mouseoverHandlers[0]({ target: hoverNode("note-1") });
-    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(0.12);
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
 
     mouseoutHandlers[0]();
 
-    expect(nodeStyleStores.get("note-3")?.["opacity"]).toBe(1);
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(false);
   });
 
   it("does not override search highlighting while a search is active", async () => {
@@ -1469,10 +1488,34 @@ describe("GraphPane – neighbor dimming on hover", () => {
       expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
     );
 
-    // Hovering note-1 (note-2 is a neighbor) would normally raise note-2 to 1;
-    // the search guard should leave it untouched at 0.2.
+    // Hovering note-1 (note-2 is a neighbor) would normally dim non-neighbors;
+    // the search guard must leave both the bypass and classes untouched.
     mouseoverHandlers[0]({ target: hoverNode("note-1") });
 
     expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2);
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(false);
+  });
+
+  it("clearing the search clears dim classes a guarded mouseout left behind", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
+
+    // Hover first: note-3 (unconnected to note-1) gets dimmed.
+    mouseoverHandlers[0]({ target: hoverNode("note-1") });
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
+
+    // Start a search — mouseout now hits the active-search guard and is swallowed.
+    const input = container.querySelector(
+      "[data-testid='graph-search']",
+    ) as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "My Note" } });
+    mouseoutHandlers[0]();
+    expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
+
+    // Clearing the search must remove the stale dim class.
+    await fireEvent.input(input, { target: { value: "" } });
+    await waitFor(() =>
+      expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(false),
+    );
   });
 });

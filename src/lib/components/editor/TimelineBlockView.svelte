@@ -2,7 +2,7 @@
   import { createBlankEvent, insertEventAt, moveEventUp, moveEventDown, renderTimelineText, type TimelineEvent } from "$lib/editor/timeline-block";
   import { tick } from "svelte";
   import { api } from "$lib/api";
-  import type { NoteSearchResult } from "$lib/editor/wiki-link";
+  import { stripWikiFragment, type NoteSearchResult } from "$lib/editor/wiki-link";
   import { notes } from "$lib/stores/notes.svelte";
   import { FileText, ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
 
@@ -32,10 +32,11 @@
     (async () => {
       const next = new Map<string, boolean>();
       for (const p of paths) {
-        if (noteList.some((n) => n.path === p)) {
+        const target = stripWikiFragment(p);
+        if (noteList.some((n) => n.path === target)) {
           next.set(p, true);
         } else {
-          const resolved = await api.resolveNoteByAlias(p).catch(() => null);
+          const resolved = await api.resolveNoteTarget(target).catch(() => null);
           next.set(p, resolved != null);
         }
       }

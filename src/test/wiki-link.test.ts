@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseWikiTarget, preprocessWikiLinks } from "$lib/editor/wiki-link";
+import {
+  parseWikiTarget,
+  preprocessWikiLinks,
+  stripWikiFragment,
+  wikiStem,
+} from "$lib/editor/wiki-link";
 
 // ─── parseWikiTarget ──────────────────────────────────────────────────────────
 // Drives both the [[...]] input rule (stub-link escape hatch) and display titles.
@@ -36,6 +41,41 @@ describe("parseWikiTarget", () => {
       title: "The Deep City",
     });
   });
+
+  it("heading link: path keeps the fragment (round-trip), title drops it", () => {
+    expect(parseWikiTarget("The Severance#The Night of Silence")).toEqual({
+      path: "The Severance#The Night of Silence",
+      title: "The Severance",
+    });
+  });
+});
+
+// ─── stripWikiFragment / wikiStem ─────────────────────────────────────────────
+// Resolution and display ignore #heading / #^block fragments; the node's path
+// attribute keeps them so the original markdown round-trips unchanged.
+
+describe("stripWikiFragment", () => {
+  it("strips a #heading fragment", () => {
+    expect(stripWikiFragment("The Severance#The Night of Silence")).toBe("The Severance");
+  });
+
+  it("strips a #^block fragment", () => {
+    expect(stripWikiFragment("Note#^abc123")).toBe("Note");
+  });
+
+  it("leaves fragment-free targets untouched", () => {
+    expect(stripWikiFragment("Places/Blackreach.md")).toBe("Places/Blackreach.md");
+  });
+});
+
+describe("wikiStem", () => {
+  it("drops the fragment before deriving the stem", () => {
+    expect(wikiStem("Events/The Severance.md#Aftermath")).toBe("The Severance");
+  });
+
+  it("last segment with .md stripped", () => {
+    expect(wikiStem("Places/Blackreach.md")).toBe("Blackreach");
+  });
 });
 
 // ─── preprocessWikiLinks (existing load-time behavior) ────────────────────────
@@ -71,5 +111,16 @@ describe("preprocessWikiLinks", () => {
     expect(out).toContain('data-path="Alpha"');
     expect(out).toContain('data-path="Beta/Note.md"');
     expect(out).toContain('data-title="B"');
+  });
+
+  it("leaves ![[...]] embeds untouched", () => {
+    const out = preprocessWikiLinks("![[ImagePlaceholder.png|cover hsmall]]");
+    expect(out).toBe("![[ImagePlaceholder.png|cover hsmall]]");
+  });
+
+  it("converts a link adjacent to an embed, but not the embed", () => {
+    const out = preprocessWikiLinks("![[banner.png]] then [[Real Note]]");
+    expect(out).toContain("![[banner.png]]");
+    expect(out).toContain('data-path="Real Note"');
   });
 });

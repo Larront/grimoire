@@ -47,12 +47,18 @@ export function parseFrontmatter(raw: string): {
   tags: string[];
   body: string;
 } {
-  if (!raw.startsWith("---\n")) return { tags: [], body: raw };
-  const closeIdx = raw.indexOf("\n---", 4);
+  // Tolerate CRLF line endings — Windows-authored vaults must parse the same.
+  const open = raw.startsWith("---\r\n") ? 5 : raw.startsWith("---\n") ? 4 : -1;
+  if (open === -1) return { tags: [], body: raw };
+  const closeIdx = raw.indexOf("\n---", open);
   if (closeIdx === -1) return { tags: [], body: raw };
-  const block = raw.slice(4, closeIdx);
+  const block = raw.slice(open, closeIdx).replace(/\r$/, "");
   const afterClose = raw.slice(closeIdx + 4); // after \n---
-  const body = afterClose.startsWith("\n") ? afterClose.slice(1) : afterClose;
+  const body = afterClose.startsWith("\r\n")
+    ? afterClose.slice(2)
+    : afterClose.startsWith("\n")
+      ? afterClose.slice(1)
+      : afterClose;
   return { tags: parseTagsBlock(block), body };
 }
 

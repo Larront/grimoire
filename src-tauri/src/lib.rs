@@ -1,4 +1,4 @@
-mod commands;
+﻿mod commands;
 mod db;
 mod ledger;
 mod note_index;
@@ -27,7 +27,7 @@ use crate::ledger::{AppLedger, LedgerState};
 /// Export-only tauri-specta builder (ADR-0009). It collects the specta-annotated
 /// commands purely so their TypeScript bindings can be generated; the runtime
 /// invoke handler remains `generate_handler!` below (the source of truth), which
-/// already serves these commands. Throw mode → generated commands return
+/// already serves these commands. Throw mode â†’ generated commands return
 /// `Promise<T>` and call `invoke` directly, so no handler swap is needed and the
 /// migration can proceed command-by-command.
 // Command names + their tauri-specta helper macros are in scope via the
@@ -106,7 +106,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             rename_note,
             rename_template,
             reorder_scene_slots,
-            resolve_note_by_alias,
+            resolve_note_target,
             restore_builtin_templates,
             save_accent_preset,
             save_app_prefs,
@@ -155,7 +155,7 @@ pub fn run() {
         // Note: specta exports f32/f64 as `number | null` (its NaN/Infinity
         // guard). Grimoire's floats are never null, so the frontend narrows them
         // to the refined `$lib/types/ledger` types with a cast at the api seam
-        // (see ADR-0009 migration outcome) — no exporter float config needed.
+        // (see ADR-0009 migration outcome) â€” no exporter float config needed.
         specta_builder()
             .export(
                 specta_typescript::Typescript::default(),
@@ -280,7 +280,7 @@ pub fn run() {
             get_note_aliases,
             set_note_aliases,
             get_alias_collisions,
-            resolve_note_by_alias,
+            resolve_note_target,
             // Graph data
             get_graph_data,
             // Graph styles

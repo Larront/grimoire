@@ -190,6 +190,25 @@
           "curve-style": "straight",
         },
       },
+      // Hover focus (applyNeighborDim) toggles .dimmed instead of animating
+      // per-element opacity — one stylesheet transition scales to large graphs.
+      // These rules come last so they win over the stub kind selector above.
+      {
+        selector: "node, edge",
+        style: {
+          "transition-property": "opacity",
+          // Bare numbers are milliseconds (cytoscape's implicit time unit).
+          "transition-duration": DIM_FADE_MS,
+        },
+      },
+      {
+        selector: "node.dimmed",
+        style: { opacity: 0.12 },
+      },
+      {
+        selector: "edge.dimmed",
+        style: { opacity: 0.05 },
+      },
     ];
   }
 
@@ -280,7 +299,9 @@
   /**
    * Highlight nodes whose label contains `query` (case-insensitive).
    * Non-matching nodes are dimmed to 20% opacity; matching nodes stay at 1.
-   * An empty query restores all nodes to full opacity.
+   * An empty query removes the opacity bypass entirely — a lingering bypass
+   * would override the hover `.dimmed` class for good — and clears any dim
+   * classes left behind by a mouseout that the active-search guard swallowed.
    * Also updates `firstMatchId` for Enter-key camera focus.
    */
   function applySearchHighlight(query: string) {
@@ -292,9 +313,10 @@
       const node = n as {
         data(key: string): unknown;
         style(key: string, val: unknown): void;
+        removeStyle(key: string): void;
       };
       if (!q) {
-        node.style("opacity", 1);
+        node.removeStyle("opacity");
         return;
       }
       const label = ((node.data("label") as string) ?? "").toLowerCase();
@@ -304,6 +326,8 @@
         firstMatchId = node.data("id") as string;
       }
     });
+
+    if (!q) applyNeighborDim(null);
   }
 
   /**
@@ -322,8 +346,10 @@
 
   /**
    * Dim everything except the hovered node and its direct neighbors (Obsidian-style
-   * focus). Passing null restores full opacity. No-op while a search is active so the
-   * two highlight mechanisms don't fight over the opacity bypass.
+   * focus) by toggling the `dimmed` class — the stylesheet's opacity transition does
+   * the fade, so this stays one style pass instead of N animations on large graphs.
+   * Passing null restores full opacity. No-op while a search is active so the two
+   * highlight mechanisms don't fight over opacity.
    */
   function applyNeighborDim(focusId: string | null) {
     if (!cy || searchQuery.trim()) return;
@@ -331,31 +357,25 @@
       ? new Set<string>([focusId, ...(adjacency.get(focusId) ?? [])])
       : null;
 
-    type Animatable = {
+    type Classable = {
       data(k: string): unknown;
-      animate(
-        opts: { style: { opacity: number } },
-        params: { duration: number; queue: boolean },
-      ): void;
+      toggleClass(name: string, toggle: boolean): void;
     };
-    const fade = (ele: Animatable, opacity: number) =>
-      ele.animate(
-        { style: { opacity } },
-        { duration: DIM_FADE_MS, queue: false },
-      );
 
-    cy.nodes().forEach((n: unknown) => {
-      const node = n as Animatable;
-      const id = node.data("id") as string;
-      fade(node, !connected || connected.has(id) ? 1 : 0.12);
-    });
+    cy.batch(() => {
+      cy!.nodes().forEach((n: unknown) => {
+        const node = n as Classable;
+        const id = node.data("id") as string;
+        node.toggleClass("dimmed", connected != null && !connected.has(id));
+      });
 
-    cy.edges().forEach((e: unknown) => {
-      const edge = e as Animatable;
-      const touches =
-        focusId != null &&
-        (edge.data("source") === focusId || edge.data("target") === focusId);
-      fade(edge, focusId == null || touches ? 1 : 0.05);
+      cy!.edges().forEach((e: unknown) => {
+        const edge = e as Classable;
+        const touches =
+          focusId != null &&
+          (edge.data("source") === focusId || edge.data("target") === focusId);
+        edge.toggleClass("dimmed", focusId != null && !touches);
+      });
     });
   }
 

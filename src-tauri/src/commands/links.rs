@@ -21,13 +21,15 @@ use tauri::State;
 
 /// Extracts all unique wikilink target paths from note content.
 /// Strips frontmatter before scanning; strips display text and heading
-/// fragments from each match. Returns deduplicated results.
+/// fragments from each match. Embeds (`![[...]]`) are transclusions, not
+/// note links, and are skipped. Returns deduplicated results.
 pub fn extract_wikilinks(content: &str) -> Vec<String> {
     let body = strip_frontmatter_body(content);
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut links: Vec<String> = Vec::new();
     let mut rest = body.as_str();
     while let Some(start) = rest.find("[[") {
+        let is_embed = start > 0 && rest.as_bytes()[start - 1] == b'!';
         rest = &rest[start + 2..];
         if let Some(end) = rest.find("]]") {
             let inner = &rest[..end];
@@ -39,7 +41,7 @@ pub fn extract_wikilinks(content: &str) -> Vec<String> {
                 .next()
                 .unwrap_or(inner)
                 .trim();
-            if !target.is_empty() && seen.insert(target.to_string()) {
+            if !is_embed && !target.is_empty() && seen.insert(target.to_string()) {
                 links.push(target.to_string());
             }
             rest = &rest[end + 2..];
@@ -51,15 +53,143 @@ pub fn extract_wikilinks(content: &str) -> Vec<String> {
 }
 
 fn strip_frontmatter_body(content: &str) -> String {
-    if !content.starts_with("---\n") {
-        return content.to_string();
+    frontmatter::split_frontmatter(content)
+        .map(|(_, body)| body)
+        .unwrap_or_else(|| content.to_string())
+}
+
+// ── Target resolution (Obsidian-style) ────────────────────────────────────────
+
+/// Strip a `#heading` / `#^block` fragment from a raw wikilink target.
+pub fn strip_fragment(target: &str) -> &str {
+    target.split('#').next().unwrap_or(target).trim()
+}
+
+/// The filename stem of a vault-relative path: last segment, `.md` stripped.
+fn path_stem(path: &str) -> &str {
+    let base = path.rsplit('/').next().unwrap_or(path);
+    base.strip_suffix(".md").unwrap_or(base)
+}
+
+/// Keep the entry pointing at the better candidate: shortest path wins,
+/// alphabetical breaks ties. Makes ambiguous filename matches deterministic.
+fn upsert_best(
+    map: &mut std::collections::HashMap<String, usize>,
+    key: String,
+    idx: usize,
+    notes: &[ResolvedNote],
+) {
+    use std::collections::hash_map::Entry;
+    match map.entry(key) {
+        Entry::Vacant(v) => {
+            v.insert(idx);
+        }
+        Entry::Occupied(mut o) => {
+            let cur = &notes[*o.get()].path;
+            let new = &notes[idx].path;
+            if (new.len(), new.as_str()) < (cur.len(), cur.as_str()) {
+                o.insert(idx);
+            }
+        }
     }
-    let after_open = &content[4..];
-    if let Some(close_idx) = after_open.find("\n---") {
-        let after = &after_open[close_idx + 4..];
-        after.strip_prefix('\n').unwrap_or(after).to_string()
-    } else {
-        content.to_string()
+}
+
+/// Resolves raw `[[...]]` target strings to notes with Obsidian's semantics,
+/// in priority order:
+///
+/// 1. exact vault-relative path, with or without the `.md` extension
+/// 2. filename match (`[[The Spark]]` → `Atlas/Aspects/The Spark.md`), or
+///    path-suffix match for disambiguated links (`[[Aspects/The Spark]]`)
+/// 3. frontmatter alias
+///
+/// All matching is case-insensitive and ignores `#fragment` suffixes.
+pub struct TargetResolver {
+    notes: Vec<ResolvedNote>,
+    by_path: std::collections::HashMap<String, usize>,
+    by_path_no_ext: std::collections::HashMap<String, usize>,
+    by_stem: std::collections::HashMap<String, usize>,
+    by_alias: std::collections::HashMap<String, usize>,
+}
+
+impl TargetResolver {
+    pub fn build(notes: Vec<ResolvedNote>, aliases: &[(i32, String)]) -> Self {
+        let mut by_path = std::collections::HashMap::new();
+        let mut by_path_no_ext = std::collections::HashMap::new();
+        let mut by_stem = std::collections::HashMap::new();
+        for (i, note) in notes.iter().enumerate() {
+            let lower = note.path.to_lowercase();
+            let no_ext = lower.strip_suffix(".md").unwrap_or(&lower).to_string();
+            let stem = path_stem(&lower).to_string();
+            upsert_best(&mut by_path, lower, i, &notes);
+            upsert_best(&mut by_path_no_ext, no_ext, i, &notes);
+            upsert_best(&mut by_stem, stem, i, &notes);
+        }
+        let id_to_idx: std::collections::HashMap<i32, usize> =
+            notes.iter().enumerate().map(|(i, note)| (note.id, i)).collect();
+        let mut by_alias = std::collections::HashMap::new();
+        for (note_id, alias) in aliases {
+            if let Some(&i) = id_to_idx.get(note_id) {
+                upsert_best(&mut by_alias, alias.to_lowercase(), i, &notes);
+            }
+        }
+        Self { notes, by_path, by_path_no_ext, by_stem, by_alias }
+    }
+
+    pub fn load(conn: &mut SqliteConnection) -> Result<Self, String> {
+        let note_rows: Vec<(i32, String, String)> = n::notes
+            .select((n::id, n::title, n::path))
+            .load(conn)
+            .map_err(|e| e.to_string())?;
+        let notes = note_rows
+            .into_iter()
+            .map(|(id, title, path)| ResolvedNote { id, title, path })
+            .collect();
+        let alias_rows: Vec<(i32, String)> = na::note_aliases
+            .select((na::note_id, na::alias))
+            .load(conn)
+            .map_err(|e| e.to_string())?;
+        Ok(Self::build(notes, &alias_rows))
+    }
+
+    pub fn resolve(&self, target: &str) -> Option<&ResolvedNote> {
+        let t = strip_fragment(target).to_lowercase();
+        if t.is_empty() {
+            return None;
+        }
+        if let Some(&i) = self.by_path.get(&t) {
+            return Some(&self.notes[i]);
+        }
+        if let Some(&i) = self.by_path_no_ext.get(&t) {
+            return Some(&self.notes[i]);
+        }
+        if t.contains('/') {
+            // Disambiguated sub-path link: match notes whose path ends with it.
+            let suffix_md = format!("/{}.md", t);
+            let suffix_raw = format!("/{}", t);
+            let mut best: Option<usize> = None;
+            for (i, note) in self.notes.iter().enumerate() {
+                let lower = note.path.to_lowercase();
+                if lower.ends_with(&suffix_md) || lower.ends_with(&suffix_raw) {
+                    best = match best {
+                        None => Some(i),
+                        Some(b) => {
+                            let (cur, new) = (&self.notes[b].path, &note.path);
+                            if (new.len(), new.as_str()) < (cur.len(), cur.as_str()) {
+                                Some(i)
+                            } else {
+                                Some(b)
+                            }
+                        }
+                    };
+                }
+            }
+            if let Some(i) = best {
+                return Some(&self.notes[i]);
+            }
+        } else if let Some(&i) = self.by_stem.get(&t) {
+            return Some(&self.notes[i]);
+        }
+        self.by_alias.get(&t).map(|&i| &self.notes[i])
     }
 }
 
@@ -198,11 +328,14 @@ fn collect_links_and_aliases(
 
 // ── Backlink rewrite ──────────────────────────────────────────────────────────
 
-/// Replace wikilink occurrences of `old_path` with `new_path` inside `content`.
-/// Matches `[[old_path]]`, `[[old_path|display]]`, `[[old_path#heading]]`.
-/// Leaves frontmatter and non-matching links untouched.
-/// Returns (new_content, was_changed).
-pub fn rewrite_wikilinks_in_content(content: &str, old_path: &str, new_path: &str) -> (String, bool) {
+/// Walk every `[[...]]` link in `content`; where `map` returns a replacement
+/// for the isolated target (display text and heading fragments excluded), swap
+/// it in and keep the `|display` / `#heading` suffix. Returns (new_content,
+/// was_changed).
+fn rewrite_wikilinks_with(
+    content: &str,
+    map: impl Fn(&str) -> Option<String>,
+) -> (String, bool) {
     let mut result = String::with_capacity(content.len());
     let mut rest = content;
     let mut changed = false;
@@ -215,8 +348,8 @@ pub fn rewrite_wikilinks_in_content(content: &str, old_path: &str, new_path: &st
             // Split at first `|` or `#` to isolate the target
             let sep_pos = inner.find(['|', '#']).unwrap_or(inner.len());
             let raw_target = inner[..sep_pos].trim();
-            if raw_target == old_path {
-                result.push_str(new_path);
+            if let Some(replacement) = map(raw_target) {
+                result.push_str(&replacement);
                 result.push_str(&inner[sep_pos..]);
                 changed = true;
             } else {
@@ -235,46 +368,75 @@ pub fn rewrite_wikilinks_in_content(content: &str, old_path: &str, new_path: &st
     (result, changed)
 }
 
-#[derive(QueryableByName, Debug)]
-struct SourceNoteRow {
-    #[diesel(sql_type = diesel::sql_types::Integer)]
-    id: i32,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    path: String,
-}
-
-/// For every note that has a `note_links` row pointing at `old_path`:
-/// reads the markdown file, rewrites `[[old_path...]]` → `[[new_path...]]`,
-/// saves the file, and re-indexes the note's outbound links in the DB.
+/// For every note whose links reached the renamed note — written as the full
+/// path (with or without `.md`) or as a bare filename stem — reads the
+/// markdown file, rewrites those links to the equivalent new form, saves the
+/// file, and re-indexes the note's outbound links in the DB.
 /// Returns the number of notes whose files were actually modified.
+///
+/// Must run while the `notes` row still holds `old_path`: the stem-ownership
+/// check below resolves against the pre-rename state.
 pub fn rewrite_backlinks_on_rename_on_conn(
     ledger_path: &Path,
     conn: &mut SqliteConnection,
     old_path: &str,
     new_path: &str,
 ) -> Result<usize, String> {
-    let sources: Vec<SourceNoteRow> = diesel::sql_query(
-        "SELECT n.id, n.path
-         FROM note_links nl
-         JOIN notes n ON nl.source_id = n.id
-         WHERE nl.target_path = ?1",
-    )
-    .bind::<diesel::sql_types::Text, _>(old_path)
-    .load(conn)
-    .map_err(|e| e.to_string())?;
+    let old_no_ext = old_path.strip_suffix(".md").unwrap_or(old_path);
+    let new_no_ext = new_path.strip_suffix(".md").unwrap_or(new_path);
+    let old_stem = path_stem(old_path);
+    let new_stem = path_stem(new_path);
+
+    // Bare-stem links ([[The Spark]]) only break when the filename itself
+    // changes — a folder move keeps them resolving. And rewrite them only if
+    // this note actually owned the stem: when another note shares the stem
+    // and wins resolution, those links were never ours to rewrite.
+    let stem_changed = !old_stem.eq_ignore_ascii_case(new_stem);
+    let owns_stem = stem_changed
+        && TargetResolver::load(conn)?
+            .resolve(old_stem)
+            .is_some_and(|r| r.path == old_path);
+
+    let map_target = |target: &str| -> Option<String> {
+        if target.eq_ignore_ascii_case(old_path) {
+            Some(new_path.to_string())
+        } else if target.eq_ignore_ascii_case(old_no_ext) {
+            Some(new_no_ext.to_string())
+        } else if owns_stem && target.eq_ignore_ascii_case(old_stem) {
+            Some(new_stem.to_string())
+        } else {
+            None
+        }
+    };
+
+    let link_rows: Vec<(i32, String)> = nl::note_links
+        .select((nl::source_id, nl::target_path))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+    let source_ids: BTreeSet<i32> = link_rows
+        .iter()
+        .filter(|(_, target)| map_target(target).is_some())
+        .map(|(source_id, _)| *source_id)
+        .collect();
+
+    let sources: Vec<(i32, String)> = n::notes
+        .filter(n::id.eq_any(&source_ids))
+        .select((n::id, n::path))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
 
     let mut updated_count = 0usize;
-    for source in sources {
-        let full_path = ledger_path.join(&source.path);
+    for (source_id, source_path) in sources {
+        let full_path = ledger_path.join(&source_path);
         let content = match fs::read_to_string(&full_path) {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let (new_content, changed) = rewrite_wikilinks_in_content(&content, old_path, new_path);
+        let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
         if changed {
             fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
             let new_links = extract_wikilinks(&new_content);
-            upsert_note_links(conn, source.id, &new_links)?;
+            upsert_note_links(conn, source_id, &new_links)?;
             updated_count += 1;
         }
     }
@@ -345,6 +507,16 @@ pub struct ResolvedNote {
     pub path: String,
 }
 
+#[derive(QueryableByName, Debug)]
+struct ResolvedNoteRow {
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    id: i32,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    title: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    path: String,
+}
+
 pub fn search_notes_by_alias_on_conn(
     conn: &mut SqliteConnection,
     query: &str,
@@ -377,38 +549,22 @@ pub fn search_notes_by_alias_on_conn(
     })
 }
 
-pub fn resolve_note_by_alias_on_conn(
+pub fn resolve_note_target_on_conn(
     conn: &mut SqliteConnection,
-    alias: &str,
+    target: &str,
 ) -> Result<Option<ResolvedNote>, String> {
-    diesel::sql_query(
-        "SELECT n.id, n.title, n.path
-         FROM note_aliases al
-         JOIN notes n ON al.note_id = n.id
-         WHERE LOWER(al.alias) = LOWER(?1)
-         LIMIT 1",
-    )
-    .bind::<diesel::sql_types::Text, _>(alias)
-    .load::<ResolvedNoteRow>(conn)
-    .map_err(|e| e.to_string())
-    .map(|rows| {
-        rows.into_iter().next().map(|r| ResolvedNote {
-            id: r.id,
-            title: r.title,
-            path: r.path,
-        })
-    })
+    Ok(TargetResolver::load(conn)?.resolve(target).cloned())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn resolve_note_by_alias(
-    alias: String,
+pub fn resolve_note_target(
+    target: String,
     ledger: State<AppLedger>,
 ) -> Result<Option<ResolvedNote>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    resolve_note_by_alias_on_conn(conn, &alias)
+    resolve_note_target_on_conn(conn, &target)
 }
 
 #[derive(Serialize, Debug, Clone, specta::Type)]
@@ -426,49 +582,65 @@ pub struct OutboundLink {
     pub resolved_path: Option<String>,
 }
 
+pub fn get_backlinks_on_conn(
+    conn: &mut SqliteConnection,
+    note_id: i32,
+) -> Result<Vec<BacklinkNote>, String> {
+    let resolver = TargetResolver::load(conn)?;
+    let link_rows: Vec<(i32, String)> = nl::note_links
+        .select((nl::source_id, nl::target_path))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    let source_ids: BTreeSet<i32> = link_rows
+        .iter()
+        .filter(|(_, target)| resolver.resolve(target).map(|r| r.id) == Some(note_id))
+        .map(|(source_id, _)| *source_id)
+        .collect();
+
+    let mut result: Vec<BacklinkNote> = n::notes
+        .filter(n::id.eq_any(&source_ids))
+        .select((n::id, n::path, n::title))
+        .load::<(i32, String, String)>(conn)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, path, title)| BacklinkNote { id, path, title })
+        .collect();
+    result.sort_by(|a, b| a.title.cmp(&b.title));
+    Ok(result)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_backlinks(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<BacklinkNote>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
-
-    let note_path: String = n::notes
-        .find(note_id)
-        .select(n::path)
-        .first(conn)
-        .map_err(|e| e.to_string())?;
-
-    let rows = diesel::sql_query(
-        "SELECT DISTINCT n.id, n.path, n.title
-         FROM note_links nl
-         JOIN notes n ON nl.source_id = n.id
-         WHERE nl.target_path = ?1
-            OR nl.target_path IN (SELECT alias FROM note_aliases WHERE note_id = ?2)
-         ORDER BY n.title",
-    )
-    .bind::<diesel::sql_types::Text, _>(&note_path)
-    .bind::<diesel::sql_types::Integer, _>(note_id)
-    .load::<BacklinkNoteRow>(conn)
-    .map_err(|e| e.to_string())?;
-
-    Ok(rows
-        .into_iter()
-        .map(|r| BacklinkNote {
-            id: r.id,
-            path: r.path,
-            title: r.title,
-        })
-        .collect())
+    get_backlinks_on_conn(conn, note_id)
 }
 
-#[derive(QueryableByName, Debug)]
-struct BacklinkNoteRow {
-    #[diesel(sql_type = diesel::sql_types::Integer)]
-    id: i32,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    path: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    title: String,
+pub fn get_outbound_links_on_conn(
+    conn: &mut SqliteConnection,
+    note_id: i32,
+) -> Result<Vec<OutboundLink>, String> {
+    let resolver = TargetResolver::load(conn)?;
+    let link_rows: Vec<String> = nl::note_links
+        .filter(nl::source_id.eq(note_id))
+        .select(nl::target_path)
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    Ok(link_rows
+        .into_iter()
+        .map(|target_path| {
+            let resolved = resolver.resolve(&target_path);
+            OutboundLink {
+                resolved_id: resolved.map(|r| r.id),
+                resolved_title: resolved.map(|r| r.title.clone()),
+                resolved_path: resolved.map(|r| r.path.clone()),
+                target_path,
+            }
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -479,64 +651,26 @@ pub fn get_outbound_links(
 ) -> Result<Vec<OutboundLink>, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    get_outbound_links_on_conn(conn, note_id)
+}
 
-    let link_rows: Vec<String> = nl::note_links
-        .filter(nl::source_id.eq(note_id))
-        .select(nl::target_path)
+pub fn get_note_backlink_count_on_conn(
+    conn: &mut SqliteConnection,
+    note_path: &str,
+) -> Result<u32, String> {
+    let resolver = TargetResolver::load(conn)?;
+    let link_rows: Vec<(i32, String)> = nl::note_links
+        .select((nl::source_id, nl::target_path))
         .load(conn)
         .map_err(|e| e.to_string())?;
-
-    let mut result = Vec::new();
-    for target_path in link_rows {
-        let resolved = n::notes
-            .filter(n::path.eq(&target_path))
-            .select((n::id, n::title, n::path))
-            .first::<(i32, String, String)>(conn)
-            .optional()
-            .map_err(|e| e.to_string())?;
-
-        let resolved = if resolved.is_none() {
-            diesel::sql_query(
-                "SELECT n.id, n.title, n.path
-                 FROM note_aliases al
-                 JOIN notes n ON al.note_id = n.id
-                 WHERE al.alias = ?1
-                 LIMIT 1",
-            )
-            .bind::<diesel::sql_types::Text, _>(&target_path)
-            .load::<ResolvedNoteRow>(conn)
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .next()
-            .map(|r| (r.id, r.title, r.path))
-        } else {
-            resolved
-        };
-
-        result.push(OutboundLink {
-            target_path,
-            resolved_id: resolved.as_ref().map(|(id, _, _)| *id),
-            resolved_title: resolved.as_ref().map(|(_, t, _)| t.clone()),
-            resolved_path: resolved.map(|(_, _, p)| p),
-        });
-    }
-    Ok(result)
-}
-
-#[derive(QueryableByName, Debug)]
-struct ResolvedNoteRow {
-    #[diesel(sql_type = diesel::sql_types::Integer)]
-    id: i32,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    title: String,
-    #[diesel(sql_type = diesel::sql_types::Text)]
-    path: String,
-}
-
-#[derive(QueryableByName)]
-struct BacklinkCountRow {
-    #[diesel(sql_type = diesel::sql_types::BigInt)]
-    cnt: i64,
+    let sources: BTreeSet<i32> = link_rows
+        .iter()
+        .filter(|(_, target)| {
+            resolver.resolve(target).map(|r| r.path.as_str()) == Some(note_path)
+        })
+        .map(|(source_id, _)| *source_id)
+        .collect();
+    Ok(sources.len() as u32)
 }
 
 #[tauri::command]
@@ -544,13 +678,7 @@ struct BacklinkCountRow {
 pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> Result<u32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let row = diesel::sql_query(
-        "SELECT COUNT(DISTINCT source_id) as cnt FROM note_links WHERE target_path = ?1",
-    )
-    .bind::<diesel::sql_types::Text, _>(&note_path)
-    .load::<BacklinkCountRow>(conn)
-    .map_err(|e| e.to_string())?;
-    Ok(row.into_iter().next().map(|r| r.cnt as u32).unwrap_or(0))
+    get_note_backlink_count_on_conn(conn, &note_path)
 }
 
 #[tauri::command]
@@ -907,7 +1035,18 @@ mod tests {
         cnt: i64,
     }
 
-    // ── rewrite_wikilinks_in_content ─────────────────────────────────────────
+    // ── rewrite_wikilinks_with ───────────────────────────────────────────────
+
+    /// Exact-target rewrite, the shape rename uses for full-path links.
+    fn rewrite_wikilinks_in_content(
+        content: &str,
+        old_path: &str,
+        new_path: &str,
+    ) -> (String, bool) {
+        rewrite_wikilinks_with(content, |target| {
+            (target == old_path).then(|| new_path.to_string())
+        })
+    }
 
     #[test]
     fn rewrite_simple_wikilink() {
@@ -1205,14 +1344,14 @@ mod tests {
         assert_eq!(results[0].id, 1);
     }
 
-    // ── resolve_note_by_alias_on_conn ────────────────────────────────────────
+    // ── resolve_note_target_on_conn ──────────────────────────────────────────
 
     #[test]
     fn resolve_by_alias_exact_match() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
         upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        let result = resolve_note_by_alias_on_conn(&mut conn, "Captain Ash").unwrap();
+        let result = resolve_note_target_on_conn(&mut conn, "Captain Ash").unwrap();
         assert!(result.is_some());
         let r = result.unwrap();
         assert_eq!(r.id, 1);
@@ -1225,7 +1364,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
         upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        let result = resolve_note_by_alias_on_conn(&mut conn, "Unknown").unwrap();
+        let result = resolve_note_target_on_conn(&mut conn, "Unknown").unwrap();
         assert!(result.is_none());
     }
 
@@ -1234,7 +1373,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
         upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        let result = resolve_note_by_alias_on_conn(&mut conn, "captain ash").unwrap();
+        let result = resolve_note_target_on_conn(&mut conn, "captain ash").unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().id, 1);
     }
@@ -1244,7 +1383,239 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
         upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        let result = resolve_note_by_alias_on_conn(&mut conn, "Captain").unwrap();
+        let result = resolve_note_target_on_conn(&mut conn, "Captain").unwrap();
         assert!(result.is_none(), "partial alias must not resolve");
+    }
+
+    // ── TargetResolver — Obsidian-style resolution ───────────────────────────
+
+    fn resolver_with(notes: &[(i32, &str)], aliases: &[(i32, &str)]) -> TargetResolver {
+        TargetResolver::build(
+            notes
+                .iter()
+                .map(|(id, path)| ResolvedNote {
+                    id: *id,
+                    title: format!("Note {}", id),
+                    path: path.to_string(),
+                })
+                .collect(),
+            &aliases
+                .iter()
+                .map(|(id, alias)| (*id, alias.to_string()))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    #[test]
+    fn resolve_bare_name_matches_nested_note() {
+        let r = resolver_with(&[(1, "Atlas of Calencia/Aspects/The Spark.md")], &[]);
+        assert_eq!(r.resolve("The Spark").map(|n| n.id), Some(1));
+    }
+
+    #[test]
+    fn resolve_bare_name_is_case_insensitive() {
+        let r = resolver_with(&[(1, "Deities/Caeligo, God of Darkness.md")], &[]);
+        assert_eq!(r.resolve("caeligo, god of darkness").map(|n| n.id), Some(1));
+    }
+
+    #[test]
+    fn resolve_exact_path_with_and_without_extension() {
+        let r = resolver_with(&[(1, "folder/note.md")], &[]);
+        assert_eq!(r.resolve("folder/note.md").map(|n| n.id), Some(1));
+        assert_eq!(r.resolve("folder/note").map(|n| n.id), Some(1));
+    }
+
+    #[test]
+    fn resolve_subpath_suffix_match() {
+        let r = resolver_with(&[(1, "Atlas/Aspects/The Spark.md")], &[]);
+        assert_eq!(r.resolve("Aspects/The Spark").map(|n| n.id), Some(1));
+    }
+
+    #[test]
+    fn resolve_strips_heading_fragment() {
+        let r = resolver_with(&[(1, "Events/The Severance.md")], &[]);
+        assert_eq!(
+            r.resolve("The Severance#The Night of Silence").map(|n| n.id),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn resolve_exact_path_beats_stem_of_other_note() {
+        // A note literally at "The Spark.md" must win over a nested stem match.
+        let r = resolver_with(
+            &[(1, "Atlas/The Spark.md"), (2, "The Spark.md")],
+            &[],
+        );
+        assert_eq!(r.resolve("The Spark.md").map(|n| n.id), Some(2));
+    }
+
+    #[test]
+    fn resolve_stem_beats_alias() {
+        let r = resolver_with(
+            &[(1, "npcs/Mira.md"), (2, "npcs/other.md")],
+            &[(2, "Mira")],
+        );
+        assert_eq!(
+            r.resolve("Mira").map(|n| n.id),
+            Some(1),
+            "a filename match must win over another note's alias"
+        );
+    }
+
+    #[test]
+    fn resolve_ambiguous_stem_picks_shortest_then_alphabetical() {
+        let r = resolver_with(
+            &[(1, "b/deep/nested/Plan.md"), (2, "a/Plan.md"), (3, "c/Plan.md")],
+            &[],
+        );
+        assert_eq!(
+            r.resolve("Plan").map(|n| n.id),
+            Some(2),
+            "shortest path, then alphabetical, must win"
+        );
+    }
+
+    #[test]
+    fn resolve_empty_and_fragment_only_return_none() {
+        let r = resolver_with(&[(1, "note.md")], &[]);
+        assert!(r.resolve("").is_none());
+        assert!(r.resolve("#Heading Only").is_none());
+    }
+
+    // ── stem-aware backlinks ─────────────────────────────────────────────────
+
+    #[test]
+    fn backlinks_include_bare_stem_links() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "Atlas/Aspects/The Spark.md", "The Spark");
+        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+
+        let backlinks = get_backlinks_on_conn(&mut conn, 2).unwrap();
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0].id, 1);
+    }
+
+    #[test]
+    fn backlink_count_includes_bare_stem_links() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "b.md", "B");
+        insert_note(&mut conn, 3, "Atlas/Aspects/The Spark.md", "The Spark");
+        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+        upsert_note_links(&mut conn, 2, &["atlas/aspects/the spark".to_string()]).unwrap();
+
+        let count =
+            get_note_backlink_count_on_conn(&mut conn, "Atlas/Aspects/The Spark.md").unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn outbound_links_resolve_bare_stems() {
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "Atlas/Aspects/The Spark.md", "The Spark");
+        upsert_note_links(
+            &mut conn,
+            1,
+            &["The Spark".to_string(), "Nowhere".to_string()],
+        )
+        .unwrap();
+
+        let outbound = get_outbound_links_on_conn(&mut conn, 1).unwrap();
+        assert_eq!(outbound.len(), 2);
+        let spark = outbound.iter().find(|l| l.target_path == "The Spark").unwrap();
+        assert_eq!(spark.resolved_id, Some(2));
+        assert_eq!(spark.resolved_path.as_deref(), Some("Atlas/Aspects/The Spark.md"));
+        let nowhere = outbound.iter().find(|l| l.target_path == "Nowhere").unwrap();
+        assert!(nowhere.resolved_id.is_none(), "unresolvable target must stay a stub");
+    }
+
+    // ── extract_wikilinks — embeds ───────────────────────────────────────────
+
+    #[test]
+    fn extract_skips_image_embeds() {
+        let links = extract_wikilinks("See ![[image.png|cover]] and [[Real Note]].");
+        assert_eq!(links, vec!["Real Note"]);
+    }
+
+    #[test]
+    fn extract_embed_at_start_of_content() {
+        let links = extract_wikilinks("![[banner.png]]\nThen [[Target]].");
+        assert_eq!(links, vec!["Target"]);
+    }
+
+    // ── rename rewrite — bare-stem links ─────────────────────────────────────
+
+    #[test]
+    fn rename_rewrites_bare_stem_links_when_stem_changes() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "See [[The Spark]] today.").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
+        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+
+        let count = rewrite_backlinks_on_rename_on_conn(
+            dir.path(),
+            &mut conn,
+            "Atlas/The Spark.md",
+            "Atlas/The Ember.md",
+        )
+        .unwrap();
+
+        assert_eq!(count, 1);
+        let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert_eq!(updated, "See [[The Ember]] today.");
+    }
+
+    #[test]
+    fn rename_folder_move_leaves_bare_stem_links_alone() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "See [[The Spark]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
+        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+
+        let count = rewrite_backlinks_on_rename_on_conn(
+            dir.path(),
+            &mut conn,
+            "Atlas/The Spark.md",
+            "Elsewhere/The Spark.md",
+        )
+        .unwrap();
+
+        assert_eq!(count, 0, "folder move keeps bare-stem links resolving — no rewrite");
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert_eq!(content, "See [[The Spark]].");
+    }
+
+    #[test]
+    fn rename_does_not_steal_stem_links_owned_by_another_note() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "See [[Plan]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        // "Plan.md" at the root wins stem resolution over the nested one.
+        insert_note(&mut conn, 2, "Plan.md", "Plan");
+        insert_note(&mut conn, 3, "deep/Plan.md", "Plan (deep)");
+        upsert_note_links(&mut conn, 1, &["Plan".to_string()]).unwrap();
+
+        let count = rewrite_backlinks_on_rename_on_conn(
+            dir.path(),
+            &mut conn,
+            "deep/Plan.md",
+            "deep/Schedule.md",
+        )
+        .unwrap();
+
+        assert_eq!(count, 0, "links resolving to the other Plan note must not be rewritten");
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        assert_eq!(content, "See [[Plan]].");
     }
 }

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "grimoire-site",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "serve", "../grimoire-site", "-l", "4173"],
+      "port": 4173
+    }
+  ]
+}
