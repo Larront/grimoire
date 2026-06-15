@@ -205,6 +205,7 @@ pub fn run() {
             read_note_tags,
             write_note_tags,
             list_all_tags,
+            get_tag_usage_counts,
             get_pin_tags,
             set_pin_tags,
             get_file_tree,
@@ -287,7 +288,6 @@ pub fn run() {
             // Graph styles
             get_tag_graph_styles,
             set_tag_graph_style,
-            get_tag_usage_counts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
