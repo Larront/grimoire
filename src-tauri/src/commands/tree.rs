@@ -439,6 +439,27 @@ mod tests {
         .unwrap();
     }
 
+    #[derive(diesel::QueryableByName)]
+    struct CountRow {
+        #[diesel(sql_type = diesel::sql_types::BigInt)]
+        cnt: i64,
+    }
+
+    /// Count note_links rows whose target_path satisfies the given SQL predicate
+    /// (e.g. `"target_path = 'beasts/dragon.md'"` or `"target_path LIKE 'creatures/%'"`).
+    fn count_links_where(conn: &mut SqliteConnection, predicate: &str) -> i64 {
+        diesel::sql_query(format!(
+            "SELECT COUNT(*) as cnt FROM note_links WHERE {}",
+            predicate
+        ))
+        .load::<CountRow>(conn)
+        .unwrap()
+        .into_iter()
+        .next()
+        .map(|r| r.cnt)
+        .unwrap_or(0)
+    }
+
     fn insert_map(conn: &mut SqliteConnection, map_image_path: &str, map_title: &str) {
         conn.batch_execute(&format!(
             "INSERT INTO maps (title, image_path, image_width, image_height) VALUES ('{}', '{}', 100, 100);",
@@ -631,26 +652,10 @@ mod tests {
         assert_eq!(updated, "See [[beasts/dragon.md]].");
 
         // note_links row must point to the new path, not the old one
-        let new_count: i64 = diesel::sql_query(
-            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path = 'beasts/dragon.md'"
-        )
-        .load::<StaleCountRow>(&mut conn)
-        .unwrap()
-        .into_iter()
-        .next()
-        .map(|r| r.cnt)
-        .unwrap_or(0);
+        let new_count = count_links_where(&mut conn, "target_path = 'beasts/dragon.md'");
         assert_eq!(new_count, 1, "link row must point to new path");
 
-        let old_count: i64 = diesel::sql_query(
-            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path = 'creatures/dragon.md'"
-        )
-        .load::<StaleCountRow>(&mut conn)
-        .unwrap()
-        .into_iter()
-        .next()
-        .map(|r| r.cnt)
-        .unwrap_or(0);
+        let old_count = count_links_where(&mut conn, "target_path = 'creatures/dragon.md'");
         assert_eq!(old_count, 0, "stale link row must not remain");
     }
 
@@ -740,21 +745,7 @@ mod tests {
         rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
 
         // All old-path link rows must be gone
-        let stale_count: i64 = diesel::sql_query(
-            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path LIKE 'creatures/%'"
-        )
-        .load::<StaleCountRow>(&mut conn)
-        .unwrap()
-        .into_iter()
-        .next()
-        .map(|r| r.cnt)
-        .unwrap_or(0);
+        let stale_count = count_links_where(&mut conn, "target_path LIKE 'creatures/%'");
         assert_eq!(stale_count, 0, "no stale rows pointing to old folder path");
-    }
-
-    #[derive(diesel::QueryableByName)]
-    struct StaleCountRow {
-        #[diesel(sql_type = diesel::sql_types::BigInt)]
-        cnt: i64,
     }
 }

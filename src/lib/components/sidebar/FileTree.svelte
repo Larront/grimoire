@@ -97,8 +97,9 @@
       if (target.is_dir) {
         const updatedCount = await api.renameFolder(target.path, newName.trim());
         if (updatedCount > 0) {
-          const n = updatedCount;
-          toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
+          toastSuccess(
+            `${updatedCount} ${updatedCount === 1 ? "note" : "notes"} updated`,
+          );
         }
         refresh();
       }
