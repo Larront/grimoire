@@ -2,6 +2,7 @@
   import IconRail from "./sidebar/IconRail.svelte";
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
+  import TagManagerDialog from "./TagManagerDialog.svelte";
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import TabBar from "./TabBar.svelte";
@@ -70,6 +71,7 @@
       onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
     />
     <SettingsDialog bind:open={searchPalette.settingsOpen} />
+    <TagManagerDialog bind:open={searchPalette.tagManagerOpen} />
     <FailedImportsDialog
       bind:open={failedImportsModal.open}
       failures={failedImportsModal.failures}

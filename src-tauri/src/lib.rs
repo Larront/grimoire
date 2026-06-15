@@ -93,6 +93,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_scenes,
             get_scenes_with_slot_counts,
             get_tag_graph_styles,
+            get_tag_usage_counts,
             list_all_tags,
             list_templates,
             open_ledger,
@@ -286,6 +287,7 @@ pub fn run() {
             // Graph styles
             get_tag_graph_styles,
             set_tag_graph_style,
+            get_tag_usage_counts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

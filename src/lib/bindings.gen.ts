@@ -75,6 +75,7 @@ export const commands = {
 	getScenes: () => __TAURI_INVOKE<Scene[]>("get_scenes"),
 	getScenesWithSlotCounts: () => __TAURI_INVOKE<SceneWithCount[]>("get_scenes_with_slot_counts"),
 	getTagGraphStyles: () => __TAURI_INVOKE<{ [key in string]: TagGraphStyleResponse }>("get_tag_graph_styles"),
+	getTagUsageCounts: () => __TAURI_INVOKE<TagUsageEntry[]>("get_tag_usage_counts"),
 	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
 	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
@@ -403,6 +404,12 @@ export type TagFacet = {
 export type TagGraphStyleResponse = {
 	color: string | null,
 	hidden: boolean,
+};
+
+export type TagUsageEntry = {
+	tag: string,
+	note_count: number,
+	pin_count: number,
 };
 
 export type TemplateEntry = {

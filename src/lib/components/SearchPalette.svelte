@@ -180,6 +180,11 @@
     searchPalette.settingsOpen = true;
   }
 
+  function cmdOpenTagManager() {
+    searchPalette.open = false;
+    searchPalette.tagManagerOpen = true;
+  }
+
   function cmdToggleTheme() {
     const cur = userPrefersMode.current;
     if (cur === "light") setMode("dark");
@@ -269,6 +274,7 @@
     { label: "Save note as template", testid: "cmd-save-note-as-template", noteOnly: true, icon: FileDown, action: cmdSaveNoteAsTemplate },
     { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
     { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
+    { label: "Manage tags", testid: "cmd-manage-tags", noteOnly: false, icon: Tag, action: cmdOpenTagManager },
     { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
     { label: "Switch ledger…", testid: "cmd-switch-ledger", noteOnly: false, icon: FolderOpen, action: cmdSwitchLedger },
     { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },

@@ -8,6 +8,7 @@
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
   import { templates } from '$lib/stores/templates.svelte';
   import { toastSuccess } from '$lib/toast';
+  import { searchPalette } from '$lib/stores/search.svelte';
   import {
     getSpotifyStatus,
     connectSpotify,
@@ -275,6 +276,26 @@
             data-testid="restore-templates-btn"
             onclick={() => (restoreDialogOpen = true)}
           >Restore</Button>
+        </div>
+      </section>
+
+      <!-- ── Tags ──────────────────────────────────────────────── -->
+      <section class="flex flex-col gap-4">
+        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
+          Tags
+        </h3>
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-(--font-body) font-medium text-foreground">Manage tags…</span>
+            <span class="text-(--font-ui) text-foreground-muted">View all tags with usage counts</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="shrink-0"
+            data-testid="open-tag-manager-btn"
+            onclick={() => { open = false; searchPalette.tagManagerOpen = true; }}
+          >Open</Button>
         </div>
       </section>
 

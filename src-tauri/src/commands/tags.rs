@@ -15,10 +15,71 @@ use crate::db::schema::pin_tags::dsl as pt;
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
-use std::collections::BTreeSet;
+use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use tauri::State;
+
+#[derive(Serialize, specta::Type, Debug, Clone)]
+pub struct TagUsageEntry {
+    pub tag: String,
+    pub note_count: i64,
+    pub pin_count: i64,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_tag_usage_counts(ledger: State<AppLedger>) -> Result<Vec<TagUsageEntry>, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    get_tag_usage_counts_from_conn(conn)
+}
+
+pub fn get_tag_usage_counts_from_conn(
+    conn: &mut SqliteConnection,
+) -> Result<Vec<TagUsageEntry>, String> {
+    let note_rows: Vec<String> = nt::note_tags
+        .select(nt::tag)
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+    let pin_rows: Vec<String> = pt::pin_tags
+        .select(pt::tag)
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    let mut note_counts: BTreeMap<String, i64> = BTreeMap::new();
+    let mut pin_counts: BTreeMap<String, i64> = BTreeMap::new();
+    // First-seen casing wins (same policy as list_all_tags_from_conn).
+    let mut canonical: BTreeMap<String, String> = BTreeMap::new();
+
+    for tag in &note_rows {
+        let lower = tag.to_lowercase();
+        *note_counts.entry(lower.clone()).or_insert(0) += 1;
+        canonical.entry(lower).or_insert_with(|| tag.clone());
+    }
+    for tag in &pin_rows {
+        let lower = tag.to_lowercase();
+        *pin_counts.entry(lower.clone()).or_insert(0) += 1;
+        canonical.entry(lower.clone()).or_insert_with(|| tag.clone());
+    }
+
+    let all_keys: BTreeSet<String> = note_counts
+        .keys()
+        .chain(pin_counts.keys())
+        .cloned()
+        .collect();
+    let mut result: Vec<TagUsageEntry> = all_keys
+        .iter()
+        .map(|lower| TagUsageEntry {
+            tag: canonical[lower].clone(),
+            note_count: note_counts.get(lower).copied().unwrap_or(0),
+            pin_count: pin_counts.get(lower).copied().unwrap_or(0),
+        })
+        .collect();
+    result.sort_by(|a, b| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()));
+    Ok(result)
+}
 
 /// Walk the ledger scanning every `.md` file for frontmatter tags, then replace
 /// the `note_tags` table contents with the fresh scan. Hidden directories
@@ -453,6 +514,74 @@ mod tests {
         let all = list_all_tags_from_conn(&mut conn).unwrap();
         assert!(all.contains(&"note-tag".to_string()), "note tag missing: {all:?}");
         assert!(all.contains(&"pin-only".to_string()), "pin-only tag missing: {all:?}");
+    }
+
+    // ── get_tag_usage_counts tests ───────────────────────────────────────────
+
+    #[test]
+    fn usage_counts_empty_when_no_tags() {
+        let mut conn = test_conn();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn usage_counts_note_count_reflects_distinct_notes() {
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["creature".to_string()]).unwrap();
+        upsert_note_tags(&mut conn, "b.md", &["creature".to_string()]).unwrap();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        let entry = result.iter().find(|e| e.tag == "creature").unwrap();
+        assert_eq!(entry.note_count, 2);
+        assert_eq!(entry.pin_count, 0);
+    }
+
+    #[test]
+    fn usage_counts_pin_count_reflects_distinct_pins() {
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        insert_pin(&mut conn, 2);
+        upsert_pin_tags(&mut conn, 1, &["location".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 2, &["location".to_string()]).unwrap();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        let entry = result.iter().find(|e| e.tag == "location").unwrap();
+        assert_eq!(entry.note_count, 0);
+        assert_eq!(entry.pin_count, 2);
+    }
+
+    #[test]
+    fn usage_counts_combines_note_and_pin_counts() {
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        let entry = result.iter().find(|e| e.tag == "npc").unwrap();
+        assert_eq!(entry.note_count, 1);
+        assert_eq!(entry.pin_count, 1);
+    }
+
+    #[test]
+    fn usage_counts_deduplicates_case_insensitively() {
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["NPC".to_string()]).unwrap();
+        insert_pin(&mut conn, 1);
+        upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        let npc_entries: Vec<_> = result.iter().filter(|e| e.tag.to_lowercase() == "npc").collect();
+        assert_eq!(npc_entries.len(), 1, "should merge case variants: {result:?}");
+        let entry = npc_entries[0];
+        assert_eq!(entry.note_count, 1);
+        assert_eq!(entry.pin_count, 1);
+    }
+
+    #[test]
+    fn usage_counts_sorted_alphabetically() {
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["zebra".to_string(), "ant".to_string()]).unwrap();
+        let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
+        assert_eq!(result[0].tag, "ant");
+        assert_eq!(result[1].tag, "zebra");
     }
 
     #[test]
