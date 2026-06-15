@@ -15,9 +15,12 @@ afterEach(async () => {
 
 function mockTagUsage(
   entries: Array<{ tag: string; note_count: number; pin_count: number }>,
+  styles: Record<string, { color: string | null; hidden: boolean }> = {},
 ) {
   vi.mocked(invoke).mockImplementation(async (cmd) => {
     if (cmd === "get_tag_usage_counts") return entries;
+    if (cmd === "get_tag_graph_styles") return styles;
+    if (cmd === "set_tag_graph_style") return null;
     return null;
   });
 }
@@ -149,5 +152,171 @@ describe("tag manager — command palette entry point", () => {
     await fireEvent.click(cmd);
     expect(searchPalette.open).toBe(false);
     expect(searchPalette.tagManagerOpen).toBe(true);
+  });
+});
+
+// ── Per-tag graph color and visibility ────────────────────────────────────────
+
+async function openTagManager(
+  entries: Array<{ tag: string; note_count: number; pin_count: number }>,
+  styles: Record<string, { color: string | null; hidden: boolean }> = {},
+) {
+  mockTagUsage(entries, styles);
+  render(AppShell);
+  searchPalette.tagManagerOpen = true;
+  const dialog = await waitFor(() => {
+    const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+    if (!el) throw new Error("dialog not found");
+    return el as HTMLElement;
+  });
+  // Wait for tag rows to load
+  await waitFor(() => {
+    if (entries.length > 0) {
+      const rows = dialog.querySelectorAll('[data-testid="tag-manager-row"]');
+      if (rows.length === 0) throw new Error("rows not rendered");
+    }
+  });
+  return dialog;
+}
+
+describe("tag manager — per-tag graph color", () => {
+  it("each tag row shows a color picker input", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: "#ff0000", hidden: false } },
+    );
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="tag-color-npc"]')).toBeTruthy();
+    });
+  });
+
+  it("color picker value reflects the stored tag color", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: "#ff0000", hidden: false } },
+    );
+    await waitFor(() => {
+      const input = dialog.querySelector('[data-testid="tag-color-npc"]') as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.value).toBe("#ff0000");
+    });
+  });
+
+  it("clear button appears when tag has an explicit color", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: "#ff0000", hidden: false } },
+    );
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="tag-color-clear-npc"]')).toBeTruthy();
+    });
+  });
+
+  it("clear button is absent when tag has no explicit color", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      {},
+    );
+    await waitFor(() => {
+      const rows = dialog.querySelectorAll('[data-testid="tag-manager-row"]');
+      expect(rows.length).toBeGreaterThan(0);
+    });
+    expect(dialog.querySelector('[data-testid="tag-color-clear-npc"]')).toBeFalsy();
+  });
+
+  it("clicking clear calls set_tag_graph_style with color null", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: "#ff0000", hidden: false } },
+    );
+    vi.mocked(invoke).mockClear();
+    const clearBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-color-clear-npc"]') as HTMLElement;
+      if (!el) throw new Error("clear btn not found");
+      return el;
+    });
+    await fireEvent.click(clearBtn);
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+        tag: "npc",
+        color: null,
+        hidden: false,
+      });
+    });
+  });
+});
+
+describe("tag manager — per-tag graph visibility", () => {
+  it("each tag row shows a visibility toggle", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+    );
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="tag-visibility-npc"]')).toBeTruthy();
+    });
+  });
+
+  it("visibility toggle aria-checked is true when tag is visible", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: null, hidden: false } },
+    );
+    await waitFor(() => {
+      const toggle = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+    });
+  });
+
+  it("visibility toggle aria-checked is false when tag is hidden", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: null, hidden: true } },
+    );
+    await waitFor(() => {
+      const toggle = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+    });
+  });
+
+  it("toggling a visible tag calls set_tag_graph_style with hidden: true", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: "#ff0000", hidden: false } },
+    );
+    vi.mocked(invoke).mockClear();
+    const toggle = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
+      if (!el) throw new Error("toggle not found");
+      return el;
+    });
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+        tag: "npc",
+        color: "#ff0000",
+        hidden: true,
+      });
+    });
+  });
+
+  it("toggling a hidden tag calls set_tag_graph_style with hidden: false", async () => {
+    const dialog = await openTagManager(
+      [{ tag: "npc", note_count: 3, pin_count: 0 }],
+      { npc: { color: null, hidden: true } },
+    );
+    vi.mocked(invoke).mockClear();
+    const toggle = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
+      if (!el) throw new Error("toggle not found");
+      return el;
+    });
+    await fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+        tag: "npc",
+        color: null,
+        hidden: false,
+      });
+    });
   });
 });

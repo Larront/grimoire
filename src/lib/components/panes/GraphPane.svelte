@@ -291,9 +291,9 @@
     });
   }
 
-  /** Open the Settings dialog scrolled to the Graph section. */
-  function openGraphSettings() {
-    searchPalette.settingsOpen = true;
+  /** Open the Tag Manager dialog (for per-tag graph color / visibility editing). */
+  function openTagManager() {
+    searchPalette.tagManagerOpen = true;
   }
 
   /**
@@ -650,10 +650,10 @@
           <!-- Edit color link -->
           <a
             data-testid="filter-edit-{tag}"
-            href="#settings-graph"
+            href="#tag-manager"
             onclick={(e) => {
               e.preventDefault();
-              openGraphSettings();
+              openTagManager();
             }}
             class="text-xs text-foreground-muted hover:text-foreground shrink-0 transition-colors"
             >Edit →</a

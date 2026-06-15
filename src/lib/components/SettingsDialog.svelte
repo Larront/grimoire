@@ -24,12 +24,6 @@
   let isAuthLoading = $state(true);
   let hasLoadedSpotify = $state(false);
 
-  type TagStyle = { color: string | null; hidden: boolean };
-  let allTags = $state<string[]>([]);
-  let tagStyles = $state<Record<string, TagStyle>>({});
-  let isGraphLoading = $state(true);
-  let hasLoadedGraph = $state(false);
-
   let restoreDialogOpen = $state(false);
   let isRestoring = $state(false);
 
@@ -56,39 +50,6 @@
         .finally(() => { isAuthLoading = false; });
     }
   });
-
-  $effect(() => {
-    if (open && !hasLoadedGraph) {
-      hasLoadedGraph = true;
-      Promise.all([
-        api.listAllTags(),
-        api.getTagGraphStyles(),
-      ])
-        .then(([tags, styles]) => {
-          allTags = tags ?? [];
-          tagStyles = styles ?? {};
-        })
-        .catch(() => {})
-        .finally(() => { isGraphLoading = false; });
-    }
-  });
-
-  function isTagVisible(tag: string): boolean {
-    return !(tagStyles[tag]?.hidden ?? false);
-  }
-
-  async function setTagColor(tag: string, color: string | null) {
-    const current = tagStyles[tag] ?? { color: null, hidden: false };
-    tagStyles[tag] = { color, hidden: current.hidden };
-    await api.setTagGraphStyle(tag, color, current.hidden);
-  }
-
-  async function toggleTagVisibility(tag: string) {
-    const current = tagStyles[tag] ?? { color: null, hidden: false };
-    const hidden = !current.hidden;
-    tagStyles[tag] = { color: current.color, hidden };
-    await api.setTagGraphStyle(tag, current.color, hidden);
-  }
 
   async function handleConnect() {
     isConnecting = true;
@@ -297,64 +258,6 @@
             onclick={() => { open = false; searchPalette.tagManagerOpen = true; }}
           >Open</Button>
         </div>
-      </section>
-
-      <!-- ── Graph ──────────────────────────────────────────────── -->
-      <section id="settings-graph" class="flex flex-col gap-4">
-        <h3 class="text-(--font-ui) font-semibold text-foreground-muted uppercase tracking-wider">
-          Graph
-        </h3>
-
-        {#if isGraphLoading}
-          <div class="flex items-center gap-3 p-4 rounded-lg bg-background-elevated border border-border">
-            <LoaderCircle class="size-4 animate-spin text-foreground-muted" />
-            <span class="text-(--font-ui) text-foreground-muted">Loading…</span>
-          </div>
-        {:else if allTags.length === 0}
-          <p class="text-(--font-ui) text-foreground-muted">No tags in ledger yet.</p>
-        {:else}
-          <div class="flex flex-col gap-2">
-            {#each allTags as tag (tag)}
-              <div class="flex items-center justify-between gap-3">
-                <span class="text-(--font-body) text-foreground truncate">{tag}</span>
-                <div class="flex items-center gap-2 shrink-0">
-                  <div class="flex items-center gap-1">
-                    <input
-                      type="color"
-                      aria-label="Color for {tag}"
-                      data-testid="tag-color-{tag}"
-                      value={tagStyles[tag]?.color ?? '#888888'}
-                      onchange={(e) => setTagColor(tag, (e.target as HTMLInputElement).value)}
-                      class="size-6 rounded cursor-pointer border border-border bg-transparent p-0"
-                    />
-                    {#if tagStyles[tag]?.color}
-                      <button
-                        type="button"
-                        aria-label="Clear color for {tag}"
-                        data-testid="tag-color-clear-{tag}"
-                        onclick={() => setTagColor(tag, null)}
-                        class="text-foreground-muted hover:text-foreground text-xs leading-none"
-                      >×</button>
-                    {/if}
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isTagVisible(tag)}
-                    aria-label="Show {tag} in graph"
-                    data-testid="tag-visibility-{tag}"
-                    onclick={() => toggleTagVisibility(tag)}
-                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {isTagVisible(tag) ? 'bg-primary' : 'bg-input'}"
-                  >
-                    <span
-                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform {isTagVisible(tag) ? 'translate-x-4' : 'translate-x-0'}"
-                    ></span>
-                  </button>
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
       </section>
 
       <!-- ── Integrations ────────────────────────────────────────── -->
