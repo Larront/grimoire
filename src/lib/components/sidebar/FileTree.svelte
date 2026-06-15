@@ -8,7 +8,7 @@
   import FileTree from "$lib/components/sidebar/FileTree.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
-  import { toastUndo } from "$lib/toast";
+  import { toastUndo, toastSuccess } from "$lib/toast";
   import {
     ChevronRight,
     FileText,
@@ -95,7 +95,11 @@
     }
     try {
       if (target.is_dir) {
-        await api.renameFolder(target.path, newName.trim());
+        const updatedCount = await api.renameFolder(target.path, newName.trim());
+        if (updatedCount > 0) {
+          const n = updatedCount;
+          toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
+        }
         refresh();
       }
       renamingPath = null;

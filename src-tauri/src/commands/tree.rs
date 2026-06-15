@@ -1,3 +1,4 @@
+use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
@@ -192,17 +193,36 @@ pub fn rename_folder_inner(
     old_path: &str,
     new_path: &str,
     conn: &mut SqliteConnection,
-) -> Result<(), String> {
-    // 1. Rename directory on disk. Individual .md files move atomically with
-    //    the folder — no per-file renames are needed.
-    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
-        .map_err(|e| format!("rename dir: {}", e))?;
-
+) -> Result<usize, String> {
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
     let like_pattern = format!("{}%", old_prefix);
 
-    // 2. Update `path` for all descendant notes.
+    // 1. Collect descendant note paths before touching disk so we can compute
+    //    (old_path, new_path) pairs for the link rewrite step below.
+    let descendant_paths: Vec<String> = notes
+        .filter(path.like(&like_pattern))
+        .select(path)
+        .load(conn)
+        .map_err(|e| format!("query descendants: {}", e))?;
+
+    // 2. Rewrite full-path wikilinks pointing at each moved note BEFORE the
+    //    filesystem rename so that source files are still readable at their DB
+    //    paths. Bare-stem links are left untouched by rewrite_backlinks_on_rename_on_conn
+    //    (stem doesn't change on a folder move, so owns_stem is always false).
+    let mut updated_count = 0usize;
+    for old_note_path in &descendant_paths {
+        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
+        updated_count +=
+            rewrite_backlinks_on_rename_on_conn(ledger_path, conn, old_note_path, &new_note_path)?;
+    }
+
+    // 3. Rename directory on disk. Individual .md files move atomically with
+    //    the folder — no per-file renames are needed.
+    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
+        .map_err(|e| format!("rename dir: {}", e))?;
+
+    // 4. Update `path` for all descendant notes.
     sql_query("UPDATE notes SET path = REPLACE(path, ?, ?) WHERE path LIKE ?")
         .bind::<Text, _>(&old_prefix)
         .bind::<Text, _>(&new_prefix)
@@ -210,7 +230,7 @@ pub fn rename_folder_inner(
         .execute(conn)
         .map_err(|e| format!("update paths: {}", e))?;
 
-    // 3a. Update `parent_path` — exact match (direct children: parent_path = old_path).
+    // 5a. Update `parent_path` — exact match (direct children: parent_path = old_path).
     //     These rows' parent_path is "creatures" (no slash), not matched by LIKE "creatures/%",
     //     so must be handled separately.
     sql_query("UPDATE notes SET parent_path = ? WHERE parent_path = ?")
@@ -219,7 +239,7 @@ pub fn rename_folder_inner(
         .execute(conn)
         .map_err(|e| format!("update parent exact: {}", e))?;
 
-    // 3b. Update `parent_path` — prefix match (deeper nesting: parent_path LIKE old_path/%).
+    // 5b. Update `parent_path` — prefix match (deeper nesting: parent_path LIKE old_path/%).
     sql_query(
         "UPDATE notes SET parent_path = REPLACE(parent_path, ?, ?) WHERE parent_path LIKE ?",
     )
@@ -229,7 +249,7 @@ pub fn rename_folder_inner(
     .execute(conn)
     .map_err(|e| format!("update parent prefix: {}", e))?;
 
-    // Update image_path for maps inside the renamed folder
+    // 6. Update image_path for maps inside the renamed folder.
     sql_query("UPDATE maps SET image_path = REPLACE(image_path, ?, ?) WHERE image_path LIKE ?")
         .bind::<Text, _>(&old_prefix)
         .bind::<Text, _>(&new_prefix)
@@ -237,7 +257,7 @@ pub fn rename_folder_inner(
         .execute(conn)
         .map_err(|e| format!("update map paths: {}", e))?;
 
-    Ok(())
+    Ok(updated_count)
 }
 
 #[tauri::command]
@@ -246,7 +266,7 @@ pub fn rename_folder(
     old_path: String,
     new_path: String,
     ledger: State<AppLedger>,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
@@ -365,7 +385,8 @@ mod tests {
         let mut conn = SqliteConnection::establish(":memory:")
             .expect("failed to open in-memory db");
         conn.batch_execute(
-            "CREATE TABLE notes (
+            "PRAGMA foreign_keys = ON;
+            CREATE TABLE notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 path TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL DEFAULT 'Untitled',
@@ -383,18 +404,37 @@ mod tests {
                 image_height INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 modified_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE note_links (
+                source_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                target_path TEXT NOT NULL,
+                PRIMARY KEY (source_id, target_path)
+            );
+            CREATE TABLE note_aliases (
+                note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                alias TEXT NOT NULL,
+                PRIMARY KEY (note_id, alias)
             );"
         ).expect("failed to create schema");
         conn
     }
 
-    fn insert_note(conn: &mut SqliteConnection, note_path: &str, note_parent: Option<&str>) {
+    fn insert_note(conn: &mut SqliteConnection, note_id: i32, note_path: &str, note_parent: Option<&str>) {
         conn.batch_execute(&format!(
-            "INSERT INTO notes (path, title, parent_path) VALUES ('{}', 'Test', {});",
+            "INSERT INTO notes (id, path, title, parent_path) VALUES ({}, '{}', 'Test', {});",
+            note_id,
             note_path,
             note_parent
                 .map(|p| format!("'{}'", p))
                 .unwrap_or_else(|| "NULL".to_string())
+        ))
+        .unwrap();
+    }
+
+    fn insert_note_link(conn: &mut SqliteConnection, source_id: i32, target_path: &str) {
+        conn.batch_execute(&format!(
+            "INSERT OR IGNORE INTO note_links (source_id, target_path) VALUES ({}, '{}');",
+            source_id, target_path
         ))
         .unwrap();
     }
@@ -434,7 +474,7 @@ mod tests {
         fs::write(folder.join("dragon.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
         delete_folder_inner(dir.path(), "creatures", &mut conn).unwrap();
 
@@ -451,8 +491,8 @@ mod tests {
         fs::write(dir.path().join("top-level.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "creatures/dragon.md", Some("creatures"));
-        insert_note(&mut conn, "top-level.md", None);
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "top-level.md", None);
 
         delete_folder_inner(dir.path(), "creatures", &mut conn).unwrap();
 
@@ -499,7 +539,7 @@ mod tests {
         fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
         rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
 
@@ -514,7 +554,7 @@ mod tests {
         fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
         rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
 
@@ -529,7 +569,7 @@ mod tests {
         fs::write(dir.path().join("creatures/dragons").join("wyvern.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
+        insert_note(&mut conn, 1, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
 
         rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
 
@@ -545,7 +585,7 @@ mod tests {
         fs::write(dir.path().join("top-level.md"), "").unwrap();
 
         let mut conn = test_conn();
-        insert_note(&mut conn, "top-level.md", None);
+        insert_note(&mut conn, 1, "top-level.md", None);
 
         rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
 
@@ -567,5 +607,154 @@ mod tests {
 
         let updated: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
         assert_eq!(updated[0].image_path.as_deref(), Some("territories/northlands.jpg"));
+    }
+
+    // ── rename_folder link rewrite tests ─────────────────────────────────────
+
+    #[test]
+    fn rename_folder_rewrites_full_path_wikilinks() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
+        // source note outside the folder has a full-path link into it
+        fs::write(dir.path().join("index.md"), "See [[creatures/dragon.md]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "creatures/dragon.md");
+
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+
+        assert_eq!(count, 1, "one note should be rewritten");
+        let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
+        assert_eq!(updated, "See [[beasts/dragon.md]].");
+
+        // note_links row must point to the new path, not the old one
+        let new_count: i64 = diesel::sql_query(
+            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path = 'beasts/dragon.md'"
+        )
+        .load::<StaleCountRow>(&mut conn)
+        .unwrap()
+        .into_iter()
+        .next()
+        .map(|r| r.cnt)
+        .unwrap_or(0);
+        assert_eq!(new_count, 1, "link row must point to new path");
+
+        let old_count: i64 = diesel::sql_query(
+            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path = 'creatures/dragon.md'"
+        )
+        .load::<StaleCountRow>(&mut conn)
+        .unwrap()
+        .into_iter()
+        .next()
+        .map(|r| r.cnt)
+        .unwrap_or(0);
+        assert_eq!(old_count, 0, "stale link row must not remain");
+    }
+
+    #[test]
+    fn rename_folder_rewrites_no_ext_wikilinks() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
+        fs::write(dir.path().join("index.md"), "See [[creatures/dragon]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "creatures/dragon");
+
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+
+        let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
+        assert_eq!(updated, "See [[beasts/dragon]].");
+    }
+
+    #[test]
+    fn rename_folder_leaves_bare_stem_links_alone() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
+        // bare-stem link: must not be touched
+        fs::write(dir.path().join("index.md"), "See [[dragon]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "dragon");
+
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+
+        assert_eq!(count, 0, "bare-stem link must not be rewritten");
+        let content = fs::read_to_string(dir.path().join("index.md")).unwrap();
+        assert_eq!(content, "See [[dragon]].");
+    }
+
+    #[test]
+    fn rename_folder_rewrites_links_to_nested_descendants() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("creatures/dragons").join("wyvern.md"), "").unwrap();
+        fs::write(
+            dir.path().join("index.md"),
+            "See [[creatures/dragons/wyvern.md]] and [[creatures/dragons/wyvern]].",
+        )
+        .unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "creatures/dragons/wyvern.md");
+        insert_note_link(&mut conn, 2, "creatures/dragons/wyvern");
+
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+
+        let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
+        assert_eq!(
+            updated,
+            "See [[beasts/dragons/wyvern.md]] and [[beasts/dragons/wyvern]]."
+        );
+    }
+
+    #[test]
+    fn rename_folder_no_stale_note_links_rows_remain() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("creatures").join("dragon.md"), "").unwrap();
+        fs::write(dir.path().join("creatures").join("wyvern.md"), "").unwrap();
+        fs::write(
+            dir.path().join("index.md"),
+            "[[creatures/dragon.md]] and [[creatures/wyvern.md]]",
+        )
+        .unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "creatures/wyvern.md", Some("creatures"));
+        insert_note(&mut conn, 3, "index.md", None);
+        insert_note_link(&mut conn, 3, "creatures/dragon.md");
+        insert_note_link(&mut conn, 3, "creatures/wyvern.md");
+
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+
+        // All old-path link rows must be gone
+        let stale_count: i64 = diesel::sql_query(
+            "SELECT COUNT(*) as cnt FROM note_links WHERE target_path LIKE 'creatures/%'"
+        )
+        .load::<StaleCountRow>(&mut conn)
+        .unwrap()
+        .into_iter()
+        .next()
+        .map(|r| r.cnt)
+        .unwrap_or(0);
+        assert_eq!(stale_count, 0, "no stale rows pointing to old folder path");
+    }
+
+    #[derive(diesel::QueryableByName)]
+    struct StaleCountRow {
+        #[diesel(sql_type = diesel::sql_types::BigInt)]
+        cnt: i64,
     }
 }

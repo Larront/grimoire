@@ -84,7 +84,7 @@ export const commands = {
 	rebuildSearchIndex: () => __TAURI_INVOKE<null>("rebuild_search_index"),
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
-	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<null>("rename_folder", { oldPath, newPath }),
+	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
 	/**
 	 *  Like `update_note` but also rewrites all wikilinks that reference the old
 	 *  path in every other note in the ledger.  Returns the count of notes whose
