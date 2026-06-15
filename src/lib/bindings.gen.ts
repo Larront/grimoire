@@ -86,6 +86,7 @@ export const commands = {
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
 	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
+	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	/**
 	 *  Like `update_note` but also rewrites all wikilinks that reference the old
 	 *  path in every other note in the ledger.  Returns the count of notes whose
@@ -408,6 +409,11 @@ export type TagGraphStyleResponse = {
 
 export type TagUsageEntry = {
 	tag: string,
+	note_count: number,
+	pin_count: number,
+};
+
+export type RetagResult = {
 	note_count: number,
 	pin_count: number,
 };

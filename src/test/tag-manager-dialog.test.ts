@@ -320,3 +320,234 @@ describe("tag manager — per-tag graph visibility", () => {
     });
   });
 });
+
+// ── Per-tag retag: ⋯ menu ────────────────────────────────────────────────────
+
+function mockTagUsageWithRetag(
+  entries: Array<{ tag: string; note_count: number; pin_count: number }>,
+  retagResult: { note_count: number; pin_count: number } = { note_count: 1, pin_count: 0 },
+) {
+  vi.mocked(invoke).mockImplementation(async (cmd) => {
+    if (cmd === "get_tag_usage_counts") return entries;
+    if (cmd === "get_tag_graph_styles") return {};
+    if (cmd === "set_tag_graph_style") return null;
+    if (cmd === "retag_tag") return retagResult;
+    return null;
+  });
+}
+
+describe("tag manager — retag ⋯ menu", () => {
+  it("each tag row has a ⋯ menu button", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+    await waitFor(() => {
+      const btn = dialog.querySelector('[data-testid="tag-menu-npc"]');
+      if (!btn) throw new Error("menu button not found");
+    });
+  });
+
+  it("⋯ menu contains Rename, Merge into…, Delete options", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="tag-menu-rename-npc"]')).toBeTruthy();
+      expect(dialog.querySelector('[data-testid="tag-menu-merge-npc"]')).toBeTruthy();
+      expect(dialog.querySelector('[data-testid="tag-menu-delete-npc"]')).toBeTruthy();
+    });
+  });
+
+  it("clicking Rename opens an input for the new tag name", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    const renameItem = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-rename-npc"]') as HTMLElement;
+      if (!el) throw new Error("rename item not found");
+      return el;
+    });
+    await fireEvent.click(renameItem);
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="retag-input-npc"]')).toBeTruthy();
+    });
+  });
+
+  it("clicking Delete opens a confirmation dialog with impact count", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 2 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    const deleteItem = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement;
+      if (!el) throw new Error("delete item not found");
+      return el;
+    });
+    await fireEvent.click(deleteItem);
+    await waitFor(() => {
+      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
+    });
+    // Impact count shown: 3 notes + 2 pins = 5
+    const confirmDialog = document.body.querySelector('[data-testid="retag-confirm-dialog"]') as HTMLElement;
+    expect(confirmDialog.textContent).toMatch(/3 note/);
+    expect(confirmDialog.textContent).toMatch(/2 pin/);
+  });
+
+  it("confirming rename calls retag_tag with from and to", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 2, pin_count: 0 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+
+    // Open menu → Rename
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    await fireEvent.click(dialog.querySelector('[data-testid="tag-menu-rename-npc"]') as HTMLElement);
+
+    // Fill in new name
+    const input = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="retag-input-npc"]') as HTMLInputElement;
+      if (!el) throw new Error("input not found");
+      return el;
+    });
+    await fireEvent.input(input, { target: { value: "villain" } });
+
+    // Submit (e.g. press Enter or click Apply)
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    // Confirm dialog should appear
+    await waitFor(() => {
+      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
+    });
+
+    vi.mocked(invoke).mockClear();
+    const confirmBtn = document.body.querySelector('[data-testid="retag-confirm-btn"]') as HTMLElement;
+    await fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("retag_tag", {
+        fromTag: "npc",
+        toTag: "villain",
+      });
+    });
+  });
+
+  it("confirming delete calls retag_tag with toTag null", async () => {
+    mockTagUsageWithRetag([{ tag: "npc", note_count: 1, pin_count: 0 }]);
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    await fireEvent.click(dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement);
+
+    await waitFor(() => {
+      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
+    });
+
+    vi.mocked(invoke).mockClear();
+    const confirmBtn = document.body.querySelector('[data-testid="retag-confirm-btn"]') as HTMLElement;
+    await fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("retag_tag", {
+        fromTag: "npc",
+        toTag: null,
+      });
+    });
+  });
+
+  it("after successful retag the tag list refreshes", async () => {
+    let callCount = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === "get_tag_graph_styles") return {};
+      if (cmd === "retag_tag") return { note_count: 1, pin_count: 0 };
+      if (cmd === "get_tag_usage_counts") {
+        callCount++;
+        // First load returns 'npc'; after retag returns 'villain'
+        if (callCount === 1) return [{ tag: "npc", note_count: 1, pin_count: 0 }];
+        return [{ tag: "villain", note_count: 1, pin_count: 0 }];
+      }
+      return null;
+    });
+    render(AppShell);
+    searchPalette.tagManagerOpen = true;
+
+    const dialog = await waitFor(() => {
+      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
+      if (!el) throw new Error("dialog not found");
+      return el as HTMLElement;
+    });
+    // Trigger delete on npc
+    const menuBtn = await waitFor(() => {
+      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
+      if (!el) throw new Error("menu button not found");
+      return el;
+    });
+    await fireEvent.click(menuBtn);
+    await fireEvent.click(dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement);
+    await waitFor(() => {
+      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
+    });
+    await fireEvent.click(document.body.querySelector('[data-testid="retag-confirm-btn"]') as HTMLElement);
+
+    // After retag, list should show 'villain' instead of 'npc'
+    await waitFor(() => {
+      expect(dialog.querySelector('[data-testid="tag-menu-villain"]')).toBeTruthy();
+    });
+  });
+});

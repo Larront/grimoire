@@ -22,6 +22,156 @@ use std::path::Path;
 use tauri::State;
 
 #[derive(Serialize, specta::Type, Debug, Clone)]
+pub struct RetagResult {
+    pub note_count: usize,
+    pub pin_count: usize,
+}
+
+/// Validate a tag target name against the ledger-wide allowlist: letters, digits, -, _, /.
+pub fn validate_tag_name(tag: &str) -> Result<(), String> {
+    if tag.is_empty() {
+        return Err("Tag name cannot be empty".to_string());
+    }
+    for c in tag.chars() {
+        if !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '/' {
+            return Err(format!(
+                "Invalid tag name '{}': tags may only contain letters, digits, -, _, /",
+                tag
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn retag_tag(
+    from_tag: String,
+    to_tag: Option<String>,
+    ledger: State<AppLedger>,
+) -> Result<RetagResult, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    let result = retag_tag_on_conn(conn, &ledger_path, &from_tag, to_tag.as_deref())?;
+    if result.note_count > 0 {
+        crate::note_index::write_search_stale_marker(&ledger_path);
+    }
+    Ok(result)
+}
+
+/// Ledger-global retag: rename, merge, or delete a tag across all notes (frontmatter)
+/// and pins (pin_tags rows). `to_tag = None` is a delete.
+///
+/// Each rewritten note's tag index row is updated via `upsert_note_tags`; the
+/// caller marks the Tantivy index stale after bulk note rewrites.
+pub fn retag_tag_on_conn(
+    conn: &mut SqliteConnection,
+    ledger_path: &Path,
+    from_tag: &str,
+    to_tag: Option<&str>,
+) -> Result<RetagResult, String> {
+    if let Some(to) = to_tag {
+        validate_tag_name(to)?;
+    }
+
+    let from_lower = from_tag.to_lowercase();
+
+    // ── Notes ─────────────────────────────────────────────────────────────────
+    let all_note_rows: Vec<(String, String)> = nt::note_tags
+        .select((nt::note_path, nt::tag))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    let mut seen_paths: BTreeSet<String> = BTreeSet::new();
+    for (path, tag) in &all_note_rows {
+        if tag.to_lowercase() == from_lower {
+            seen_paths.insert(path.clone());
+        }
+    }
+    let affected_paths: Vec<String> = seen_paths.into_iter().collect();
+    let mut note_count = 0usize;
+
+    for note_path in &affected_paths {
+        let full_path = ledger_path.join(note_path);
+        let content = fs::read_to_string(&full_path)
+            .map_err(|e| format!("Failed to read '{note_path}': {e}"))?;
+
+        let current_tags = frontmatter::read_tags(&content);
+        let mut new_tags: Vec<String> = Vec::new();
+        let mut seen_lower: BTreeSet<String> = BTreeSet::new();
+        for tag in &current_tags {
+            if tag.to_lowercase() == from_lower {
+                if let Some(to) = to_tag {
+                    let to_lower = to.to_lowercase();
+                    if seen_lower.insert(to_lower) {
+                        new_tags.push(to.to_string());
+                    }
+                }
+                // to_tag = None → delete, skip tag
+            } else {
+                let tag_lower = tag.to_lowercase();
+                if seen_lower.insert(tag_lower) {
+                    new_tags.push(tag.clone());
+                }
+            }
+        }
+
+        let new_content = frontmatter::apply_tags(&content, &new_tags);
+        fs::write(&full_path, &new_content)
+            .map_err(|e| format!("Failed to write '{note_path}': {e}"))?;
+
+        upsert_note_tags(conn, note_path, &new_tags)?;
+        note_count += 1;
+    }
+
+    // ── Pins ──────────────────────────────────────────────────────────────────
+    let all_pin_rows: Vec<(i32, String)> = pt::pin_tags
+        .select((pt::pin_id, pt::tag))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    let mut seen_pins: BTreeSet<i32> = BTreeSet::new();
+    for (pin_id, tag) in &all_pin_rows {
+        if tag.to_lowercase() == from_lower {
+            seen_pins.insert(*pin_id);
+        }
+    }
+    let affected_pins: Vec<i32> = seen_pins.into_iter().collect();
+    let pin_count = affected_pins.len();
+
+    for pin_id in &affected_pins {
+        let current_tags: Vec<String> = pt::pin_tags
+            .filter(pt::pin_id.eq(pin_id))
+            .select(pt::tag)
+            .load(conn)
+            .map_err(|e| e.to_string())?;
+
+        let mut new_tags: Vec<String> = Vec::new();
+        let mut seen_lower: BTreeSet<String> = BTreeSet::new();
+        for tag in &current_tags {
+            if tag.to_lowercase() == from_lower {
+                if let Some(to) = to_tag {
+                    let to_lower = to.to_lowercase();
+                    if seen_lower.insert(to_lower) {
+                        new_tags.push(to.to_string());
+                    }
+                }
+            } else {
+                let tag_lower = tag.to_lowercase();
+                if seen_lower.insert(tag_lower) {
+                    new_tags.push(tag.clone());
+                }
+            }
+        }
+
+        upsert_pin_tags(conn, *pin_id, &new_tags)?;
+    }
+
+    Ok(RetagResult { note_count, pin_count })
+}
+
+#[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct TagUsageEntry {
     pub tag: String,
     pub note_count: i64,
@@ -596,5 +746,206 @@ mod tests {
         let all = list_all_tags_from_conn(&mut conn).unwrap();
         let count = all.iter().filter(|t| t.to_lowercase() == "shared").count();
         assert_eq!(count, 1, "shared tag should appear exactly once: {all:?}");
+    }
+
+    // ── validate_tag_name tests ───────────────────────────────────────────────
+
+    #[test]
+    fn validate_empty_tag_name_is_error() {
+        assert!(validate_tag_name("").is_err());
+    }
+
+    #[test]
+    fn validate_tag_name_rejects_spaces_and_special_chars() {
+        assert!(validate_tag_name("bad tag").is_err());
+        assert!(validate_tag_name("tag!").is_err());
+        assert!(validate_tag_name("tag@place").is_err());
+    }
+
+    #[test]
+    fn validate_tag_name_accepts_letters_digits_and_allowed_punctuation() {
+        assert!(validate_tag_name("npc").is_ok());
+        assert!(validate_tag_name("NPC").is_ok());
+        assert!(validate_tag_name("tag-1").is_ok());
+        assert!(validate_tag_name("tag_two").is_ok());
+        assert!(validate_tag_name("group/sub").is_ok());
+        assert!(validate_tag_name("abc123").is_ok());
+    }
+
+    // ── retag_tag_on_conn tests ───────────────────────────────────────────────
+
+    #[test]
+    fn retag_rename_rewrites_notes_and_pins() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("dragon.md"),
+            "---\ntags: [creature, fire]\n---\nBody",
+        )
+        .unwrap();
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        upsert_note_tags(&mut conn, "dragon.md", &["creature".to_string(), "fire".to_string()])
+            .unwrap();
+        upsert_pin_tags(&mut conn, 1, &["creature".to_string()]).unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, dir.path(), "creature", Some("monster")).unwrap();
+        assert_eq!(result.note_count, 1);
+        assert_eq!(result.pin_count, 1);
+
+        // File updated
+        let content = fs::read_to_string(dir.path().join("dragon.md")).unwrap();
+        let tags = frontmatter::read_tags(&content);
+        assert!(tags.contains(&"monster".to_string()), "expected monster in {tags:?}");
+        assert!(!tags.contains(&"creature".to_string()), "unexpected creature in {tags:?}");
+        assert!(tags.contains(&"fire".to_string()), "fire should be retained");
+
+        // note_tags index updated
+        let note_rows: Vec<(String, String)> = nt::note_tags.load(&mut conn).unwrap();
+        assert!(note_rows.iter().any(|(_, t)| t == "monster"));
+        assert!(!note_rows.iter().any(|(_, t)| t.to_lowercase() == "creature"));
+
+        // pin_tags updated
+        let pin_rows: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        assert!(pin_rows.iter().any(|(_, t)| t == "monster"));
+        assert!(!pin_rows.iter().any(|(_, t)| t.to_lowercase() == "creature"));
+    }
+
+    #[test]
+    fn retag_delete_removes_tag_everywhere() {
+        let dir = TempDir::new().unwrap();
+        fs::write(
+            dir.path().join("a.md"),
+            "---\ntags: [npc, creature]\n---\nBody",
+        )
+        .unwrap();
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        upsert_note_tags(
+            &mut conn,
+            "a.md",
+            &["npc".to_string(), "creature".to_string()],
+        )
+        .unwrap();
+        upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
+
+        let result = retag_tag_on_conn(&mut conn, dir.path(), "npc", None).unwrap();
+        assert_eq!(result.note_count, 1);
+        assert_eq!(result.pin_count, 1);
+
+        // 'npc' removed from note file; 'creature' retained
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        let tags = frontmatter::read_tags(&content);
+        assert!(!tags.iter().any(|t| t.to_lowercase() == "npc"));
+        assert!(tags.contains(&"creature".to_string()));
+
+        // note_tags index cleaned up
+        let note_rows: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(!note_rows.iter().any(|t| t.to_lowercase() == "npc"));
+
+        // pin_tags cleaned up
+        let pin_rows: Vec<(i32, String)> = pt::pin_tags.load(&mut conn).unwrap();
+        assert!(pin_rows.is_empty());
+    }
+
+    #[test]
+    fn retag_merge_deduplicates_per_entity() {
+        let dir = TempDir::new().unwrap();
+        // Note already has both 'npc' and 'character'
+        fs::write(
+            dir.path().join("a.md"),
+            "---\ntags: [npc, character]\n---\nBody",
+        )
+        .unwrap();
+        let mut conn = test_conn();
+        upsert_note_tags(
+            &mut conn,
+            "a.md",
+            &["npc".to_string(), "character".to_string()],
+        )
+        .unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("character")).unwrap();
+        assert_eq!(result.note_count, 1);
+        assert_eq!(result.pin_count, 0);
+
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        let tags = frontmatter::read_tags(&content);
+        // Exactly one 'character', no 'npc'
+        assert_eq!(
+            tags.iter().filter(|t| t.to_lowercase() == "character").count(),
+            1,
+            "should have exactly one character: {tags:?}"
+        );
+        assert!(!tags.iter().any(|t| t.to_lowercase() == "npc"), "npc should be gone: {tags:?}");
+
+        let note_rows: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert_eq!(
+            note_rows.iter().filter(|t| t.to_lowercase() == "character").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn retag_case_only_rewrites_display_form() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---\ntags: [npc]\n---\nBody").unwrap();
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+
+        let result = retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("NPC")).unwrap();
+        assert_eq!(result.note_count, 1);
+
+        let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
+        let tags = frontmatter::read_tags(&content);
+        assert!(tags.contains(&"NPC".to_string()), "expected NPC: {tags:?}");
+        assert!(!tags.contains(&"npc".to_string()), "old npc should be gone: {tags:?}");
+
+        let note_rows: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(note_rows.contains(&"NPC".to_string()));
+        assert!(!note_rows.contains(&"npc".to_string()));
+    }
+
+    #[test]
+    fn retag_counts_all_affected_notes_and_pins() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---\ntags: [loc]\n---\n").unwrap();
+        fs::write(dir.path().join("b.md"), "---\ntags: [loc]\n---\n").unwrap();
+        let mut conn = test_conn();
+        insert_pin(&mut conn, 1);
+        insert_pin(&mut conn, 2);
+        upsert_note_tags(&mut conn, "a.md", &["loc".to_string()]).unwrap();
+        upsert_note_tags(&mut conn, "b.md", &["loc".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 1, &["loc".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 2, &["loc".to_string()]).unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, dir.path(), "loc", Some("location")).unwrap();
+        assert_eq!(result.note_count, 2);
+        assert_eq!(result.pin_count, 2);
+    }
+
+    #[test]
+    fn retag_invalid_target_name_returns_error() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+
+        let err = retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("bad tag!"))
+            .unwrap_err();
+        assert!(err.contains("Invalid tag name"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn retag_no_op_when_tag_not_present() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---\ntags: [npc]\n---\n").unwrap();
+        let mut conn = test_conn();
+        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, dir.path(), "ghost", Some("phantom")).unwrap();
+        assert_eq!(result.note_count, 0);
+        assert_eq!(result.pin_count, 0);
     }
 }
