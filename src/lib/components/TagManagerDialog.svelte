@@ -37,18 +37,14 @@
     return !(tagStyles[tag]?.hidden ?? false);
   }
 
-  async function setTagColor(tag: string, color: string | null) {
-    const current = tagStyles[tag] ?? { color: null, hidden: false };
-    tagStyles = { ...tagStyles, [tag]: { color, hidden: current.hidden } };
-    await api.setTagGraphStyle(tag, color, current.hidden);
+  function updateTagStyle(tag: string, patch: Partial<{ color: string | null; hidden: boolean }>) {
+    const next = { color: null, hidden: false, ...tagStyles[tag], ...patch };
+    tagStyles = { ...tagStyles, [tag]: next };
+    return api.setTagGraphStyle(tag, next.color, next.hidden);
   }
 
-  async function toggleTagVisibility(tag: string) {
-    const current = tagStyles[tag] ?? { color: null, hidden: false };
-    const hidden = !current.hidden;
-    tagStyles = { ...tagStyles, [tag]: { color: current.color, hidden } };
-    await api.setTagGraphStyle(tag, current.color, hidden);
-  }
+  const setTagColor = (tag: string, color: string | null) => updateTagStyle(tag, { color });
+  const toggleTagVisibility = (tag: string) => updateTagStyle(tag, { hidden: isTagVisible(tag) });
 </script>
 
 <Dialog.Root bind:open>
