@@ -60,6 +60,28 @@ pub fn retag_tag(
     Ok(result)
 }
 
+/// Apply a retag to one entity's tag list: every case-insensitive match of
+/// `from_lower` is replaced by `to_tag` (or dropped when `None`). The result is
+/// deduplicated case-insensitively while preserving order, which is what folds a
+/// merge target that already coexists with `from` down to a single entry.
+fn rebuild_tags(current: &[String], from_lower: &str, to_tag: Option<&str>) -> Vec<String> {
+    let mut new_tags: Vec<String> = Vec::new();
+    let mut seen_lower: BTreeSet<String> = BTreeSet::new();
+    for tag in current {
+        let replacement = if tag.to_lowercase() == from_lower {
+            to_tag
+        } else {
+            Some(tag.as_str())
+        };
+        if let Some(t) = replacement {
+            if seen_lower.insert(t.to_lowercase()) {
+                new_tags.push(t.to_string());
+            }
+        }
+    }
+    new_tags
+}
+
 /// Ledger-global retag: rename, merge, or delete a tag across all notes (frontmatter)
 /// and pins (pin_tags rows). `to_tag = None` is a delete.
 ///
@@ -98,24 +120,7 @@ pub fn retag_tag_on_conn(
             .map_err(|e| format!("Failed to read '{note_path}': {e}"))?;
 
         let current_tags = frontmatter::read_tags(&content);
-        let mut new_tags: Vec<String> = Vec::new();
-        let mut seen_lower: BTreeSet<String> = BTreeSet::new();
-        for tag in &current_tags {
-            if tag.to_lowercase() == from_lower {
-                if let Some(to) = to_tag {
-                    let to_lower = to.to_lowercase();
-                    if seen_lower.insert(to_lower) {
-                        new_tags.push(to.to_string());
-                    }
-                }
-                // to_tag = None → delete, skip tag
-            } else {
-                let tag_lower = tag.to_lowercase();
-                if seen_lower.insert(tag_lower) {
-                    new_tags.push(tag.clone());
-                }
-            }
-        }
+        let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
 
         let new_content = frontmatter::apply_tags(&content, &new_tags);
         fs::write(&full_path, &new_content)
@@ -147,23 +152,7 @@ pub fn retag_tag_on_conn(
             .load(conn)
             .map_err(|e| e.to_string())?;
 
-        let mut new_tags: Vec<String> = Vec::new();
-        let mut seen_lower: BTreeSet<String> = BTreeSet::new();
-        for tag in &current_tags {
-            if tag.to_lowercase() == from_lower {
-                if let Some(to) = to_tag {
-                    let to_lower = to.to_lowercase();
-                    if seen_lower.insert(to_lower) {
-                        new_tags.push(to.to_string());
-                    }
-                }
-            } else {
-                let tag_lower = tag.to_lowercase();
-                if seen_lower.insert(tag_lower) {
-                    new_tags.push(tag.clone());
-                }
-            }
-        }
+        let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
 
         upsert_pin_tags(conn, *pin_id, &new_tags)?;
     }

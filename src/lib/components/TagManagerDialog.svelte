@@ -70,12 +70,9 @@
     retagInput = null;
   }
 
-  function startRename(tag: string) {
-    menuOpenFor = null;
-    retagInput = { from: tag, value: '' };
-  }
-
-  function startMerge(tag: string) {
+  // Rename and Merge both open the same target-name input; the backend
+  // auto-detects which one it is from whether the target already exists.
+  function startRetagInput(tag: string) {
     menuOpenFor = null;
     retagInput = { from: tag, value: '' };
   }
@@ -255,13 +252,13 @@
                         <button
                           type="button"
                           data-testid="tag-menu-rename-{entry.tag}"
-                          onclick={() => startRename(entry.tag)}
+                          onclick={() => startRetagInput(entry.tag)}
                           class="px-3 py-1.5 text-sm text-left hover:bg-background-elevated"
                         >Rename</button>
                         <button
                           type="button"
                           data-testid="tag-menu-merge-{entry.tag}"
-                          onclick={() => startMerge(entry.tag)}
+                          onclick={() => startRetagInput(entry.tag)}
                           class="px-3 py-1.5 text-sm text-left hover:bg-background-elevated"
                         >Merge into…</button>
                         <button
