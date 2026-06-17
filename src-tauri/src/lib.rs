@@ -171,10 +171,19 @@ pub fn run() {
 
     let client_id = std::env::var("SPOTIFY_CLIENT_ID").unwrap_or_default();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init());
+
+    // The updater plugin is desktop-only; gate it so mobile targets still compile.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .manage(AppLedger::new(LedgerState::new(client_id)))
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,

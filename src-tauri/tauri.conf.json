@@ -26,6 +26,14 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "PASTE_YOUR_UPDATER_PUBLIC_KEY_HERE",
+      "endpoints": [
+        "https://github.com/Larront/grimoire/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
