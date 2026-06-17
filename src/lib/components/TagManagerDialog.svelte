@@ -55,7 +55,14 @@
   }
 
   function updateTagStyle(tag: string, patch: Partial<{ color: string | null; hidden: boolean }>) {
-    const next = { color: null, hidden: false, ...tagStyles[tag], ...patch };
+    // Index access is typed as always-present, but unstyled tags are absent at
+    // runtime, so fall back to defaults per field. Key off presence (`in`), not
+    // nullishness, so an explicit `color: null` (clearing a color) is preserved.
+    const existing: { color: string | null; hidden: boolean } | undefined = tagStyles[tag];
+    const next = {
+      color: "color" in patch ? (patch.color ?? null) : (existing?.color ?? null),
+      hidden: "hidden" in patch ? (patch.hidden ?? false) : (existing?.hidden ?? false),
+    };
     tagStyles = { ...tagStyles, [tag]: next };
     return api.setTagGraphStyle(tag, next.color, next.hidden);
   }
