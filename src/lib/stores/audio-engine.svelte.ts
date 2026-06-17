@@ -344,6 +344,7 @@ function createAudioEngine() {
   let slotStates = $state(new Map<number, SlotPlaybackState>());
   let pendingSceneId = $state<number | null>(null);
   let masterVolume = $state(1);
+  let preMuteVolume = $state<number | null>(null);
 
   // Non-reactive player state — not exposed to components
   let localCtx: LocalAudioContext | null = null;
@@ -379,6 +380,7 @@ function createAudioEngine() {
     isCrossfading = false;
     activeSceneId = null;
     activePlaylistPlayer = null;
+    preMuteVolume = null;
   }
 
   function setSlotVolume(slotId: number, volume: number): void {
@@ -390,11 +392,27 @@ function createAudioEngine() {
     slotStates = updated;
   }
 
+  function applyMasterVolume(v: number): void {
+    masterVolume = v;
+    for (const player of slotPlayers.values()) {
+      player.setMasterVolume(v);
+    }
+  }
+
   function setMasterVolume(v: number): void {
     const clamped = Math.max(0, Math.min(1, v));
-    masterVolume = clamped;
-    for (const player of slotPlayers.values()) {
-      player.setMasterVolume(clamped);
+    preMuteVolume = null;
+    applyMasterVolume(clamped);
+  }
+
+  function toggleMasterMute(): void {
+    if (preMuteVolume !== null) {
+      const restore = preMuteVolume;
+      preMuteVolume = null;
+      applyMasterVolume(restore);
+    } else {
+      preMuteVolume = masterVolume;
+      applyMasterVolume(0);
     }
   }
 
@@ -414,6 +432,34 @@ function createAudioEngine() {
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, playing: true });
     slotStates = updated;
+  }
+
+  async function pauseScene(): Promise<void> {
+    for (const [slotId, state] of slotStates) {
+      if (state.playing) await pauseSlot(slotId);
+    }
+  }
+
+  async function resumeScene(): Promise<void> {
+    for (const [slotId, state] of slotStates) {
+      if (!state.playing) await resumeSlot(slotId);
+    }
+  }
+
+  function isSceneActive(id: number): boolean {
+    return activeSceneId === id;
+  }
+
+  function isScenePlaying(id: number): boolean {
+    return activeSceneId === id && isPlaying;
+  }
+
+  function isSlotPlaying(slotId: number): boolean {
+    return slotStates.get(slotId)?.playing ?? false;
+  }
+
+  function slotVolume(slotId: number): number | undefined {
+    return slotStates.get(slotId)?.volume;
   }
 
   async function skipNext(): Promise<void> {
@@ -523,13 +569,24 @@ function createAudioEngine() {
     get loadingSceneId() { return loadingSceneId; },
     get slotStates() { return slotStates; },
     get masterVolume() { return masterVolume; },
+    get isMasterMuted() { return preMuteVolume !== null; },
+    get isScenePaused() {
+      return activeSceneId !== null && slotStates.size > 0 && [...slotStates.values()].every(s => !s.playing);
+    },
     get analyserNode(): AnalyserNode | null { return localCtx?.analyser ?? null; },
     playScene,
     stopAll,
     setSlotVolume,
     setMasterVolume,
+    toggleMasterMute,
+    pauseScene,
+    resumeScene,
     pauseSlot,
     resumeSlot,
+    isSceneActive,
+    isScenePlaying,
+    isSlotPlaying,
+    slotVolume,
     skipNext,
     skipPrev,
     crossfadeTo,

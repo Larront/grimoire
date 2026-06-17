@@ -155,7 +155,7 @@
 
   // ---- Playback derived state ----
   let isThisScenePlaying = $derived(
-    audioEngine.activeSceneId === scene?.id && audioEngine.isPlaying
+    scene !== null && audioEngine.isScenePlaying(scene.id)
   );
   let isThisSceneLoading = $derived(
     audioEngine.loadingSceneId === scene?.id
@@ -172,28 +172,16 @@
   }
 
   // ---- Scene pause / resume ----
-  let scenePaused = $state(false);
-
-  $effect(() => {
-    if (!isThisScenePlaying) scenePaused = false;
-  });
 
   async function handlePause() {
-    for (const [slotId, state] of audioEngine.slotStates) {
-      if (state.playing) await audioEngine.pauseSlot(slotId);
-    }
-    scenePaused = true;
+    await audioEngine.pauseScene();
   }
 
   async function handleResume() {
-    for (const [slotId, state] of audioEngine.slotStates) {
-      if (!state.playing) await audioEngine.resumeSlot(slotId);
-    }
-    scenePaused = false;
+    await audioEngine.resumeScene();
   }
 
   function handleStop() {
-    scenePaused = false;
     audioEngine.stopAll();
   }
 
@@ -228,13 +216,8 @@
   }
 
   // ---- Slot play/pause ----
-  function getSlotPlaying(slotId: number): boolean {
-    const state = audioEngine.slotStates.get(slotId);
-    return state?.playing ?? false;
-  }
-
   async function toggleSlotPlayback(slotId: number) {
-    if (getSlotPlaying(slotId)) {
+    if (audioEngine.isSlotPlaying(slotId)) {
       await audioEngine.pauseSlot(slotId);
     } else {
       await audioEngine.resumeSlot(slotId);
@@ -578,7 +561,7 @@
             <LoaderCircle class="size-3.5 animate-spin" />
             Loading...
           </Button>
-        {:else if scenePaused}
+        {:else if audioEngine.isScenePaused}
           <Button variant="default" size="sm" onclick={handleResume}>
             <Play class="size-3.5" />
             Resume
@@ -689,7 +672,7 @@
 
                       {#if isThisScenePlaying}
                         <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => toggleSlotPlayback(slot.id)}>
-                          {#if getSlotPlaying(slot.id)}
+                          {#if audioEngine.isSlotPlaying(slot.id)}
                             <Pause class="size-3.5 text-foreground" />
                           {:else}
                             <Play class="size-3.5 text-foreground" />

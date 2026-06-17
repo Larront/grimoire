@@ -1,8 +1,9 @@
-import { render, waitFor, fireEvent } from "@testing-library/svelte";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, waitFor, fireEvent, cleanup } from "@testing-library/svelte";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
+import { audioEngine } from "../lib/stores/audio-engine.svelte";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
@@ -41,6 +42,11 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: { updateTabTitle: vi.fn() },
 }));
 
+let mockActiveSceneId: number | null = null;
+let mockIsScenePaused = false;
+let mockIsMasterMuted = false;
+let mockSlotPlayingMap = new Map<number, boolean>();
+
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   // Keep in sync with the named export in audio-engine.svelte.ts
   isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
@@ -49,28 +55,24 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
     setSlotVolume: vi.fn(),
+    toggleMasterMute: vi.fn(),
+    pauseScene: vi.fn().mockResolvedValue(undefined),
+    resumeScene: vi.fn().mockResolvedValue(undefined),
     pauseSlot: vi.fn().mockResolvedValue(undefined),
     resumeSlot: vi.fn().mockResolvedValue(undefined),
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
-    get activeSceneId() {
-      return null;
-    },
-    get isPlaying() {
-      return false;
-    },
-    get isCrossfading() {
-      return false;
-    },
-    get loadingSceneId() {
-      return null;
-    },
-    get masterVolume() {
-      return 1;
-    },
-    get slotStates() {
-      return new Map();
-    },
+    isSceneActive: vi.fn((id: number) => id === mockActiveSceneId),
+    isScenePlaying: vi.fn((id: number) => id === mockActiveSceneId),
+    isSlotPlaying: vi.fn((id: number) => mockSlotPlayingMap.get(id) ?? false),
+    slotVolume: vi.fn((_id: number) => undefined),
+    get activeSceneId() { return mockActiveSceneId; },
+    get isPlaying() { return false; },
+    get isCrossfading() { return false; },
+    get loadingSceneId() { return null; },
+    get masterVolume() { return 1; },
+    get isScenePaused() { return mockIsScenePaused; },
+    get isMasterMuted() { return mockIsMasterMuted; },
   },
 }));
 
@@ -111,6 +113,10 @@ describe("ScenePane hero header", () => {
   beforeEach(() => {
     mockScenes = [];
     mockSlots = [];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockIsMasterMuted = false;
+    mockSlotPlayingMap = new Map();
     vi.clearAllMocks();
   });
 
@@ -181,6 +187,9 @@ describe("ScenePane hero header — thumbnail pickers", () => {
   beforeEach(() => {
     mockScenes = [];
     mockSlots = [];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlotPlayingMap = new Map();
     vi.clearAllMocks();
   });
 
@@ -233,6 +242,9 @@ describe("ScenePane hero header — thumbnail image upload", () => {
   beforeEach(() => {
     mockScenes = [];
     mockSlots = [];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlotPlayingMap = new Map();
     vi.clearAllMocks();
   });
 
@@ -281,6 +293,68 @@ describe("ScenePane hero header — thumbnail image upload", () => {
         "update_scene_thumbnail",
         expect.objectContaining({ id: 1, thumbnailPath: null }),
       );
+    });
+  });
+});
+
+// ── Scene pause / resume / mute controls ─────────────────────────────────────
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("ScenePane — scene-level pause/resume (engine interface)", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene()];
+    mockSlots = [];
+    mockActiveSceneId = 1;
+    mockIsScenePaused = false;
+    mockSlotPlayingMap = new Map();
+    vi.clearAllMocks();
+  });
+
+  it("Pause button calls audioEngine.pauseScene()", async () => {
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const pauseBtn = await waitFor(() => {
+      const btns = getAllByRole("button");
+      const btn = btns.find((b) => b.textContent?.trim() === "Pause");
+      if (!btn) throw new Error("Pause button not found");
+      return btn;
+    });
+    await fireEvent.click(pauseBtn);
+    expect(audioEngine.pauseScene).toHaveBeenCalled();
+  });
+
+  it("Resume button calls audioEngine.resumeScene() when isScenePaused is true", async () => {
+    mockIsScenePaused = true;
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    const resumeBtn = await waitFor(() => {
+      const btns = getAllByRole("button");
+      const btn = btns.find((b) => b.textContent?.trim() === "Resume");
+      if (!btn) throw new Error("Resume button not found");
+      return btn;
+    });
+    await fireEvent.click(resumeBtn);
+    expect(audioEngine.resumeScene).toHaveBeenCalled();
+  });
+
+  it("shows Resume and Stop when isScenePaused is true", async () => {
+    mockIsScenePaused = true;
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await waitFor(() => {
+      const btns = getAllByRole("button");
+      expect(btns.some((b) => b.textContent?.trim() === "Resume")).toBe(true);
+      expect(btns.some((b) => b.textContent?.trim() === "Stop")).toBe(true);
+    });
+  });
+
+  it("shows Pause and Stop when scene is playing and not paused", async () => {
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await waitFor(() => {
+      const btns = getAllByRole("button");
+      expect(btns.some((b) => b.textContent?.trim() === "Pause")).toBe(true);
+      expect(btns.some((b) => b.textContent?.trim() === "Stop")).toBe(true);
     });
   });
 });

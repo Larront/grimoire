@@ -101,9 +101,9 @@
   });
 
   const thisScene = $derived(scenes.scenes.find((s) => s.id === _sceneId) ?? null);
-  const isThisSceneActive = $derived(audioEngine.activeSceneId === _sceneId);
+  const isThisSceneActive = $derived(_sceneId !== null && audioEngine.isSceneActive(_sceneId));
   const isThisSceneLoading = $derived(audioEngine.loadingSceneId === _sceneId);
-  const isThisScenePlaying = $derived(isThisSceneActive && audioEngine.isPlaying);
+  const isThisScenePlaying = $derived(_sceneId !== null && audioEngine.isScenePlaying(_sceneId));
   const showBars = $derived(
     isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
   );
@@ -126,41 +126,19 @@
 
   // ── Pause / Resume / Stop (parity with ScenePane) ────────────────────────
 
-  let scenePaused = $state(false);
-
-  $effect(() => {
-    if (!isThisScenePlaying) scenePaused = false;
-  });
-
-  async function handlePauseScene() {
-    for (const [slotId, state] of audioEngine.slotStates) {
-      if (state.playing) await audioEngine.pauseSlot(slotId);
-    }
-    scenePaused = true;
-  }
-
-  async function handleResumeScene() {
-    for (const [slotId, state] of audioEngine.slotStates) {
-      if (!state.playing) await audioEngine.resumeSlot(slotId);
-    }
-    scenePaused = false;
-  }
-
   function handlePlayPause() {
     if (_sceneId === null || isThisSceneLoading) return;
     if (isThisScenePlaying) {
-      handlePauseScene();
-    } else if (isThisSceneActive && scenePaused) {
-      handleResumeScene();
+      audioEngine.pauseScene();
+    } else if (isThisSceneActive && audioEngine.isScenePaused) {
+      audioEngine.resumeScene();
     } else {
       audioEngine.playScene(_sceneId);
     }
   }
 
   function handleStopScene() {
-    scenePaused = false;
     audioEngine.stopAll();
-    masterMutedVolume = null;
   }
 
   function openInScenesTab() {
@@ -178,24 +156,9 @@
 
   // ── Master volume ─────────────────────────────────────────────────────────
 
-  let masterMutedVolume = $state<number | null>(null);
-  const isMasterMuted = $derived(masterMutedVolume !== null);
-  const displayMasterVolume = $derived(isMasterMuted ? 0 : audioEngine.masterVolume);
-
-  function toggleMasterMute() {
-    if (masterMutedVolume !== null) {
-      audioEngine.setMasterVolume(masterMutedVolume);
-      masterMutedVolume = null;
-    } else {
-      masterMutedVolume = audioEngine.masterVolume;
-      audioEngine.setMasterVolume(0);
-    }
-  }
-
   function handleMasterVolumeInput(e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
     audioEngine.setMasterVolume(value);
-    if (masterMutedVolume !== null) masterMutedVolume = null;
   }
 
   // ── Per-slot controls ─────────────────────────────────────────────────────
@@ -253,8 +216,7 @@
     if (busySlots.has(slot.id)) return;
     busySlots.add(slot.id);
     try {
-      const state = audioEngine.slotStates.get(slot.id);
-      if (state?.playing) {
+      if (audioEngine.isSlotPlaying(slot.id)) {
         await audioEngine.pauseSlot(slot.id);
       } else {
         await audioEngine.resumeSlot(slot.id);
@@ -269,7 +231,7 @@
       await api.updateSceneSlot(
         slot.id,
         slot.label,
-        audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
+        audioEngine.slotVolume(slot.id) ?? slot.volume,
         !slot.loop,
         slot.slot_order,
         !!slot.shuffle,
@@ -288,7 +250,7 @@
       await api.updateSceneSlot(
         slot.id,
         slot.label,
-        audioEngine.slotStates.get(slot.id)?.volume ?? slot.volume,
+        audioEngine.slotVolume(slot.id) ?? slot.volume,
         slot.loop,
         slot.slot_order,
         !slot.shuffle,
@@ -407,7 +369,7 @@
         disabled={isThisSceneLoading}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
                hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label={isThisScenePlaying ? "Pause scene" : scenePaused ? "Resume scene" : "Play scene"}
+        aria-label={isThisScenePlaying ? "Pause scene" : audioEngine.isScenePaused ? "Resume scene" : "Play scene"}
       >
         {#if isThisSceneLoading}
           <LoaderCircle class="size-3.5 text-muted-foreground animate-spin" />
@@ -464,12 +426,12 @@
 
       <!-- Master mute toggle -->
       <button
-        onclick={toggleMasterMute}
+        onclick={() => audioEngine.toggleMasterMute()}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
                hover:bg-muted transition-colors"
-        aria-label={isMasterMuted ? "Unmute" : "Mute all"}
+        aria-label={audioEngine.isMasterMuted ? "Unmute" : "Mute all"}
       >
-        {#if isMasterMuted}
+        {#if audioEngine.isMasterMuted}
           <VolumeOff class="size-3 text-muted-foreground/50" />
         {:else}
           <Volume2 class="size-3 text-muted-foreground/60" />
@@ -481,11 +443,11 @@
         <div class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40">
           <div
             class="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-[width] duration-75"
-            style="width: {displayMasterVolume * 100}%"
+            style="width: {audioEngine.masterVolume * 100}%"
           ></div>
           <div
             class="pointer-events-none absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-primary ring-1 ring-card transition-[left] duration-75"
-            style="left: calc({displayMasterVolume * 100}% - 6px)"
+            style="left: calc({audioEngine.masterVolume * 100}% - 6px)"
             aria-hidden="true"
           ></div>
         </div>
@@ -494,10 +456,10 @@
           min="0"
           max="1"
           step="0.01"
-          value={displayMasterVolume}
+          value={audioEngine.masterVolume}
           class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           aria-label="Master volume"
-          aria-valuetext="{Math.round(displayMasterVolume * 100)}%"
+          aria-valuetext="{Math.round(audioEngine.masterVolume * 100)}%"
           oninput={handleMasterVolumeInput}
         />
       </div>
@@ -548,8 +510,7 @@
             </p>
           {:else}
             {#each activeSlots as slot (slot.id)}
-              {@const slotState = audioEngine.slotStates.get(slot.id)}
-              {@const isPlaying = slotState?.playing ?? false}
+              {@const isPlaying = audioEngine.isSlotPlaying(slot.id)}
               {@const displayVol = getSlotDisplayVolume(slot)}
               {@const isMuted = slotMutedVolumes.has(slot.id)}
               {@const isSpotify = slot.source === "spotify"}

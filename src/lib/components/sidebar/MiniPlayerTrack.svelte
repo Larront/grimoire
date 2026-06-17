@@ -19,9 +19,8 @@
 
   let mutedVolume = $state<number | null>(null);
 
-  let slotState = $derived(audioEngine.slotStates.get(slot.id));
-  let isSlotPlaying = $derived(slotState?.playing ?? false);
-  let currentVolume = $derived(slotState?.volume ?? slot.volume);
+  let isSlotPlaying = $derived(audioEngine.isSlotPlaying(slot.id));
+  let currentVolume = $derived(audioEngine.slotVolume(slot.id) ?? slot.volume);
   let isMuted = $derived(mutedVolume !== null);
   let isSpotify = $derived(slot.source === "spotify");
   let isPlaylist = $derived(

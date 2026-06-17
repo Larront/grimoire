@@ -7,20 +7,12 @@
   import { Play, Pause, Square, Volume2, VolumeOff, ChevronUp, LoaderCircle } from "@lucide/svelte";
 
   let expanded = $state(false);
-  let masterMutedVolume = $state<number | null>(null);
   let activeSlots = $state<SceneSlot[]>([]);
 
   let sceneName = $derived(
     scenes.scenes.find((s) => s.id === audioEngine.activeSceneId)?.name ?? "Unknown Scene"
   );
   let isActive = $derived(audioEngine.activeSceneId !== null);
-  let isMasterMuted = $derived(masterMutedVolume !== null);
-  let displayVolume = $derived(isMasterMuted ? 0 : audioEngine.masterVolume);
-
-  let allPaused = $derived(
-    audioEngine.slotStates.size === 0 ||
-    [...audioEngine.slotStates.values()].every((s) => !s.playing)
-  );
 
   $effect(() => {
     const sceneId = audioEngine.activeSceneId;
@@ -35,45 +27,25 @@
     } else {
       activeSlots = [];
       expanded = false;
-      masterMutedVolume = null;
     }
     return () => { cancelled = true; };
   });
 
   async function togglePlayPause() {
-    const states = audioEngine.slotStates;
-    if (allPaused) {
-      for (const [slotId] of states) {
-        await audioEngine.resumeSlot(slotId);
-      }
+    if (audioEngine.isScenePaused) {
+      await audioEngine.resumeScene();
     } else {
-      for (const [slotId, state] of states) {
-        if (state.playing) {
-          await audioEngine.pauseSlot(slotId);
-        }
-      }
+      await audioEngine.pauseScene();
     }
   }
 
   function handleStop() {
     audioEngine.stopAll();
-    masterMutedVolume = null;
-  }
-
-  function toggleMasterMute() {
-    if (masterMutedVolume !== null) {
-      audioEngine.setMasterVolume(masterMutedVolume);
-      masterMutedVolume = null;
-    } else {
-      masterMutedVolume = audioEngine.masterVolume;
-      audioEngine.setMasterVolume(0);
-    }
   }
 
   function handleMasterVolumeInput(e: Event) {
     const value = parseFloat((e.target as HTMLInputElement).value);
     audioEngine.setMasterVolume(value);
-    if (masterMutedVolume !== null) masterMutedVolume = null;
   }
 </script>
 
@@ -109,9 +81,9 @@
           class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           onclick={togglePlayPause}
           disabled={audioEngine.isCrossfading}
-          aria-label={allPaused ? "Resume scene" : "Pause scene"}
+          aria-label={audioEngine.isScenePaused ? "Resume scene" : "Pause scene"}
         >
-          {#if allPaused}
+          {#if audioEngine.isScenePaused}
             <Play class="size-3.5 text-sidebar-foreground" />
           {:else}
             <Pause class="size-3.5 text-sidebar-foreground" />
@@ -129,10 +101,10 @@
 
         <button
           class="shrink-0 flex items-center justify-center size-6 rounded-sm hover:bg-sidebar-accent transition-colors"
-          onclick={toggleMasterMute}
-          aria-label={isMasterMuted ? "Unmute" : "Mute all"}
+          onclick={() => audioEngine.toggleMasterMute()}
+          aria-label={audioEngine.isMasterMuted ? "Unmute" : "Mute all"}
         >
-          {#if isMasterMuted}
+          {#if audioEngine.isMasterMuted}
             <VolumeOff class="size-3.5 text-muted-foreground/50" />
           {:else}
             <Volume2 class="size-3.5 text-muted-foreground/70" />
@@ -144,7 +116,7 @@
           <div class="relative h-1 w-full rounded-full bg-sidebar-accent">
             <div
               class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-              style="width: {displayVolume * 100}%"
+              style="width: {audioEngine.masterVolume * 100}%"
             ></div>
           </div>
           <input
@@ -152,10 +124,10 @@
             min="0"
             max="1"
             step="0.01"
-            value={displayVolume}
+            value={audioEngine.masterVolume}
             class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             aria-label="Master volume"
-            aria-valuetext="{Math.round(displayVolume * 100)}%"
+            aria-valuetext="{Math.round(audioEngine.masterVolume * 100)}%"
             oninput={handleMasterVolumeInput}
           />
         </div>
