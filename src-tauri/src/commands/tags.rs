@@ -10,9 +10,12 @@
 // shape with a sibling table.
 
 use crate::commands::frontmatter;
+use crate::db::models::Note;
 use crate::db::schema::note_tags::dsl as nt;
+use crate::db::schema::notes::dsl as nd;
 use crate::db::schema::pin_tags::dsl as pt;
 use crate::ledger::AppLedger;
+use crate::note_index::ReconcileManyItem;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -52,11 +55,10 @@ pub fn retag_tag(
 ) -> Result<RetagResult, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let result = retag_tag_on_conn(conn, &ledger_path, &from_tag, to_tag.as_deref())?;
-    if result.note_count > 0 {
-        crate::note_index::write_search_stale_marker(&ledger_path);
-    }
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+    let result = retag_tag_on_conn(conn, index, &ledger_path, &from_tag, to_tag.as_deref())?;
     Ok(result)
 }
 
@@ -85,10 +87,11 @@ fn rebuild_tags(current: &[String], from_lower: &str, to_tag: Option<&str>) -> V
 /// Ledger-global retag: rename, merge, or delete a tag across all notes (frontmatter)
 /// and pins (pin_tags rows). `to_tag = None` is a delete.
 ///
-/// Each rewritten note's tag index row is updated via `upsert_note_tags`; the
-/// caller marks the Tantivy index stale after bulk note rewrites.
+/// All note index writes are routed through `reconcile_many` — one atomic SQLite
+/// transaction across N notes, one Tantivy commit.
 pub fn retag_tag_on_conn(
     conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
     ledger_path: &Path,
     from_tag: &str,
     to_tag: Option<&str>,
@@ -112,22 +115,32 @@ pub fn retag_tag_on_conn(
         }
     }
     let affected_paths: Vec<String> = seen_paths.into_iter().collect();
-    let mut note_count = 0usize;
+    let note_count = affected_paths.len();
 
-    for note_path in &affected_paths {
-        let full_path = ledger_path.join(note_path);
-        let content = fs::read_to_string(&full_path)
-            .map_err(|e| format!("Failed to read '{note_path}': {e}"))?;
+    if note_count > 0 {
+        let mut items: Vec<ReconcileManyItem> = Vec::with_capacity(note_count);
+        for note_path in &affected_paths {
+            let full_path = ledger_path.join(note_path);
+            let content = fs::read_to_string(&full_path)
+                .map_err(|e| format!("Failed to read '{note_path}': {e}"))?;
 
-        let current_tags = frontmatter::read_tags(&content);
-        let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
+            let current_tags = frontmatter::read_tags(&content);
+            let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
+            let new_content = frontmatter::apply_tags(&content, &new_tags);
 
-        let new_content = frontmatter::apply_tags(&content, &new_tags);
-        fs::write(&full_path, &new_content)
-            .map_err(|e| format!("Failed to write '{note_path}': {e}"))?;
+            fs::write(&full_path, &new_content)
+                .map_err(|e| format!("Failed to write '{note_path}': {e}"))?;
 
-        upsert_note_tags(conn, note_path, &new_tags)?;
-        note_count += 1;
+            let note: Note = nd::notes
+                .filter(nd::path.eq(note_path))
+                .first(conn)
+                .map_err(|e| format!("Note '{note_path}' not in DB: {e}"))?;
+
+            items.push(ReconcileManyItem { note, content: new_content, prev_path: None });
+        }
+
+        let outcome = crate::note_index::reconcile_many(conn, index, &items)?;
+        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────
@@ -391,10 +404,30 @@ mod tests {
             SqliteConnection::establish(":memory:").expect("failed to open in-memory db");
         conn.batch_execute(
             "PRAGMA foreign_keys = ON;
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY NOT NULL,
+                path TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL DEFAULT '',
+                icon TEXT,
+                cover_image TEXT,
+                parent_path TEXT,
+                archived BOOLEAN NOT NULL DEFAULT 0,
+                modified_at TEXT NOT NULL DEFAULT ''
+            );
             CREATE TABLE note_tags (
                 note_path TEXT NOT NULL,
                 tag TEXT NOT NULL,
                 PRIMARY KEY (note_path, tag)
+            );
+            CREATE TABLE note_links (
+                source_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                target_path TEXT NOT NULL,
+                PRIMARY KEY (source_id, target_path)
+            );
+            CREATE TABLE note_aliases (
+                note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                alias TEXT NOT NULL,
+                PRIMARY KEY (note_id, alias)
             );
             CREATE TABLE pins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -418,6 +451,13 @@ mod tests {
         )
         .expect("create tables");
         conn
+    }
+
+    fn insert_note(conn: &mut SqliteConnection, id: i32, path: &str, title: &str) {
+        conn.batch_execute(&format!(
+            "INSERT INTO notes (id, path, title) VALUES ({id}, '{path}', '{title}')"
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -772,13 +812,14 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
+        insert_note(&mut conn, 1, "dragon.md", "Dragon");
         insert_pin(&mut conn, 1);
         upsert_note_tags(&mut conn, "dragon.md", &["creature".to_string(), "fire".to_string()])
             .unwrap();
         upsert_pin_tags(&mut conn, 1, &["creature".to_string()]).unwrap();
 
         let result =
-            retag_tag_on_conn(&mut conn, dir.path(), "creature", Some("monster")).unwrap();
+            retag_tag_on_conn(&mut conn, None, dir.path(), "creature", Some("monster")).unwrap();
         assert_eq!(result.note_count, 1);
         assert_eq!(result.pin_count, 1);
 
@@ -809,6 +850,7 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
         insert_pin(&mut conn, 1);
         upsert_note_tags(
             &mut conn,
@@ -818,7 +860,7 @@ mod tests {
         .unwrap();
         upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
 
-        let result = retag_tag_on_conn(&mut conn, dir.path(), "npc", None).unwrap();
+        let result = retag_tag_on_conn(&mut conn, None, dir.path(), "npc", None).unwrap();
         assert_eq!(result.note_count, 1);
         assert_eq!(result.pin_count, 1);
 
@@ -847,6 +889,7 @@ mod tests {
         )
         .unwrap();
         let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
         upsert_note_tags(
             &mut conn,
             "a.md",
@@ -855,7 +898,7 @@ mod tests {
         .unwrap();
 
         let result =
-            retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("character")).unwrap();
+            retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("character")).unwrap();
         assert_eq!(result.note_count, 1);
         assert_eq!(result.pin_count, 0);
 
@@ -881,9 +924,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "---\ntags: [npc]\n---\nBody").unwrap();
         let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
         upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
 
-        let result = retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("NPC")).unwrap();
+        let result = retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("NPC")).unwrap();
         assert_eq!(result.note_count, 1);
 
         let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
@@ -902,6 +946,8 @@ mod tests {
         fs::write(dir.path().join("a.md"), "---\ntags: [loc]\n---\n").unwrap();
         fs::write(dir.path().join("b.md"), "---\ntags: [loc]\n---\n").unwrap();
         let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "b.md", "B");
         insert_pin(&mut conn, 1);
         insert_pin(&mut conn, 2);
         upsert_note_tags(&mut conn, "a.md", &["loc".to_string()]).unwrap();
@@ -910,7 +956,7 @@ mod tests {
         upsert_pin_tags(&mut conn, 2, &["loc".to_string()]).unwrap();
 
         let result =
-            retag_tag_on_conn(&mut conn, dir.path(), "loc", Some("location")).unwrap();
+            retag_tag_on_conn(&mut conn, None, dir.path(), "loc", Some("location")).unwrap();
         assert_eq!(result.note_count, 2);
         assert_eq!(result.pin_count, 2);
     }
@@ -920,7 +966,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
 
-        let err = retag_tag_on_conn(&mut conn, dir.path(), "npc", Some("bad tag!"))
+        let err = retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("bad tag!"))
             .unwrap_err();
         assert!(err.contains("Invalid tag name"), "unexpected error: {err}");
     }
@@ -933,7 +979,7 @@ mod tests {
         upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
 
         let result =
-            retag_tag_on_conn(&mut conn, dir.path(), "ghost", Some("phantom")).unwrap();
+            retag_tag_on_conn(&mut conn, None, dir.path(), "ghost", Some("phantom")).unwrap();
         assert_eq!(result.note_count, 0);
         assert_eq!(result.pin_count, 0);
     }

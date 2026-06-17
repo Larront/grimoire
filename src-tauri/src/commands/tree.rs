@@ -193,6 +193,7 @@ pub fn rename_folder_inner(
     old_path: &str,
     new_path: &str,
     conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
 ) -> Result<usize, String> {
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
@@ -210,12 +211,20 @@ pub fn rename_folder_inner(
     //    filesystem rename so that source files are still readable at their DB
     //    paths. Bare-stem links are left untouched by rewrite_backlinks_on_rename_on_conn
     //    (stem doesn't change on a folder move, so owns_stem is always false).
-    let mut updated_count = 0usize;
+    let mut all_backlink_rewrites: Vec<crate::note_index::ReconcileManyItem> = Vec::new();
     for old_note_path in &descendant_paths {
         let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
-        updated_count +=
+        let rewrites =
             rewrite_backlinks_on_rename_on_conn(ledger_path, conn, old_note_path, &new_note_path)?;
+        for (note, content) in rewrites {
+            all_backlink_rewrites.push(crate::note_index::ReconcileManyItem {
+                note,
+                content,
+                prev_path: None,
+            });
+        }
     }
+    let updated_count = all_backlink_rewrites.len();
 
     // 3. Rename directory on disk. Individual .md files move atomically with
     //    the folder — no per-file renames are needed.
@@ -257,6 +266,35 @@ pub fn rename_folder_inner(
         .execute(conn)
         .map_err(|e| format!("update map paths: {}", e))?;
 
+    // 7. Load moved notes (now at new paths) and build reconcile items so their
+    //    note_tags are re-keyed and Tantivy is updated. prev_path triggers the
+    //    old-path note_tags clear in write_facets.
+    let mut moved_items: Vec<crate::note_index::ReconcileManyItem> =
+        Vec::with_capacity(descendant_paths.len());
+    for old_note_path in &descendant_paths {
+        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
+        let note: Note = notes
+            .filter(path.eq(&new_note_path))
+            .first(conn)
+            .map_err(|e| format!("load moved note '{new_note_path}': {e}"))?;
+        let content = fs::read_to_string(ledger_path.join(&new_note_path))
+            .unwrap_or_default();
+        moved_items.push(crate::note_index::ReconcileManyItem {
+            note,
+            content,
+            prev_path: Some(old_note_path.clone()),
+        });
+    }
+
+    // 8. Route all index writes through reconcile_many — one atomic SQLite tx,
+    //    one Tantivy commit for backlink sources + moved notes.
+    let mut all_items = all_backlink_rewrites;
+    all_items.extend(moved_items);
+    if !all_items.is_empty() {
+        let outcome = crate::note_index::reconcile_many(conn, index, &all_items)?;
+        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+    }
+
     Ok(updated_count)
 }
 
@@ -269,8 +307,10 @@ pub fn rename_folder(
 ) -> Result<usize, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    rename_folder_inner(&ledger_path, &old_path, &new_path, conn)
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+    rename_folder_inner(&ledger_path, &old_path, &new_path, conn, index)
 }
 
 #[cfg(test)]
@@ -414,6 +454,11 @@ mod tests {
                 note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
                 alias TEXT NOT NULL,
                 PRIMARY KEY (note_id, alias)
+            );
+            CREATE TABLE note_tags (
+                note_path TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                PRIMARY KEY (note_path, tag)
             );"
         ).expect("failed to create schema");
         conn
@@ -547,7 +592,7 @@ mod tests {
         fs::create_dir(dir.path().join("creatures")).unwrap();
         let mut conn = test_conn();
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         assert!(!dir.path().join("creatures").exists());
         assert!(dir.path().join("beasts").is_dir());
@@ -562,7 +607,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].path, "beasts/dragon.md");
@@ -577,7 +622,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].parent_path.as_deref(), Some("beasts"));
@@ -592,7 +637,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].path, "beasts/dragons/wyvern.md");
@@ -608,7 +653,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "top-level.md", None);
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].path, "top-level.md");
@@ -624,7 +669,7 @@ mod tests {
         let mut conn = test_conn();
         insert_map(&mut conn, "regions/northlands.jpg", "Northlands");
 
-        rename_folder_inner(dir.path(), "regions", "territories", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "regions", "territories", &mut conn, None).unwrap();
 
         let updated: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
         assert_eq!(updated[0].image_path.as_deref(), Some("territories/northlands.jpg"));
@@ -645,7 +690,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "creatures/dragon.md");
 
-        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         assert_eq!(count, 1, "one note should be rewritten");
         let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
@@ -671,7 +716,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "creatures/dragon");
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
         assert_eq!(updated, "See [[beasts/dragon]].");
@@ -690,7 +735,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "dragon");
 
-        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         assert_eq!(count, 0, "bare-stem link must not be rewritten");
         let content = fs::read_to_string(dir.path().join("index.md")).unwrap();
@@ -714,7 +759,7 @@ mod tests {
         insert_note_link(&mut conn, 2, "creatures/dragons/wyvern.md");
         insert_note_link(&mut conn, 2, "creatures/dragons/wyvern");
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
         assert_eq!(
@@ -742,7 +787,7 @@ mod tests {
         insert_note_link(&mut conn, 3, "creatures/dragon.md");
         insert_note_link(&mut conn, 3, "creatures/wyvern.md");
 
-        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn).unwrap();
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
 
         // All old-path link rows must be gone
         let stale_count = count_links_where(&mut conn, "target_path LIKE 'creatures/%'");

@@ -1,6 +1,5 @@
 use crate::commands::frontmatter;
 use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
-use crate::commands::tags::upsert_note_tags;
 use crate::note_index;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
@@ -135,7 +134,6 @@ pub fn create_note_from_template(
 ) -> Result<Note, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
     let content = crate::commands::templates::read_template_content(&ledger_path, &template_path)?;
 
@@ -167,15 +165,19 @@ pub fn create_note_from_template(
         modified_at: &now,
     };
 
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
     let created: Note = diesel::insert_into(notes)
         .values(&new_note)
         .returning(Note::as_returning())
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_note(index, &created, &content, &[]);
-    }
+    let outcome = note_index::reconcile(conn, index, &created, &content, None)?;
+    note_index::mark_stale_if_needed(&outcome, &ledger_path);
 
     Ok(created)
 }
@@ -256,9 +258,23 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
         if old_full.exists() {
             fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
         }
-        // note_tags re-key handled inside reconcile via prev_path
-        updated_count =
+        // note_tags re-key handled inside reconcile via prev_path.
+        // Backlink sources get their note_links + Tantivy refreshed via reconcile_many.
+        let backlink_rewrites =
             rewrite_backlinks_on_rename_on_conn(&ledger_path, conn, &old_note.path, &note.path)?;
+        updated_count = backlink_rewrites.len();
+        if !backlink_rewrites.is_empty() {
+            let backlink_items: Vec<note_index::ReconcileManyItem> = backlink_rewrites
+                .into_iter()
+                .map(|(n, c)| note_index::ReconcileManyItem {
+                    note: n,
+                    content: c,
+                    prev_path: None,
+                })
+                .collect();
+            let bl_outcome = note_index::reconcile_many(conn, index, &backlink_items)?;
+            note_index::mark_stale_if_needed(&bl_outcome, &ledger_path);
+        }
     }
 
     let updated: Note = diesel::update(notes.find(note.id))
@@ -367,17 +383,20 @@ pub fn write_note_tags(
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
     fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    upsert_note_tags(conn, &note_path, &tags)?;
-    // Re-index in Tantivy so tag: filters reflect the updated tags immediately
+
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
     let maybe_note = notes
         .filter(path.eq(&note_path))
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    if let (Some(note), Some(index)) = (maybe_note, state.search_index.as_ref()) {
-        let body_text = crate::search::extract_plain_text(&new_content);
-        let _ = crate::search::index_note(index, &note, &body_text, &tags);
+    if let Some(note) = maybe_note {
+        let outcome = note_index::reconcile(conn, index, &note, &new_content, None)?;
+        note_index::mark_stale_if_needed(&outcome, &ledger_path);
     }
     Ok(())
 }

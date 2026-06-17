@@ -376,12 +376,15 @@ fn rewrite_wikilinks_with(
 ///
 /// Must run while the `notes` row still holds `old_path`: the stem-ownership
 /// check below resolves against the pre-rename state.
+/// Returns a list of `(Note, rewritten_content)` pairs for every source note
+/// whose file was modified. Does NOT touch derived indexes — callers are
+/// responsible for routing through `reconcile` / `reconcile_many`.
 pub fn rewrite_backlinks_on_rename_on_conn(
     ledger_path: &Path,
     conn: &mut SqliteConnection,
     old_path: &str,
     new_path: &str,
-) -> Result<usize, String> {
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
     let old_no_ext = old_path.strip_suffix(".md").unwrap_or(old_path);
     let new_no_ext = new_path.strip_suffix(".md").unwrap_or(new_path);
     let old_stem = path_stem(old_path);
@@ -419,15 +422,14 @@ pub fn rewrite_backlinks_on_rename_on_conn(
         .map(|(source_id, _)| *source_id)
         .collect();
 
-    let sources: Vec<(i32, String)> = n::notes
+    let sources: Vec<crate::db::models::Note> = n::notes
         .filter(n::id.eq_any(&source_ids))
-        .select((n::id, n::path))
         .load(conn)
         .map_err(|e| e.to_string())?;
 
-    let mut updated_count = 0usize;
-    for (source_id, source_path) in sources {
-        let full_path = ledger_path.join(&source_path);
+    let mut rewrites: Vec<(crate::db::models::Note, String)> = Vec::new();
+    for source in sources {
+        let full_path = ledger_path.join(&source.path);
         let content = match fs::read_to_string(&full_path) {
             Ok(c) => c,
             Err(_) => continue,
@@ -435,12 +437,10 @@ pub fn rewrite_backlinks_on_rename_on_conn(
         let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
         if changed {
             fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
-            let new_links = extract_wikilinks(&new_content);
-            upsert_note_links(conn, source_id, &new_links)?;
-            updated_count += 1;
+            rewrites.push((source, new_content));
         }
     }
-    Ok(updated_count)
+    Ok(rewrites)
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -702,20 +702,25 @@ pub fn set_note_aliases(
 ) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
 
-    let note_path: String = n::notes
+    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
+    let note: crate::db::models::Note = n::notes
         .find(note_id)
-        .select(n::path)
         .first(conn)
         .map_err(|e| e.to_string())?;
 
-    let full_path = ledger_path.join(&note_path);
+    let full_path = ledger_path.join(&note.path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
     fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
 
-    upsert_note_aliases(conn, note_id, &aliases)
+    let outcome = crate::note_index::reconcile(conn, index, &note, &new_content, None)?;
+    crate::note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1117,19 +1122,19 @@ mod tests {
         insert_note(&mut conn, 2, "b.md", "B");
         upsert_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
 
-        let count =
+        let rewrites =
             rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "b.md", "b-renamed.md")
                 .unwrap();
 
-        assert_eq!(count, 1, "one note should have been rewritten");
+        assert_eq!(rewrites.len(), 1, "one note should have been rewritten");
 
         // File content should have been updated
         let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert_eq!(updated, "See [[b-renamed.md]].");
 
-        // note_links should now point to the new path
-        let rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert_eq!(rows, vec![(1, "b-renamed.md".to_string())]);
+        // Returned item is (Note, new_content) — index update is caller's responsibility
+        assert_eq!(rewrites[0].0.path, "a.md");
+        assert!(rewrites[0].1.contains("b-renamed.md"));
     }
 
     #[test]
@@ -1140,10 +1145,10 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
 
-        let count =
+        let rewrites =
             rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "missing.md", "new.md")
                 .unwrap();
-        assert_eq!(count, 0);
+        assert!(rewrites.is_empty());
     }
 
     #[test]
@@ -1160,7 +1165,7 @@ mod tests {
         upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
         upsert_note_links(&mut conn, 3, &["target.md".to_string()]).unwrap();
 
-        let count = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
             &mut conn,
             "target.md",
@@ -1168,7 +1173,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(count, 2);
+        assert_eq!(rewrites.len(), 2);
         assert_eq!(
             fs::read_to_string(dir.path().join("a.md")).unwrap(),
             "[[renamed.md]]"
@@ -1211,11 +1216,11 @@ mod tests {
         insert_note(&mut conn, 2, "target.md", "Target");
         upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
 
-        let count =
+        let rewrites =
             rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "target.md", "renamed.md")
                 .unwrap();
 
-        assert_eq!(count, 1, "note.md should have been rewritten");
+        assert_eq!(rewrites.len(), 1, "note.md should have been rewritten");
         let updated = fs::read_to_string(dir.path().join("note.md")).unwrap();
         assert!(
             updated.contains("[[renamed.md]]"),
@@ -1558,7 +1563,7 @@ mod tests {
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
         upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
-        let count = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
             &mut conn,
             "Atlas/The Spark.md",
@@ -1566,7 +1571,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(count, 1);
+        assert_eq!(rewrites.len(), 1);
         let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert_eq!(updated, "See [[The Ember]] today.");
     }
@@ -1581,7 +1586,7 @@ mod tests {
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
         upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
-        let count = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
             &mut conn,
             "Atlas/The Spark.md",
@@ -1589,7 +1594,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(count, 0, "folder move keeps bare-stem links resolving — no rewrite");
+        assert!(rewrites.is_empty(), "folder move keeps bare-stem links resolving — no rewrite");
         let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert_eq!(content, "See [[The Spark]].");
     }
@@ -1606,7 +1611,7 @@ mod tests {
         insert_note(&mut conn, 3, "deep/Plan.md", "Plan (deep)");
         upsert_note_links(&mut conn, 1, &["Plan".to_string()]).unwrap();
 
-        let count = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
             &mut conn,
             "deep/Plan.md",
@@ -1614,7 +1619,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(count, 0, "links resolving to the other Plan note must not be rewritten");
+        assert!(rewrites.is_empty(), "links resolving to the other Plan note must not be rewritten");
         let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert_eq!(content, "See [[Plan]].");
     }

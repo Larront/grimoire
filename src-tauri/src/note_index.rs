@@ -74,6 +74,52 @@ pub fn clear_stale_marker_if_rebuilt(ledger_path: &std::path::Path, rebuild_succ
     }
 }
 
+/// Write the three derived-index tables for `note` inside an already-open
+/// transaction. `old_path_to_clear` is `Some(p)` only when `p ≠ note.path`
+/// (prevents a double-clear when prev_path == note.path).
+fn write_facets(
+    c: &mut SqliteConnection,
+    note: &Note,
+    facets: &DerivedFacets,
+    old_path_to_clear: Option<&str>,
+) -> Result<(), diesel::result::Error> {
+    if let Some(old_path) = old_path_to_clear {
+        diesel::delete(nt::note_tags.filter(nt::note_path.eq(old_path))).execute(c)?;
+    }
+
+    // note_links
+    diesel::delete(nl::note_links.filter(nl::source_id.eq(note.id))).execute(c)?;
+    for target in &facets.links {
+        diesel::insert_into(nl::note_links)
+            .values((nl::source_id.eq(note.id), nl::target_path.eq(target)))
+            .execute(c)?;
+    }
+
+    // note_aliases (case-insensitive dedup)
+    diesel::delete(na::note_aliases.filter(na::note_id.eq(note.id))).execute(c)?;
+    let mut seen_aliases: BTreeSet<String> = BTreeSet::new();
+    for alias in &facets.aliases {
+        if seen_aliases.insert(alias.to_lowercase()) {
+            diesel::insert_into(na::note_aliases)
+                .values((na::note_id.eq(note.id), na::alias.eq(alias)))
+                .execute(c)?;
+        }
+    }
+
+    // note_tags (case-insensitive dedup, path-keyed)
+    diesel::delete(nt::note_tags.filter(nt::note_path.eq(&note.path))).execute(c)?;
+    let mut seen_tags: BTreeSet<String> = BTreeSet::new();
+    for tag in &facets.tags {
+        if seen_tags.insert(tag.to_lowercase()) {
+            diesel::insert_into(nt::note_tags)
+                .values((nt::note_path.eq(&note.path), nt::tag.eq(tag)))
+                .execute(c)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Write all derived indexes for `note` in a single atomic SQLite transaction,
 /// then update Tantivy on a best-effort basis.
 ///
@@ -87,45 +133,10 @@ pub fn reconcile(
     prev_path: Option<&str>,
 ) -> Result<ReconcileOutcome, String> {
     let facets = DerivedFacets::extract(content);
-
     let old_path_to_clear = prev_path.filter(|&p| p != note.path.as_str());
 
     conn.transaction::<_, diesel::result::Error, _>(|c| {
-        if let Some(old_path) = old_path_to_clear {
-            diesel::delete(nt::note_tags.filter(nt::note_path.eq(old_path))).execute(c)?;
-        }
-
-        // note_links
-        diesel::delete(nl::note_links.filter(nl::source_id.eq(note.id))).execute(c)?;
-        for target in &facets.links {
-            diesel::insert_into(nl::note_links)
-                .values((nl::source_id.eq(note.id), nl::target_path.eq(target)))
-                .execute(c)?;
-        }
-
-        // note_aliases (case-insensitive dedup)
-        diesel::delete(na::note_aliases.filter(na::note_id.eq(note.id))).execute(c)?;
-        let mut seen_aliases: BTreeSet<String> = BTreeSet::new();
-        for alias in &facets.aliases {
-            if seen_aliases.insert(alias.to_lowercase()) {
-                diesel::insert_into(na::note_aliases)
-                    .values((na::note_id.eq(note.id), na::alias.eq(alias)))
-                    .execute(c)?;
-            }
-        }
-
-        // note_tags (case-insensitive dedup, path-keyed)
-        diesel::delete(nt::note_tags.filter(nt::note_path.eq(&note.path))).execute(c)?;
-        let mut seen_tags: BTreeSet<String> = BTreeSet::new();
-        for tag in &facets.tags {
-            if seen_tags.insert(tag.to_lowercase()) {
-                diesel::insert_into(nt::note_tags)
-                    .values((nt::note_path.eq(&note.path), nt::tag.eq(tag)))
-                    .execute(c)?;
-            }
-        }
-
-        Ok(())
+        write_facets(c, note, &facets, old_path_to_clear)
     })
     .map_err(|e| e.to_string())?;
 
@@ -133,6 +144,62 @@ pub fn reconcile(
     let search_stale = match index {
         Some(idx) => {
             crate::search::index_note(idx, note, &facets.body_text, &facets.tags).is_err()
+        }
+        None => true,
+    };
+
+    Ok(ReconcileOutcome { search_stale })
+}
+
+/// One item in a bulk reconcile batch.
+pub struct ReconcileManyItem {
+    pub note: Note,
+    pub content: String,
+    pub prev_path: Option<String>,
+}
+
+/// Bulk reconcile: extract all facets, write every item's derived indexes in
+/// **one** SQLite transaction, then issue **one** batched Tantivy commit.
+///
+/// On an empty slice, returns `ReconcileOutcome { search_stale: false }`.
+/// On a Tantivy failure, returns `search_stale: true`; the caller must write
+/// the stale marker exactly once.
+pub fn reconcile_many(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    items: &[ReconcileManyItem],
+) -> Result<ReconcileOutcome, String> {
+    if items.is_empty() {
+        return Ok(ReconcileOutcome { search_stale: false });
+    }
+
+    let extracted: Vec<DerivedFacets> = items
+        .iter()
+        .map(|item| DerivedFacets::extract(&item.content))
+        .collect();
+
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        for (item, facets) in items.iter().zip(extracted.iter()) {
+            let old_path_to_clear = item
+                .prev_path
+                .as_deref()
+                .filter(|&p| p != item.note.path.as_str());
+            write_facets(c, &item.note, facets, old_path_to_clear)?;
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let search_stale = match index {
+        Some(idx) => {
+            let batch: Vec<(&Note, &str, &[String])> = items
+                .iter()
+                .zip(extracted.iter())
+                .map(|(item, facets)| {
+                    (&item.note, facets.body_text.as_str(), facets.tags.as_slice())
+                })
+                .collect();
+            crate::search::index_notes_batch(idx, &batch).is_err()
         }
         None => true,
     };
@@ -847,5 +914,171 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert_eq!(sibling, vec!["sibling"]);
+    }
+
+    // ── reconcile_many ────────────────────────────────────────────────────────
+
+    #[test]
+    fn reconcile_many_writes_all_four_indexes_for_each_item() {
+        let mut conn = test_conn();
+        let note1 = make_note(1, "alpha.md");
+        let note2 = make_note(2, "beta.md");
+        insert_note(&mut conn, &note1);
+        insert_note(&mut conn, &note2);
+
+        let dir = TempDir::new().unwrap();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let items = vec![
+            ReconcileManyItem {
+                note: note1.clone(),
+                content: "---\ntags: [npc]\naliases: [Alpha]\n---\n[[target.md]].".to_string(),
+                prev_path: None,
+            },
+            ReconcileManyItem {
+                note: note2.clone(),
+                content: "---\ntags: [location]\naliases: [Beta Base]\n---\n[[alpha.md]].".to_string(),
+                prev_path: None,
+            },
+        ];
+
+        let outcome = reconcile_many(&mut conn, Some(&index), &items).unwrap();
+        assert!(!outcome.search_stale, "valid index write must not be stale");
+
+        let tags1: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("alpha.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(tags1, vec!["npc"]);
+
+        let aliases1: Vec<String> = na::note_aliases
+            .filter(na::note_id.eq(1))
+            .select(na::alias)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(aliases1, vec!["Alpha"]);
+
+        let links1: Vec<String> = nl::note_links
+            .filter(nl::source_id.eq(1))
+            .select(nl::target_path)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(links1, vec!["target.md"]);
+
+        let tags2: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("beta.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(tags2, vec!["location"]);
+
+        let r1 = crate::search::search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(r1.len(), 1);
+        assert_eq!(r1[0].id, 1);
+
+        let r2 = crate::search::search_notes_in_index(&index, dir.path(), "tag:location", 10).unwrap();
+        assert_eq!(r2.len(), 1);
+        assert_eq!(r2[0].id, 2);
+    }
+
+    #[test]
+    fn reconcile_many_folder_rename_rekeyes_note_tags_and_updates_tantivy_path() {
+        let mut conn = test_conn();
+        let note = make_note(1, "new.md");
+        insert_note(&mut conn, &note);
+        // Seed old-path tags
+        conn.batch_execute("INSERT INTO note_tags (note_path, tag) VALUES ('old.md', 'npc')")
+            .unwrap();
+
+        let dir = TempDir::new().unwrap();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let items = vec![ReconcileManyItem {
+            note: note.clone(),
+            content: "---\ntags: [npc]\n---\nBody.".to_string(),
+            prev_path: Some("old.md".to_string()),
+        }];
+
+        reconcile_many(&mut conn, Some(&index), &items).unwrap();
+
+        let old_tags: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("old.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert!(old_tags.is_empty(), "old path tags must be cleared");
+
+        let new_tags: Vec<String> = nt::note_tags
+            .filter(nt::note_path.eq("new.md"))
+            .select(nt::tag)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(new_tags, vec!["npc"]);
+
+        let results =
+            crate::search::search_notes_in_index(&index, dir.path(), "tag:npc", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].path, "new.md", "Tantivy must store the new path");
+    }
+
+    #[test]
+    fn reconcile_many_atomicity_failed_item_rolls_back_sqlite() {
+        let mut conn = test_conn();
+        let note1 = make_note(1, "alpha.md");
+        insert_note(&mut conn, &note1);
+        // note2 id=999 not in DB → FK violation on note_links when content has a wikilink
+        let note2 = make_note(999, "ghost.md");
+
+        let items = vec![
+            ReconcileManyItem {
+                note: note1.clone(),
+                content: "---\ntags: [npc]\n---\nBody.".to_string(),
+                prev_path: None,
+            },
+            ReconcileManyItem {
+                note: note2,
+                content: "---\ntags: [loc]\n---\nSee [[link.md]].".to_string(),
+                prev_path: None,
+            },
+        ];
+
+        let result = reconcile_many(&mut conn, None, &items);
+        assert!(result.is_err(), "must fail on FK violation");
+
+        // Transaction must be rolled back — note1 writes must not persist
+        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
+        assert!(links.is_empty(), "note_links must be rolled back on batch failure");
+    }
+
+    #[test]
+    fn reconcile_many_empty_slice_is_noop() {
+        let mut conn = test_conn();
+        let outcome = reconcile_many(&mut conn, None, &[]).unwrap();
+        assert!(!outcome.search_stale);
+    }
+
+    #[test]
+    fn template_note_with_tags_is_indexed_by_reconcile() {
+        let mut conn = test_conn();
+        let note = make_note(1, "quest.md");
+        insert_note(&mut conn, &note);
+
+        let dir = TempDir::new().unwrap();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        let template_content =
+            "---\ntags: [quest, main-story]\n---\n# Quest Template\nDescribe the quest.";
+        let outcome = reconcile(&mut conn, Some(&index), &note, template_content, None).unwrap();
+        assert!(!outcome.search_stale);
+
+        let results =
+            crate::search::search_notes_in_index(&index, dir.path(), "tag:quest", 10).unwrap();
+        assert_eq!(results.len(), 1, "note must be findable by tag from template content");
+        assert_eq!(results[0].id, 1);
+
+        let mut tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        tags.sort();
+        assert_eq!(tags, vec!["main-story", "quest"]);
     }
 }

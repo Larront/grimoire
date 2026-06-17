@@ -413,6 +413,27 @@ pub fn index_note(index: &Index, note: &Note, body_text: &str, tags: &[String]) 
     upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text, tags)?)
 }
 
+/// Batch-upsert multiple note docs: one IndexWriter opened once, one commit.
+/// More efficient than calling index_note N times (each opens/commits a writer).
+pub fn index_notes_batch(
+    index: &Index,
+    items: &[(&Note, &str, &[String])],
+) -> Result<(), String> {
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
+    for (note, body_text, tags) in items {
+        writer.delete_term(tantivy::Term::from_field_text(
+            doc_key_f,
+            &format!("note:{}", note.id),
+        ));
+        let doc = note_doc(&schema, note, body_text, tags)?;
+        writer.add_document(doc).map_err(|e| e.to_string())?;
+    }
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     remove_doc(index, &format!("note:{}", entity_id))
 }
