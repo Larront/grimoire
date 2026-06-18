@@ -304,13 +304,15 @@ pub fn rename_folder(
     old_path: String,
     new_path: String,
     ledger: State<AppLedger>,
-) -> Result<usize, String> {
+) -> Result<i32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
     let state_ref = &mut *state;
     let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
     let index = state_ref.search_index.as_ref();
-    rename_folder_inner(&ledger_path, &old_path, &new_path, conn, index)
+    // Cast the internal usize count to i32 at the command seam: specta forbids
+    // BigInt-style types in exported bindings, and link counts are always small.
+    rename_folder_inner(&ledger_path, &old_path, &new_path, conn, index).map(|n| n as i32)
 }
 
 #[cfg(test)]

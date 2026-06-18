@@ -86,13 +86,13 @@ export const commands = {
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
 	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
-	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	/**
 	 *  Like `update_note` but also rewrites all wikilinks that reference the old
 	 *  path in every other note in the ledger.  Returns the count of notes whose
 	 *  files were actually rewritten so the frontend can show a toast.
 	 */
 	renameNote: (note: Note) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note }),
+	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
 	resolveNoteTarget: (target: string) => __TAURI_INVOKE<{
@@ -347,6 +347,11 @@ export type ResolvedNote = {
 	path: string,
 };
 
+export type RetagResult = {
+	note_count: number,
+	pin_count: number,
+};
+
 export type Scene = {
 	id: number,
 	name: string,
@@ -409,11 +414,6 @@ export type TagGraphStyleResponse = {
 
 export type TagUsageEntry = {
 	tag: string,
-	note_count: number,
-	pin_count: number,
-};
-
-export type RetagResult = {
 	note_count: number,
 	pin_count: number,
 };
