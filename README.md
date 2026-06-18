@@ -19,7 +19,7 @@ Grimoire is a local-first desktop app for Game Masters to manage lore, NPCs,
 maps, and session prep — a focused creative instrument for the world you're
 building.
 
-> **Early access** (`0.1.x`). Local-first and stable at the core; iterating fast.
+> **Prerelease** (`0.X.Y`). Local-first and stable at the core; iterating fast.
 
 ## Features
 
@@ -34,15 +34,15 @@ building.
 Download the latest build for your OS from the
 [**Releases**](https://github.com/Larront/grimoire/releases) page:
 
-| OS | Installer |
-| :--- | :--- |
-| Windows | `.msi` or `.exe` |
-| macOS | `.dmg` → drag to Applications |
-| Linux | `.deb` or `.AppImage` |
+| OS      | Installer                     |
+| :------ | :---------------------------- |
+| Windows | `.msi` or `.exe`              |
+| macOS   | `.dmg` → drag to Applications |
+| Linux   | `.deb` or `.AppImage`         |
 
 > Builds are currently **unsigned** — your OS may warn about an unidentified
 > developer on first launch (macOS: right-click → Open; Windows: More info → Run
-> anyway). Signing is planned.
+> anyway).
 
 On first launch you'll pick a folder to use as your **Ledger**; Grimoire stores
 its campaign database in a hidden `.grimoire` folder inside it.
