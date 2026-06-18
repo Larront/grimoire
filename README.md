@@ -1,81 +1,66 @@
-# 📜 Grimoire
+<h1 align="center">📜 Grimoire</h1>
 
-**A spellbook of record for Tabletop RPG worldbuilders.**
+<p align="center">
+  <strong>A spellbook of record for tabletop RPG worldbuilders.</strong>
+</p>
 
-Grimoire is a modern desktop application designed for Game Masters to manage lore, NPCs, and session prep. It is built to feel like a well-crafted creative instrument—restrained, purposeful, and focused on the world you are building.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
+  <a href="https://github.com/Larront/grimoire/releases"><img src="https://img.shields.io/github/v/release/Larront/grimoire?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://github.com/Larront/grimoire/actions/workflows/ci.yml"><img src="https://github.com/Larront/grimoire/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
-## ✨ Key Features
+<!-- Replace with a real screenshot or GIF (recommended ~1200px wide). -->
+<p align="center">
+  <img src="docs/screenshot.png" alt="Grimoire screenshot" width="800">
+</p>
 
-- **Local-First Ledgers:** Your data belongs to you. Grimoire operates on a local directory ("Ledger"). Because all paths are relative to the ledger root, your campaign is fully portable—move it between drives or computers without breaking a single link.
-- **Rich Text Notes:** A distraction-free Markdown editor for capturing lore. Notes are stored as raw `.md` files, ensuring your data is never locked in a proprietary format.
-- **Ambient Audio Scenes:** Create immersive soundscapes by layering local audio files and Spotify tracks into custom scene slots.
-- **Interactive Maps:** (Planned) Annotate world maps with pins and categories to track geography and points of interest.
-- **Arcane Clarity:** A cool-toned interface designed for high scannability and "GM clarity under pressure" during live sessions.
+Grimoire is a local-first desktop app for Game Masters to manage lore, NPCs,
+maps, and session prep — a focused creative instrument for the world you're
+building.
 
-## 🚀 Getting Started
+> **Early access** (`0.1.x`). Local-first and stable at the core; iterating fast.
 
-### Installation
+## Features
 
-1.  Download the latest version for your operating system from the **Releases** page.
-2.  Install the application:
-    - **Windows:** Run the `.msi` or `.exe` installer.
-    - **macOS:** Drag the `.app` to your Applications folder.
-    - **Linux:** Use the `.deb` or `AppImage`.
+- **📁 Local-first ledgers** — your campaign is a portable local folder; move it anywhere without breaking links.
+- **✍️ Markdown notes** — distraction-free editor; notes are plain `.md` files, never locked in.
+- **🔊 Ambient audio scenes** — layer local audio and Spotify tracks into custom soundscapes.
+- **🗺️ Interactive maps** — annotate world maps with pins and categories.
+- **🎨 Arcane clarity** — a warm, parchment-and-ink interface tuned for clarity under pressure.
 
-### Opening a Ledger
+## Install
 
-When you first launch Grimoire, you will be prompted to open a directory. This directory is your **Ledger**. Grimoire will create a hidden `.grimoire` folder inside to manage its campaign database and metadata.
+Download the latest build for your OS from the
+[**Releases**](https://github.com/Larront/grimoire/releases) page:
 
-## ❓ FAQ
+| OS | Installer |
+| :--- | :--- |
+| Windows | `.msi` or `.exe` |
+| macOS | `.dmg` → drag to Applications |
+| Linux | `.deb` or `.AppImage` |
 
-**What do I need for Spotify integration?**
-You simply need a **Spotify Premium** account. You can connect your account in the app settings to start adding tracks and playlists to your scenes.
+> Builds are currently **unsigned** — your OS may warn about an unidentified
+> developer on first launch (macOS: right-click → Open; Windows: More info → Run
+> anyway). Signing is planned.
 
-**Can I use other Markdown editors?**
-Yes. Your notes are stored as standard Markdown files. You can open and edit them in tools like Obsidian or VS Code without breaking your Grimoire ledger.
+On first launch you'll pick a folder to use as your **Ledger**; Grimoire stores
+its campaign database in a hidden `.grimoire` folder inside it.
 
----
+## Documentation
 
-## 🛠 Development
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — setup, conventions, workflow, releases
+- **[`docs/adr/`](docs/adr/)** — architecture decision records
+- **[`docs/agents/`](docs/agents/)** — architecture, domain model, and Git workflow
 
-If you wish to contribute or build Grimoire from source, follow the instructions below.
+## Tech stack
 
-### Prerequisites
+Tauri 2 · Svelte 5 (runes) · SvelteKit · SQLite (Diesel) · Tantivy · Tailwind CSS 4 · shadcn-svelte
 
-Ensure you have the following installed:
+## Contributing
 
-1.  **Node.js** (LTS) & **Bun**
-2.  **Rust** (via rustup)
-3.  **System Dependencies** for Tauri: Windows | macOS | Linux
+Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** to get started.
 
-### Setup
+## License
 
-```bash
-bun install
-```
-
-### Commands
-
-```bash
-# Start full desktop app (Tauri + Vite)
-bun run tauri dev
-
-# Frontend only (Vite)
-bun run dev
-
-# Run type-checking
-bun run check
-
-# Build production bundle
-bun run tauri build
-```
-
-### 🛠 Tech Stack
-
-- **Framework:** Tauri v2, Svelte 5 (Runes), SvelteKit
-- **Database:** SQLite via Diesel ORM
-- **Styling:** Tailwind CSS 4, shadcn-svelte
-
-### 📝 Recommended IDE Setup
-
-- VS Code + Svelte + Tauri + rust-analyzer
+[GNU General Public License v3.0](LICENSE) © Aaron Lamont
