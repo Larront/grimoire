@@ -54,6 +54,9 @@ jobs:
           # Updater signing (NOT OS code-signing). Required for self-update.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Baked into the binary at compile time via option_env! (see lib.rs).
+          # Add SPOTIFY_CLIENT_ID to the `release` environment in repo settings.
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Grimoire ${{ github.ref_name }}"

@@ -42,12 +42,23 @@ git branch -d feature/your-feature-name
 
 Once next contains a satisfactory batch of features and is stable, promote it to main.
 
+`main` is a **protected branch**: direct pushes and force-pushes are blocked, and
+all changes must arrive via a pull request with passing CI. Promotion therefore
+goes through a PR rather than a local merge-and-push:
+
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, and
+   `src-tauri/Cargo.toml` (they must match) on `next`.
+2. Open a PR from `next` → `main`, confirm CI is green, and merge it.
+3. Tag the release on `main` and push the tag (tags are not branch-protected):
+
 ```bash
-git checkout main
-git merge --no-ff next
+git checkout main && git pull
 git tag -a v0.22.3 -m "Release 0.22.3: Summary of changes"
-git push origin main --tags
+git push origin v0.22.3
 ```
+
+Pushing the tag triggers the release workflow (cross-platform installers +
+signed updater artifacts + a draft GitHub Release to review and publish).
 
 ## 3. The Hotfix Protocol
 
@@ -57,7 +68,9 @@ Use this path when a critical bug is found in the current build (main) that cann
    `git checkout -b hotfix/critical-bug-name main`
 
 2. Fix and Merge to main:
-   Merge back to main, tag a new patch version (e.g., v0.22.4), and push.
+   Open a PR from the hotfix branch → `main` (direct pushes are blocked), confirm
+   CI passes, and merge. Then tag a new patch version (e.g., v0.22.4) on `main`
+   and push the tag.
 
 3. The Back-Port (Crucial):
    Immediately merge main into next to ensure the fix is included in the next planned release and doesn't get overwritten.

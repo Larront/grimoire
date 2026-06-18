@@ -169,7 +169,14 @@ pub fn run() {
         }
     }
 
-    let client_id = std::env::var("SPOTIFY_CLIENT_ID").unwrap_or_default();
+    // Spotify client ID: prefer the value baked in at compile time (set by the
+    // release build), falling back to the runtime env / .env for local dev. A
+    // PKCE client ID is not a secret, so embedding it in the binary is fine.
+    let client_id = option_env!("SPOTIFY_CLIENT_ID")
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("SPOTIFY_CLIENT_ID").ok())
+        .unwrap_or_default();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
