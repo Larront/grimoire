@@ -46,8 +46,10 @@ Once next contains a satisfactory batch of features and is stable, promote it to
 all changes must arrive via a pull request with passing CI. Promotion therefore
 goes through a PR rather than a local merge-and-push:
 
-1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, and
-   `src-tauri/Cargo.toml` (they must match) on `next`.
+1. Bump the version on `next` with
+   `npm version <patch|minor|major> --no-git-tag-version` (this updates
+   `package.json`; `tauri.conf.json` reads from it and the `version` hook syncs
+   `Cargo.toml`), then `cargo check` to refresh `Cargo.lock`, and commit.
 2. Open a PR from `next` → `main`, confirm CI is green, and merge it.
 3. Tag the release on `main` and push the tag (tags are not branch-protected):
 

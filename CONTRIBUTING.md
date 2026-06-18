@@ -105,11 +105,17 @@ through a PR** with passing CI. Promoting a release therefore goes via PR, not a
 local merge-and-push:
 
 1. Ensure `next` is stable and CI is green.
-2. **Bump the version in all three manifests together** (they must match or the
-   updater won't recognise a release as newer):
-   - `package.json`
-   - `src-tauri/tauri.conf.json`
-   - `src-tauri/Cargo.toml`
+2. **Bump the version** — `package.json` is the single source of truth
+   (`tauri.conf.json` reads from it, and the `version` npm hook syncs
+   `Cargo.toml`):
+
+   ```bash
+   npm version <patch|minor|major> --no-git-tag-version
+   cargo check --manifest-path src-tauri/Cargo.toml   # refresh Cargo.lock
+   ```
+
+   Commit the result on `next`. (Tagging happens on `main` in step 4, after the
+   PR merges — hence `--no-git-tag-version` here.)
 3. Open a PR from `next` → `main`, confirm CI passes, and merge it.
 4. Tag the release on `main` and push the tag:
 

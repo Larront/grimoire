@@ -1,7 +1,7 @@
 {
   "name": "grimoire",
   "version": "0.1.0",
-  "description": "",
+  "description": "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes.",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -11,7 +11,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml"
   },
   "license": "GPL-3.0-or-later",
   "dependencies": {
