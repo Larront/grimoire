@@ -64,3 +64,10 @@ Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** to get 
 ## License
 
 [GNU General Public License v3.0](LICENSE) © Aaron Lamont
+
+## Credits
+
+The sample world ships with the following audio:
+
+- **"Final Battle of the Dark Wizards"** and **"Folk Round"** — Kevin MacLeod (incompetech.com), licensed under [Creative Commons: By Attribution 4.0](http://creativecommons.org/licenses/by/4.0/)
+- **"Heavy Rain With Thunder"** and **"Crowd Walla"** — released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/) (no attribution required)

@@ -1,5 +1,5 @@
-use crate::db::models::{NewMap, NewPin};
-use crate::db::schema::{maps, notes, pin_categories, pins};
+use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene};
+use crate::db::schema::{maps, notes, pin_categories, pins, scene_slots, scenes};
 use diesel::prelude::*;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
@@ -151,6 +151,68 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
     Ok(())
 }
 
+/// Seeds two layered Scenes — "Boss Battle" and "Town Market" — each composed of a
+/// looping music bed plus a quieter looping ambience overlay, into the already-open
+/// connection. Audio is referenced as `local` slot sources whose `source_id` is a
+/// ledger-relative path under `.grimoire/audio/` (matching `copy_audio_file`), so the
+/// scenes resolve identically to user-imported audio and stay portable.
+/// Idempotent: skips if any scene rows already exist.
+pub fn seed_sample_world_scenes(conn: &mut SqliteConnection) -> Result<(), String> {
+    let scene_count: i64 = scenes::table
+        .count()
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+    if scene_count > 0 {
+        return Ok(());
+    }
+
+    // (scene name, [(label, file, volume) for bed then ambience])
+    let scene_data = [
+        (
+            "Boss Battle",
+            [
+                ("Final Battle of the Dark Wizards", "Final Battle of the Dark Wizards.mp3", 0.8_f32),
+                ("Heavy Rain", "Heavy Rain With Thunder 10.wav", 0.5_f32),
+            ],
+        ),
+        (
+            "Town Market",
+            [
+                ("Folk Round", "Folk Round.mp3", 0.8_f32),
+                ("Crowd Noise", "Crowd Walla 11.wav", 0.5_f32),
+            ],
+        ),
+    ];
+
+    for (scene_name, slots) in &scene_data {
+        let scene: Scene = diesel::insert_into(scenes::table)
+            .values(NewScene { name: scene_name.to_string() })
+            .returning(Scene::as_returning())
+            .get_result(conn)
+            .map_err(|e| format!("Failed to insert sample scene '{}': {}", scene_name, e))?;
+
+        for (slot_order, (label, file, volume)) in slots.iter().enumerate() {
+            diesel::insert_into(scene_slots::table)
+                .values(NewSceneSlot {
+                    scene_id: scene.id,
+                    source: "local".to_string(),
+                    source_id: format!(".grimoire/audio/{}", file),
+                    label: label.to_string(),
+                    volume: *volume,
+                    is_loop: true,
+                    slot_order: slot_order as i32,
+                    shuffle: false,
+                })
+                .execute(conn)
+                .map_err(|e| {
+                    format!("Failed to insert slot '{}' for scene '{}': {}", label, scene_name, e)
+                })?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Copies the bundled sample-world resource tree to a writable sandbox at
 /// `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 /// database with the sample map and pins, and returns the sandbox path.
@@ -187,6 +249,7 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     crate::commands::ledger::seed_default_categories(&mut conn)?;
     crate::commands::import::reconcile_notes_with_disk(&sample_dst, &mut conn)?;
     seed_sample_world_maps(&mut conn)?;
+    seed_sample_world_scenes(&mut conn)?;
 
     Ok(sample_dst.to_string_lossy().to_string())
 }
@@ -219,7 +282,7 @@ mod tests {
     use crate::commands::import::reconcile_notes_with_disk;
     use crate::commands::ledger::seed_default_categories;
     use crate::db::establish_connection;
-    use crate::db::schema::{maps, note_links, notes, scenes};
+    use crate::db::schema::{maps, note_links, notes, scene_slots, scenes};
     use diesel::prelude::*;
     use std::fs;
     use tempfile::tempdir;
@@ -302,6 +365,7 @@ mod tests {
         );
 
         seed_sample_world_maps(&mut conn).unwrap();
+        seed_sample_world_scenes(&mut conn).unwrap();
 
         // Rebuild derived indexes (tags, links, aliases, search).
         let all_maps: Vec<crate::db::models::Map> =
@@ -323,9 +387,50 @@ mod tests {
             "expected exactly 10 notes, got {note_count}"
         );
 
-        // ── Scene count ──────────────────────────────────────────────────────
+        // ── Scenes: 2 layered scenes with resolvable local audio ─────────────
         let scene_count: i64 = scenes::table.count().get_result(&mut conn).unwrap();
-        assert_eq!(scene_count, 0, "expected 0 scenes (audio not yet authored)");
+        assert_eq!(scene_count, 2, "expected exactly 2 seeded scenes");
+
+        for scene_name in ["Boss Battle", "Town Market"] {
+            let scene_id: i32 = scenes::table
+                .filter(scenes::name.eq(scene_name))
+                .select(scenes::id)
+                .first(&mut conn)
+                .unwrap_or_else(|_| panic!("scene '{scene_name}' must exist"));
+
+            let slots: Vec<crate::db::models::SceneSlot> = scene_slots::table
+                .filter(scene_slots::scene_id.eq(scene_id))
+                .order(scene_slots::slot_order.asc())
+                .load(&mut conn)
+                .unwrap();
+
+            assert!(
+                slots.len() >= 2,
+                "scene '{scene_name}' must have ≥2 layered slots, got {}",
+                slots.len()
+            );
+
+            for slot in &slots {
+                assert_eq!(
+                    slot.source, "local",
+                    "scene '{scene_name}' slot '{}' must be a local source",
+                    slot.label
+                );
+                // Audio paths are ledger-relative (portable; no absolute references)…
+                assert!(
+                    !std::path::Path::new(&slot.source_id).is_absolute(),
+                    "slot source_id '{}' must be relative, not absolute",
+                    slot.source_id
+                );
+                // …and must resolve to a real file on disk under the ledger root.
+                let resolved = tmp.path().join(&slot.source_id);
+                assert!(
+                    resolved.exists(),
+                    "audio for scene '{scene_name}' slot '{}' not found at {resolved:?}",
+                    slot.label
+                );
+            }
+        }
 
         // ── Map count ────────────────────────────────────────────────────────
         let map_count: i64 = maps::table.count().get_result(&mut conn).unwrap();
@@ -409,6 +514,35 @@ mod tests {
             !session_content.contains("```timeline"),
             "Session 1 must not contain a timeline fence"
         );
+
+        // ── Start Here scene-blocks reference real seeded scenes ─────────────
+        // The embedded <scene-block data-id="N"> tags are hand-authored against the
+        // seed's autoincrement order; this guards against the page and seed drifting.
+        let start_here = fs::read_to_string(tmp.path().join("Start Here.md")).unwrap();
+        let referenced_ids: Vec<i32> = start_here
+            .match_indices("data-id=\"")
+            .filter_map(|(i, m)| {
+                let rest = &start_here[i + m.len()..];
+                let end = rest.find('"')?;
+                rest[..end].parse::<i32>().ok()
+            })
+            .collect();
+        assert!(
+            referenced_ids.len() >= 2,
+            "Start Here must embed ≥2 scene-blocks, found {}",
+            referenced_ids.len()
+        );
+        for id in referenced_ids {
+            let exists: i64 = scenes::table
+                .filter(scenes::id.eq(id))
+                .count()
+                .get_result(&mut conn)
+                .unwrap();
+            assert_eq!(
+                exists, 1,
+                "Start Here scene-block references scene id {id}, which is not seeded"
+            );
+        }
 
         // ── Wikilinks produce real edges (not all stubs) ──────────────────────
         let keep_note_id: Option<i32> = notes::table
