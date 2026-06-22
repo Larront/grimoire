@@ -17,6 +17,7 @@ export interface Tab {
   rename?: boolean;
   badge?: string;
   templatePath?: string;
+  pdfPath?: string;
 }
 
 export interface TabPane {
@@ -43,6 +44,7 @@ function createTabsStore() {
           id: t.id,
           title: t.title,
           ...(t.templatePath ? { templatePath: t.templatePath } : {}),
+          ...(t.pdfPath ? { pdfPath: t.pdfPath } : {}),
         }));
     const leftTabs = serializeTabs(left.tabs);
     const rightTabs = right ? serializeTabs(right.tabs) : null;
@@ -74,6 +76,7 @@ function createTabsStore() {
 
   function tabMatches(t: Tab, tab: Tab): boolean {
     if (tab.type === "template") return t.type === "template" && t.templatePath === tab.templatePath;
+    if (tab.type === "pdf") return t.type === "pdf" && t.pdfPath === tab.pdfPath;
     return t.type === tab.type && t.id === tab.id;
   }
 
@@ -414,7 +417,7 @@ function createTabsStore() {
     const pane = focusedPane;
     const current = pane === "right" && right ? right : left;
     const currentTab = current.tabs[current.activeIndex];
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath };
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath, pdfPath: tab.pdfPath };
     const newTabs = [...current.tabs];
     newTabs[current.activeIndex] = newTab;
     const backStack = currentTab && currentTab.type !== "empty"

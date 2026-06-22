@@ -73,6 +73,19 @@ pub fn build_file_tree(
                     map_id: None,
                     children: Vec::new(),
                 });
+            } else if entry_name.to_lowercase().ends_with(".pdf") {
+                // PDFs are path-addressed, not entities (ADR-0011): a plain
+                // FileNode with no id. The frontend detects the `.pdf` extension
+                // from `path` and renders the BookOpen glyph + opens a "pdf" tab.
+                let stem = &entry_name[..entry_name.len() - ".pdf".len()];
+                files.push(FileNode {
+                    name: stem.to_string(),
+                    path: child_rel,
+                    is_dir: false,
+                    note_id: None,
+                    map_id: None,
+                    children: Vec::new(),
+                });
             } else {
                 let lower = entry_name.to_lowercase();
                 if lower.ends_with(".png") || lower.ends_with(".jpg")
@@ -414,6 +427,51 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("photo.png"), "").unwrap();
         let tree = build_file_tree(dir.path(), "", &HashMap::new(), &HashMap::new());
+        assert!(tree.children.is_empty());
+    }
+
+    #[test]
+    fn pdf_files_appear_as_nodes_with_stem_name_and_no_ids() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("Players Handbook.pdf"), "%PDF-1.4").unwrap();
+        });
+        assert_eq!(tree.children.len(), 1);
+        let node = &tree.children[0];
+        assert_eq!(node.name, "Players Handbook");
+        assert_eq!(node.path, "Players Handbook.pdf");
+        assert!(!node.is_dir);
+        assert_eq!(node.note_id, None);
+        assert_eq!(node.map_id, None);
+    }
+
+    #[test]
+    fn pdf_extension_match_is_case_insensitive() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("Manual.PDF"), "%PDF-1.4").unwrap();
+        });
+        assert_eq!(tree.children.len(), 1);
+        assert_eq!(tree.children[0].path, "Manual.PDF");
+        assert_eq!(tree.children[0].name, "Manual");
+    }
+
+    #[test]
+    fn nested_pdf_builds_correct_relative_path() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::create_dir(p.join("rulebooks")).unwrap();
+            fs::write(p.join("rulebooks").join("DMG.pdf"), "%PDF-1.4").unwrap();
+        });
+        let folder = &tree.children[0];
+        assert_eq!(folder.path, "rulebooks");
+        assert_eq!(folder.children[0].path, "rulebooks/DMG.pdf");
+    }
+
+    #[test]
+    fn non_allowlisted_files_are_hidden() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("notes.txt"), "").unwrap();
+            fs::write(p.join("manual.docx"), "").unwrap();
+            fs::write(p.join("archive.zip"), "").unwrap();
+        });
         assert!(tree.children.is_empty());
     }
 

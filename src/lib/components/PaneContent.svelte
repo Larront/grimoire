@@ -9,6 +9,7 @@
 	import ScenesDashboard from './panes/ScenesDashboard.svelte';
 	import TemplatePane from './panes/TemplatePane.svelte';
 	import GraphPane from './panes/GraphPane.svelte';
+	import PdfPane from './panes/PdfPane.svelte';
 
 	interface Props {
 		pane: 'left' | 'right';
@@ -66,6 +67,10 @@
 				templatePath={activeTab.templatePath}
 				templateTitle={activeTab.title}
 			/>
+		{/key}
+	{:else if activeTab.type === 'pdf' && activeTab.pdfPath}
+		{#key activeTab.pdfPath}
+			<PdfPane pdfPath={activeTab.pdfPath} pdfTitle={activeTab.title} />
 		{/key}
 	{:else if activeTab.type === 'graph'}
 		<GraphPane />

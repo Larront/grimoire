@@ -15,6 +15,7 @@
     Map as MapIcon,
     MapPinPlus,
     Folder,
+    BookOpen,
   } from "@lucide/svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { useSidebar } from "$lib/components/ui/sidebar";
@@ -34,12 +35,16 @@
   let { node, noteMap, refresh, handleNewNote, handleNewFolder, handleNewMap }: Props =
     $props();
 
+  // A PDF node is path-addressed (ADR-0011): no id, detected by extension.
+  const isPdf = $derived(!node.is_dir && node.path.toLowerCase().endsWith('.pdf'));
+
   // Active state: is this node the active tab in the focused pane?
   const isActive = $derived.by(() => {
     const active = tabs.activeTab;
     if (!active) return false;
     if (node.note_id !== null) return active.type === 'note' && active.id === node.note_id;
     if (node.map_id !== null) return active.type === 'map'  && active.id === node.map_id;
+    if (isPdf) return active.type === 'pdf' && active.pdfPath === node.path;
     return false;
   });
 
@@ -123,6 +128,8 @@
             tabs.navigateOpen({ type: 'note', id: node.note_id, title: node.name });
           } else if (node.map_id !== null) {
             tabs.navigateOpen({ type: 'map', id: node.map_id, title: node.name });
+          } else if (isPdf) {
+            tabs.navigateOpen({ type: 'pdf', id: 0, title: node.name, pdfPath: node.path });
           } else {
             return;
           }
@@ -131,6 +138,8 @@
       >
         {#if node.map_id !== null}
           <MapIcon class="size-4 shrink-0 text-muted-foreground" />
+        {:else if isPdf}
+          <BookOpen class="size-4 shrink-0 text-muted-foreground" />
         {:else}
           <FileText class="size-4 shrink-0 text-muted-foreground" />
         {/if}
@@ -225,6 +234,8 @@
         >
           Delete Map
         </ContextMenu.Item>
+      {:else if isPdf}
+        <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'pdf', id: 0, title: node.name, pdfPath: node.path }, 'right')}>Open in Right Pane</ContextMenu.Item>
       {:else}
         <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'note', id: node.note_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
         <ContextMenu.Item onSelect={() => tabs.openTabWithRename('note', node.note_id!, node.name)}>Rename</ContextMenu.Item>

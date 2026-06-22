@@ -128,6 +128,25 @@ pub fn get_image_absolute_path(
         .ok_or("Path contains invalid UTF-8".to_string())
 }
 
+/// Resolve a ledger-relative PDF path to a validated absolute path for the
+/// frontend to feed through `convertFileSrc` into PDF.js. Reuses `validate_path`
+/// so path-traversal attempts are rejected exactly as for images. PDFs are
+/// path-addressed (ADR-0011) — there is no id, just the ledger-relative path.
+#[tauri::command]
+#[specta::specta]
+pub fn get_pdf_absolute_path(
+    relative_path: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+    let canonical = validate_path(ledger_path, &relative_path)?;
+    canonical
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or("Path contains invalid UTF-8".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,6 +284,30 @@ mod tests {
 
         let result = validate_path(&ledger, "../escape.png");
         assert!(result.is_err(), "expected ../escape.png to be rejected");
+    }
+
+    #[test]
+    fn test_validate_path_resolves_pdf_inside_ledger() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        fs::write(ledger.join("rulebook.pdf"), b"%PDF-1.4").unwrap();
+
+        let resolved = validate_path(&ledger, "rulebook.pdf").unwrap();
+        assert!(resolved.ends_with("rulebook.pdf"));
+        assert!(resolved.is_absolute());
+        assert!(resolved.exists());
+    }
+
+    #[test]
+    fn test_validate_path_rejects_pdf_traversal() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        fs::write(outer.path().join("secret.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = validate_path(&ledger, "../secret.pdf");
+        assert!(result.is_err(), "expected ../secret.pdf to be rejected");
     }
 
     #[test]

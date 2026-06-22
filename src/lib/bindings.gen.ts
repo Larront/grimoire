@@ -65,6 +65,13 @@ export const commands = {
 } | null>("get_note_by_path", { notePath }),
 	getNotes: () => __TAURI_INVOKE<Note[]>("get_notes"),
 	getOutboundLinks: (noteId: number) => __TAURI_INVOKE<OutboundLink[]>("get_outbound_links", { noteId }),
+	/**
+	 *  Resolve a ledger-relative PDF path to a validated absolute path for the
+	 *  frontend to feed through `convertFileSrc` into PDF.js. Reuses `validate_path`
+	 *  so path-traversal attempts are rejected exactly as for images. PDFs are
+	 *  path-addressed (ADR-0011) — there is no id, just the ledger-relative path.
+	 */
+	getPdfAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_pdf_absolute_path", { relativePath }),
 	getPinCategories: () => __TAURI_INVOKE<PinCategory[]>("get_pin_categories"),
 	getPinCategoriesForMap: (mapId: number) => __TAURI_INVOKE<PinCategory[]>("get_pin_categories_for_map", { mapId }),
 	getPinTags: (pinId: number) => __TAURI_INVOKE<string[]>("get_pin_tags", { pinId }),

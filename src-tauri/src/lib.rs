@@ -83,6 +83,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_note_by_path,
             get_notes,
             get_outbound_links,
+            get_pdf_absolute_path,
             get_pin_categories,
             get_pin_categories_for_map,
             get_pin_tags,
@@ -268,6 +269,7 @@ pub fn run() {
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
+            get_pdf_absolute_path,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
             // Recent entities
