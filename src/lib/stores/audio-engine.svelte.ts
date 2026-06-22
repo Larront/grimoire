@@ -336,7 +336,12 @@ interface SlotPlaybackState {
 
 // ---- Store -------------------------------------------------------------------------
 
-function createAudioEngine() {
+// The slot-player factory is the injectable seam (issue #97): production wires the
+// real createSlotPlayer + lazily-created WebAudio/Spotify contexts, while a test can
+// pass a fake adapter to drive the crossfade state machine with no AudioContext/SDK.
+type MakeSlotPlayer = (slot: SceneSlot) => SlotPlayer;
+
+function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer } = {}) {
   let activeSceneId = $state<number | null>(null);
   let isPlaying = $state(false);
   let isCrossfading = $state(false);
@@ -362,6 +367,11 @@ function createAudioEngine() {
     if (!spotifyCtx) spotifyCtx = new SpotifyContext();
     return spotifyCtx;
   }
+
+  // Default factory: real adapters over lazily-created contexts. Contexts are
+  // created on first slot construction rather than eagerly per crossfade.
+  const slotPlayerFactory: MakeSlotPlayer =
+    makeSlotPlayer ?? ((slot) => createSlotPlayer(slot, getOrCreateLocalCtx(), getOrCreateSpotifyCtx()));
 
   async function playScene(sceneId: number): Promise<void> {
     await crossfadeTo(sceneId);
@@ -496,15 +506,13 @@ function createAudioEngine() {
       const fadeOuts = outgoing.map((p) => p.fadeTo(0, fadeSec));
 
       // Start incoming slots concurrently while outgoing fades
-      const newCtx = getOrCreateLocalCtx();
-      const newSpotifyCtx = getOrCreateSpotifyCtx();
       const newStates = new Map<number, SlotPlaybackState>();
       const newPlayers = new Map<number, SlotPlayer>();
       let newPlaylistPlayer: PlaylistSlotPlayer | null = null;
 
       for (const slot of newSlots) {
         try {
-          const player = createSlotPlayer(slot, newCtx, newSpotifyCtx);
+          const player = slotPlayerFactory(slot);
           await player.start(slot, 0);
           // setMasterVolume must be called before fadeTo so streaming players
           // scale to the correct final volume
@@ -592,5 +600,10 @@ function createAudioEngine() {
     crossfadeTo,
   };
 }
+
+// Exported for unit tests, which inject a fake slot-player factory to drive the
+// crossfade state machine. Production code uses the singleton below.
+export { createAudioEngine };
+export type { SlotPlayer, MakeSlotPlayer };
 
 export const audioEngine = createAudioEngine();
