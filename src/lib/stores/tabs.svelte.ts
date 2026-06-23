@@ -309,6 +309,41 @@ function createTabsStore() {
     }
   }
 
+  // PDFs are path-keyed, not id-keyed (ADR-0011), so closeTabByTypeAndId can't
+  // reach them. Close every pdf tab matching `pdfPath` across both panes — a
+  // deleted PDF must not leave a broken tab behind (issue #101).
+  function closeTabsByPdfPath(pdfPath: string) {
+    let idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+    while (idx !== -1) {
+      closeTab("left", idx);
+      idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+    }
+    if (right) {
+      let ridx = right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+      while (right && ridx !== -1) {
+        closeTab("right", ridx);
+        ridx = right ? right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath) : -1;
+      }
+    }
+  }
+
+  // Re-key an open pdf tab when its file is renamed on disk, so the tab keeps
+  // pointing at the moved file and shows the new title (issue #101). Mirrors
+  // updateTemplateTab — both carry a path rather than an id.
+  function updatePdfTab(oldPath: string, newTitle: string, newPath: string) {
+    const update = (pane: TabPane) => ({
+      ...pane,
+      tabs: pane.tabs.map((t) =>
+        t.type === "pdf" && t.pdfPath === oldPath
+          ? { ...t, title: newTitle, pdfPath: newPath }
+          : t,
+      ),
+    });
+    left = update(left);
+    if (right) right = update(right);
+    persist();
+  }
+
   function updateTabTitle(type: TabType, id: number, title: string) {
     const update = (pane: TabPane) => ({
       ...pane,
@@ -545,8 +580,10 @@ function createTabsStore() {
     moveToOtherPane,
     closeActiveTab,
     closeTabByTypeAndId,
+    closeTabsByPdfPath,
     updateTabTitle,
     updateTemplateTab,
+    updatePdfTab,
     clearRenameFlag,
     setFocusedPane,
     isTabOpen,

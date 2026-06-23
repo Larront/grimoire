@@ -30,6 +30,7 @@ export const commands = {
 	deleteFolder: (folderPath: string) => __TAURI_INVOKE<null>("delete_folder", { folderPath }),
 	deleteMap: (mapId: number) => __TAURI_INVOKE<number>("delete_map", { mapId }),
 	deleteNote: (noteId: number) => __TAURI_INVOKE<number>("delete_note", { noteId }),
+	deletePdf: (pdfPath: string) => __TAURI_INVOKE<null>("delete_pdf", { pdfPath }),
 	deletePin: (pinId: number) => __TAURI_INVOKE<number>("delete_pin", { pinId }),
 	deletePinCategory: (categoryId: number) => __TAURI_INVOKE<number>("delete_pin_category", { categoryId }),
 	deleteScene: (id: number) => __TAURI_INVOKE<null>("delete_scene", { id }),
@@ -99,6 +100,7 @@ export const commands = {
 	 *  files were actually rewritten so the frontend can show a toast.
 	 */
 	renameNote: (note: Note) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note }),
+	renamePdf: (oldPath: string, newStem: string) => __TAURI_INVOKE<string>("rename_pdf", { oldPath, newStem }),
 	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),

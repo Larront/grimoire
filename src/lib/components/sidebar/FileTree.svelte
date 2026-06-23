@@ -68,6 +68,14 @@
     });
   }
 
+  function deletePdf(target: FileNode) {
+    toastUndo(`"${target.name}" deleted`, async () => {
+      tabs.closeTabsByPdfPath(target.path);
+      await api.deletePdf(target.path);
+      refresh();
+    });
+  }
+
   function deleteFolder(target: FileNode) {
     toastUndo(`"${target.name}" deleted`, async () => {
       for (const [id, note] of noteMap) {
@@ -107,6 +115,13 @@
           );
         }
         refresh();
+      } else if (isPdf) {
+        // PDFs are path-addressed (ADR-0011): rename the file on disk, then
+        // re-key any open tab so it follows the moved file and shows the new
+        // title. `newName` is the stem; the backend appends `.pdf`.
+        const newPath = await api.renamePdf(target.path, newName.trim());
+        tabs.updatePdfTab(target.path, newName.trim(), newPath);
+        refresh();
       }
       renamingPath = null;
       return true;
@@ -143,7 +158,31 @@
         {:else}
           <FileText class="size-4 shrink-0 text-muted-foreground" />
         {/if}
-        <span class="truncate">{node.name}</span>
+        {#if isPdf}
+          <!-- PDFs rename inline in the tree (like folders): they're
+               path-addressed, so there's no tab-title rename to hang off. -->
+          <Rename.Root
+            this="span"
+            class="flex-1 truncate text-sm"
+            bind:value={
+              () => (renamingPath === node.path ? renameValue : node.name),
+              (val) => {
+                renameValue = val;
+              }
+            }
+            bind:mode={
+              () => (renamingPath === node.path ? "edit" : "view"),
+              (val) => {
+                if (val === "view") renamingPath = null;
+              }
+            }
+            blurBehavior="exit"
+            onSave={(val) => handleRename(node, val)}
+            onCancel={() => (renamingPath = null)}
+          />
+        {:else}
+          <span class="truncate">{node.name}</span>
+        {/if}
       </Sidebar.MenuButton>
     {:else}
       <Sidebar.MenuItem>
@@ -235,7 +274,16 @@
           Delete Map
         </ContextMenu.Item>
       {:else if isPdf}
+        <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'pdf', id: 0, title: node.name, pdfPath: node.path })}>Open</ContextMenu.Item>
         <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'pdf', id: 0, title: node.name, pdfPath: node.path }, 'right')}>Open in Right Pane</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => startRename(node)}>Rename</ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item
+          variant="destructive"
+          onSelect={() => deletePdf(node)}
+        >
+          Delete PDF
+        </ContextMenu.Item>
       {:else}
         <ContextMenu.Item onSelect={() => tabs.navigateOpen({ type: 'note', id: node.note_id!, title: node.name }, 'right')}>Open in Right Pane</ContextMenu.Item>
         <ContextMenu.Item onSelect={() => tabs.openTabWithRename('note', node.note_id!, node.name)}>Rename</ContextMenu.Item>

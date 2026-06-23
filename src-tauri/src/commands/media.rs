@@ -147,6 +147,88 @@ pub fn get_pdf_absolute_path(
         .ok_or("Path contains invalid UTF-8".to_string())
 }
 
+/// Rename a PDF within the ledger, keeping it in its current folder. `old_path`
+/// is the ledger-relative path to the existing `.pdf`; `new_stem` is the desired
+/// filename without extension (the tree shows the stem, not the `.pdf`). Returns
+/// the new ledger-relative path so the frontend can re-key its open tab.
+///
+/// PDFs are path-addressed (ADR-0011) — there is no DB row to update, so this is
+/// a pure filesystem rename, guarded against traversal (via `validate_path` on
+/// the source and a path-separator check on the new name) and against silently
+/// clobbering an existing file.
+///
+/// FUTURE (ADR-0011 §Consequences): once `pdf_scene_links` exists, a rename must
+/// also rewrite that table's `pdf_path` rows (reusing the `links.rs` rename
+/// machinery) so Scene-links follow the moved file. That table isn't built yet
+/// (Scene-links land last, per #98 build order), so there is nothing to rewrite
+/// here today — but the Scene-link work must extend this command.
+pub fn rename_pdf_inner(
+    ledger_path: &Path,
+    old_path: &str,
+    new_stem: &str,
+) -> Result<String, String> {
+    // The new name is a bare filename — reject anything that could redirect the
+    // rename out of the PDF's folder or up the tree.
+    let trimmed = new_stem.trim();
+    if trimmed.is_empty() {
+        return Err("PDF name cannot be empty".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("PDF name cannot contain a path separator".to_string());
+    }
+
+    // Validate the source resolves inside the ledger and exists.
+    let src = validate_path(ledger_path, old_path)?;
+
+    // Same parent folder, new stem, normalised `.pdf` extension.
+    let new_rel = match old_path.rsplit_once('/') {
+        Some((parent, _)) => format!("{}/{}.pdf", parent, trimmed),
+        None => format!("{}.pdf", trimmed),
+    };
+    let dest = ledger_path.join(&new_rel);
+
+    // An explicit rename onto a taken name is a user error worth surfacing —
+    // the auto-suffix behaviour is reserved for drag-and-drop imports.
+    if dest.exists() {
+        return Err(format!(
+            "ERR_NAME_TAKEN: A file named {}.pdf already exists",
+            trimmed
+        ));
+    }
+
+    std::fs::rename(&src, &dest).map_err(|e| format!("rename pdf: {}", e))?;
+    Ok(new_rel)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn rename_pdf(
+    old_path: String,
+    new_stem: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    drop(state); // release lock before filesystem op
+    rename_pdf_inner(&ledger_path, &old_path, &new_stem)
+}
+
+/// Delete a PDF from the ledger. PDFs are path-addressed (ADR-0011) — no DB row
+/// to clean up, just the file. `validate_path` rejects any traversal attempt.
+pub fn delete_pdf_inner(ledger_path: &Path, pdf_path: &str) -> Result<(), String> {
+    let abs = validate_path(ledger_path, pdf_path)?;
+    std::fs::remove_file(&abs).map_err(|e| format!("remove pdf: {}", e))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_pdf(pdf_path: String, ledger: State<AppLedger>) -> Result<(), String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    drop(state); // release lock before filesystem op
+    delete_pdf_inner(&ledger_path, &pdf_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +402,99 @@ mod tests {
 
         let result = validate_path(&ledger, outside.to_str().unwrap());
         assert!(result.is_err(), "expected absolute outside path to be rejected");
+    }
+
+    // ── rename_pdf tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_rename_pdf_renames_file_and_returns_new_path() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("rulebook.pdf"), b"%PDF-1.4").unwrap();
+
+        let new_rel = rename_pdf_inner(dir.path(), "rulebook.pdf", "Player's Handbook").unwrap();
+
+        assert_eq!(new_rel, "Player's Handbook.pdf");
+        assert!(!dir.path().join("rulebook.pdf").exists());
+        assert!(dir.path().join("Player's Handbook.pdf").exists());
+    }
+
+    #[test]
+    fn test_rename_pdf_preserves_parent_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("rulebooks")).unwrap();
+        fs::write(dir.path().join("rulebooks").join("DMG.pdf"), b"%PDF-1.4").unwrap();
+
+        let new_rel =
+            rename_pdf_inner(dir.path(), "rulebooks/DMG.pdf", "Dungeon Master Guide").unwrap();
+
+        assert_eq!(new_rel, "rulebooks/Dungeon Master Guide.pdf");
+        assert!(dir.path().join("rulebooks/Dungeon Master Guide.pdf").exists());
+        assert!(!dir.path().join("rulebooks/DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_rename_pdf_rejects_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.pdf"), b"%PDF-1.4").unwrap();
+        fs::write(dir.path().join("b.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = rename_pdf_inner(dir.path(), "a.pdf", "b");
+        assert!(result.is_err(), "expected collision to be rejected");
+        assert!(result.unwrap_err().starts_with("ERR_NAME_TAKEN"));
+        // Original is untouched.
+        assert!(dir.path().join("a.pdf").exists());
+    }
+
+    #[test]
+    fn test_rename_pdf_rejects_path_separator_in_name() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.pdf"), b"%PDF-1.4").unwrap();
+
+        assert!(rename_pdf_inner(dir.path(), "a.pdf", "../escape").is_err());
+        assert!(rename_pdf_inner(dir.path(), "a.pdf", "sub/name").is_err());
+        assert!(dir.path().join("a.pdf").exists());
+    }
+
+    #[test]
+    fn test_rename_pdf_rejects_empty_name() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.pdf"), b"%PDF-1.4").unwrap();
+
+        assert!(rename_pdf_inner(dir.path(), "a.pdf", "   ").is_err());
+    }
+
+    #[test]
+    fn test_rename_pdf_rejects_traversal_old_path() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        fs::write(outer.path().join("secret.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = rename_pdf_inner(&ledger, "../secret.pdf", "stolen");
+        assert!(result.is_err(), "expected traversal old_path to be rejected");
+        assert!(outer.path().join("secret.pdf").exists());
+    }
+
+    // ── delete_pdf tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_delete_pdf_removes_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("rulebook.pdf"), b"%PDF-1.4").unwrap();
+
+        delete_pdf_inner(dir.path(), "rulebook.pdf").unwrap();
+        assert!(!dir.path().join("rulebook.pdf").exists());
+    }
+
+    #[test]
+    fn test_delete_pdf_rejects_traversal() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        fs::write(outer.path().join("secret.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = delete_pdf_inner(&ledger, "../secret.pdf");
+        assert!(result.is_err(), "expected traversal to be rejected");
+        assert!(outer.path().join("secret.pdf").exists(), "outside file must survive");
     }
 }
