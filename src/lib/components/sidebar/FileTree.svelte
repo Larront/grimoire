@@ -20,6 +20,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
+  import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
 
   const sidebar = useSidebar();
 
@@ -87,6 +88,31 @@
       await notes.load();
       refresh();
     });
+  }
+
+  // ── PDF drag-and-drop import (#102) ──────────────────────────────────────
+  // A folder row is a drop target: dropping PDFs onto it imports them into that
+  // folder. The handler stops propagation so the event never reaches the root
+  // drop zone (which would otherwise import into the ledger root instead).
+  let isDropTarget = $state(false);
+
+  function handleDragOver(e: DragEvent) {
+    if (!node.is_dir) return;
+    if (!e.dataTransfer?.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    isDropTarget = true;
+  }
+
+  async function handleDrop(e: DragEvent) {
+    if (!node.is_dir) return;
+    isDropTarget = false;
+    const pdfs = Array.from(e.dataTransfer?.files ?? []).filter(isPdfFile);
+    if (!pdfs.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    for (const f of pdfs) await importPdfFromHandle(f, node.path);
+    await refresh();
   }
 
   // Rename state
@@ -191,7 +217,13 @@
         >
           <Collapsible.Trigger>
             {#snippet child({ props })}
-              <Sidebar.MenuButton {...props}>
+              <Sidebar.MenuButton
+                {...props}
+                ondragover={handleDragOver}
+                ondragleave={() => (isDropTarget = false)}
+                ondrop={handleDrop}
+                class={isDropTarget ? "ring-1 ring-primary/50" : undefined}
+              >
                 <ChevronRight class="transition-transform" />
                 <Folder class="size-4 shrink-0 text-muted-foreground" />
                 <Rename.Root

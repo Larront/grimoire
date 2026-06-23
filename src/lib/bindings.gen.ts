@@ -115,6 +115,7 @@ export const commands = {
 	saveDensityLevel: (level: string) => __TAURI_INVOKE<void>("save_density_level", { level }),
 	saveImageBytes: (bytes: number[], filename: string) => __TAURI_INVOKE<string>("save_image_bytes", { bytes, filename }),
 	saveNoteAsTemplate: (notePath: string) => __TAURI_INVOKE<TemplateEntry>("save_note_as_template", { notePath }),
+	savePdfBytes: (bytes: number[], filename: string, targetFolder: string) => __TAURI_INVOKE<string>("save_pdf_bytes", { bytes, filename, targetFolder }),
 	searchAll: (query: string) => __TAURI_INVOKE<SearchAllResult>("search_all", { query }),
 	searchNotes: (query: string) => __TAURI_INVOKE<NoteSearchResult[]>("search_notes", { query }),
 	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),

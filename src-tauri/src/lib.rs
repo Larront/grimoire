@@ -118,6 +118,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_density_level,
             save_image_bytes,
             save_note_as_template,
+            save_pdf_bytes,
             search_all,
             search_notes,
             set_note_aliases,
@@ -274,6 +275,7 @@ pub fn run() {
             get_pdf_absolute_path,
             rename_pdf,
             delete_pdf,
+            save_pdf_bytes,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
             // Recent entities

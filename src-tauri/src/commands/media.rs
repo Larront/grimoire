@@ -213,6 +213,114 @@ pub fn rename_pdf(
     rename_pdf_inner(&ledger_path, &old_path, &new_stem)
 }
 
+/// Resolve a non-colliding filename in `dir` for a dropped PDF. An exact name is
+/// used as-is; a collision auto-suffixes `Manual.pdf` → `Manual (2).pdf` →
+/// `Manual (3).pdf` (the convention from #98/#102). The parenthesised form is
+/// deliberately distinct from the image dedup (`portrait 2.png`) — PDFs follow
+/// the filename convention the GM sees in their OS file manager.
+fn resolve_pdf_filename(dir: &Path, file_name: &str) -> PathBuf {
+    let candidate = dir.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let p = PathBuf::from(file_name);
+    let stem = p
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let ext = p
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    let mut counter = 2u32;
+    loop {
+        let path = dir.join(format!("{} ({}){}", stem, counter, ext));
+        if !path.exists() {
+            return path;
+        }
+        counter += 1;
+    }
+}
+
+fn validate_pdf_extension(path: &Path) -> Result<(), String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .ok_or_else(|| "File has no extension".to_string())?;
+    if ext == "pdf" {
+        Ok(())
+    } else {
+        Err(format!("ERR_UNSUPPORTED_PDF: Not a PDF: .{}", ext))
+    }
+}
+
+/// Import dropped PDF bytes into the ledger at `target_folder` (ledger-relative,
+/// forward-slash separated; empty string = ledger root). Name collisions
+/// auto-suffix silently (`Manual (2).pdf`) — drag-and-drop never prompts. The
+/// bytes are copied in, so nothing outside the ledger is referenced (ADR-0011:
+/// PDFs are path-addressed; the returned ledger-relative path *is* the PDF's
+/// identity). Traversal in either the folder or the filename is rejected.
+pub fn import_pdf_bytes_to(
+    ledger_root: &Path,
+    target_folder: &str,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    // Defense in depth: the editor drop handler only forwards PDFs, but the
+    // backend must never trust the caller's filtering.
+    let name_path = PathBuf::from(filename);
+    validate_pdf_extension(&name_path)?;
+
+    // The dropped name must be a bare filename, never a path that could redirect
+    // the write out of the target folder.
+    let file_name = name_path
+        .file_name()
+        .filter(|n| *n == name_path.as_os_str())
+        .ok_or("Invalid filename")?
+        .to_string_lossy()
+        .to_string();
+
+    // Resolve the destination directory. Empty folder = ledger root (a quick drop
+    // on empty tree space); otherwise the folder must resolve inside the ledger.
+    let folder = target_folder.trim();
+    let dest_dir = if folder.is_empty() {
+        ledger_root.to_path_buf()
+    } else {
+        validate_path(ledger_root, folder)?
+    };
+    std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+
+    let dest = resolve_pdf_filename(&dest_dir, &file_name);
+    std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
+
+    // Build the ledger-relative path from the (validated) folder string rather
+    // than stripping the canonicalised dest — on Windows the canonical form is a
+    // `\\?\` extended path that won't share `ledger_root`'s prefix.
+    let written_name = dest.file_name().unwrap().to_string_lossy();
+    let rel = if folder.is_empty() {
+        written_name.to_string()
+    } else {
+        format!("{}/{}", folder.trim_end_matches('/'), written_name)
+    };
+    Ok(rel)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn save_pdf_bytes(
+    bytes: Vec<u8>,
+    filename: String,
+    target_folder: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    drop(state); // release lock before filesystem op
+    import_pdf_bytes_to(&ledger_path, &target_folder, &filename, &bytes)
+}
+
 /// Delete a PDF from the ledger. PDFs are path-addressed (ADR-0011) — no DB row
 /// to clean up, just the file. `validate_path` rejects any traversal attempt.
 pub fn delete_pdf_inner(ledger_path: &Path, pdf_path: &str) -> Result<(), String> {
@@ -496,5 +604,84 @@ mod tests {
         let result = delete_pdf_inner(&ledger, "../secret.pdf");
         assert!(result.is_err(), "expected traversal to be rejected");
         assert!(outer.path().join("secret.pdf").exists(), "outside file must survive");
+    }
+
+    // ── save_pdf_bytes (drag-and-drop import) tests ───────────────────────────
+
+    #[test]
+    fn test_import_pdf_bytes_writes_to_ledger_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let bytes = b"%PDF-1.4 fake";
+
+        let rel = import_pdf_bytes_to(dir.path(), "", "Manual.pdf", bytes).unwrap();
+
+        assert_eq!(rel, "Manual.pdf");
+        assert_eq!(fs::read(dir.path().join("Manual.pdf")).unwrap(), bytes);
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_writes_to_target_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("rulebooks")).unwrap();
+        let bytes = b"%PDF-1.4 fake";
+
+        let rel = import_pdf_bytes_to(dir.path(), "rulebooks", "DMG.pdf", bytes).unwrap();
+
+        assert_eq!(rel, "rulebooks/DMG.pdf");
+        assert_eq!(fs::read(dir.path().join("rulebooks/DMG.pdf")).unwrap(), bytes);
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_auto_suffixes_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Manual.pdf"), b"original").unwrap();
+
+        let rel = import_pdf_bytes_to(dir.path(), "", "Manual.pdf", b"dropped").unwrap();
+
+        assert_eq!(rel, "Manual (2).pdf");
+        // The original is untouched and the dropped bytes land in the suffixed file.
+        assert_eq!(fs::read(dir.path().join("Manual.pdf")).unwrap(), b"original");
+        assert_eq!(fs::read(dir.path().join("Manual (2).pdf")).unwrap(), b"dropped");
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_auto_suffixes_multiple_collisions() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Manual.pdf"), b"x").unwrap();
+        fs::write(dir.path().join("Manual (2).pdf"), b"x").unwrap();
+
+        let rel = import_pdf_bytes_to(dir.path(), "", "Manual.pdf", b"dropped").unwrap();
+
+        assert_eq!(rel, "Manual (3).pdf");
+        assert!(dir.path().join("Manual (3).pdf").exists());
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_rejects_non_pdf() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let result = import_pdf_bytes_to(dir.path(), "", "notes.txt", b"x");
+        assert!(result.is_err(), "expected non-PDF to be rejected");
+        assert!(!dir.path().join("notes.txt").exists());
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_rejects_path_in_filename() {
+        let dir = tempfile::tempdir().unwrap();
+
+        assert!(import_pdf_bytes_to(dir.path(), "", "../escape.pdf", b"x").is_err());
+        assert!(import_pdf_bytes_to(dir.path(), "", "sub/evil.pdf", b"x").is_err());
+        assert!(!dir.path().join("escape.pdf").exists());
+    }
+
+    #[test]
+    fn test_import_pdf_bytes_rejects_target_folder_traversal() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+
+        let result = import_pdf_bytes_to(&ledger, "..", "evil.pdf", b"x");
+        assert!(result.is_err(), "expected target-folder traversal to be rejected");
+        assert!(!outer.path().join("evil.pdf").exists());
     }
 }
