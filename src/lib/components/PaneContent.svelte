@@ -70,7 +70,7 @@
 		{/key}
 	{:else if activeTab.type === 'pdf' && activeTab.pdfPath}
 		{#key activeTab.pdfPath}
-			<PdfPane pdfPath={activeTab.pdfPath} pdfTitle={activeTab.title} />
+			<PdfPane pdfPath={activeTab.pdfPath} pdfTitle={activeTab.title} {pane} />
 		{/key}
 	{:else if activeTab.type === 'graph'}
 		<GraphPane />
