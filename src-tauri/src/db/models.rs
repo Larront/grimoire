@@ -27,7 +27,7 @@ pub struct NewNote<'a> {
     pub modified_at: &'a str,
 }
 
-use super::schema::{maps, pin_categories, pins, scene_slots, scenes, spotify_auth};
+use super::schema::{maps, pdf_scene_links, pin_categories, pins, scene_slots, scenes, spotify_auth};
 
 // ── MapAnnotation ─────────────────────────────────────────────────────────────
 
@@ -219,6 +219,36 @@ pub struct SceneWithCount {
     pub thumbnail_color: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     pub thumbnail_icon: Option<String>,
+}
+
+// ── PdfSceneLink ──────────────────────────────────────────────────────────────
+// A Scene attached to a character range on a page of a path-addressed PDF
+// (ADR-0011). `quote` is the selected text, kept for display in the hover
+// toolbar and to flag drift if a different edition is later dropped at the same
+// path. `scene_id` is a real FK with ON DELETE CASCADE.
+
+#[derive(Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, Identifiable)]
+#[diesel(table_name = pdf_scene_links)]
+pub struct PdfSceneLink {
+    pub id: i32,
+    pub pdf_path: String,
+    pub page: i32,
+    pub start_offset: i32,
+    pub end_offset: i32,
+    pub quote: String,
+    pub scene_id: i32,
+    pub created_at: String,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = pdf_scene_links)]
+pub struct NewPdfSceneLink {
+    pub pdf_path: String,
+    pub page: i32,
+    pub start_offset: i32,
+    pub end_offset: i32,
+    pub quote: String,
+    pub scene_id: i32,
 }
 
 // ── SceneSlot ─────────────────────────────────────────────────────────────────

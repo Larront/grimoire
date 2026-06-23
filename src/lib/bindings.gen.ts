@@ -21,6 +21,7 @@ export const commands = {
 	createMapEmpty: (title: string) => __TAURI_INVOKE<Map>("create_map_empty", { title }),
 	createNote: (noteTitle: string, notePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note", { noteTitle, notePath, noteParentPath }),
 	createNoteFromTemplate: (templatePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note_from_template", { templatePath, noteParentPath }),
+	createPdfSceneLink: (pdfPath: string, page: number, startOffset: number, endOffset: number, quote: string, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("create_pdf_scene_link", { pdfPath, page, startOffset, endOffset, quote, sceneId }),
 	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
@@ -31,6 +32,7 @@ export const commands = {
 	deleteMap: (mapId: number) => __TAURI_INVOKE<number>("delete_map", { mapId }),
 	deleteNote: (noteId: number) => __TAURI_INVOKE<number>("delete_note", { noteId }),
 	deletePdf: (pdfPath: string) => __TAURI_INVOKE<null>("delete_pdf", { pdfPath }),
+	deletePdfSceneLink: (id: number) => __TAURI_INVOKE<null>("delete_pdf_scene_link", { id }),
 	deletePin: (pinId: number) => __TAURI_INVOKE<number>("delete_pin", { pinId }),
 	deletePinCategory: (categoryId: number) => __TAURI_INVOKE<number>("delete_pin_category", { categoryId }),
 	deleteScene: (id: number) => __TAURI_INVOKE<null>("delete_scene", { id }),
@@ -73,6 +75,7 @@ export const commands = {
 	 *  path-addressed (ADR-0011) — there is no id, just the ledger-relative path.
 	 */
 	getPdfAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_pdf_absolute_path", { relativePath }),
+	getPdfSceneLinks: (pdfPath: string) => __TAURI_INVOKE<PdfSceneLink[]>("get_pdf_scene_links", { pdfPath }),
 	getPinCategories: () => __TAURI_INVOKE<PinCategory[]>("get_pin_categories"),
 	getPinCategoriesForMap: (mapId: number) => __TAURI_INVOKE<PinCategory[]>("get_pin_categories_for_map", { mapId }),
 	getPinTags: (pinId: number) => __TAURI_INVOKE<string[]>("get_pin_tags", { pinId }),
@@ -304,6 +307,17 @@ export type OutboundLink = {
 	resolved_id: number | null,
 	resolved_title: string | null,
 	resolved_path: string | null,
+};
+
+export type PdfSceneLink = {
+	id: number,
+	pdf_path: string,
+	page: number,
+	start_offset: number,
+	end_offset: number,
+	quote: string,
+	scene_id: number,
+	created_at: string,
 };
 
 export type Pin = {

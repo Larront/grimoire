@@ -12,14 +12,21 @@
     ChevronUp,
     ChevronDown,
     X,
+    Link2,
+    Plus,
   } from "@lucide/svelte";
   import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
   import type { PDFDocumentProxy, PDFDocumentLoadingTask } from "pdfjs-dist";
   import type { TextContent, TextItem } from "pdfjs-dist/types/src/display/api";
   import { buildPageIndex, findMatches, rangesForMatch, type ItemRange } from "$lib/pdf/pdf-find";
   import PdfPage from "./PdfPage.svelte";
+  import ScenePicker from "./ScenePicker.svelte";
+  import type { SceneLinkSelection } from "$lib/pdf/scene-link-anchor";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { scenes } from "$lib/stores/scenes.svelte";
+  import { pdfSceneLinks } from "$lib/stores/pdf-scene-links.svelte";
+  import type { PdfSceneLink } from "$lib/bindings.gen";
 
   interface Props {
     pdfPath: string;
@@ -92,6 +99,9 @@
         numPages = loaded.numPages;
         doc = loaded;
         status = "ready";
+        // Load this PDF's Scene-links so underlines re-render on (re)open (#103).
+        // Fire-and-forget: the store uses api.silent, which already logs.
+        void pdfSceneLinks.load(pdfPath).catch(() => {});
       } catch (error) {
         if (destroyed) return;
         // Missing, corrupt, not-a-PDF, and password-protected all resolve to the
@@ -264,6 +274,80 @@
       openFind();
     }
   }
+
+  // ── Scene-links ─────────────────────────────────────────────────────────────
+  // The store holds every link for this path; a link whose Scene was deleted is
+  // filtered out here so its underline vanishes the instant the Scene is gone
+  // (the DB row is already cascade-removed — issue #103). Links are grouped by
+  // page for the per-page overlay.
+  const scenesById = $derived(new Map(scenes.scenes.map((s) => [s.id, s])));
+  const visibleLinks = $derived(
+    pdfSceneLinks.linksForPath(pdfPath).filter((l) => scenesById.has(l.scene_id)),
+  );
+  const linksByPage = $derived.by(() => {
+    const map = new Map<number, PdfSceneLink[]>();
+    for (const link of visibleLinks) {
+      const list = map.get(link.page) ?? [];
+      list.push(link);
+      map.set(link.page, list);
+    }
+    return map;
+  });
+  const EMPTY_LINKS: PdfSceneLink[] = [];
+
+  // A pending selection drives the "+ Link Scene" action bubble; opening the
+  // picker freezes it (so clicking around the picker can't clear it).
+  let pendingSelection = $state<SceneLinkSelection | null>(null);
+  let pickerOpen = $state(false);
+  let showLinkHint = $state(false);
+  let hintTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onSceneLinkSelect(selection: SceneLinkSelection) {
+    pendingSelection = selection;
+    pickerOpen = false;
+  }
+
+  // The persistent toolbar button: opens the picker if text is selected, else
+  // teaches the gesture with a transient hint (CONTEXT: discoverable path).
+  function onLinkSceneButton() {
+    if (pendingSelection) {
+      pickerOpen = true;
+      showLinkHint = false;
+    } else {
+      showLinkHint = true;
+      if (hintTimer) clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => (showLinkHint = false), 2600);
+    }
+  }
+
+  async function linkScene(sceneId: number) {
+    const sel = pendingSelection;
+    if (!sel) return;
+    pickerOpen = false;
+    pendingSelection = null;
+    window.getSelection()?.removeAllRanges();
+    try {
+      await pdfSceneLinks.create(pdfPath, sel.page, sel.start, sel.end, sel.quote, sceneId);
+    } catch (error) {
+      console.error("create scene-link failed:", error);
+    }
+  }
+
+  async function removeSceneLink(linkId: number) {
+    try {
+      await pdfSceneLinks.remove(pdfPath, linkId);
+    } catch (error) {
+      console.error("remove scene-link failed:", error);
+    }
+  }
+
+  // The action bubble/picker are viewport-anchored to the selection rect, so a
+  // scroll detaches them — dismiss on scroll unless the picker is open.
+  function dismissSelectionOnScroll() {
+    if (!pickerOpen) {
+      pendingSelection = null;
+    }
+  }
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
@@ -319,6 +403,31 @@
 
       <div class="flex-1"></div>
 
+      <!-- Link Scene (discoverable path): opens the picker when text is selected,
+           teaches the gesture otherwise. -->
+      <div class="relative">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="gap-1.5 text-muted-foreground"
+          aria-label="Link a Scene to selected text"
+          onclick={onLinkSceneButton}
+        >
+          <Link2 class="size-3.5" />
+          Link Scene
+        </Button>
+        {#if showLinkHint}
+          <div
+            class="absolute right-0 top-full z-20 mt-1 w-max rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md"
+            role="status"
+          >
+            Select text to link a Scene
+          </div>
+        {/if}
+      </div>
+
+      <div class="mx-1 h-4 w-px bg-border"></div>
+
       <!-- Find toggle -->
       <Button
         variant="ghost"
@@ -365,7 +474,10 @@
     <!-- Scroll surface -->
     <div
       bind:this={scrollEl}
-      onscroll={updateCurrentPage}
+      onscroll={() => {
+        updateCurrentPage();
+        dismissSelectionOnScroll();
+      }}
       data-pdf-scroll
       aria-label={`PDF: ${pdfTitle}`}
       class="relative min-h-0 flex-1 overflow-y-auto bg-muted/40"
@@ -423,9 +535,52 @@
             {getTextContent}
             highlightRanges={highlightsByPage.get(i + 1) ?? EMPTY}
             activeRanges={activeMatchEntry?.page === i + 1 ? activeMatchEntry.ranges : EMPTY}
+            sceneLinks={linksByPage.get(i + 1) ?? EMPTY_LINKS}
+            scenesList={scenes.scenes}
+            {onSceneLinkSelect}
+            onRemoveSceneLink={removeSceneLink}
           />
         {/each}
       </div>
     </div>
+
+    <!-- Selection action bubble + Scene picker. Both are viewport-anchored to the
+         selection rect (fixed), so they float over the scroll surface and are
+         dismissed when the selection clears or the page scrolls. -->
+    {#if pendingSelection && !pickerOpen}
+      <div
+        class="fixed z-30"
+        style="left: {pendingSelection.rect.left}px; top: {Math.max(8, pendingSelection.rect.top - 40)}px;"
+      >
+        <Button
+          variant="default"
+          size="sm"
+          class="gap-1.5 shadow-md"
+          onclick={() => (pickerOpen = true)}
+        >
+          <Plus class="size-3.5" />
+          Link Scene
+        </Button>
+      </div>
+    {/if}
+
+    {#if pendingSelection && pickerOpen}
+      <div
+        class="fixed z-30"
+        style="left: {pendingSelection.rect.left}px; top: {Math.min(pendingSelection.rect.bottom + 6, (typeof window !== 'undefined' ? window.innerHeight : 800) - 280)}px;"
+      >
+        <ScenePicker onSelect={linkScene} />
+      </div>
+      <!-- Click-away closes the picker without linking. -->
+      <button
+        type="button"
+        class="fixed inset-0 z-20 cursor-default"
+        aria-label="Dismiss Scene picker"
+        onclick={() => {
+          pickerOpen = false;
+          pendingSelection = null;
+        }}
+      ></button>
+    {/if}
   </div>
 {/if}

@@ -12,6 +12,7 @@ use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
+use commands::pdf_scene_links::*;
 use commands::preferences::*;
 use commands::recent::*;
 use commands::recent_ledgers::*;
@@ -50,6 +51,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_map_empty,
             create_note,
             create_note_from_template,
+            create_pdf_scene_link,
             create_pin,
             create_pin_category,
             create_scene,
@@ -60,6 +62,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_map,
             delete_note,
             delete_pdf,
+            delete_pdf_scene_link,
             delete_pin,
             delete_pin_category,
             delete_scene,
@@ -85,6 +88,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_notes,
             get_outbound_links,
             get_pdf_absolute_path,
+            get_pdf_scene_links,
             get_pin_categories,
             get_pin_categories_for_map,
             get_pin_tags,
@@ -276,6 +280,10 @@ pub fn run() {
             rename_pdf,
             delete_pdf,
             save_pdf_bytes,
+            // PDF Scene-links
+            create_pdf_scene_link,
+            get_pdf_scene_links,
+            delete_pdf_scene_link,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
             // Recent entities

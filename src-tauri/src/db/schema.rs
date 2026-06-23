@@ -94,6 +94,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    pdf_scene_links (id) {
+        id -> Integer,
+        pdf_path -> Text,
+        page -> Integer,
+        start_offset -> Integer,
+        end_offset -> Integer,
+        quote -> Text,
+        scene_id -> Integer,
+        created_at -> Text,
+    }
+}
+
+diesel::table! {
     pins (id) {
         id -> Integer,
         map_id -> Integer,
@@ -161,6 +174,7 @@ diesel::joinable!(pin_tags -> pins (pin_id));
 diesel::joinable!(pins -> maps (map_id));
 diesel::joinable!(pins -> notes (note_id));
 diesel::joinable!(pins -> pin_categories (category_id));
+diesel::joinable!(pdf_scene_links -> scenes (scene_id));
 diesel::joinable!(scene_slots -> scenes (scene_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -170,6 +184,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     note_links,
     note_tags,
     notes,
+    pdf_scene_links,
     pin_categories,
     pin_tags,
     pins,

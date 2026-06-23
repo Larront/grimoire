@@ -152,16 +152,12 @@ pub fn get_pdf_absolute_path(
 /// filename without extension (the tree shows the stem, not the `.pdf`). Returns
 /// the new ledger-relative path so the frontend can re-key its open tab.
 ///
-/// PDFs are path-addressed (ADR-0011) — there is no DB row to update, so this is
-/// a pure filesystem rename, guarded against traversal (via `validate_path` on
-/// the source and a path-separator check on the new name) and against silently
-/// clobbering an existing file.
-///
-/// FUTURE (ADR-0011 §Consequences): once `pdf_scene_links` exists, a rename must
-/// also rewrite that table's `pdf_path` rows (reusing the `links.rs` rename
-/// machinery) so Scene-links follow the moved file. That table isn't built yet
-/// (Scene-links land last, per #98 build order), so there is nothing to rewrite
-/// here today — but the Scene-link work must extend this command.
+/// PDFs are path-addressed (ADR-0011), so this is a pure filesystem rename,
+/// guarded against traversal (via `validate_path` on the source and a
+/// path-separator check on the new name) and against silently clobbering an
+/// existing file. The one piece of canonical PDF state — `pdf_scene_links` rows
+/// keyed by the path — is re-keyed by the `rename_pdf` command wrapper after this
+/// succeeds (ADR-0011 §Consequences); this inner fn stays FS-only and testable.
 pub fn rename_pdf_inner(
     ledger_path: &Path,
     old_path: &str,
@@ -210,7 +206,17 @@ pub fn rename_pdf(
     let state = ledger.lock().map_err(|e| e.to_string())?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     drop(state); // release lock before filesystem op
-    rename_pdf_inner(&ledger_path, &old_path, &new_stem)
+
+    let new_path = rename_pdf_inner(&ledger_path, &old_path, &new_stem)?;
+
+    // The Scene-link table is keyed by the PDF path (ADR-0011 §Consequences), so a
+    // rename must re-key its rows or the links would be orphaned at the old path.
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    crate::commands::pdf_scene_links::rewrite_pdf_path(conn, &old_path, &new_path)
+        .map_err(|e| e.to_string())?;
+
+    Ok(new_path)
 }
 
 /// Resolve a non-colliding filename in `dir` for a dropped PDF. An exact name is
@@ -334,7 +340,16 @@ pub fn delete_pdf(pdf_path: String, ledger: State<AppLedger>) -> Result<(), Stri
     let state = ledger.lock().map_err(|e| e.to_string())?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     drop(state); // release lock before filesystem op
-    delete_pdf_inner(&ledger_path, &pdf_path)
+    delete_pdf_inner(&ledger_path, &pdf_path)?;
+
+    // A deleted PDF's Scene-links have no referent and the PDF is not a DB row that
+    // could cascade, so remove them explicitly (ADR-0011 §Consequences).
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    crate::commands::pdf_scene_links::delete_links_for_pdf(conn, &pdf_path)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[cfg(test)]

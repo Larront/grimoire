@@ -8,6 +8,14 @@
   } from "pdfjs-dist";
   import type { TextContent } from "pdfjs-dist/types/src/display/api";
   import type { ItemRange } from "$lib/pdf/pdf-find";
+  import {
+    offsetsFromRange,
+    quoteForOffsets,
+    type SceneLinkSelection,
+  } from "$lib/pdf/scene-link-anchor";
+  import PdfSceneLinkLayer from "./PdfSceneLinkLayer.svelte";
+  import type { PdfSceneLink } from "$lib/bindings.gen";
+  import type { SceneWithCount } from "$lib/types/ledger";
 
   interface Props {
     doc: PDFDocumentProxy;
@@ -27,6 +35,12 @@
     // the currently-active match (drawn brighter and scrolled into view).
     highlightRanges: ItemRange[];
     activeRanges: ItemRange[];
+    // Scene-links (issue #103): this page's links, the Scene list they tint
+    // against, and callbacks for creating (on selection) and removing them.
+    sceneLinks: PdfSceneLink[];
+    scenesList: SceneWithCount[];
+    onSceneLinkSelect: (selection: SceneLinkSelection) => void;
+    onRemoveSceneLink: (linkId: number) => void;
   }
   let {
     doc,
@@ -37,6 +51,10 @@
     getTextContent,
     highlightRanges,
     activeRanges,
+    sceneLinks,
+    scenesList,
+    onSceneLinkSelect,
+    onRemoveSceneLink,
   }: Props = $props();
 
   let page = $state<PDFPageProxy | null>(null);
@@ -61,8 +79,10 @@
   let renderGen = 0;
   let renderTask: RenderTask | null = null;
   let textLayer: TextLayerType | null = null;
-  let textDivs: HTMLElement[] = [];
-  let itemStrings: string[] = [];
+  // $state so the scene-link overlay re-measures when the layer (re)renders or is
+  // cleared — these arrays are passed to PdfSceneLinkLayer.
+  let textDivs = $state<HTMLElement[]>([]);
+  let itemStrings = $state<string[]>([]);
   let TextLayerCtor: typeof TextLayerType | null = null;
 
   // Lazy render: only rasterize a page while it is near the viewport, and drop
@@ -248,6 +268,27 @@
     if (cursor < original.length) frag.append(document.createTextNode(original.slice(cursor)));
     div.replaceChildren(frag);
   }
+
+  // Report a fresh text selection within this page's text layer as a candidate
+  // Scene-link range. The offset math lives in the anchoring module; here we just
+  // gate to selections that actually land on this page and pass along the rect
+  // the action bubble anchors to.
+  function handleTextMouseUp() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    if (!textLayerEl || !textLayerEl.contains(range.commonAncestorContainer)) return;
+    const offsets = offsetsFromRange(textDivs, range);
+    if (!offsets) return;
+    const rect = range.getBoundingClientRect();
+    onSceneLinkSelect({
+      page: pageNumber,
+      start: offsets.start,
+      end: offsets.end,
+      quote: quoteForOffsets(itemStrings, offsets.start, offsets.end),
+      rect: { left: rect.left, top: rect.top, bottom: rect.bottom, right: rect.right },
+    });
+  }
 </script>
 
 <div
@@ -257,7 +298,18 @@
   style="--total-scale-factor: {scale}; --scale-round-x: 1px; --scale-round-y: 1px; width: {displayWidth}px; height: {displayHeight}px;"
 >
   <canvas bind:this={canvasEl} class="block h-full w-full"></canvas>
-  <div bind:this={textLayerEl} class="textLayer"></div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div bind:this={textLayerEl} class="textLayer" onmouseup={handleTextMouseUp}></div>
+  <PdfSceneLinkLayer
+    links={sceneLinks}
+    {scenesList}
+    {textDivs}
+    {itemStrings}
+    wrapperEl={wrapperEl}
+    {scale}
+    {textReady}
+    onRemove={onRemoveSceneLink}
+  />
 </div>
 
 <style>
