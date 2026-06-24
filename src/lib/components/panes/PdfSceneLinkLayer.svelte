@@ -2,7 +2,8 @@
      Draws a page's Scene-links over the PDF.js text layer: a scene-accent-tinted
      underline per linked text range (text stays readable — underline, not a
      background highlight), a trailing scene-icon chip, an active state while the
-     Scene plays, and a hover bubble exposing Play / Remove.
+     Scene plays, and a hover bubble exposing the full toolbar (Play/Stop, master
+     volume, change-Scene, Remove).
 
      Geometry is measured from the live text-layer spans via the anchoring module
      (offset-range → per-span ranges → client rects), so it re-flows with zoom and
@@ -24,6 +25,8 @@
     wrapperEl,
     scale,
     textReady,
+    onChangeScene,
+    onNewScene,
     onRemove,
   }: {
     links: PdfSceneLink[];
@@ -33,6 +36,8 @@
     wrapperEl: HTMLElement | undefined;
     scale: number;
     textReady: number;
+    onChangeScene: (linkId: number, sceneId: number) => void;
+    onNewScene: (linkId: number) => void;
     onRemove: (linkId: number) => void;
   } = $props();
 
@@ -173,7 +178,12 @@
           role="group"
         >
           <div class="absolute bottom-1 left-0">
-            <SceneLinkBubble scene={box.scene} onRemove={() => onRemove(box.link.id)} />
+            <SceneLinkBubble
+              scene={box.scene}
+              onChangeScene={(sceneId) => onChangeScene(box.link.id, sceneId)}
+              onNewScene={() => onNewScene(box.link.id)}
+              onRemove={() => onRemove(box.link.id)}
+            />
           </div>
         </div>
       {/if}

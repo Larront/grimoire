@@ -48,6 +48,16 @@ function createPdfSceneLinksStore() {
     return link;
   }
 
+  /** Re-link a link to a different Scene, replacing the row in the path's set. */
+  async function update(pdfPath: string, id: number, sceneId: number): Promise<PdfSceneLink> {
+    const link = await api.silent.updatePdfSceneLink(id, sceneId);
+    byPath.set(
+      pdfPath,
+      (byPath.get(pdfPath) ?? []).map((l) => (l.id === id ? link : l)),
+    );
+    return link;
+  }
+
   /** Remove a link by id from a path's set. */
   async function remove(pdfPath: string, id: number): Promise<void> {
     await api.silent.deletePdfSceneLink(id);
@@ -63,7 +73,7 @@ function createPdfSceneLinksStore() {
     });
   });
 
-  return { load, linksForPath, create, remove };
+  return { load, linksForPath, create, update, remove };
 }
 
 export const pdfSceneLinks = createPdfSceneLinksStore();

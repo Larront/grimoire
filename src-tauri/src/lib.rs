@@ -52,6 +52,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_note,
             create_note_from_template,
             create_pdf_scene_link,
+            update_pdf_scene_link,
             create_pin,
             create_pin_category,
             create_scene,
@@ -282,6 +283,7 @@ pub fn run() {
             save_pdf_bytes,
             // PDF Scene-links
             create_pdf_scene_link,
+            update_pdf_scene_link,
             get_pdf_scene_links,
             delete_pdf_scene_link,
             toggle_scene_favorite,

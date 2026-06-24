@@ -56,6 +56,26 @@ pub fn get_pdf_scene_links(
         .map_err(|e| e.to_string())
 }
 
+/// Re-link a Scene-link to a different Scene (the toolbar change-Scene dropdown,
+/// issue #104). Only the `scene_id` changes — the anchor (page + offsets + quote)
+/// stays put, so the underline keeps its position and only its accent/identity
+/// swaps. Returns the updated row.
+#[tauri::command]
+#[specta::specta]
+pub fn update_pdf_scene_link(
+    id: i32,
+    scene_id: i32,
+    ledger: State<AppLedger>,
+) -> Result<PdfSceneLink, String> {
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    diesel::update(pdf_scene_links::table.find(id))
+        .set(pdf_scene_links::scene_id.eq(scene_id))
+        .returning(PdfSceneLink::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pdf_scene_link(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
@@ -206,6 +226,27 @@ mod tests {
         let remaining: Vec<PdfSceneLink> = pdf_scene_links::table.load(&mut conn).unwrap();
         assert_eq!(remaining.len(), 1, "the deleted scene's links cascade away");
         assert_eq!(remaining[0].scene_id, keep.id, "the other scene's link survives");
+    }
+
+    #[test]
+    fn test_update_relinks_scene_only() {
+        let mut conn = setup_db();
+        let from = make_scene(&mut conn, "Tavern");
+        let to = make_scene(&mut conn, "Forest");
+        let link = make_link(&mut conn, "a.pdf", 1, from.id);
+
+        let updated = diesel::update(pdf_scene_links::table.find(link.id))
+            .set(pdf_scene_links::scene_id.eq(to.id))
+            .returning(PdfSceneLink::as_returning())
+            .get_result::<PdfSceneLink>(&mut conn)
+            .unwrap();
+
+        // The Scene swaps; the anchor (page + offsets + quote) is untouched.
+        assert_eq!(updated.scene_id, to.id, "re-linked to the new Scene");
+        assert_eq!(updated.page, link.page);
+        assert_eq!(updated.start_offset, link.start_offset);
+        assert_eq!(updated.end_offset, link.end_offset);
+        assert_eq!(updated.quote, link.quote);
     }
 
     #[test]

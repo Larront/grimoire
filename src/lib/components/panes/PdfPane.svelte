@@ -333,6 +333,44 @@
     }
   }
 
+  // "+ New scene" from the selection picker: create an empty Scene and link it to
+  // the pending selection immediately, so a GM can attach a Scene to a passage
+  // before authoring its audio (issue #104; the name is clicked through later).
+  async function linkNewScene() {
+    const sel = pendingSelection;
+    if (!sel) return;
+    pickerOpen = false;
+    pendingSelection = null;
+    window.getSelection()?.removeAllRanges();
+    try {
+      const scene = await scenes.createScene("New Scene");
+      await pdfSceneLinks.create(pdfPath, sel.page, sel.start, sel.end, sel.quote, scene.id);
+    } catch (error) {
+      console.error("create scene-link with new scene failed:", error);
+    }
+  }
+
+  // Change-Scene dropdown on the hover toolbar: re-link the span to a different
+  // existing Scene (anchor untouched).
+  async function changeSceneLink(linkId: number, sceneId: number) {
+    try {
+      await pdfSceneLinks.update(pdfPath, linkId, sceneId);
+    } catch (error) {
+      console.error("re-link scene failed:", error);
+    }
+  }
+
+  // "+ New scene" from the change dropdown: create an empty Scene and re-link the
+  // existing span to it.
+  async function newSceneForLink(linkId: number) {
+    try {
+      const scene = await scenes.createScene("New Scene");
+      await pdfSceneLinks.update(pdfPath, linkId, scene.id);
+    } catch (error) {
+      console.error("re-link to new scene failed:", error);
+    }
+  }
+
   async function removeSceneLink(linkId: number) {
     try {
       await pdfSceneLinks.remove(pdfPath, linkId);
@@ -538,6 +576,8 @@
             sceneLinks={linksByPage.get(i + 1) ?? EMPTY_LINKS}
             scenesList={scenes.scenes}
             {onSceneLinkSelect}
+            onChangeSceneLink={changeSceneLink}
+            onNewSceneForLink={newSceneForLink}
             onRemoveSceneLink={removeSceneLink}
           />
         {/each}
@@ -569,7 +609,7 @@
         class="fixed z-30"
         style="left: {pendingSelection.rect.left}px; top: {Math.min(pendingSelection.rect.bottom + 6, (typeof window !== 'undefined' ? window.innerHeight : 800) - 280)}px;"
       >
-        <ScenePicker onSelect={linkScene} />
+        <ScenePicker onSelect={linkScene} onNewScene={linkNewScene} />
       </div>
       <!-- Click-away closes the picker without linking. -->
       <button

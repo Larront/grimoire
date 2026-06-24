@@ -40,6 +40,8 @@
     sceneLinks: PdfSceneLink[];
     scenesList: SceneWithCount[];
     onSceneLinkSelect: (selection: SceneLinkSelection) => void;
+    onChangeSceneLink: (linkId: number, sceneId: number) => void;
+    onNewSceneForLink: (linkId: number) => void;
     onRemoveSceneLink: (linkId: number) => void;
   }
   let {
@@ -54,6 +56,8 @@
     sceneLinks,
     scenesList,
     onSceneLinkSelect,
+    onChangeSceneLink,
+    onNewSceneForLink,
     onRemoveSceneLink,
   }: Props = $props();
 
@@ -308,6 +312,8 @@
     wrapperEl={wrapperEl}
     {scale}
     {textReady}
+    onChangeScene={onChangeSceneLink}
+    onNewScene={onNewSceneForLink}
     onRemove={onRemoveSceneLink}
   />
 </div>

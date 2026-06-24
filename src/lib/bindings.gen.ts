@@ -22,6 +22,13 @@ export const commands = {
 	createNote: (noteTitle: string, notePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note", { noteTitle, notePath, noteParentPath }),
 	createNoteFromTemplate: (templatePath: string, noteParentPath: string | null) => __TAURI_INVOKE<Note>("create_note_from_template", { templatePath, noteParentPath }),
 	createPdfSceneLink: (pdfPath: string, page: number, startOffset: number, endOffset: number, quote: string, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("create_pdf_scene_link", { pdfPath, page, startOffset, endOffset, quote, sceneId }),
+	/**
+	 *  Re-link a Scene-link to a different Scene (the toolbar change-Scene dropdown,
+	 *  issue #104). Only the `scene_id` changes — the anchor (page + offsets + quote)
+	 *  stays put, so the underline keeps its position and only its accent/identity
+	 *  swaps. Returns the updated row.
+	 */
+	updatePdfSceneLink: (id: number, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("update_pdf_scene_link", { id, sceneId }),
 	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
