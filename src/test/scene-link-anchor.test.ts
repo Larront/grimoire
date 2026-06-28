@@ -3,6 +3,7 @@ import {
   offsetsFromRange,
   highlightRangesForOffsets,
   quoteForOffsets,
+  quoteMatchesAtOffsets,
   rangeWithinDiv,
   type ItemRange,
 } from "../lib/pdf/scene-link-anchor";
@@ -110,6 +111,23 @@ describe("quoteForOffsets", () => {
   it("extracts the selected text across item boundaries", () => {
     expect(quoteForOffsets(["The ", "quick", " fox"], 4, 9)).toBe("quick");
     expect(quoteForOffsets(["The ", "quick", " fox"], 0, 13)).toBe("The quick fox");
+  });
+});
+
+describe("quoteMatchesAtOffsets", () => {
+  it("is true when the text at the range still equals the stored quote", () => {
+    expect(quoteMatchesAtOffsets(["The ", "quick", " fox"], 4, 9, "quick")).toBe(true);
+  });
+
+  it("is false when the PDF text drifted under the stored range", () => {
+    // A different edition dropped at the same path: same offsets, different text.
+    expect(quoteMatchesAtOffsets(["The ", "slow", " fox"], 4, 9, "quick")).toBe(false);
+  });
+
+  it("is false when the range now runs past the (shorter) page text", () => {
+    // A shorter edition: the stored end offset exceeds the available text, so the
+    // slice is truncated and cannot equal the original quote.
+    expect(quoteMatchesAtOffsets(["Hi"], 0, 5, "Hello")).toBe(false);
   });
 });
 

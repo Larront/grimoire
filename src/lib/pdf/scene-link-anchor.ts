@@ -120,6 +120,23 @@ export function quoteForOffsets(itemStrings: readonly string[], start: number, e
 }
 
 /**
+ * Whether the text now at a Scene-link's stored `[start, end)` range still equals
+ * the `quote` captured when the link was made. A PDF is path-addressed (ADR-0011),
+ * so a different edition dropped at the same path keeps the offsets but changes the
+ * underlying text — the range would then underline unrelated words. Callers use
+ * this to surface the drift instead of silently mis-highlighting. `quote` was
+ * itself produced by `quoteForOffsets`, so an unchanged PDF compares exactly.
+ */
+export function quoteMatchesAtOffsets(
+  itemStrings: readonly string[],
+  start: number,
+  end: number,
+  quote: string,
+): boolean {
+  return quoteForOffsets(itemStrings, start, end) === quote;
+}
+
+/**
  * Build a DOM Range spanning chars `[from, to)` of a span's text, so the caller
  * can measure it (`getBoundingClientRect`) to position an underline. Returns null
  * for an empty span. Walks the span's text nodes so it works whether the span

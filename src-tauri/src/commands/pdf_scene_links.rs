@@ -100,6 +100,36 @@ pub fn rewrite_pdf_path(
         .execute(conn)
 }
 
+/// Re-key Scene-links for every PDF under a moved folder. Called from
+/// `rename_folder` (a folder move relocates its PDFs on disk via an atomic
+/// directory rename, so their path-addressed links must move with them, ADR-0011
+/// §Consequences). `old_prefix`/`new_prefix` are the folder paths with a trailing
+/// slash, so only paths *inside* the folder match — a sibling folder sharing a
+/// name prefix (`creatures` vs `creatures-extra`) is untouched. Returns the rows
+/// rewritten.
+///
+/// The rewrite is anchored to the *leading* prefix only — `new_prefix` followed by
+/// the remainder after `old_prefix` — rather than a blanket `REPLACE`, so a path
+/// that repeats the folder name deeper (`creatures/sub/creatures/x.pdf`) keeps its
+/// interior segment intact.
+pub fn rewrite_pdf_path_prefix(
+    conn: &mut SqliteConnection,
+    old_prefix: &str,
+    new_prefix: &str,
+) -> QueryResult<usize> {
+    let like_pattern = format!("{}%", old_prefix);
+    // SQLite SUBSTR is 1-based; +1 starts just past the matched prefix. Binding
+    // the prefix length as a literal i32 keeps it parameterised.
+    let prefix_len = old_prefix.chars().count() as i32;
+    diesel::sql_query(
+        "UPDATE pdf_scene_links SET pdf_path = ? || SUBSTR(pdf_path, ?) WHERE pdf_path LIKE ?",
+    )
+    .bind::<diesel::sql_types::Text, _>(new_prefix)
+    .bind::<diesel::sql_types::Integer, _>(prefix_len + 1)
+    .bind::<diesel::sql_types::Text, _>(&like_pattern)
+    .execute(conn)
+}
+
 /// Remove every Scene-link for a PDF. Called from `delete_pdf` — a deleted PDF's
 /// links have no referent, and unlike a Scene (whose deletion cascades) the PDF is
 /// not a DB row, so the cleanup is explicit here. Returns the rows removed.
@@ -270,6 +300,45 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert!(stale.is_empty(), "nothing left at the old path");
+    }
+
+    #[test]
+    fn test_rewrite_pdf_path_prefix_follows_folder_move() {
+        let mut conn = setup_db();
+        let scene = make_scene(&mut conn, "Scene");
+        // Two PDFs inside the moved folder, one nested deeper, plus a sibling
+        // folder that merely shares a name prefix — that one must NOT move.
+        make_link(&mut conn, "creatures/dragon.pdf", 1, scene.id);
+        make_link(&mut conn, "creatures/lair/map.pdf", 2, scene.id);
+        // A path that repeats the folder name deeper — the interior segment must
+        // survive (the rewrite is anchored to the leading prefix, not a blanket
+        // REPLACE that would also rewrite the inner "creatures/").
+        make_link(&mut conn, "creatures/creatures/inner.pdf", 1, scene.id);
+        make_link(&mut conn, "creatures-extra/orc.pdf", 1, scene.id);
+
+        let rewritten = rewrite_pdf_path_prefix(&mut conn, "creatures/", "beasts/").unwrap();
+        assert_eq!(rewritten, 3, "only links under the moved folder are re-keyed");
+
+        let moved: Vec<PdfSceneLink> = pdf_scene_links::table
+            .filter(pdf_scene_links::pdf_path.like("beasts/%"))
+            .order(pdf_scene_links::pdf_path.asc())
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(
+            moved.iter().map(|l| l.pdf_path.as_str()).collect::<Vec<_>>(),
+            vec![
+                "beasts/creatures/inner.pdf",
+                "beasts/dragon.pdf",
+                "beasts/lair/map.pdf",
+            ],
+            "direct, nested, and repeated-name PDFs follow the move with interiors intact",
+        );
+
+        let sibling: Vec<PdfSceneLink> = pdf_scene_links::table
+            .filter(pdf_scene_links::pdf_path.eq("creatures-extra/orc.pdf"))
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(sibling.len(), 1, "the name-prefix sibling folder is untouched");
     }
 
     #[test]
