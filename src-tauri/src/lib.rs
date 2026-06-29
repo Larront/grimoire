@@ -325,6 +325,46 @@ pub fn run() {
             get_tag_graph_styles,
             set_tag_graph_style,
         ])
+        .setup(|_app| {
+            #[cfg(target_os = "windows")]
+            disable_webview_pinch_zoom(_app);
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Turn off WebView2's built-in pinch-zoom ("Page Scale" zoom). By default a
+/// touchpad/touchscreen pinch compositor-scales the *entire* web content (the
+/// whole app shell, with clipping) — undesirable jank in a desktop window.
+///
+/// NOTE: this does NOT route pinch into the PDF reader's zoom. WebView2 handles
+/// pinch entirely at the compositor and exposes no interceptable signal — no DOM
+/// event, and ZoomFactor/ZoomFactorChanged cover only ctrl+wheel "standard" zoom,
+/// not pinch (MicrosoftEdge/WebView2Feedback#485, unresolved). So PDF zoom stays
+/// on ctrl+wheel + the toolbar buttons; this just stops pinch from scaling the
+/// app. Don't re-attempt a pinch→PDF-zoom binding here until WebView2 ships an API.
+///
+/// Best-effort: any failure to reach the setting is ignored.
+#[cfg(target_os = "windows")]
+fn disable_webview_pinch_zoom(app: &tauri::App) {
+    use tauri::Manager;
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.with_webview(|webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
+        use windows::core::Interface;
+        unsafe {
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                return;
+            };
+            let Ok(settings) = core.Settings() else {
+                return;
+            };
+            if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
+                let _ = settings5.SetIsPinchZoomEnabled(false);
+            }
+        }
+    });
 }
