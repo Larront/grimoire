@@ -73,6 +73,19 @@ pub fn build_file_tree(
                     map_id: None,
                     children: Vec::new(),
                 });
+            } else if entry_name.to_lowercase().ends_with(".pdf") {
+                // PDFs are path-addressed, not entities (ADR-0011): a plain
+                // FileNode with no id. The frontend detects the `.pdf` extension
+                // from `path` and renders the BookOpen glyph + opens a "pdf" tab.
+                let stem = &entry_name[..entry_name.len() - ".pdf".len()];
+                files.push(FileNode {
+                    name: stem.to_string(),
+                    path: child_rel,
+                    is_dir: false,
+                    note_id: None,
+                    map_id: None,
+                    children: Vec::new(),
+                });
             } else {
                 let lower = entry_name.to_lowercase();
                 if lower.ends_with(".png") || lower.ends_with(".jpg")
@@ -266,6 +279,12 @@ pub fn rename_folder_inner(
         .execute(conn)
         .map_err(|e| format!("update map paths: {}", e))?;
 
+    // 6b. Re-key Scene-links for PDFs inside the renamed folder. PDFs are
+    //     path-addressed (ADR-0011), so a folder move relocates them on disk with
+    //     the atomic dir rename above; their links must follow or be orphaned.
+    crate::commands::pdf_scene_links::rewrite_pdf_path_prefix(conn, &old_prefix, &new_prefix)
+        .map_err(|e| format!("update pdf scene-link paths: {}", e))?;
+
     // 7. Load moved notes (now at new paths) and build reconcile items so their
     //    note_tags are re-keyed and Tantivy is updated. prev_path triggers the
     //    old-path note_tags clear in write_facets.
@@ -417,6 +436,51 @@ mod tests {
         assert!(tree.children.is_empty());
     }
 
+    #[test]
+    fn pdf_files_appear_as_nodes_with_stem_name_and_no_ids() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("Players Handbook.pdf"), "%PDF-1.4").unwrap();
+        });
+        assert_eq!(tree.children.len(), 1);
+        let node = &tree.children[0];
+        assert_eq!(node.name, "Players Handbook");
+        assert_eq!(node.path, "Players Handbook.pdf");
+        assert!(!node.is_dir);
+        assert_eq!(node.note_id, None);
+        assert_eq!(node.map_id, None);
+    }
+
+    #[test]
+    fn pdf_extension_match_is_case_insensitive() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("Manual.PDF"), "%PDF-1.4").unwrap();
+        });
+        assert_eq!(tree.children.len(), 1);
+        assert_eq!(tree.children[0].path, "Manual.PDF");
+        assert_eq!(tree.children[0].name, "Manual");
+    }
+
+    #[test]
+    fn nested_pdf_builds_correct_relative_path() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::create_dir(p.join("rulebooks")).unwrap();
+            fs::write(p.join("rulebooks").join("DMG.pdf"), "%PDF-1.4").unwrap();
+        });
+        let folder = &tree.children[0];
+        assert_eq!(folder.path, "rulebooks");
+        assert_eq!(folder.children[0].path, "rulebooks/DMG.pdf");
+    }
+
+    #[test]
+    fn non_allowlisted_files_are_hidden() {
+        let (_dir, tree) = make_tree(|p| {
+            fs::write(p.join("notes.txt"), "").unwrap();
+            fs::write(p.join("manual.docx"), "").unwrap();
+            fs::write(p.join("archive.zip"), "").unwrap();
+        });
+        assert!(tree.children.is_empty());
+    }
+
     // ── test helpers ─────────────────────────────────────────────────────
 
     use diesel::Connection;
@@ -461,6 +525,20 @@ mod tests {
                 note_path TEXT NOT NULL,
                 tag TEXT NOT NULL,
                 PRIMARY KEY (note_path, tag)
+            );
+            CREATE TABLE scenes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                name TEXT NOT NULL
+            );
+            CREATE TABLE pdf_scene_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                pdf_path TEXT NOT NULL,
+                page INTEGER NOT NULL,
+                start_offset INTEGER NOT NULL,
+                end_offset INTEGER NOT NULL,
+                quote TEXT NOT NULL,
+                scene_id INTEGER NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );"
         ).expect("failed to create schema");
         conn
@@ -505,6 +583,33 @@ mod tests {
         .next()
         .map(|r| r.cnt)
         .unwrap_or(0)
+    }
+
+    fn insert_pdf_scene_link(conn: &mut SqliteConnection, pdf_path: &str) {
+        conn.batch_execute(
+            "INSERT OR IGNORE INTO scenes (id, name) VALUES (1, 'Tavern');",
+        )
+        .unwrap();
+        conn.batch_execute(&format!(
+            "INSERT INTO pdf_scene_links (pdf_path, page, start_offset, end_offset, quote, scene_id) \
+             VALUES ('{}', 1, 0, 5, 'Hello', 1);",
+            pdf_path
+        ))
+        .unwrap();
+    }
+
+    fn pdf_link_paths(conn: &mut SqliteConnection) -> Vec<String> {
+        #[derive(diesel::QueryableByName)]
+        struct PathRow {
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            pdf_path: String,
+        }
+        diesel::sql_query("SELECT pdf_path FROM pdf_scene_links ORDER BY pdf_path")
+            .load::<PathRow>(conn)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.pdf_path)
+            .collect()
     }
 
     fn insert_map(conn: &mut SqliteConnection, map_image_path: &str, map_title: &str) {
@@ -644,6 +749,27 @@ mod tests {
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].path, "beasts/dragons/wyvern.md");
         assert_eq!(updated[0].parent_path.as_deref(), Some("beasts/dragons"));
+    }
+
+    #[test]
+    fn rename_folder_rewrites_pdf_scene_link_paths() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/lair")).unwrap();
+        fs::write(dir.path().join("creatures/dragon.pdf"), "%PDF-1.4").unwrap();
+        fs::write(dir.path().join("creatures/lair/map.pdf"), "%PDF-1.4").unwrap();
+
+        let mut conn = test_conn();
+        insert_pdf_scene_link(&mut conn, "creatures/dragon.pdf");
+        insert_pdf_scene_link(&mut conn, "creatures/lair/map.pdf");
+
+        rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
+
+        // Both PDFs moved with the folder on disk; their Scene-links follow.
+        assert_eq!(
+            pdf_link_paths(&mut conn),
+            vec!["beasts/dragon.pdf", "beasts/lair/map.pdf"],
+            "Scene-links re-key to the moved folder so they are not orphaned",
+        );
     }
 
     #[test]

@@ -1692,6 +1692,8 @@ dependencies = [
  "tauri-specta",
  "tempfile",
  "tokio",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

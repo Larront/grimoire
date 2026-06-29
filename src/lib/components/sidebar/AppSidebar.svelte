@@ -30,6 +30,7 @@
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { toastUndo } from "$lib/toast";
   import { slide } from "svelte/transition";
+  import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -82,6 +83,28 @@
         .finally(() => (treeLoading = false));
     }
   });
+
+  // ── PDF drag-and-drop import into the ledger root (#102) ───────────────────
+  // The Files tree area is a drop target for the ledger root. Drops onto a
+  // folder row are handled (and stop-propagated) by FileTree, so anything that
+  // bubbles up to here — empty tree space, a note/PDF row — lands in the root.
+  let isRootDropTarget = $state(false);
+
+  function handleRootDragOver(e: DragEvent) {
+    if (!e.dataTransfer?.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    isRootDropTarget = true;
+  }
+
+  async function handleRootDrop(e: DragEvent) {
+    isRootDropTarget = false;
+    const pdfs = Array.from(e.dataTransfer?.files ?? []).filter(isPdfFile);
+    if (!pdfs.length) return;
+    e.preventDefault();
+    for (const f of pdfs) await importPdfFromHandle(f, "");
+    await refresh();
+  }
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
@@ -262,6 +285,15 @@
               {#if open}
                 <div {...props} transition:slide>
                   <Sidebar.GroupContent>
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div
+                      ondragover={handleRootDragOver}
+                      ondragleave={() => (isRootDropTarget = false)}
+                      ondrop={handleRootDrop}
+                      class="rounded-md {isRootDropTarget
+                        ? 'ring-1 ring-primary/40'
+                        : ''}"
+                    >
                     {#if treeLoading && !tree}
                       <div class="space-y-1 px-2">
                         <Sidebar.MenuSkeleton showIcon />
@@ -309,6 +341,7 @@
                         </Button>
                       </div>
                     {/if}
+                    </div>
                   </Sidebar.GroupContent>
                 </div>
               {/if}

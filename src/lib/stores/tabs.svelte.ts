@@ -17,6 +17,7 @@ export interface Tab {
   rename?: boolean;
   badge?: string;
   templatePath?: string;
+  pdfPath?: string;
 }
 
 export interface TabPane {
@@ -43,6 +44,7 @@ function createTabsStore() {
           id: t.id,
           title: t.title,
           ...(t.templatePath ? { templatePath: t.templatePath } : {}),
+          ...(t.pdfPath ? { pdfPath: t.pdfPath } : {}),
         }));
     const leftTabs = serializeTabs(left.tabs);
     const rightTabs = right ? serializeTabs(right.tabs) : null;
@@ -74,6 +76,7 @@ function createTabsStore() {
 
   function tabMatches(t: Tab, tab: Tab): boolean {
     if (tab.type === "template") return t.type === "template" && t.templatePath === tab.templatePath;
+    if (tab.type === "pdf") return t.type === "pdf" && t.pdfPath === tab.pdfPath;
     return t.type === tab.type && t.id === tab.id;
   }
 
@@ -306,6 +309,41 @@ function createTabsStore() {
     }
   }
 
+  // PDFs are path-keyed, not id-keyed (ADR-0011), so closeTabByTypeAndId can't
+  // reach them. Close every pdf tab matching `pdfPath` across both panes — a
+  // deleted PDF must not leave a broken tab behind (issue #101).
+  function closeTabsByPdfPath(pdfPath: string) {
+    let idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+    while (idx !== -1) {
+      closeTab("left", idx);
+      idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+    }
+    if (right) {
+      let ridx = right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+      while (right && ridx !== -1) {
+        closeTab("right", ridx);
+        ridx = right ? right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath) : -1;
+      }
+    }
+  }
+
+  // Re-key an open pdf tab when its file is renamed on disk, so the tab keeps
+  // pointing at the moved file and shows the new title (issue #101). Mirrors
+  // updateTemplateTab — both carry a path rather than an id.
+  function updatePdfTab(oldPath: string, newTitle: string, newPath: string) {
+    const update = (pane: TabPane) => ({
+      ...pane,
+      tabs: pane.tabs.map((t) =>
+        t.type === "pdf" && t.pdfPath === oldPath
+          ? { ...t, title: newTitle, pdfPath: newPath }
+          : t,
+      ),
+    });
+    left = update(left);
+    if (right) right = update(right);
+    persist();
+  }
+
   function updateTabTitle(type: TabType, id: number, title: string) {
     const update = (pane: TabPane) => ({
       ...pane,
@@ -414,7 +452,7 @@ function createTabsStore() {
     const pane = focusedPane;
     const current = pane === "right" && right ? right : left;
     const currentTab = current.tabs[current.activeIndex];
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath };
+    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath, pdfPath: tab.pdfPath };
     const newTabs = [...current.tabs];
     newTabs[current.activeIndex] = newTab;
     const backStack = currentTab && currentTab.type !== "empty"
@@ -542,8 +580,10 @@ function createTabsStore() {
     moveToOtherPane,
     closeActiveTab,
     closeTabByTypeAndId,
+    closeTabsByPdfPath,
     updateTabTitle,
     updateTemplateTab,
+    updatePdfTab,
     clearRenameFlag,
     setFocusedPane,
     isTabOpen,

@@ -50,5 +50,13 @@ specta-typescript = "=0.0.12"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 
+# Windows-only: lets us reach into the WebView2 controller to disable the
+# native pinch-zoom gesture so touchpad pinch reaches the page as ctrl+wheel
+# (see `disable_webview_pinch_zoom`). Pinned to the versions Tauri already
+# locks transitively so no extra crate copy is compiled.
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "=0.38.2"
+windows = "=0.61.3"
+
 [dev-dependencies]
 tempfile = "3"

@@ -12,6 +12,7 @@ use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
+use commands::pdf_scene_links::*;
 use commands::preferences::*;
 use commands::recent::*;
 use commands::recent_ledgers::*;
@@ -50,6 +51,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_map_empty,
             create_note,
             create_note_from_template,
+            create_pdf_scene_link,
+            update_pdf_scene_link,
             create_pin,
             create_pin_category,
             create_scene,
@@ -59,6 +62,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_folder,
             delete_map,
             delete_note,
+            delete_pdf,
+            delete_pdf_scene_link,
             delete_pin,
             delete_pin_category,
             delete_scene,
@@ -83,6 +88,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_note_by_path,
             get_notes,
             get_outbound_links,
+            get_pdf_absolute_path,
+            get_pdf_scene_links,
             get_pin_categories,
             get_pin_categories_for_map,
             get_pin_tags,
@@ -105,6 +112,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             remove_recent_ledger,
             rename_folder,
             rename_note,
+            rename_pdf,
             retag_tag,
             rename_template,
             reorder_scene_slots,
@@ -115,6 +123,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_density_level,
             save_image_bytes,
             save_note_as_template,
+            save_pdf_bytes,
             search_all,
             search_notes,
             set_note_aliases,
@@ -268,6 +277,15 @@ pub fn run() {
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
+            get_pdf_absolute_path,
+            rename_pdf,
+            delete_pdf,
+            save_pdf_bytes,
+            // PDF Scene-links
+            create_pdf_scene_link,
+            update_pdf_scene_link,
+            get_pdf_scene_links,
+            delete_pdf_scene_link,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
             // Recent entities
@@ -307,6 +325,46 @@ pub fn run() {
             get_tag_graph_styles,
             set_tag_graph_style,
         ])
+        .setup(|_app| {
+            #[cfg(target_os = "windows")]
+            disable_webview_pinch_zoom(_app);
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Turn off WebView2's built-in pinch-zoom ("Page Scale" zoom). By default a
+/// touchpad/touchscreen pinch compositor-scales the *entire* web content (the
+/// whole app shell, with clipping) — undesirable jank in a desktop window.
+///
+/// NOTE: this does NOT route pinch into the PDF reader's zoom. WebView2 handles
+/// pinch entirely at the compositor and exposes no interceptable signal — no DOM
+/// event, and ZoomFactor/ZoomFactorChanged cover only ctrl+wheel "standard" zoom,
+/// not pinch (MicrosoftEdge/WebView2Feedback#485, unresolved). So PDF zoom stays
+/// on ctrl+wheel + the toolbar buttons; this just stops pinch from scaling the
+/// app. Don't re-attempt a pinch→PDF-zoom binding here until WebView2 ships an API.
+///
+/// Best-effort: any failure to reach the setting is ignored.
+#[cfg(target_os = "windows")]
+fn disable_webview_pinch_zoom(app: &tauri::App) {
+    use tauri::Manager;
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.with_webview(|webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
+        use windows::core::Interface;
+        unsafe {
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                return;
+            };
+            let Ok(settings) = core.Settings() else {
+                return;
+            };
+            if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
+                let _ = settings5.SetIsPinchZoomEnabled(false);
+            }
+        }
+    });
 }
