@@ -309,6 +309,11 @@
   let addShuffle = $state(false);
   let addSourcePath = $state("");
   let addFileName = $state("");
+  // A track can be chosen via the OS picker (path → copyAudioFile) or dropped onto
+  // the box (bytes → copyAudioBytes). The dropped File is held until "Add" so both
+  // paths defer the copy to the same moment; whichever was set last wins.
+  let addDroppedFile = $state<File | null>(null);
+  let isAudioDropTarget = $state(false);
   let addSpotifyUri = $state("");
   let isAdding = $state(false);
 
@@ -371,7 +376,7 @@
 
   let canAdd = $derived(
     addLabel.trim() !== "" &&
-      (addTab === "local" ? !!addSourcePath : !!parsedSpotifyInput)
+      (addTab === "local" ? (!!addSourcePath || !!addDroppedFile) : !!parsedSpotifyInput)
   );
 
   function resetAddDialog() {
@@ -382,8 +387,41 @@
     addShuffle = false;
     addSourcePath = "";
     addFileName = "";
+    addDroppedFile = null;
+    isAudioDropTarget = false;
     addSpotifyUri = "";
     spotifyAuthChecked = false;
+  }
+
+  const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "flac", "m4a", "aac"];
+
+  function isAudioFile(file: File): boolean {
+    if (file.type.startsWith("audio/")) return true;
+    const ext = file.name.toLowerCase().split(".").pop() ?? "";
+    return AUDIO_EXTENSIONS.includes(ext);
+  }
+
+  // Drop sets the dropped File and clears any picked path (last choice wins).
+  function selectDroppedFile(file: File) {
+    addDroppedFile = file;
+    addSourcePath = "";
+    addFileName = file.name;
+    if (!addLabel) addLabel = file.name.replace(/\.[^/.]+$/, "");
+  }
+
+  function handleAudioDragOver(e: DragEvent) {
+    if (!e.dataTransfer?.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    isAudioDropTarget = true;
+  }
+
+  function handleAudioDrop(e: DragEvent) {
+    isAudioDropTarget = false;
+    const audio = Array.from(e.dataTransfer?.files ?? []).find(isAudioFile);
+    if (!audio) return;
+    e.preventDefault();
+    selectDroppedFile(audio);
   }
 
   async function handleFilePick() {
@@ -392,12 +430,13 @@
       filters: [
         {
           name: "Audio",
-          extensions: ["mp3", "wav", "ogg", "flac", "m4a", "aac"],
+          extensions: AUDIO_EXTENSIONS,
         },
       ],
     });
     if (picked && typeof picked === "string") {
       addSourcePath = picked;
+      addDroppedFile = null;
       const parts = picked.replace(/\\/g, "/").split("/");
       addFileName = parts[parts.length - 1];
       if (!addLabel) addLabel = addFileName.replace(/\.[^/.]+$/, "");
@@ -411,7 +450,12 @@
       let sourceId: string;
       let source: string;
       if (addTab === "local") {
-        sourceId = await api.copyAudioFile(addSourcePath);
+        if (addDroppedFile) {
+          const bytes = Array.from(new Uint8Array(await addDroppedFile.arrayBuffer()));
+          sourceId = await api.copyAudioBytes(bytes, addDroppedFile.name);
+        } else {
+          sourceId = await api.copyAudioFile(addSourcePath);
+        }
         source = "local";
       } else {
         const parsed = parseSpotifyInput(addSpotifyUri.trim());
@@ -901,10 +945,18 @@
 
     <!-- Tab content -->
     {#if addTab === "local"}
-      <div class="space-y-4 pt-4">
+      <div
+        class="space-y-4 pt-4"
+        role="presentation"
+        ondragover={handleAudioDragOver}
+        ondragleave={() => (isAudioDropTarget = false)}
+        ondrop={handleAudioDrop}
+      >
         {#if addFileName}
           <div
-            class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
+            class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors {isAudioDropTarget
+              ? 'ring-2 ring-primary/50'
+              : ''}"
           >
             <Music2 class="size-4 text-primary/60" />
             <span class="flex-1 truncate text-foreground">{addFileName}</span>
@@ -915,14 +967,18 @@
         {:else}
           <button
             onclick={handleFilePick}
-            class="w-full rounded-lg border border-dashed border-border p-6 text-center hover:border-primary/30 transition-colors"
+            class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors {isAudioDropTarget
+              ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/40'
+              : 'border-border hover:border-primary/50 hover:bg-primary/5'}"
           >
-            <Music2 class="size-6 mx-auto text-muted-foreground/60 mb-2" />
-            <div class="text-sm text-muted-foreground">
-              Choose an audio file
+            <Music2
+              class="size-6 mx-auto mb-2 text-muted-foreground/60 transition-colors group-hover:text-primary/70"
+            />
+            <div class="text-sm font-medium text-foreground">
+              {isAudioDropTarget ? "Drop to add" : "Click to choose an audio file"}
             </div>
             <div class="text-xs text-muted-foreground/60 mt-1">
-              mp3, wav, ogg, flac
+              or drag &amp; drop · mp3, wav, ogg, flac
             </div>
           </button>
         {/if}

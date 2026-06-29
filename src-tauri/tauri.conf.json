@@ -15,8 +15,6 @@
         "title": "Grimoire",
         "width": 1280,
         "height": 832,
-        "minWidth": 1024,
-        "minHeight": 768,
         "dragDropEnabled": false
       }
     ],

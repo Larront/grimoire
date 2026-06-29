@@ -123,6 +123,32 @@ fn collect_md_files(
     }
 }
 
+/// Count `.pdf` files in the ledger tree. PDFs are loose, path-addressed files
+/// with no DB row (ADR-0011), so they aren't in the `notes` table — this walk is
+/// how they get folded into the note count shown on the welcome screen. Mirrors
+/// `collect_md_files`'s dotfile-skipping traversal, so `.grimoire/audio` and other
+/// hidden dirs are excluded.
+pub fn count_pdf_files(dir: &Path) -> usize {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+    let mut count = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            count += count_pdf_files(&path);
+        } else if name.to_lowercase().ends_with(".pdf") {
+            count += 1;
+        }
+    }
+    count
+}
+
 fn title_from_path(rel_path: &str) -> String {
     rel_path
         .rsplit('/')
@@ -414,5 +440,30 @@ mod tests {
             modified_at.contains('T'),
             "modified_at not RFC3339: {modified_at}"
         );
+    }
+
+    #[test]
+    fn count_pdf_files_recurses_skips_dotdirs_and_is_case_insensitive() {
+        let dir = TempDir::new().unwrap();
+        // Top-level PDFs, mixed case.
+        fs::write(dir.path().join("Manual.pdf"), "").unwrap();
+        fs::write(dir.path().join("Errata.PDF"), "").unwrap();
+        // Nested PDF in a real subfolder — must be counted.
+        let sub = dir.path().join("lore");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("Backstory.pdf"), "").unwrap();
+        // Non-PDFs and hidden dirs (e.g. .grimoire/audio) — must be ignored.
+        fs::write(dir.path().join("Session.md"), "").unwrap();
+        let hidden = dir.path().join(".grimoire").join("audio");
+        fs::create_dir_all(&hidden).unwrap();
+        fs::write(hidden.join("theme.pdf"), "").unwrap();
+
+        assert_eq!(count_pdf_files(dir.path()), 3);
+    }
+
+    #[test]
+    fn count_pdf_files_missing_dir_is_zero() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(count_pdf_files(&dir.path().join("nope")), 0);
     }
 }

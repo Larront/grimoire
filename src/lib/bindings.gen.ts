@@ -13,6 +13,14 @@ export const commands = {
 	adoptSampleLedger: (parent: string, name: string) => __TAURI_INVOKE<string>("adopt_sample_ledger", { parent, name }),
 	assignMapImage: (mapId: number, sourceImagePath: string, destFolder: string | null) => __TAURI_INVOKE<Map>("assign_map_image", { mapId, sourceImagePath, destFolder }),
 	closeLedger: () => __TAURI_INVOKE<null>("close_ledger"),
+	/**
+	 *  Drag-and-drop sibling of `copy_audio_file`. A file dropped onto the webview
+	 *  (HTML5 drag-drop, `dragDropEnabled: false`) exposes only its bytes, not an OS
+	 *  path, so the front end reads the bytes and hands them here. Writes into the
+	 *  same `.grimoire/audio/` directory and returns the same ledger-relative path,
+	 *  so the add-track flow is identical whether a track is picked or dropped.
+	 */
+	copyAudioBytes: (bytes: number[], fileName: string) => __TAURI_INVOKE<string>("copy_audio_bytes", { bytes, fileName }),
 	copyAudioFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_audio_file", { absolutePath }),
 	copyImageFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_image_file", { absolutePath }),
 	copyThumbnailFile: (absolutePath: string) => __TAURI_INVOKE<string>("copy_thumbnail_file", { absolutePath }),

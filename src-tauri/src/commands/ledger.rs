@@ -92,10 +92,16 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
     // in place so the next launch retries.
     crate::note_index::clear_stale_marker_if_rebuilt(&ledger_path, search_index.is_some());
 
+    // PDFs are loose, path-addressed files (ADR-0011) with no `notes` row, so they
+    // are counted off disk and folded into the note count — the welcome screen's
+    // "N notes" stat reads PDFs as notes (the recent-ledger entry persists this
+    // combined value; see ledger.svelte.ts).
+    let pdf_count = crate::commands::import::count_pdf_files(&ledger_path) as i64;
     let note_count: i64 = notes::table
         .count()
         .get_result(&mut conn)
-        .unwrap_or(0);
+        .unwrap_or(0)
+        + pdf_count;
     let scene_count: i64 = scenes::table
         .count()
         .get_result(&mut conn)

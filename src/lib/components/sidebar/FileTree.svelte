@@ -21,6 +21,8 @@
   import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { readFile } from "@tauri-apps/plugin-fs";
 
   const sidebar = useSidebar();
 
@@ -112,6 +114,27 @@
     e.preventDefault();
     e.stopPropagation();
     for (const f of pdfs) await importPdfFromHandle(f, node.path);
+    await refresh();
+  }
+
+  // The explicit affordance for PDF import (drag-and-drop is the implicit one):
+  // pick one or more PDFs via the OS dialog and import them into this folder. The
+  // dialog yields paths, so bytes are read here and handed to the same backend
+  // command the drop path uses (savePdfBytes; ADR-0011).
+  async function importPdfToFolder(target: FileNode) {
+    if (!target.is_dir) return;
+    const picked = await open({
+      title: "Import PDF",
+      multiple: true,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    if (!paths.length) return;
+    for (const p of paths) {
+      const bytes: number[] = Array.from(await readFile(p));
+      const name = p.replace(/\\/g, "/").split("/").pop() ?? "document.pdf";
+      await api.savePdfBytes(bytes, name, target.path);
+    }
     await refresh();
   }
 
@@ -285,6 +308,9 @@
         >
         <ContextMenu.Item onSelect={() => handleNewMap(node)}>
           New Map
+        </ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => importPdfToFolder(node)}>
+          Import PDF…
         </ContextMenu.Item>
         <ContextMenu.Item onSelect={() => startRename(node)}
           >Rename</ContextMenu.Item

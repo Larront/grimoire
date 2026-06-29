@@ -250,6 +250,36 @@ pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Resul
     Ok(relative)
 }
 
+/// Drag-and-drop sibling of `copy_audio_file`. A file dropped onto the webview
+/// (HTML5 drag-drop, `dragDropEnabled: false`) exposes only its bytes, not an OS
+/// path, so the front end reads the bytes and hands them here. Writes into the
+/// same `.grimoire/audio/` directory and returns the same ledger-relative path,
+/// so the add-track flow is identical whether a track is picked or dropped.
+#[tauri::command]
+#[specta::specta]
+pub fn copy_audio_bytes(
+    bytes: Vec<u8>,
+    file_name: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    // Brief lock to resolve a conflict-free destination, then drop before writing.
+    let (dest, relative) = {
+        let state = ledger.lock().map_err(|e| e.to_string())?;
+        let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+        let audio_dir = ledger_path.join(".grimoire").join("audio");
+        std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
+        let dest = resolve_filename(&audio_dir, &file_name);
+        let relative = format!(
+            ".grimoire/audio/{}",
+            dest.file_name().unwrap().to_string_lossy()
+        );
+        (dest, relative)
+    }; // lock dropped here — fs::write runs without holding mutex
+
+    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
+    Ok(relative)
+}
+
 // "stem counter.ext" convention (no parens), e.g. "forest 2.mp3" — matches maps.rs
 fn resolve_filename(dir: &Path, file_name: &str) -> PathBuf {
     let stem = Path::new(file_name)
