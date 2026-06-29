@@ -13,7 +13,6 @@
     ChevronDown,
     X,
     Link2,
-    Plus,
   } from "@lucide/svelte";
   import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
   import type { PDFDocumentProxy, PDFDocumentLoadingTask } from "pdfjs-dist";
@@ -386,6 +385,38 @@
       pendingSelection = null;
     }
   }
+
+  // Clear the pending-selection bubble when the user collapses the selection
+  // (e.g. clicks elsewhere without scrolling). The picker freezes the selection
+  // deliberately, so leave it alone while it's open.
+  $effect(() => {
+    function onSelectionChange() {
+      if (pickerOpen) return;
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) pendingSelection = null;
+    }
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  });
+
+  // Ctrl/⌘+wheel zooms through the discrete stops (the browser also reports
+  // trackpad pinch as a ctrl+wheel event). Listener is non-passive so we can
+  // preventDefault the page-zoom; plain wheel falls through to native scroll.
+  $effect(() => {
+    const root = scrollEl;
+    if (!root) return;
+    function onWheel(e: WheelEvent) {
+      // Ctrl + mouse wheel only. Touchpad pinch never reaches here: WebView2
+      // consumes it as native "Page Scale" zoom and exposes no DOM event for it
+      // (see disable_webview_pinch_zoom on the Rust side).
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) zoomIn();
+      else if (e.deltaY > 0) zoomOut();
+    }
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  });
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
@@ -589,16 +620,16 @@
          dismissed when the selection clears or the page scrolls. -->
     {#if pendingSelection && !pickerOpen}
       <div
-        class="fixed z-30"
+        class="fixed z-30 rounded-md border border-border bg-popover shadow-md"
         style="left: {pendingSelection.rect.left}px; top: {Math.max(8, pendingSelection.rect.top - 40)}px;"
       >
         <Button
-          variant="default"
+          variant="ghost"
           size="sm"
-          class="gap-1.5 shadow-md"
+          class="gap-1.5 text-muted-foreground"
           onclick={() => (pickerOpen = true)}
         >
-          <Plus class="size-3.5" />
+          <Link2 class="size-3.5" />
           Link Scene
         </Button>
       </div>
