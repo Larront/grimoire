@@ -70,7 +70,11 @@ pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Re
     let images_dir = ledger_path.join(".grimoire").join("images");
     std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
     let dest = resolve_image_filename(&images_dir, &file_name);
-    let relative = format!(".grimoire/images/{}", dest.file_name().unwrap().to_string_lossy());
+    let dest_name = dest
+        .file_name()
+        .ok_or("Invalid destination filename")?
+        .to_string_lossy();
+    let relative = format!(".grimoire/images/{}", dest_name);
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(relative)
 }
@@ -92,10 +96,11 @@ pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> R
         .to_string();
     std::fs::create_dir_all(images_dir).map_err(|e| e.to_string())?;
     let dest = resolve_image_filename(images_dir, &file_name);
-    let relative = format!(
-        ".grimoire/images/{}",
-        dest.file_name().unwrap().to_string_lossy()
-    );
+    let dest_name = dest
+        .file_name()
+        .ok_or("Invalid destination filename")?
+        .to_string_lossy();
+    let relative = format!(".grimoire/images/{}", dest_name);
     std::fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(relative)
 }
@@ -184,8 +189,10 @@ pub fn rename_pdf_inner(
     let dest = ledger_path.join(&new_rel);
 
     // An explicit rename onto a taken name is a user error worth surfacing —
-    // the auto-suffix behaviour is reserved for drag-and-drop imports.
-    if dest.exists() {
+    // the auto-suffix behaviour is reserved for drag-and-drop imports. On
+    // case-insensitive filesystems a case-only rename hits the source file
+    // itself; only a *different* file is a collision.
+    if dest.exists() && dest.canonicalize().map(|d| d != src).unwrap_or(true) {
         return Err(format!(
             "ERR_NAME_TAKEN: A file named {}.pdf already exists",
             trimmed
@@ -304,7 +311,10 @@ pub fn import_pdf_bytes_to(
     // Build the ledger-relative path from the (validated) folder string rather
     // than stripping the canonicalised dest — on Windows the canonical form is a
     // `\\?\` extended path that won't share `ledger_root`'s prefix.
-    let written_name = dest.file_name().unwrap().to_string_lossy();
+    let written_name = dest
+        .file_name()
+        .ok_or("Invalid destination filename")?
+        .to_string_lossy();
     let rel = if folder.is_empty() {
         written_name.to_string()
     } else {
@@ -553,6 +563,19 @@ mod tests {
         assert_eq!(new_rel, "rulebooks/Dungeon Master Guide.pdf");
         assert!(dir.path().join("rulebooks/Dungeon Master Guide.pdf").exists());
         assert!(!dir.path().join("rulebooks/DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_rename_pdf_allows_case_only_rename() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Manual.pdf"), b"%PDF-1.4").unwrap();
+
+        // On case-insensitive filesystems the destination "exists" (it's the
+        // source itself) — this must not be reported as a collision.
+        let new_rel = rename_pdf_inner(dir.path(), "Manual.pdf", "manual").unwrap();
+
+        assert_eq!(new_rel, "manual.pdf");
+        assert!(dir.path().join("manual.pdf").exists());
     }
 
     #[test]

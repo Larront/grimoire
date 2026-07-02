@@ -239,10 +239,11 @@ pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Resul
         let audio_dir = ledger_path.join(".grimoire").join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&audio_dir, &file_name);
-        let relative = format!(
-            ".grimoire/audio/{}",
-            dest.file_name().unwrap().to_string_lossy()
-        );
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/audio/{}", dest_name);
         (dest, relative)
     }; // lock dropped here — fs::copy runs without holding mutex
 
@@ -269,10 +270,11 @@ pub fn copy_audio_bytes(
         let audio_dir = ledger_path.join(".grimoire").join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&audio_dir, &file_name);
-        let relative = format!(
-            ".grimoire/audio/{}",
-            dest.file_name().unwrap().to_string_lossy()
-        );
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/audio/{}", dest_name);
         (dest, relative)
     }; // lock dropped here — fs::write runs without holding mutex
 
@@ -362,10 +364,11 @@ pub fn copy_thumbnail_file(absolute_path: String, ledger: State<AppLedger>) -> R
         let thumb_dir = ledger_path.join(".grimoire").join("thumbnails");
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&thumb_dir, &file_name);
-        let relative = format!(
-            ".grimoire/thumbnails/{}",
-            dest.file_name().unwrap().to_string_lossy()
-        );
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/thumbnails/{}", dest_name);
         (dest, relative)
     };
 

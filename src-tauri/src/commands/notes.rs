@@ -182,6 +182,29 @@ pub fn create_note_from_template(
     Ok(created)
 }
 
+/// Read a note's content for index reconciliation. A missing file reconciles as
+/// empty (there is genuinely no content on disk); any other failure (file locked
+/// by a sync tool, permissions) propagates so the derived indexes are never
+/// silently rebuilt from blank content.
+fn read_note_for_reconcile(full_path: &Path) -> Result<String, String> {
+    match std::fs::read_to_string(full_path) {
+        Ok(content) => Ok(content),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("Failed to read '{}': {}", full_path.display(), e)),
+    }
+}
+
+/// True when an existing file at `new_full` is the rename source itself — the
+/// case-only-rename hit on case-insensitive filesystems (Windows/macOS), where
+/// `exists()` matches the old file. A different file at the new path (possible
+/// on case-sensitive filesystems even for a case-only rename) is a collision.
+fn is_same_file(old_full: &Path, new_full: &Path) -> bool {
+    match (old_full.canonicalize(), new_full.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
@@ -200,7 +223,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
     if old_note.path != note.path {
         let old_full = validate_path(&ledger_path, &old_note.path)?;
         let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() {
+        if new_full.exists() && !is_same_file(&old_full, &new_full) {
             return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
         }
         if old_full.exists() {
@@ -215,8 +238,7 @@ pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String>
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path))
-        .unwrap_or_default();
+    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
 
     let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
     note_index::mark_stale_if_needed(&outcome, &ledger_path);
@@ -252,7 +274,7 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
     if old_note.path != note.path {
         let old_full = validate_path(&ledger_path, &old_note.path)?;
         let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() {
+        if new_full.exists() && !is_same_file(&old_full, &new_full) {
             return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
         }
         if old_full.exists() {
@@ -283,7 +305,7 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let raw_content = std::fs::read_to_string(ledger_path.join(&updated.path)).unwrap_or_default();
+    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
 
     let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
     note_index::mark_stale_if_needed(&outcome, &ledger_path);
