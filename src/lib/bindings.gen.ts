@@ -373,6 +373,12 @@ export type RecentLedger = {
 	scene_count: number,
 	map_count: number,
 	last_opened: string,
+	/**
+	 *  Derived at read time: the ledger folder was not found on disk (moved,
+	 *  deleted, or on an unmounted drive). Recomputed by every
+	 *  `get_recent_ledgers` call; the stored value is ignored.
+	 */
+	missing?: boolean,
 };
 
 export type RenameNoteResult = {

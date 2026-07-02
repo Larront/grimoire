@@ -32,6 +32,8 @@ export interface RecentLedger {
   scene_count: number;
   map_count: number;
   last_opened: string;
+  /** Derived by the backend at read time: folder not found on disk. */
+  missing?: boolean;
 }
 
 export const failedImportsModal = $state({
@@ -100,6 +102,7 @@ function createLedgerStore() {
         scene_count: result.scene_count,
         map_count: result.map_count,
         last_opened: new Date().toISOString(),
+        missing: false,
       }).catch(() => {});
 
       return true;

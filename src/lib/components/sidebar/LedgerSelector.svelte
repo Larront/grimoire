@@ -18,7 +18,9 @@
   async function handleToggle() {
     open = !open;
     if (open) {
-      recentLedgers = await ledger.getRecentLedgers();
+      // Missing folders (moved/unmounted) are Splash concerns — a quick-switch
+      // menu only lists ledgers that can actually open.
+      recentLedgers = (await ledger.getRecentLedgers()).filter((v) => !v.missing);
     }
   }
 
