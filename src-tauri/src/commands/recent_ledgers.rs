@@ -18,6 +18,11 @@ pub struct RecentLedger {
     #[specta(type = i32)]
     pub map_count: usize,
     pub last_opened: String, // ISO 8601
+    /// Derived at read time: the ledger folder was not found on disk (moved,
+    /// deleted, or on an unmounted drive). Recomputed by every
+    /// `get_recent_ledgers` call; the stored value is ignored.
+    #[serde(default)]
+    pub missing: bool,
 }
 
 #[derive(Debug, Serialize, specta::Type, Deserialize, Default)]
@@ -58,10 +63,12 @@ fn write_recent_ledgers_file(app: &AppHandle, data: &RecentLedgersFile) -> Resul
 #[specta::specta]
 pub fn get_recent_ledgers(app: AppHandle) -> Result<Vec<RecentLedger>, String> {
     let mut data = read_recent_ledgers_file(&app)?;
-    // Filter out ledgers whose directories no longer exist
-    data.ledgers.retain(|v| std::path::Path::new(&v.path).exists());
-    // Write back the filtered list so removed entries don't persist
-    write_recent_ledgers_file(&app, &data)?;
+    // Annotate rather than prune: a folder on an unmounted drive is only
+    // temporarily gone — silently dropping the entry would lose it for good.
+    // Removal is explicit via remove_recent_ledger (issue #111).
+    for entry in &mut data.ledgers {
+        entry.missing = !std::path::Path::new(&entry.path).exists();
+    }
     Ok(data.ledgers)
 }
 
