@@ -138,6 +138,31 @@ pub fn delete_links_for_pdf(conn: &mut SqliteConnection, pdf_path: &str) -> Quer
         .execute(conn)
 }
 
+/// Remove Scene-links whose PDF no longer exists on disk. A PDF deleted or moved
+/// outside the app never runs `delete_pdf`/`rename_pdf`, so its path-keyed rows
+/// (no FK to the filesystem, ADR-0011) would otherwise linger forever — and a
+/// different PDF later dropped at the same path would inherit them. Called from
+/// `open_ledger` in the check-and-skip setup category (distinct paths, one stat
+/// each). Returns the rows removed.
+pub fn sweep_orphaned_links(
+    conn: &mut SqliteConnection,
+    ledger_path: &std::path::Path,
+) -> QueryResult<usize> {
+    let paths: Vec<String> = pdf_scene_links::table
+        .select(pdf_scene_links::pdf_path)
+        .distinct()
+        .load(conn)?;
+    let orphaned: Vec<String> = paths
+        .into_iter()
+        .filter(|p| !ledger_path.join(p).exists())
+        .collect();
+    if orphaned.is_empty() {
+        return Ok(0);
+    }
+    diesel::delete(pdf_scene_links::table.filter(pdf_scene_links::pdf_path.eq_any(&orphaned)))
+        .execute(conn)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,6 +364,37 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert_eq!(sibling.len(), 1, "the name-prefix sibling folder is untouched");
+    }
+
+    #[test]
+    fn test_sweep_orphaned_links_removes_only_missing_pdfs() {
+        let mut conn = setup_db();
+        let scene = make_scene(&mut conn, "Scene");
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("present.pdf"), b"%PDF-1.4").unwrap();
+
+        make_link(&mut conn, "present.pdf", 1, scene.id);
+        make_link(&mut conn, "gone.pdf", 1, scene.id);
+        make_link(&mut conn, "gone.pdf", 2, scene.id);
+
+        let removed = sweep_orphaned_links(&mut conn, dir.path()).unwrap();
+        assert_eq!(removed, 2, "both rows for the missing PDF are swept");
+
+        let all: Vec<PdfSceneLink> = pdf_scene_links::table.load(&mut conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].pdf_path, "present.pdf", "the existing PDF keeps its links");
+    }
+
+    #[test]
+    fn test_sweep_orphaned_links_noop_when_all_present() {
+        let mut conn = setup_db();
+        let scene = make_scene(&mut conn, "Scene");
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.pdf"), b"%PDF-1.4").unwrap();
+        make_link(&mut conn, "a.pdf", 1, scene.id);
+
+        let removed = sweep_orphaned_links(&mut conn, dir.path()).unwrap();
+        assert_eq!(removed, 0);
     }
 
     #[test]

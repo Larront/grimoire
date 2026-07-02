@@ -76,6 +76,14 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
     // tag/link/search rebuild passes so they see fully-populated rows.
     let import_report = reconcile_notes_with_disk(&ledger_path, &mut conn)?;
 
+    // Scene-links are path-keyed with no FK to the filesystem (ADR-0011); a PDF
+    // deleted outside the app leaves its rows behind, so sweep them here.
+    match crate::commands::pdf_scene_links::sweep_orphaned_links(&mut conn, &ledger_path) {
+        Ok(0) => {}
+        Ok(n) => eprintln!("[open_ledger] swept {n} orphaned pdf scene-link(s)"),
+        Err(e) => eprintln!("[open_ledger] orphaned scene-link sweep failed: {e}"),
+    }
+
     // Single walk: parse each .md file once into DerivedFacets and populate
     // note_tags, note_links, note_aliases, and the Tantivy Search Index.
     // SQLite inserts are chunked/bulk; search failure is non-fatal (ADR-0004).
