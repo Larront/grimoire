@@ -189,6 +189,21 @@ pub fn run() {
         .unwrap_or_default();
 
     let mut builder = tauri::Builder::default()
+        // Persist app + frontend logs to the OS log dir (issue #107) so beta
+        // bug reports have something to attach. Stdout stays on for dev.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("grimoire".into()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .max_file_size(2_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())

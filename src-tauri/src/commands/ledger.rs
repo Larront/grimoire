@@ -80,8 +80,8 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
     // deleted outside the app leaves its rows behind, so sweep them here.
     match crate::commands::pdf_scene_links::sweep_orphaned_links(&mut conn, &ledger_path) {
         Ok(0) => {}
-        Ok(n) => eprintln!("[open_ledger] swept {n} orphaned pdf scene-link(s)"),
-        Err(e) => eprintln!("[open_ledger] orphaned scene-link sweep failed: {e}"),
+        Ok(n) => log::info!("[open_ledger] swept {n} orphaned pdf scene-link(s)"),
+        Err(e) => log::warn!("[open_ledger] orphaned scene-link sweep failed: {e}"),
     }
 
     // Single walk: parse each .md file once into DerivedFacets and populate

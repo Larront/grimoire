@@ -57,6 +57,17 @@ its campaign database in a hidden `.grimoire` folder inside it.
 
 Tauri 2 · Svelte 5 (runes) · SvelteKit · SQLite (Diesel) · Tantivy · Tailwind CSS 4 · shadcn-svelte
 
+## Reporting bugs
+
+Grimoire writes a log file you can attach to a
+[bug report](https://github.com/Larront/grimoire/issues):
+
+| OS      | Log location                                          |
+| :------ | :---------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\com.lamonta.grimoire\logs\grimoire.log` |
+| macOS   | `~/Library/Logs/com.lamonta.grimoire/grimoire.log`     |
+| Linux   | `~/.local/share/com.lamonta.grimoire/logs/grimoire.log` |
+
 ## Contributing
 
 Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** to get started.

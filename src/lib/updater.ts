@@ -1,4 +1,5 @@
 import { toast } from "svelte-sonner";
+import { logWarn } from "$lib/log";
 
 /**
  * Check GitHub Releases for a newer signed bundle and, if one exists, offer to
@@ -36,6 +37,6 @@ export async function checkForUpdates(): Promise<void> {
     });
   } catch (err) {
     // Offline, no published release yet, or endpoint unreachable — log and move on.
-    console.warn("Update check failed:", err);
+    logWarn("Update check failed:", err);
   }
 }

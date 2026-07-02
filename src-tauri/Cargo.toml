@@ -50,6 +50,8 @@ specta-typescript = "=0.0.12"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-window-state = "2.4.1"
+tauri-plugin-log = "2.8.0"
+log = "0.4.33"
 
 # Windows-only: lets us reach into the WebView2 controller to disable the
 # native pinch-zoom gesture so touchpad pinch reaches the page as ctrl+wheel
