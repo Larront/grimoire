@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "$lib/api";
 import { toastImportFailures } from "$lib/toast";
+import { pendingSaves } from "$lib/stores/pending-saves";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -50,6 +51,9 @@ function createLedgerStore() {
 
   /** Invokes open_ledger, updates store state, and surfaces failed imports. */
   async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
+    // Flush pending editor saves while the outgoing ledger is still open, so
+    // a debounced edit is never dropped or written into the wrong ledger.
+    await pendingSaves.flushAll();
     const result = await api.openLedger(ledgerPath);
 
     path = result.path;
@@ -133,6 +137,10 @@ function createLedgerStore() {
     isLoading = true;
     error = null;
     try {
+      // Flush before the backend wipes and re-copies the sandbox — if the
+      // current ledger IS the sandbox, a later flush would write into the
+      // freshly reset copy.
+      await pendingSaves.flushAll();
       const sandboxPath = await api.exploreSampleLedger();
       await openAtPath(sandboxPath);
       isSample = true;
@@ -165,6 +173,7 @@ function createLedgerStore() {
   }
 
   async function closeLedger(): Promise<void> {
+    await pendingSaves.flushAll();
     try {
       await api.closeLedger();
     } catch (e) {

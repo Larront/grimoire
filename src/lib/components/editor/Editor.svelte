@@ -29,6 +29,7 @@
   import WikiLinkPreview from "./WikiLinkPreview.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { pendingSaves } from "$lib/stores/pending-saves";
   import { parseFrontmatter } from "$lib/utils";
 
   interface Props {
@@ -42,6 +43,11 @@
   let element = $state<HTMLDivElement>();
   let editor = $state<Editor | null>(null);
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  // True while an edit is waiting on the save debounce; cleared when a save
+  // starts. Lets flush() know whether teardown must save (issue #106).
+  let dirty = false;
+  let inFlightSave: Promise<void> | null = null;
+  let unregisterFlush: (() => void) | undefined;
   // Bumped on every doc edit so the broken-link resolver re-runs when links change.
   let docVersion = $state(0);
 
@@ -117,10 +123,15 @@
       contentType: "markdown",
       onUpdate: () => {
         docVersion++;
+        dirty = true;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 500);
       },
     });
+
+    // Ledger switches and window close flush through this registry; the
+    // editor's own unmount flushes in onDestroy below.
+    unregisterFlush = pendingSaves.register(flush);
 
     if (highlightQuery) {
       // Allow the editor to finish its initial render before searching
@@ -129,14 +140,29 @@
   });
 
   onDestroy(() => {
-    clearTimeout(saveTimer);
+    unregisterFlush?.();
     clearTimeout(previewTimer);
+    // flush() captures the markdown synchronously (before its first await),
+    // so the pending edit is safe to hand off before destroying the editor.
+    void flush();
     editor?.destroy();
   });
 
   async function save() {
     if (!editor) return;
-    await onSave(editor.getMarkdown());
+    dirty = false;
+    const run: Promise<void> = onSave(editor.getMarkdown()).finally(() => {
+      if (inFlightSave === run) inFlightSave = null;
+    });
+    inFlightSave = run;
+    await run;
+  }
+
+  /** Cancel the debounce and persist any pending edit immediately. */
+  async function flush() {
+    clearTimeout(saveTimer);
+    if (dirty) await save();
+    else if (inFlightSave) await inFlightSave;
   }
 
   // Resolve which wikilink targets don't exist — path miss AND alias miss, the same

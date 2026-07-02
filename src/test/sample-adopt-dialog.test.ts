@@ -139,6 +139,8 @@ describe("adopt dialog — LedgerSelector", () => {
     await flush();
 
     fireEvent.click(getByTestId("adopt-confirm-btn"));
+    // Three settle rounds: adopt → (flush pending saves) → open → isSample.
+    await flush();
     await flush();
     await flush();
 
