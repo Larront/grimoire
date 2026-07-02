@@ -198,6 +198,10 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        // Restore window size/position across launches (issue #119). The plugin
+        // saves on close and restores on create; a saved monitor that is no
+        // longer connected falls back on-screen.
+        builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
     }
 
     builder
