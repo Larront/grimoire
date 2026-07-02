@@ -37,6 +37,10 @@
   let lastMarkdown = $state<string | null>(null);
   let lastFetchedId = $state<number | null>(null);
   let highlightQuery = $state("");
+  // The note the mounted Editor's content belongs to. `note` moves as soon as
+  // the tab navigates — before the old Editor's unmount flush runs — so saves
+  // must target the note whose body was loaded, never the live `note`.
+  let editorNoteId: number | null = null;
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
@@ -49,6 +53,7 @@
       api.readNoteContent(note.path).then((c) => {
         if (lastFetchedId !== targetId) return;
         const parsed = parseFrontmatter(c);
+        editorNoteId = targetId;
         body = parsed.body;
       });
     }
@@ -176,9 +181,14 @@
 
   async function handleSave(markdown: string) {
     lastMarkdown = markdown;
-    if (!note || isSavingTitle) return;
+    if (editorNoteId === null || isSavingTitle) return;
+    // Resolve the path from the store at save time: it follows renames, and a
+    // note deleted while its editor was open is absent — never resurrect its
+    // file from a trailing debounced or flushed save.
+    const target = notes.notes.find((n) => n.id === editorNoteId);
+    if (!target) return;
     try {
-      await api.writeNoteContent(note.path, markdown);
+      await api.writeNoteContent(target.path, markdown);
       linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);
