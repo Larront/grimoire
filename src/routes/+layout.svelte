@@ -16,6 +16,22 @@
   // Check for a new release on startup (no-ops outside the Tauri runtime).
   checkForUpdates();
 
+  // Keep the OS window title on the open ledger (issue #118): taskbar and
+  // alt-tab identify the world, not just the app.
+  $effect(() => {
+    const name = ledger.isSample
+      ? "Example World"
+      : ledger.isOpen && ledger.path
+        ? (ledger.path.split(/[\\/]/).pop() ?? null)
+        : null;
+    const title = name ? `${name} — Grimoire` : "Grimoire";
+    if ("__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
+        .catch(() => {});
+    }
+  });
+
   // Intercept window close once to flush pending note saves (issue #106) —
   // otherwise an edit inside the 500ms save debounce is silently dropped.
   // The re-entrant close() passes straight through the flushed guard.
