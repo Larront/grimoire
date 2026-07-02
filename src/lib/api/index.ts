@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
+import { logError } from "$lib/log";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -85,14 +86,14 @@ type Surface = typeof commands & typeof carveouts;
 
 /** Quiet surface: logs on failure, then rethrows. No toast. */
 const silent = wrap(all, (error) => {
-  console.error("[api:silent]", error);
+  logError("[api:silent]", error);
 }) as Surface;
 
 /** Default surface: toasts a friendly message on failure, then rethrows.
  *  `api.silent.*` is the quiet variant for background / fire-and-forget calls. */
 export const api = Object.assign(
   wrap(all, (error) => {
-    console.error("[api]", error);
+    logError("[api]", error);
     toastError(friendlyMessage(error));
   }) as Surface,
   { silent },

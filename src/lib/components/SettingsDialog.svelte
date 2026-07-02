@@ -19,6 +19,24 @@
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
+  // App version for the About footer — resolved from the Tauri runtime so it
+  // can never drift from the shipped bundle (issue #117).
+  let appVersion = $state<string | null>(null);
+  $effect(() => {
+    if (open && appVersion === null && '__TAURI_INTERNALS__' in window) {
+      import('@tauri-apps/api/app')
+        .then(({ getVersion }) => getVersion())
+        .then((v) => { appVersion = v; })
+        .catch(() => {});
+    }
+  });
+
+  function openExternal(url: string) {
+    import('@tauri-apps/plugin-opener')
+      .then(({ openUrl }) => openUrl(url))
+      .catch(() => {});
+  }
+
   let authStatus = $state<SpotifyAuthStatus | null>(null);
   let isConnecting = $state(false);
   let isAuthLoading = $state(true);
@@ -298,6 +316,40 @@
             </Button>
           </div>
         {/if}
+      </section>
+
+      <!-- ── About ──────────────────────────────────────────────── -->
+      <section
+        data-testid="about-section"
+        class="flex flex-col gap-1.5 border-t border-border pt-4"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <span class="text-(--font-ui) text-foreground-muted">
+            Grimoire {appVersion ? `v${appVersion}` : ''}
+          </span>
+          <button
+            type="button"
+            class="text-(--font-ui) text-foreground-muted underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            onclick={() => openExternal('https://github.com/Larront/grimoire/issues')}
+          >Report a bug</button>
+        </div>
+        <span class="text-(--font-ui) text-foreground-faint">
+          Free software under
+          <button
+            type="button"
+            class="underline-offset-2 hover:text-foreground-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            onclick={() => openExternal('https://www.gnu.org/licenses/gpl-3.0.html')}
+          >GPL-3.0</button>
+          · source on
+          <button
+            type="button"
+            class="underline-offset-2 hover:text-foreground-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            onclick={() => openExternal('https://github.com/Larront/grimoire')}
+          >GitHub</button>
+        </span>
+        <span class="text-(--font-ui) text-foreground-faint">
+          Sample audio by Kevin MacLeod (incompetech.com, CC-BY 4.0) and CC0 contributors.
+        </span>
       </section>
 
     </div>
