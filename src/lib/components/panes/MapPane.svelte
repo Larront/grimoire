@@ -43,6 +43,9 @@
   let annotations = $state<MapAnnotation[]>([]);
   let imageDataUrl = $state<string | null>(null);
   let isLoadingData = $state(false);
+  // The map's image (or data) couldn't be loaded — e.g. the image file was
+  // deleted outside Grimoire. Renders the unified error state below.
+  let loadError = $state(false);
   let selectedPin = $state<Pin | null>(null);
   let selectedAnnotation = $state<MapAnnotation | null>(null);
   let placingMode = $state(false);
@@ -104,20 +107,22 @@
     selectedPin = null;
     selectedAnnotation = null;
     imageDataUrl = null;
+    loadError = false;
     placingMode = false;
     annotationMode = null;
 
     // Generated types widen the refined ledger types (nullable floats from
     // specta's NaN-guard; `string` instead of the PinShape/PinIcon/Annotation
     // unions). The backend only ever emits valid values, so narrow at the seam.
+    // Silent surface: the pane owns the error UI below (ADR-0010).
     const ipcFetches = Promise.all([
-      api.getPins(m.id) as Promise<Pin[]>,
-      api.getPinCategories() as Promise<PinCategory[]>,
-      api.getAnnotations(m.id) as Promise<MapAnnotation[]>,
+      api.silent.getPins(m.id) as Promise<Pin[]>,
+      api.silent.getPinCategories() as Promise<PinCategory[]>,
+      api.silent.getAnnotations(m.id) as Promise<MapAnnotation[]>,
     ]);
 
     const imageFetch = m.image_path
-      ? api.getMapImageDataUrl(m.id)
+      ? api.silent.getMapImageDataUrl(m.id)
       : Promise.resolve(null);
 
     Promise.all([ipcFetches, imageFetch])
@@ -132,7 +137,11 @@
         selectedAnnotation = a.find((ann) => ann.id === saved.annotationId) ?? null;
         mapLoaded = true;
       })
-      .catch(console.error)
+      .catch(() => {
+        // Image file moved/deleted outside Grimoire, or the data fetch failed —
+        // without it the canvas can't render; show the unified error state.
+        loadError = true;
+      })
       .finally(() => {
         isLoadingData = false;
       });
@@ -312,6 +321,18 @@
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
       <p class="font-display text-lg font-semibold">Map not found</p>
       <a href="/" class="text-sm text-accent hover:underline">← Back to ledger</a>
+    </div>
+  </div>
+{:else if loadError}
+  <!-- Image file moved/deleted outside Grimoire (or data fetch failed) -->
+  <div class="flex h-full items-center justify-center" data-testid="map-load-error">
+    <div class="flex flex-col items-center gap-4 text-center max-w-xs">
+      <FileXCorner class="w-7 h-7 text-muted-foreground" />
+      <p class="font-display text-lg font-semibold">Can't display this map</p>
+      <p class="text-sm text-muted-foreground leading-relaxed">
+        Its image couldn't be read — the file may have been moved or deleted
+        outside Grimoire.
+      </p>
     </div>
   </div>
 {:else if !mapData.image_path}
