@@ -2,6 +2,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "$lib/api";
 import { ledger } from "./ledger.svelte";
 import { scenes } from "./scenes.svelte";
+import { toastError } from "$lib/toast";
+import { logError } from "$lib/log";
 import type { SceneSlot } from "$lib/types/ledger";
 
 const FADE_SEC = 2.5;
@@ -13,6 +15,15 @@ const FADE_SEC_COLD = 0.3;
 
 export function isPlaylistSlot(slot: SceneSlot): boolean {
   return slot.source_id.startsWith("spotify:playlist:");
+}
+
+/** GM-facing name for a slot in failure toasts: the audio file's name for
+ *  local slots, a generic label for Spotify (URIs mean nothing to the GM). */
+function slotDisplayName(slot: SceneSlot): string {
+  if (slot.source === "spotify") {
+    return isPlaylistSlot(slot) ? "the Spotify playlist" : "the Spotify track";
+  }
+  return `"${slot.source_id.split("/").pop() ?? slot.source_id}"`;
 }
 
 // ---- Interfaces --------------------------------------------------------------------
@@ -160,32 +171,54 @@ function loadSpotifySdk(): Promise<void> {
 class SpotifyContext {
   private sdkPlayer: Spotify.Player | null = null;
   private deviceId: string | null = null;
+  // The SDK re-emits auth errors on every retry — toast the first only.
+  private authErrorToasted = false;
+
+  private toastAuthErrorOnce(message: string): void {
+    if (this.authErrorToasted) return;
+    this.authErrorToasted = true;
+    toastError(message);
+  }
 
   async initialize(): Promise<void> {
     if (this.sdkPlayer && this.deviceId) return;
+    this.authErrorToasted = false;
     await loadSpotifySdk();
 
     this.sdkPlayer = new window.Spotify.Player({
       name: "Notaret",
       getOAuthToken: async (cb: (token: string) => void) => {
+        // Silent surface: a failure here surfaces through the SDK's
+        // authentication_error listener below, with a reconnect hint.
         try {
-          const token = await api.spotifyGetAccessToken();
-          cb(token);
+          cb(await api.silent.spotifyGetAccessToken());
         } catch {
-          cb("");
+          // One refresh retry before giving up — mid-session token expiry
+          // should recover invisibly (issue #115).
+          try {
+            await api.silent.spotifyRefreshToken();
+            cb(await api.silent.spotifyGetAccessToken());
+          } catch (e) {
+            logError("[SpotifyPlayer] token refresh failed:", e);
+            cb("");
+          }
         }
       },
       volume: 0,
     });
 
     this.sdkPlayer.addListener("initialization_error", ({ message }: { message: string }) => {
-      console.error("[SpotifyPlayer] init error:", message);
+      logError("[SpotifyPlayer] init error:", message);
     });
     this.sdkPlayer.addListener("authentication_error", ({ message }: { message: string }) => {
-      console.error("[SpotifyPlayer] auth error:", message);
+      logError("[SpotifyPlayer] auth error:", message);
+      this.toastAuthErrorOnce(
+        "Spotify session expired — reconnect in Settings → Integrations.",
+      );
     });
     this.sdkPlayer.addListener("account_error", ({ message }: { message: string }) => {
-      console.error("[SpotifyPlayer] account error:", message);
+      logError("[SpotifyPlayer] account error:", message);
+      this.toastAuthErrorOnce("Spotify playback requires a Premium account.");
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -510,6 +543,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       const newPlayers = new Map<number, SlotPlayer>();
       let newPlaylistPlayer: PlaylistSlotPlayer | null = null;
 
+      const failedSlots: string[] = [];
       for (const slot of newSlots) {
         try {
           const player = slotPlayerFactory(slot);
@@ -522,8 +556,20 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
           newPlayers.set(slot.id, player);
           if (isPlaylistSlot(slot)) newPlaylistPlayer = player as PlaylistSlotPlayer;
         } catch (e) {
-          console.error(`[audio-engine] failed to start slot ${slot.id}:`, e);
+          logError(`[audio-engine] failed to start slot ${slot.id}:`, e);
+          failedSlots.push(slotDisplayName(slot));
         }
+      }
+
+      // One toast per scene start (issue #115) — silence with no explanation
+      // is the GM's worst case. Spotify auth failures get their own toast via
+      // the SDK listeners, so this covers unreadable/deleted local files.
+      if (failedSlots.length > 0) {
+        toastError(
+          failedSlots.length === 1
+            ? `Couldn't play ${failedSlots[0]}`
+            : `Couldn't play ${failedSlots.length} tracks: ${failedSlots.join(", ")}`,
+        );
       }
 
       await Promise.all(fadeOuts);
