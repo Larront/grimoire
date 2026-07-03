@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppShell from "$lib/components/AppShell.svelte";
+  import DbRecoveryDialog from "$lib/components/DbRecoveryDialog.svelte";
   import ThemeWatcher from "$lib/components/ThemeWatcher.svelte";
   import { Toaster } from "svelte-sonner";
   import { ledger } from "../lib/stores/ledger.svelte";
@@ -55,6 +56,7 @@
 
 <ThemeWatcher />
 <Toaster richColors closeButton />
+<DbRecoveryDialog />
 
 {#if ledger.isOpen}
   <AppShell />

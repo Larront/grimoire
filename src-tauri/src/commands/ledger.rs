@@ -1,7 +1,8 @@
 use crate::commands::import::{reconcile_notes_with_disk, FailedImport};
 use crate::commands::templates::inject_builtin_templates;
-use crate::db::establish_connection;
+use crate::db;
 use crate::db::models::{Map, NewPinCategory, Scene};
+use diesel::SqliteConnection;
 use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
@@ -47,6 +48,10 @@ pub struct OpenLedgerResult {
     #[specta(type = i32)]
     pub map_count: i64,
     pub failed_imports: Vec<FailedImport>,
+    /// Set when the database was auto-restored from the `.grimoire/backups`
+    /// snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
+    /// so the frontend can toast "scenes and pins reflect <date>".
+    pub recovered_from_backup: Option<String>,
 }
 
 #[tauri::command]
@@ -59,9 +64,53 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
             .map_err(|e| format!("Failed to create ledger directory: {}", e))?;
     }
 
-    inject_builtin_templates(&ledger_path)?;
+    // Lock/corruption posture (issue #116): a locked DB waited out a 5s busy
+    // timeout and surfaces as ERR_DB_LOCKED; a corrupt DB auto-restores from
+    // the last known-good snapshot when one exists (the damaged file is kept
+    // aside), otherwise ERR_DB_CORRUPT sends the frontend to the rebuild
+    // dialog — real scene/pin loss is never silently accepted.
+    let (conn, recovered) = match db::open_validated_connection(&ledger_path) {
+        Ok(conn) => (conn, None),
+        Err(db::DbOpenError::Corrupt(detail)) => {
+            log::warn!("[open_ledger] database failed validation: {detail}");
+            match db::restore_from_snapshot(&ledger_path)? {
+                Some(taken_at) => {
+                    log::info!("[open_ledger] restored database from snapshot taken {taken_at}");
+                    let conn =
+                        db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+                    (conn, Some(taken_at))
+                }
+                None => return Err(format!("ERR_DB_CORRUPT: {detail}")),
+            }
+        }
+        Err(e) => return Err(e.message()),
+    };
 
-    let mut conn = establish_connection(&ledger_path)?;
+    finish_open(path, ledger_path, conn, recovered, &ledger)
+}
+
+/// Recreate the ledger database from scratch after the GM confirmed the
+/// rebuild dialog (corrupt DB, no usable snapshot). The damaged file is moved
+/// aside — never deleted — then the normal open flow recovers every note from
+/// its markdown file via the ledger scan. Scenes, pins, and map metadata are
+/// SQLite-canonical and cannot be recovered this way; the dialog said so.
+#[tauri::command]
+#[specta::specta]
+pub fn rebuild_ledger_db(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerResult, String> {
+    let ledger_path = PathBuf::from(&path);
+    db::move_corrupt_db_aside(&ledger_path)?;
+    let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    finish_open(path, ledger_path, conn, None, &ledger)
+}
+
+fn finish_open(
+    path: String,
+    ledger_path: PathBuf,
+    mut conn: SqliteConnection,
+    recovered_from_backup: Option<String>,
+    ledger: &State<AppLedger>,
+) -> Result<OpenLedgerResult, String> {
+    inject_builtin_templates(&ledger_path)?;
     seed_default_categories(&mut conn)?;
 
     // Prune maps abandoned mid-creation: a map row is inserted as soon as the
@@ -119,6 +168,12 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
         .get_result(&mut conn)
         .unwrap_or(0);
 
+    // Snapshot the now-known-good database (issue #116). Best-effort — a
+    // failed snapshot must never block an open.
+    if let Err(e) = db::write_snapshot(&mut conn, &ledger_path) {
+        log::warn!("[open_ledger] database snapshot failed: {e}");
+    }
+
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     state.path = Some(ledger_path);
     state.connection = Some(conn);
@@ -130,6 +185,7 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
         scene_count,
         map_count,
         failed_imports: import_report.failed,
+        recovered_from_backup,
     })
 }
 

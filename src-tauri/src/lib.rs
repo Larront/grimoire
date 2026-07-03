@@ -108,6 +108,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             read_note_content,
             read_note_tags,
             read_template,
+            rebuild_ledger_db,
             rebuild_search_index,
             record_recent,
             remove_recent_ledger,
@@ -224,6 +225,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
+            rebuild_ledger_db,
             close_ledger,
             get_app_prefs,
             save_app_prefs,
