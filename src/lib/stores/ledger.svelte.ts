@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { toast } from "svelte-sonner";
 import { api } from "$lib/api";
 import { toastImportFailures } from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
@@ -23,6 +24,8 @@ interface OpenLedgerResult {
   scene_count: number;
   map_count: number;
   failed_imports: FailedImport[];
+  /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
+  recovered_from_backup: string | null;
 }
 
 export interface RecentLedger {
@@ -50,14 +53,13 @@ function createLedgerStore() {
   let density = $state<DensityLevel>("balanced");
   let isSample = $state(false);
   let pendingStartHere = $state(false);
+  // Set when open_ledger reported ERR_DB_CORRUPT with no usable snapshot —
+  // DbRecoveryDialog (mounted in the root layout) offers Rebuild/Cancel.
+  let corruptLedgerPath = $state<string | null>(null);
 
-  /** Invokes open_ledger, updates store state, and surfaces failed imports. */
-  async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
-    // Flush pending editor saves while the outgoing ledger is still open, so
-    // a debounced edit is never dropped or written into the wrong ledger.
-    await pendingSaves.flushAll();
-    const result = await api.openLedger(ledgerPath);
-
+  /** Applies a successful open_ledger result to store state and surfaces
+   *  failed imports and snapshot recovery. */
+  function applyOpenResult(result: OpenLedgerResult): void {
     path = result.path;
     isOpen = true;
 
@@ -68,7 +70,31 @@ function createLedgerStore() {
       });
     }
 
-    return result;
+    // Invisible background recovery → informational toast (issue #116).
+    if (result.recovered_from_backup) {
+      const taken = new Date(result.recovered_from_backup);
+      toast("Ledger restored from a backup", {
+        description: `The database was damaged and has been restored — scenes and pins reflect ${taken.toLocaleString()}. The damaged file was kept beside it.`,
+        duration: Infinity,
+      });
+    }
+  }
+
+  /** Invokes open_ledger, updates store state, and surfaces failed imports. */
+  async function openAtPath(ledgerPath: string): Promise<OpenLedgerResult> {
+    // Flush pending editor saves while the outgoing ledger is still open, so
+    // a debounced edit is never dropped or written into the wrong ledger.
+    await pendingSaves.flushAll();
+    try {
+      const result = await api.openLedger(ledgerPath);
+      applyOpenResult(result);
+      return result;
+    } catch (e) {
+      if (String(e).includes("ERR_DB_CORRUPT")) {
+        corruptLedgerPath = ledgerPath;
+      }
+      throw e;
+    }
   }
 
   async function openLedger(selectedPath?: string): Promise<boolean> {
@@ -89,22 +115,7 @@ function createLedgerStore() {
       }
 
       const result = await openAtPath(ledgerPath);
-
-      // Record in recent ledgers (fire-and-forget).
-      // Item counts in this entry are set at open time and refreshed on the next open_ledger call.
-      // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
-      // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
-      const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
-      api.silent.addRecentLedger({
-        path: result.path,
-        name,
-        note_count: result.note_count,
-        scene_count: result.scene_count,
-        map_count: result.map_count,
-        last_opened: new Date().toISOString(),
-        missing: false,
-      }).catch(() => {});
-
+      recordRecent(result);
       return true;
     } catch (e) {
       error = String(e);
@@ -112,6 +123,50 @@ function createLedgerStore() {
     } finally {
       isLoading = false;
     }
+  }
+
+  // Record in recent ledgers (fire-and-forget).
+  // Item counts in this entry are set at open time and refreshed on the next open_ledger call.
+  // In-session counts are derived reactively from notes.noteCount, scenes.sceneCount,
+  // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
+  function recordRecent(result: OpenLedgerResult): void {
+    const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
+    api.silent.addRecentLedger({
+      path: result.path,
+      name,
+      note_count: result.note_count,
+      scene_count: result.scene_count,
+      map_count: result.map_count,
+      last_opened: new Date().toISOString(),
+      missing: false,
+    }).catch(() => {});
+  }
+
+  /** Confirmed rebuild after ERR_DB_CORRUPT with no snapshot: the backend
+   *  moves the damaged database aside and re-runs the open flow (notes are
+   *  recovered from their files; scenes/pins/maps are not — the dialog that
+   *  triggers this said so). */
+  async function rebuildCorruptLedger(): Promise<boolean> {
+    const target = corruptLedgerPath;
+    if (!target) return false;
+    isLoading = true;
+    error = null;
+    try {
+      const result = await api.rebuildLedgerDb(target);
+      applyOpenResult(result);
+      recordRecent(result);
+      corruptLedgerPath = null;
+      return true;
+    } catch (e) {
+      error = String(e);
+      throw e;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function dismissCorruptLedger(): void {
+    corruptLedgerPath = null;
   }
 
   async function adopt(parent: string, name: string): Promise<boolean> {
@@ -237,9 +292,14 @@ function createLedgerStore() {
     get pendingStartHere() {
       return pendingStartHere;
     },
+    get corruptLedgerPath() {
+      return corruptLedgerPath;
+    },
     clearPendingStartHere() {
       pendingStartHere = false;
     },
+    rebuildCorruptLedger,
+    dismissCorruptLedger,
     openLedger,
     adopt,
     exploreSample,

@@ -25,6 +25,9 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
+  ERR_DB_LOCKED:
+    "Another program is using this ledger's database — close it and try again.",
+  ERR_DB_CORRUPT: "This ledger's database is damaged.",
 };
 
 // Honest for both reads and writes — "your work is safe" would mislead when a

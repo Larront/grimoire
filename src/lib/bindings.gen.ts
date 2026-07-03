@@ -108,6 +108,14 @@ export const commands = {
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
 	readTemplate: (path: string) => __TAURI_INVOKE<string>("read_template", { path }),
+	/**
+	 *  Recreate the ledger database from scratch after the GM confirmed the
+	 *  rebuild dialog (corrupt DB, no usable snapshot). The damaged file is moved
+	 *  aside — never deleted — then the normal open flow recovers every note from
+	 *  its markdown file via the ledger scan. Scenes, pins, and map metadata are
+	 *  SQLite-canonical and cannot be recovered this way; the dialog said so.
+	 */
+	rebuildLedgerDb: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("rebuild_ledger_db", { path }),
 	rebuildSearchIndex: () => __TAURI_INVOKE<null>("rebuild_search_index"),
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
@@ -315,6 +323,12 @@ export type OpenLedgerResult = {
 	scene_count: number,
 	map_count: number,
 	failed_imports: FailedImport[],
+	/**
+	 *  Set when the database was auto-restored from the `.grimoire/backups`
+	 *  snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
+	 *  so the frontend can toast "scenes and pins reflect <date>".
+	 */
+	recovered_from_backup: string | null,
 };
 
 export type OutboundLink = {
