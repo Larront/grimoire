@@ -55,7 +55,9 @@
 </script>
 
 <ThemeWatcher />
-<Toaster richColors closeButton />
+<!-- closeButton is set per-toast (errors, import failures) — transient success
+     and undo toasts stay clean; see $lib/toast. -->
+<Toaster richColors />
 <DbRecoveryDialog />
 
 {#if ledger.isOpen}

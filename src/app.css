@@ -554,6 +554,16 @@ input[type="range"]:disabled {
   --normal-text: var(--foreground);
 }
 
+/*
+  Shadowless Rule (DESIGN.md §4, absolute): svelte-sonner ships a drop-shadow on
+  every toast, but Grimoire chrome is flat — elevation reads from the raised
+  surface + border, never a shadow. Neutralise it. The extra specificity
+  (toaster › toast) beats sonner's own single-attribute rule without !important.
+*/
+[data-sonner-toaster] [data-sonner-toast] {
+  box-shadow: none;
+}
+
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
 
 /* Wikilinks read as accent everywhere they appear — editor node views and the

@@ -15,11 +15,20 @@ beforeEach(() => {
 });
 
 describe("toastError", () => {
-  it("calls sonner.error with duration Infinity", () => {
+  it("auto-expires (finite duration) instead of persisting forever", () => {
+    toastError("Something broke");
+    const opts = vi.mocked(sonner.error).mock.calls[0][1] as {
+      duration: number;
+    };
+    expect(opts.duration).toBeGreaterThan(0);
+    expect(opts.duration).toBeLessThan(Infinity);
+  });
+
+  it("dedupes identical errors via a stable id (the message)", () => {
     toastError("Something broke");
     expect(sonner.error).toHaveBeenCalledWith(
       "Something broke",
-      expect.objectContaining({ duration: Infinity }),
+      expect.objectContaining({ id: "Something broke" }),
     );
   });
 });
@@ -37,15 +46,15 @@ describe("toastSuccess", () => {
 describe("toastImportFailures", () => {
   it("shows no toast when failures array is empty", () => {
     toastImportFailures([], vi.fn());
-    expect(sonner).not.toHaveBeenCalled();
+    expect(sonner.error).not.toHaveBeenCalled();
   });
 
-  it("shows singular 'file' message for one failure", () => {
+  it("shows singular 'file' message for one failure, styled as an error", () => {
     toastImportFailures(
       [{ path: "notes/foo.md", reason: "Permission denied" }],
       vi.fn(),
     );
-    expect(sonner).toHaveBeenCalledWith(
+    expect(sonner.error).toHaveBeenCalledWith(
       "Couldn't import 1 file",
       expect.objectContaining({
         action: expect.objectContaining({ label: "Show details" }),
@@ -61,7 +70,7 @@ describe("toastImportFailures", () => {
       ],
       vi.fn(),
     );
-    expect(sonner).toHaveBeenCalledWith(
+    expect(sonner.error).toHaveBeenCalledWith(
       "Couldn't import 2 files",
       expect.objectContaining({
         action: expect.objectContaining({ label: "Show details" }),
@@ -75,7 +84,7 @@ describe("toastImportFailures", () => {
       [{ path: "foo.md", reason: "err" }],
       onShowDetails,
     );
-    const opts = vi.mocked(sonner).mock.calls[0][1] as unknown as {
+    const opts = vi.mocked(sonner.error).mock.calls[0][1] as unknown as {
       action: { onClick: () => void };
     };
     opts.action.onClick();
