@@ -104,13 +104,22 @@ describe("tag manager — settings entry point", () => {
     return { ...result, dialog };
   }
 
-  it("settings dialog has a 'Manage tags…' row with an Open button", async () => {
-    const { dialog } = await openSettings();
+  // The tag manager entry point lives under the "Content" section tab.
+  async function openContentTab() {
+    const opened = await openSettings();
+    await fireEvent.click(
+      within(opened.dialog).getByTestId("settings-tab-content"),
+    );
+    return opened;
+  }
+
+  it("settings dialog has a Tags row with a Manage button", async () => {
+    const { dialog } = await openContentTab();
     expect(within(dialog).getByTestId("open-tag-manager-btn")).toBeTruthy();
   });
 
-  it("clicking 'Open' in Settings closes Settings and opens Tag Manager", async () => {
-    const { dialog } = await openSettings();
+  it("clicking 'Manage' in Settings closes Settings and opens Tag Manager", async () => {
+    const { dialog } = await openContentTab();
     expect(searchPalette.settingsOpen).toBe(true);
 
     await fireEvent.click(within(dialog).getByTestId("open-tag-manager-btn"));

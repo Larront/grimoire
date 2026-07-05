@@ -167,19 +167,28 @@ describe("settings dialog — reduce motion", () => {
 // ── Templates section ─────────────────────────────────────────────
 
 describe("settings dialog — templates section", () => {
-  it("shows a 'Templates' section heading", async () => {
-    const { dialog } = await openSettingsDialog();
-    expect(within(dialog).getByText(/^templates$/i)).toBeTruthy();
+  // Templates now live under the "Content" section tab, so navigate there first.
+  async function openContentTab() {
+    const opened = await openSettingsDialog();
+    await fireEvent.click(
+      within(opened.dialog).getByTestId("settings-tab-content"),
+    );
+    return opened;
+  }
+
+  it("exposes built-in templates controls under the Content tab", async () => {
+    const { dialog } = await openContentTab();
+    expect(within(dialog).getByText("Built-in templates")).toBeTruthy();
   });
 
-  it("shows a 'Restore default templates' button", async () => {
-    const { dialog } = await openSettingsDialog();
+  it("shows a 'Restore defaults' button", async () => {
+    const { dialog } = await openContentTab();
     expect(within(dialog).getByTestId("restore-templates-btn")).toBeTruthy();
   });
 
   it("clicking restore shows a confirmation dialog before acting", async () => {
     const invokeSpy = vi.mocked(invoke);
-    const { dialog } = await openSettingsDialog();
+    const { dialog } = await openContentTab();
     invokeSpy.mockClear();
     await fireEvent.click(within(dialog).getByTestId("restore-templates-btn"));
     // No command fired yet — confirmation is required first.
@@ -195,7 +204,7 @@ describe("settings dialog — templates section", () => {
   it("confirming invokes restore_builtin_templates and reloads templates", async () => {
     const invokeSpy = vi.mocked(invoke);
     const loadSpy = vi.spyOn(templates, "load").mockResolvedValue(undefined);
-    const { dialog } = await openSettingsDialog();
+    const { dialog } = await openContentTab();
     invokeSpy.mockClear();
     await fireEvent.click(within(dialog).getByTestId("restore-templates-btn"));
     const confirm = await waitFor(() => {
