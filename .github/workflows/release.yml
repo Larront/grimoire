@@ -42,6 +42,15 @@ jobs:
           # macOS builds both arches; other platforms ignore this.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      # The macOS runner is Apple Silicon with a pre-installed stable toolchain,
+      # so rust-toolchain's `targets:` above is a no-op when stable already
+      # exists — the x86_64 target never gets added and the Intel build fails
+      # with "Target x86_64-apple-darwin is not installed". Add both targets
+      # explicitly; `rustup target add` is idempotent.
+      - name: Add macOS cross-compile targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
