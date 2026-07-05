@@ -8,6 +8,7 @@ pub mod links;
 pub mod maps;
 pub mod media;
 pub mod notes;
+pub mod pdf_scene_links;
 pub mod preferences;
 pub mod recent;
 pub mod recent_ledgers;

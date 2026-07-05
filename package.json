@@ -1,7 +1,7 @@
 {
   "name": "grimoire",
   "version": "0.1.0",
-  "description": "",
+  "description": "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes.",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -11,15 +11,19 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-fs": "~2",
+    "@tauri-apps/plugin-log": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@tiptap/core": "^3.22.3",
     "@tiptap/extension-image": "^3.22.3",
     "@tiptap/markdown": "^3.22.3",
@@ -33,6 +37,7 @@
     "leaflet": "^1.9.4",
     "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
+    "pdfjs-dist": "^6.0.227",
     "svelte-sonner": "^1.1.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.3.0"

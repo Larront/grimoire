@@ -12,6 +12,7 @@ use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
 use commands::notes::*;
+use commands::pdf_scene_links::*;
 use commands::preferences::*;
 use commands::recent::*;
 use commands::recent_ledgers::*;
@@ -41,6 +42,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             adopt_sample_ledger,
             assign_map_image,
             close_ledger,
+            copy_audio_bytes,
             copy_audio_file,
             copy_image_file,
             copy_thumbnail_file,
@@ -50,6 +52,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_map_empty,
             create_note,
             create_note_from_template,
+            create_pdf_scene_link,
+            update_pdf_scene_link,
             create_pin,
             create_pin_category,
             create_scene,
@@ -59,6 +63,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_folder,
             delete_map,
             delete_note,
+            delete_pdf,
+            delete_pdf_scene_link,
             delete_pin,
             delete_pin_category,
             delete_scene,
@@ -83,6 +89,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_note_by_path,
             get_notes,
             get_outbound_links,
+            get_pdf_absolute_path,
+            get_pdf_scene_links,
             get_pin_categories,
             get_pin_categories_for_map,
             get_pin_tags,
@@ -100,11 +108,13 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             read_note_content,
             read_note_tags,
             read_template,
+            rebuild_ledger_db,
             rebuild_search_index,
             record_recent,
             remove_recent_ledger,
             rename_folder,
             rename_note,
+            rename_pdf,
             retag_tag,
             rename_template,
             reorder_scene_slots,
@@ -115,6 +125,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_density_level,
             save_image_bytes,
             save_note_as_template,
+            save_pdf_bytes,
             search_all,
             search_notes,
             set_note_aliases,
@@ -169,16 +180,52 @@ pub fn run() {
         }
     }
 
-    let client_id = std::env::var("SPOTIFY_CLIENT_ID").unwrap_or_default();
+    // Spotify client ID: prefer the value baked in at compile time (set by the
+    // release build), falling back to the runtime env / .env for local dev. A
+    // PKCE client ID is not a secret, so embedding it in the binary is fine.
+    let client_id = option_env!("SPOTIFY_CLIENT_ID")
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("SPOTIFY_CLIENT_ID").ok())
+        .unwrap_or_default();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
+        // Persist app + frontend logs to the OS log dir (issue #107) so beta
+        // bug reports have something to attach. Stdout stays on for dev.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("grimoire".into()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .max_file_size(2_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init());
+
+    // The updater plugin is desktop-only; gate it so mobile targets still compile.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        // Restore window size/position across launches (issue #119). The plugin
+        // saves on close and restores on create; a saved monitor that is no
+        // longer connected falls back on-screen.
+        builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
+    }
+
+    builder
         .manage(AppLedger::new(LedgerState::new(client_id)))
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
+            rebuild_ledger_db,
             close_ledger,
             get_app_prefs,
             save_app_prefs,
@@ -246,12 +293,22 @@ pub fn run() {
             delete_scene_slot,
             reorder_scene_slots,
             copy_audio_file,
+            copy_audio_bytes,
             get_audio_absolute_path,
             update_scene_thumbnail,
             copy_thumbnail_file,
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
+            get_pdf_absolute_path,
+            rename_pdf,
+            delete_pdf,
+            save_pdf_bytes,
+            // PDF Scene-links
+            create_pdf_scene_link,
+            update_pdf_scene_link,
+            get_pdf_scene_links,
+            delete_pdf_scene_link,
             toggle_scene_favorite,
             get_scenes_with_slot_counts,
             // Recent entities
@@ -291,6 +348,46 @@ pub fn run() {
             get_tag_graph_styles,
             set_tag_graph_style,
         ])
+        .setup(|_app| {
+            #[cfg(target_os = "windows")]
+            disable_webview_pinch_zoom(_app);
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Turn off WebView2's built-in pinch-zoom ("Page Scale" zoom). By default a
+/// touchpad/touchscreen pinch compositor-scales the *entire* web content (the
+/// whole app shell, with clipping) — undesirable jank in a desktop window.
+///
+/// NOTE: this does NOT route pinch into the PDF reader's zoom. WebView2 handles
+/// pinch entirely at the compositor and exposes no interceptable signal — no DOM
+/// event, and ZoomFactor/ZoomFactorChanged cover only ctrl+wheel "standard" zoom,
+/// not pinch (MicrosoftEdge/WebView2Feedback#485, unresolved). So PDF zoom stays
+/// on ctrl+wheel + the toolbar buttons; this just stops pinch from scaling the
+/// app. Don't re-attempt a pinch→PDF-zoom binding here until WebView2 ships an API.
+///
+/// Best-effort: any failure to reach the setting is ignored.
+#[cfg(target_os = "windows")]
+fn disable_webview_pinch_zoom(app: &tauri::App) {
+    use tauri::Manager;
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.with_webview(|webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings5;
+        use windows::core::Interface;
+        unsafe {
+            let Ok(core) = webview.controller().CoreWebView2() else {
+                return;
+            };
+            let Ok(settings) = core.Settings() else {
+                return;
+            };
+            if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
+                let _ = settings5.SetIsPinchZoomEnabled(false);
+            }
+        }
+    });
 }

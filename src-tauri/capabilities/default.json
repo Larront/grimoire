@@ -11,6 +11,9 @@
     {
       "identifier": "fs:allow-watch",
       "allow": [{ "path": "**" }]
-    }
+    },
+    "updater:default",
+    "process:allow-restart",
+    "log:default"
   ]
 }

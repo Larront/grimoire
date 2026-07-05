@@ -3,7 +3,7 @@
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { api } from "$lib/api";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { Folder, Plus, LoaderCircle, BookOpen } from "@lucide/svelte";
+  import { Folder, Plus, LoaderCircle, BookOpen, X } from "@lucide/svelte";
   import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
 
   let recentLedgers = $state<RecentLedger[]>([]);
@@ -30,6 +30,15 @@
         });
     }
   });
+
+  async function handleRemoveRecent(ledgerPath: string) {
+    try {
+      await api.removeRecentLedger(ledgerPath);
+      recentLedgers = recentLedgers.filter((v) => v.path !== ledgerPath);
+    } catch (e) {
+      errorMsg = String(e);
+    }
+  }
 
   async function handleOpenRecent(ledgerPath: string) {
     openingPath = ledgerPath;
@@ -352,6 +361,41 @@
 
         <div class="flex flex-col">
           {#each recentLedgers as v (v.path)}
+            {#if v.missing}
+              <!-- Folder moved, deleted, or on an unmounted drive: not
+                   clickable, not silently dropped — removal is the GM's call. -->
+              <div
+                data-testid="recent-missing"
+                class="flex items-center justify-between py-2.5 px-3 rounded-sm
+                       border-b border-border text-left"
+              >
+                <div class="min-w-0 flex-1 opacity-50">
+                  <div
+                    class="font-heading text-[15px] font-normal text-foreground truncate"
+                  >
+                    {v.name}
+                  </div>
+                  <div
+                    class="font-mono text-[10px] text-foreground-muted mt-0.5 truncate"
+                    title={v.path}
+                  >
+                    Folder not found — {v.path}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Remove {v.name} from recent ledgers"
+                  data-testid="recent-remove-btn"
+                  class="ml-3 shrink-0 rounded-sm p-1 text-foreground-faint
+                         hover:text-foreground hover:bg-(--hover-overlay)
+                         transition-colors duration-150 focus-visible:outline-none
+                         focus-visible:ring-2 focus-visible:ring-primary"
+                  onclick={() => handleRemoveRecent(v.path)}
+                >
+                  <X class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            {:else}
             <button
               class="flex items-center justify-between py-2.5 px-3 rounded-sm
                      border-b border-border text-left
@@ -389,6 +433,7 @@
                 {formatRelativeTime(v.last_opened)}
               </div>
             </button>
+            {/if}
           {/each}
         </div>
       </div>

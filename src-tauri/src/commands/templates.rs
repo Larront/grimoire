@@ -164,7 +164,14 @@ pub fn rename_template_for_ledger(
     let (canonical_file, canonical_dir) = resolve_template_path(ledger_path, path)?;
     let new_path = canonical_dir.join(format!("{new_name}.md"));
 
-    if new_path.exists() && new_path != canonical_file {
+    // Canonicalize before comparing: on case-insensitive filesystems a
+    // case-only rename hits the source file itself, and the raw joined path
+    // never string-matches the canonical one.
+    let same_file = new_path
+        .canonicalize()
+        .map(|p| p == canonical_file)
+        .unwrap_or(false);
+    if new_path.exists() && !same_file {
         return Err(format!("ERR_NAME_TAKEN: A template named '{new_name}' already exists"));
     }
 
@@ -503,6 +510,18 @@ mod tests {
 
         assert!(!dir.join("NPC.md").exists(), "NPC.md should be gone");
         assert!(dir.join("Character.md").exists(), "Character.md should exist");
+    }
+
+    #[test]
+    fn rename_template_allows_case_only_rename() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+
+        // On case-insensitive filesystems the destination "exists" (it's the
+        // source itself) — this must not be reported as a collision.
+        rename_template_for_ledger(tmp.path(), ".grimoire/templates/NPC.md", "npc").unwrap();
+
+        assert!(templates_dir(tmp.path()).join("npc.md").exists());
     }
 
     #[test]

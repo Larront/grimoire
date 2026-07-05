@@ -363,18 +363,20 @@ describe("note rename — confirmation dialog (toggle on)", () => {
 // ── Settings dialog — Editing section ────────────────────────────────────────
 
 describe("settings dialog — editing section", () => {
+  // Editing prefs now live under the "Content" section tab; navigate there.
   async function openSettingsDialog() {
     vi.mocked(invoke).mockResolvedValue(null);
     const result = render(AppShell);
     const rail = result.getByTestId("icon-rail");
     await fireEvent.click(within(rail).getByRole("button", { name: /^settings$/i }));
     const dialog = await result.findByRole("dialog");
+    await fireEvent.click(within(dialog).getByTestId("settings-tab-content"));
     return { ...result, dialog };
   }
 
-  it("shows an 'Editing' section heading in the settings dialog", async () => {
+  it("exposes a 'Content' settings section", async () => {
     const { dialog } = await openSettingsDialog();
-    expect(dialog.textContent).toMatch(/editing/i);
+    expect(within(dialog).getByTestId("settings-tab-content")).toBeTruthy();
   });
 
   it("renders the 'Confirm before updating links on rename' toggle", async () => {

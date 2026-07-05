@@ -37,22 +37,41 @@
   let lastMarkdown = $state<string | null>(null);
   let lastFetchedId = $state<number | null>(null);
   let highlightQuery = $state("");
+  // The note the mounted Editor's content belongs to. `note` moves as soon as
+  // the tab navigates — before the old Editor's unmount flush runs — so saves
+  // must target the note whose body was loaded, never the live `note`.
+  let editorNoteId: number | null = null;
+  // The note's file couldn't be read (deleted/moved outside Grimoire). The
+  // pane owns this error UI, so the fetch uses the silent surface (ADR-0010).
+  let loadError = $state(false);
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
       const targetId = note.id;
       lastFetchedId = targetId;
       body = null;
+      loadError = false;
       // Capture and consume the pending search query for scroll-to-match
       highlightQuery = searchPalette.activeQuery;
       searchPalette.activeQuery = "";
-      api.readNoteContent(note.path).then((c) => {
-        if (lastFetchedId !== targetId) return;
-        const parsed = parseFrontmatter(c);
-        body = parsed.body;
-      });
+      api.silent
+        .readNoteContent(note.path)
+        .then((c) => {
+          if (lastFetchedId !== targetId) return;
+          const parsed = parseFrontmatter(c);
+          editorNoteId = targetId;
+          body = parsed.body;
+        })
+        .catch(() => {
+          if (lastFetchedId !== targetId) return;
+          loadError = true;
+        });
     }
   });
+
+  function closeThisTab() {
+    tabs.closeTab(pane, tabIndex);
+  }
 
   // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
@@ -176,9 +195,14 @@
 
   async function handleSave(markdown: string) {
     lastMarkdown = markdown;
-    if (!note || isSavingTitle) return;
+    if (editorNoteId === null || isSavingTitle) return;
+    // Resolve the path from the store at save time: it follows renames, and a
+    // note deleted while its editor was open is absent — never resurrect its
+    // file from a trailing debounced or flushed save.
+    const target = notes.notes.find((n) => n.id === editorNoteId);
+    if (!target) return;
     try {
-      await api.writeNoteContent(note.path, markdown);
+      await api.writeNoteContent(target.path, markdown);
       linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);
@@ -302,7 +326,26 @@
           <div
             class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"
           ></div>
-          {#if body !== null}
+          {#if loadError}
+            <!-- No Editor mounts in this state, so no autosave can recreate
+                 the missing file. -->
+            <div
+              data-testid="note-load-error"
+              class="flex flex-col items-start gap-3 text-muted-foreground"
+            >
+              <p class="text-sm leading-relaxed max-w-prose">
+                This note couldn't be read — its file may have been moved or
+                deleted outside Grimoire.
+              </p>
+              <button
+                type="button"
+                data-testid="note-load-error-close"
+                onclick={closeThisTab}
+                class="text-sm text-primary underline-offset-2 hover:underline
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+              >Close tab</button>
+            </div>
+          {:else if body !== null}
             <Editor initialContent={body} onSave={handleSave} {highlightQuery} />
           {/if}
         </div>

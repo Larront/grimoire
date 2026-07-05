@@ -26,7 +26,9 @@ use tauri::State;
 
 #[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct RetagResult {
+    #[specta(type = i32)]
     pub note_count: usize,
+    #[specta(type = i32)]
     pub pin_count: usize,
 }
 
@@ -176,7 +178,9 @@ pub fn retag_tag_on_conn(
 #[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct TagUsageEntry {
     pub tag: String,
+    #[specta(type = i32)]
     pub note_count: i64,
+    #[specta(type = i32)]
     pub pin_count: i64,
 }
 

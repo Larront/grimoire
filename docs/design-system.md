@@ -411,8 +411,8 @@ All async operations (file open, audio source connect, ledger load) must show a 
 Single toast component, bottom-right, `z-index` above all content. Stacks if multiple appear (max 3 visible).
 
 - **Success toast**: success icon (circle-check, `success` color) + short confirmation copy. Auto-dismisses after 3s.
-- **Error toast**: error icon (circle-x, `error` color) + short failure copy. Persists until dismissed — errors should not auto-dismiss.
-- **Undo toast**: used after destructive actions. Shows for 5s with an "Undo" link (primary color). Dismissing without undo makes the action permanent.
+- **Error toast**: error icon (circle-x, `error` color) + short failure copy. Auto-dismisses after 8s — longer than success (error copy is denser and higher-stakes) but never permanent, so the tool doesn't pin itself to the corner during live play. Carries a close button to dismiss early. Identical errors dedupe (replace and reset the timer) rather than stacking. A partial-import failure is an error toast too, lasting 10s to give its "Show details" action time to be used.
+- **Undo toast**: used after destructive actions. Shows for 5s with an "Undo" link (primary color). No close button — the choice is Undo or let it expire; letting it expire makes the action permanent.
 
 Copy voice: short and non-blaming. "Scene deleted" + Undo, not "Scene was successfully deleted." Never say "successfully."
 

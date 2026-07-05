@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
+import { logError } from "$lib/log";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -22,7 +23,11 @@ import { toastError } from "$lib/toast";
 const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_NAME_TAKEN: "That name is already taken.",
   ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
+  ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
+  ERR_DB_LOCKED:
+    "Another program is using this ledger's database — close it and try again.",
+  ERR_DB_CORRUPT: "This ledger's database is damaged.",
 };
 
 // Honest for both reads and writes — "your work is safe" would mislead when a
@@ -84,14 +89,14 @@ type Surface = typeof commands & typeof carveouts;
 
 /** Quiet surface: logs on failure, then rethrows. No toast. */
 const silent = wrap(all, (error) => {
-  console.error("[api:silent]", error);
+  logError("[api:silent]", error);
 }) as Surface;
 
 /** Default surface: toasts a friendly message on failure, then rethrows.
  *  `api.silent.*` is the quiet variant for background / fire-and-forget calls. */
 export const api = Object.assign(
   wrap(all, (error) => {
-    console.error("[api]", error);
+    logError("[api]", error);
     toastError(friendlyMessage(error));
   }) as Surface,
   { silent },

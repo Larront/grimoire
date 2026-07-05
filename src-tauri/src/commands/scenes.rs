@@ -239,14 +239,46 @@ pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Resul
         let audio_dir = ledger_path.join(".grimoire").join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&audio_dir, &file_name);
-        let relative = format!(
-            ".grimoire/audio/{}",
-            dest.file_name().unwrap().to_string_lossy()
-        );
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/audio/{}", dest_name);
         (dest, relative)
     }; // lock dropped here — fs::copy runs without holding mutex
 
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+    Ok(relative)
+}
+
+/// Drag-and-drop sibling of `copy_audio_file`. A file dropped onto the webview
+/// (HTML5 drag-drop, `dragDropEnabled: false`) exposes only its bytes, not an OS
+/// path, so the front end reads the bytes and hands them here. Writes into the
+/// same `.grimoire/audio/` directory and returns the same ledger-relative path,
+/// so the add-track flow is identical whether a track is picked or dropped.
+#[tauri::command]
+#[specta::specta]
+pub fn copy_audio_bytes(
+    bytes: Vec<u8>,
+    file_name: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    // Brief lock to resolve a conflict-free destination, then drop before writing.
+    let (dest, relative) = {
+        let state = ledger.lock().map_err(|e| e.to_string())?;
+        let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+        let audio_dir = ledger_path.join(".grimoire").join("audio");
+        std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
+        let dest = resolve_filename(&audio_dir, &file_name);
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/audio/{}", dest_name);
+        (dest, relative)
+    }; // lock dropped here — fs::write runs without holding mutex
+
+    std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
     Ok(relative)
 }
 
@@ -332,10 +364,11 @@ pub fn copy_thumbnail_file(absolute_path: String, ledger: State<AppLedger>) -> R
         let thumb_dir = ledger_path.join(".grimoire").join("thumbnails");
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&thumb_dir, &file_name);
-        let relative = format!(
-            ".grimoire/thumbnails/{}",
-            dest.file_name().unwrap().to_string_lossy()
-        );
+        let dest_name = dest
+            .file_name()
+            .ok_or("Invalid destination filename")?
+            .to_string_lossy();
+        let relative = format!(".grimoire/thumbnails/{}", dest_name);
         (dest, relative)
     };
 

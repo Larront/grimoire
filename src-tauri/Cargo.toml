@@ -1,8 +1,9 @@
 [package]
 name = "grimoire"
 version = "0.1.0"
-description = "A Tauri App"
+description = "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes."
 authors = ["Aaron Lamont"]
+license = "GPL-3.0-or-later"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -46,6 +47,19 @@ tantivy = "0.22"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "=0.0.12"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
+tauri-plugin-window-state = "2.4.1"
+tauri-plugin-log = "2.8.0"
+log = "0.4.33"
+
+# Windows-only: lets us reach into the WebView2 controller to disable the
+# native pinch-zoom gesture so touchpad pinch reaches the page as ctrl+wheel
+# (see `disable_webview_pinch_zoom`). Pinned to the versions Tauri already
+# locks transitively so no extra crate copy is compiled.
+[target.'cfg(target_os = "windows")'.dependencies]
+webview2-com = "=0.38.2"
+windows = "=0.61.3"
 
 [dev-dependencies]
 tempfile = "3"
