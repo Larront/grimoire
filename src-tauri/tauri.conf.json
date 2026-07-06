@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "grimoire",
+  "productName": "Grimoire",
   "version": "../package.json",
   "identifier": "com.lamonta.grimoire",
   "build": {
