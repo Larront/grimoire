@@ -37,17 +37,21 @@
   // otherwise an edit inside the 500ms save debounce is silently dropped.
   // The re-entrant close() passes straight through the flushed guard.
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-    let flushed = false;
+    let closing = false;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
       const appWindow = getCurrentWindow();
       appWindow.onCloseRequested(async (event) => {
-        if (flushed) return;
+        if (closing) return;
         event.preventDefault();
-        flushed = true;
+        closing = true;
         try {
           await pendingSaves.flushAll();
         } finally {
-          await appWindow.close();
+          // Use destroy(), not close(): calling close() from inside a
+          // close-requested handler re-emits the event and the window never
+          // actually tears down (Tauri v2 re-entrancy). destroy() force-closes
+          // without re-firing, so the flush-then-close path completes.
+          await appWindow.destroy();
         }
       });
     });
