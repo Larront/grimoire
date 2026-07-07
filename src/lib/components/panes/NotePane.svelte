@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { api } from "$lib/api";
   import { MediaQuery } from "svelte/reactivity";
   import { fly } from "svelte/transition";
@@ -44,6 +45,11 @@
   // The note's file couldn't be read (deleted/moved outside Grimoire). The
   // pane owns this error UI, so the fetch uses the silent surface (ADR-0010).
   let loadError = $state(false);
+  // The mounted Editor instance, for its clean-buffer check on external reload.
+  let editorApi = $state<{ isClean: () => boolean } | undefined>(undefined);
+  // Bumped to force-remount the Editor with freshly-loaded content when the
+  // file changes on disk (Editor seeds its buffer only on mount).
+  let reloadTick = $state(0);
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
@@ -72,6 +78,35 @@
   function closeThisTab() {
     tabs.closeTab(pane, tabIndex);
   }
+
+  // ── External file watching (ADR-0013 Stage 3) ─────────────────────────────
+  // When this note's .md file is edited outside Grimoire, the backend emits
+  // note:content-changed with its path. Reload the editor from disk — but only
+  // when the buffer is clean, so unsaved edits are never clobbered (the dirty
+  // case gets a conflict banner in a later slice).
+  async function handleExternalChange(changedPath: string) {
+    if (!note || note.path !== changedPath) return;
+    if (editorApi && !editorApi.isClean()) return;
+    try {
+      const c = await api.silent.readNoteContent(changedPath);
+      // The pane may have navigated away during the read.
+      if (!note || note.path !== changedPath) return;
+      body = parseFrontmatter(c).body;
+      reloadTick++;
+    } catch {
+      // Unreadable (mid-write, deleted) — leave the current buffer untouched.
+    }
+  }
+
+  onMount(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const unlisten = listen<{ path: string }>("note:content-changed", (event) =>
+      handleExternalChange(event.payload.path),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  });
 
   // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
@@ -346,7 +381,9 @@
               >Close tab</button>
             </div>
           {:else if body !== null}
-            <Editor initialContent={body} onSave={handleSave} {highlightQuery} />
+            {#key reloadTick}
+              <Editor bind:this={editorApi} initialContent={body} onSave={handleSave} {highlightQuery} />
+            {/key}
           {/if}
         </div>
       </div>

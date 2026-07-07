@@ -165,6 +165,16 @@
     else if (inFlightSave) await inFlightSave;
   }
 
+  /**
+   * True when the buffer holds no unsaved work — no edit waiting on the save
+   * debounce and no save in flight. An external live-reload (ADR-0013 Stage 3)
+   * only replaces the buffer when this holds, so a note being edited is never
+   * clobbered by a change on disk.
+   */
+  export function isClean(): boolean {
+    return !dirty && !inFlightSave;
+  }
+
   // Resolve which wikilink targets don't exist — path miss AND alias miss, the same
   // test handleClick uses to navigate — and feed the set to the broken-link plugin so
   // stubs render faded. Unresolved-yet links stay full accent (never flash as stubs).

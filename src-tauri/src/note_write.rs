@@ -72,6 +72,29 @@ impl RecentWrites {
         }
     }
 
+    /// If `bytes` matches a remembered write for `path`, remove that one hash
+    /// and return `true` (the watch event is the app's own echo). Otherwise
+    /// return `false` (a genuine external edit, or a path we never wrote).
+    ///
+    /// Consuming the matched hash keeps a later identical *external* write from
+    /// also being suppressed — each recorded write suppresses exactly one event.
+    fn take(&mut self, path: &Path, bytes: &[u8]) -> bool {
+        let key = normalize(path);
+        let h = hash_bytes(bytes);
+        let Some(list) = self.hashes.get_mut(&key) else {
+            return false;
+        };
+        let Some(pos) = list.iter().rposition(|&recorded| recorded == h) else {
+            return false;
+        };
+        list.remove(pos);
+        if list.is_empty() {
+            self.hashes.remove(&key);
+            self.order.retain(|p| p != &key);
+        }
+        true
+    }
+
     fn clear(&mut self) {
         self.order.clear();
         self.hashes.clear();
@@ -101,6 +124,19 @@ pub fn write_note_file(full_path: &Path, bytes: &[u8]) -> Result<(), String> {
         guard.record(full_path, bytes);
     }
     Ok(())
+}
+
+/// Ask whether the bytes now on disk at `path` are one this process just wrote.
+/// Returns `true` (consuming the matched record) when they are — the ledger
+/// watcher uses this to drop its own write echoes. A `false` means the on-disk
+/// content differs from anything we wrote, i.e. a genuine external edit.
+pub fn is_recent_write(path: &Path, bytes: &[u8]) -> bool {
+    match RECENT_WRITES.lock() {
+        Ok(mut guard) => guard.take(path, bytes),
+        // A poisoned lock can't confirm the write is ours; treating it as
+        // external at worst re-reconciles idempotently — never loses an edit.
+        Err(_) => false,
+    }
 }
 
 /// Forget all remembered writes. Called on ledger open so echo suppression can
@@ -143,5 +179,37 @@ mod tests {
         rw.clear();
         assert!(rw.order.is_empty());
         assert!(rw.hashes.is_empty());
+    }
+
+    #[test]
+    fn take_matches_and_consumes_a_recorded_write() {
+        let mut rw = RecentWrites::default();
+        let p = PathBuf::from("nonexistent-note.md");
+        rw.record(&p, b"body");
+
+        // The exact bytes we wrote are our own echo — matched once, then gone.
+        assert!(rw.take(&p, b"body"), "recorded bytes must match");
+        assert!(
+            !rw.take(&p, b"body"),
+            "a matched hash must be consumed so a second identical event is external"
+        );
+    }
+
+    #[test]
+    fn take_does_not_match_different_bytes() {
+        let mut rw = RecentWrites::default();
+        let p = PathBuf::from("nonexistent-note.md");
+        rw.record(&p, b"our write");
+
+        // A genuine external edit hashes to something we never recorded.
+        assert!(!rw.take(&p, b"someone else's edit"));
+        // ...and the un-matched record is left in place for the real echo.
+        assert!(rw.take(&p, b"our write"));
+    }
+
+    #[test]
+    fn take_on_unknown_path_is_false() {
+        let mut rw = RecentWrites::default();
+        assert!(!rw.take(&PathBuf::from("never-written.md"), b"x"));
     }
 }
