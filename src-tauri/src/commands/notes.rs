@@ -1,6 +1,7 @@
 use crate::commands::frontmatter;
 use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::note_index;
+use crate::note_write::write_note_file;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
 use crate::ledger::AppLedger;
@@ -98,7 +99,7 @@ pub fn create_note(
         .to_string_lossy()
         .replace('\\', "/");
 
-    fs::write(&full_path, "").map_err(|e| e.to_string())?;
+    write_note_file(&full_path, "".as_bytes())?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
@@ -155,7 +156,7 @@ pub fn create_note_from_template(
         .to_string_lossy()
         .replace('\\', "/");
 
-    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
+    write_note_file(&full_path, content.as_bytes())?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
@@ -361,7 +362,7 @@ pub fn write_note_content(
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     let full_path = validate_parent_path(&ledger_path, &note_path)?;
-    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
+    write_note_file(&full_path, content.as_bytes())?;
 
     // Borrow connection and search_index as separate fields of *state so the
     // borrow checker allows both to be live when calling reconcile.
@@ -404,7 +405,7 @@ pub fn write_note_tags(
     let full_path = validate_path(&ledger_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
-    fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
+    write_note_file(&full_path, new_content.as_bytes())?;
 
     // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
     let state_ref = &mut *state;

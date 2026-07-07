@@ -174,6 +174,10 @@ fn finish_open(
         log::warn!("[open_ledger] database snapshot failed: {e}");
     }
 
+    // Drop any write hashes remembered for a previously-open ledger before this
+    // one's watcher (later slice) can start matching against them.
+    crate::note_write::reset_recent_writes();
+
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     state.path = Some(ledger_path);
     state.connection = Some(conn);

@@ -2,6 +2,7 @@
 mod db;
 mod ledger;
 mod note_index;
+mod note_write;
 mod search;
 
 use commands::app_prefs::*;
