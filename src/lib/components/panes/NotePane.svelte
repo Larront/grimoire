@@ -100,11 +100,21 @@
 
   onMount(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
-    const unlisten = listen<{ path: string }>("note:content-changed", (event) =>
-      handleExternalChange(event.payload.path),
-    );
+    const unlisten = Promise.all([
+      listen<{ path: string }>("note:content-changed", (event) =>
+        handleExternalChange(event.payload.path),
+      ),
+      // Bulk external change (git checkout, cloud sync): the backend rebuilt the
+      // whole ledger under one coarse event. This note's file may be among the
+      // rewritten ones, so reload its content (clean-buffer gated) and details.
+      listen("ledger:rebuilt", () => {
+        if (!note) return;
+        handleExternalChange(note.path);
+        details.reload();
+      }),
+    ]);
     return () => {
-      void unlisten.then((fn) => fn());
+      void unlisten.then((fns) => fns.forEach((fn) => fn()));
     };
   });
 

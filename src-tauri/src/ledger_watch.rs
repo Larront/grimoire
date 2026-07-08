@@ -25,8 +25,13 @@
 //!   resolve to remove-old + create-new here, so the tree follows the file to its
 //!   new location. Following a rename *while the note is open* is a later slice.
 //!
-//! The bulk-op fallback (`rebuild_all_from_ledger` on a large coalesced batch) is
-//! a later slice.
+//! When a single coalesced batch touches more than [`BULK_REBUILD_THRESHOLD`]
+//! distinct notes — a `git checkout`, a cloud-sync settling, a vault-wide
+//! find-replace — reconciling each file individually would issue that many
+//! Tantivy commits and frontend events. Above the threshold the batch instead
+//! falls back to the same idempotent disk→DB sync + full derived-index rebuild
+//! `open_ledger` runs ([`rebuild_all`]) and emits one coarse `ledger:rebuilt`
+//! event the frontend refetches wholesale on.
 //!
 //! The watcher handle lives in its own managed [`LedgerWatcher`] state rather
 //! than on `LedgerState`: the event handler locks `AppLedger`, so keeping the
@@ -51,6 +56,12 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Debounce window. Long enough to collapse an atomic save's write/rename churn
 /// into one event, short enough that a live edit still feels immediate.
 const DEBOUNCE_MS: u64 = 150;
+
+/// Above this many distinct external `.md` changes in one debounced batch, the
+/// per-file path (one Tantivy commit + one frontend event apiece) is abandoned
+/// for a single [`rebuild_all`] + one coarse `ledger:rebuilt` event — the bulk-op
+/// fallback (ADR-0013). Tune both the window and this threshold here.
+const BULK_REBUILD_THRESHOLD: usize = 50;
 
 type LedgerDebouncer = Debouncer<RecommendedWatcher, RecommendedCache>;
 
@@ -105,9 +116,13 @@ pub fn start(app: &AppHandle, ledger_path: &Path) {
                     return;
                 }
             };
-            // A debounced batch can carry several events per path; reconcile each
-            // touched path at most once.
+            // A debounced batch can carry several events per path; classify each
+            // touched path at most once. Classifying up front (existence check,
+            // content read, echo suppression) is also what lets us count *genuine*
+            // external changes — the app's own bulk writes, e.g. a rename's
+            // backlink rewrites, are dropped here and never trip the threshold.
             let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+            let mut changes: Vec<Change> = Vec::new();
             for event in &events {
                 // Access (open/read) events never change content — ignore them.
                 if matches!(event.kind, EventKind::Access(_)) {
@@ -115,8 +130,26 @@ pub fn start(app: &AppHandle, ledger_path: &Path) {
                 }
                 for path in &event.paths {
                     if seen.insert(path.clone()) {
-                        process_path(&handler_app, &handler_root, path);
+                        if let Some(change) = classify(&handler_root, path) {
+                            changes.push(change);
+                        }
                     }
+                }
+            }
+
+            if changes.is_empty() {
+                return;
+            }
+            if is_bulk_batch(changes.len()) {
+                log::info!(
+                    "[ledger_watch] {} external changes >= threshold {}; full rebuild",
+                    changes.len(),
+                    BULK_REBUILD_THRESHOLD
+                );
+                rebuild_all(&handler_app, &handler_root);
+            } else {
+                for change in changes {
+                    apply(&handler_app, &handler_root, change);
                 }
             }
         },
@@ -179,14 +212,11 @@ enum Notify {
     Nothing,
 }
 
-/// Handle one filesystem path from a debounced batch: classify it as a genuine
-/// external `.md` create/modify/delete inside the open ledger, apply it to the
-/// `notes` table + derived indexes, then notify the frontend.
-fn process_path(app: &AppHandle, canonical_root: &Path, event_path: &Path) {
-    let Some(change) = classify(canonical_root, event_path) else {
-        return;
-    };
-    apply(app, canonical_root, change);
+/// Whether a coalesced batch of `n` distinct genuine external changes is a bulk
+/// op that should fall back to a single [`rebuild_all`] instead of `n` per-file
+/// reconciles. The one place the threshold decision is made.
+fn is_bulk_batch(n: usize) -> bool {
+    n >= BULK_REBUILD_THRESHOLD
 }
 
 /// Classify an event path into an intended [`Change`], performing every
@@ -282,6 +312,68 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
             }
         }
         Notify::Nothing => {}
+    }
+}
+
+/// The bulk-op fallback (ADR-0013): a coalesced batch exceeded
+/// [`BULK_REBUILD_THRESHOLD`], so rather than reconcile each file (one Tantivy
+/// commit apiece) rerun the same two steps `open_ledger` does — bring the `notes`
+/// table into agreement with disk (creates/deletes), then rebuild every derived
+/// index in one walk — swap in the fresh search index, and emit one coarse
+/// `ledger:rebuilt` event. The lock is released before emitting so a frontend
+/// listener that turns around and calls a command can't contend with this handler.
+fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
+    let ledger = app.state::<AppLedger>();
+    let mut guard = match ledger.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    let Some(ledger_path) = guard.path.clone() else {
+        return; // no ledger open
+    };
+    // The ledger may have switched between the batch firing and now; only act
+    // when the open ledger is still the one this watcher was rooted at.
+    if std::fs::canonicalize(&ledger_path).ok().as_deref() != Some(canonical_root) {
+        return;
+    }
+
+    let rebuilt = {
+        let state_ref = &mut *guard;
+        let Some(conn) = state_ref.connection.as_mut() else {
+            return;
+        };
+        // Bring the notes table into agreement with disk before the rebuild pass
+        // so it sees fully-populated rows — mirrors open_ledger's ordering.
+        if let Err(e) = crate::commands::import::reconcile_notes_with_disk(&ledger_path, conn) {
+            log::warn!("[ledger_watch] bulk notes reconcile failed: {e}");
+            return;
+        }
+        let maps = crate::db::schema::maps::table
+            .load::<crate::db::models::Map>(conn)
+            .unwrap_or_default();
+        let scenes = crate::db::schema::scenes::table
+            .load::<crate::db::models::Scene>(conn)
+            .unwrap_or_default();
+        match crate::note_index::rebuild_all_from_ledger(&ledger_path, conn, &maps, &scenes) {
+            Ok(index) => {
+                // A successful rebuild clears any persisted stale marker; a failed
+                // Search rebuild (Ok(None)) leaves it so the next launch retries.
+                crate::note_index::clear_stale_marker_if_rebuilt(&ledger_path, index.is_some());
+                index
+            }
+            Err(e) => {
+                log::warn!("[ledger_watch] bulk rebuild failed: {e}");
+                return;
+            }
+        }
+    };
+    // `rebuild_all_from_ledger` returns a brand-new Tantivy index handle; swap it
+    // in so later per-file reconciles write to the rebuilt index, not a stale one.
+    guard.search_index = rebuilt;
+    drop(guard);
+
+    if let Err(e) = app.emit("ledger:rebuilt", ()) {
+        log::warn!("[ledger_watch] failed to emit ledger:rebuilt: {e}");
     }
 }
 
@@ -410,6 +502,22 @@ mod tests {
     use diesel::connection::SimpleConnection;
     use diesel::Connection;
     use tempfile::TempDir;
+
+    // ── is_bulk_batch ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn small_batches_reconcile_per_file() {
+        assert!(!is_bulk_batch(0));
+        assert!(!is_bulk_batch(1));
+        assert!(!is_bulk_batch(BULK_REBUILD_THRESHOLD - 1));
+    }
+
+    #[test]
+    fn batches_at_or_over_threshold_are_bulk() {
+        assert!(is_bulk_batch(BULK_REBUILD_THRESHOLD));
+        assert!(is_bulk_batch(BULK_REBUILD_THRESHOLD + 1));
+        assert!(is_bulk_batch(500));
+    }
 
     // ── relative_md ────────────────────────────────────────────────────────────
 

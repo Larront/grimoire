@@ -80,6 +80,9 @@
     const unlisten = Promise.all([
       listen("ledger:tree-changed", () => syncFromDisk()),
       listen("note:removed", () => syncFromDisk()),
+      // Bulk external change (git checkout, cloud sync): the backend rebuilt the
+      // whole ledger and emitted one coarse event — refetch notes + tree wholesale.
+      listen("ledger:rebuilt", () => syncFromDisk()),
     ]);
     return () => {
       void unlisten.then((fns) => fns.forEach((fn) => fn()));
