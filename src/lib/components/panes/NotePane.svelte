@@ -10,7 +10,7 @@
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
   import { linksTick } from "$lib/stores/links-tick.svelte";
   import { toastSuccess } from "$lib/toast";
-  import { LoaderCircle } from "@lucide/svelte";
+  import { LoaderCircle, FileWarning } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import { parseWikiTarget } from "$lib/editor/wiki-link";
   import Editor from "$lib/components/editor/Editor.svelte";
@@ -45,11 +45,26 @@
   // The note's file couldn't be read (deleted/moved outside Grimoire). The
   // pane owns this error UI, so the fetch uses the silent surface (ADR-0010).
   let loadError = $state(false);
-  // The mounted Editor instance, for its clean-buffer check on external reload.
-  let editorApi = $state<{ isClean: () => boolean } | undefined>(undefined);
+  // The mounted Editor instance, for its clean-buffer check and autosave
+  // control during external-change conflict resolution.
+  let editorApi = $state<
+    | {
+        isClean: () => boolean;
+        pauseAutosave: () => void;
+        resumeAutosave: () => void;
+        discardPendingEdit: () => void;
+      }
+    | undefined
+  >(undefined);
   // Bumped to force-remount the Editor with freshly-loaded content when the
   // file changes on disk (Editor seeds its buffer only on mount).
   let reloadTick = $state(0);
+  // The external on-disk body captured when the file changed under a dirty
+  // buffer. Non-null ⇒ the Conflict Banner is showing (ADR-0013 Stage 4): the
+  // GM must choose to reload it or keep their edits; neither side is discarded
+  // silently. Held (not re-read on resolve) so an intervening autosave can't
+  // swap it out from under the "Reload from disk" choice.
+  let conflictBody = $state<string | null>(null);
 
   $effect(() => {
     if (note && note.id !== lastFetchedId) {
@@ -57,6 +72,7 @@
       lastFetchedId = targetId;
       body = null;
       loadError = false;
+      conflictBody = null;
       // Capture and consume the pending search query for scroll-to-match
       highlightQuery = searchPalette.activeQuery;
       searchPalette.activeQuery = "";
@@ -79,23 +95,52 @@
     tabs.closeTab(pane, tabIndex);
   }
 
-  // ── External file watching (ADR-0013 Stage 3) ─────────────────────────────
+  // ── External file watching (ADR-0013 Stages 3 + 4) ────────────────────────
   // When this note's .md file is edited outside Grimoire, the backend emits
-  // note:content-changed with its path. Reload the editor from disk — but only
-  // when the buffer is clean, so unsaved edits are never clobbered (the dirty
-  // case gets a conflict banner in a later slice).
+  // note:content-changed with its path. A clean buffer reloads from disk
+  // silently. A dirty buffer (unsaved edits / mid-debounce) must never be
+  // clobbered and the external edit must never be discarded silently, so we
+  // surface a non-destructive Conflict Banner and let the GM choose.
   async function handleExternalChange(changedPath: string) {
     if (!note || note.path !== changedPath) return;
-    if (editorApi && !editorApi.isClean()) return;
+    let externalBody: string;
     try {
       const c = await api.silent.readNoteContent(changedPath);
       // The pane may have navigated away during the read.
       if (!note || note.path !== changedPath) return;
-      body = parseFrontmatter(c).body;
-      reloadTick++;
+      externalBody = parseFrontmatter(c).body;
     } catch {
       // Unreadable (mid-write, deleted) — leave the current buffer untouched.
+      return;
     }
+    if (editorApi && !editorApi.isClean()) {
+      // Dirty buffer: don't touch it. Capture the external version, freeze the
+      // autosave so a queued edit can't clobber disk while the banner waits,
+      // and raise it — resolution reloads or keeps under the GM's control.
+      conflictBody = externalBody;
+      editorApi.pauseAutosave();
+      return;
+    }
+    body = externalBody;
+    reloadTick++;
+  }
+
+  // Discard the in-app buffer and load the external version. discardPendingEdit
+  // stops the outgoing editor's teardown flush from writing the stale buffer;
+  // remounting (reloadTick) reseeds a clean buffer from disk content.
+  function reloadFromDisk() {
+    if (conflictBody === null) return;
+    editorApi?.discardPendingEdit();
+    body = conflictBody;
+    conflictBody = null;
+    reloadTick++;
+  }
+
+  // Keep the unsaved buffer; resumeAutosave writes it to disk now, so the kept
+  // version wins the conflict instead of lingering diverged from disk.
+  function keepMyVersion() {
+    editorApi?.resumeAutosave();
+    conflictBody = null;
   }
 
   onMount(() => {
@@ -357,6 +402,41 @@
         data-note-scroll
         class="@container h-[calc(100svh_-_var(--tab-bar-h)_-_1px)] overflow-y-auto"
       >
+        {#if conflictBody !== null}
+          <!-- In-pane conflict bar (ADR-0013). Sticky, not modal: it flags
+               external divergence without blocking the rest of the app. -->
+          <div
+            data-testid="conflict-banner"
+            role="alert"
+            class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
+                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <FileWarning class="size-4 shrink-0 text-primary" />
+              <p class="text-xs text-muted-foreground">
+                This note changed on disk while you had unsaved edits.
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                data-testid="conflict-reload"
+                onclick={reloadFromDisk}
+                class="inline-flex h-7 items-center rounded-md border border-border bg-background
+                       px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
+                       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >Reload from disk</button>
+              <button
+                type="button"
+                data-testid="conflict-keep"
+                onclick={keepMyVersion}
+                class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
+                       text-primary-foreground hover:bg-primary/90 transition-colors
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >Keep my version</button>
+            </div>
+          </div>
+        {/if}
         <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
           <input
             bind:this={titleInput}
