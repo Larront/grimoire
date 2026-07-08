@@ -149,7 +149,10 @@ pub fn count_pdf_files(dir: &Path) -> usize {
     count
 }
 
-fn title_from_path(rel_path: &str) -> String {
+/// Derive a note's display title from its ledger-relative path: the filename
+/// stem. Shared with the ledger watcher, which inserts rows for notes created
+/// on disk outside the app (ADR-0013).
+pub(crate) fn title_from_path(rel_path: &str) -> String {
     rel_path
         .rsplit('/')
         .next()
@@ -158,7 +161,10 @@ fn title_from_path(rel_path: &str) -> String {
         .to_string()
 }
 
-fn parent_path_from(rel_path: &str) -> Option<String> {
+/// Derive a note's `parent_path` (its containing folder) from its
+/// ledger-relative path, or `None` for a root-level note. Shared with the
+/// ledger watcher (ADR-0013).
+pub(crate) fn parent_path_from(rel_path: &str) -> Option<String> {
     let slash = rel_path.rfind('/')?;
     Some(rel_path[..slash].to_string())
 }

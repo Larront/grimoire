@@ -2,8 +2,10 @@
 //! `.md` edits made outside the app (ADR-0013).
 //!
 //! A recursive `notify` watcher, rooted at the open ledger, reports filesystem
-//! events; the debouncer coalesces atomic-save churn over a short window. This
-//! first slice handles **external modifies of existing notes only**:
+//! events; the debouncer coalesces atomic-save churn over a short window. It
+//! keeps the `notes` table, the [`crate::note_index`] Derived Index set, and the
+//! Files tree in sync with external **create / modify / delete / rename** of
+//! `.md` files:
 //!
 //! - `<ledger>/.grimoire/` (SQLite/Tantivy/media) and every other dot-segment is
 //!   excluded, matching the traversal convention used elsewhere, so the app's own
@@ -12,13 +14,19 @@
 //!   [`crate::note_write`]: on each event we re-read the file and ask whether its
 //!   bytes are one we just wrote. A match is our echo; a differing hash is a
 //!   genuine external edit.
-//! - A genuine external modify of a note that has a `notes` row reconciles that
-//!   note's derived indexes and emits `note:content-changed` `{path}` so the
-//!   frontend can live-reload a clean editor buffer.
+//! - Each event path is classified by whether it still exists on disk. A path
+//!   that exists is an **upsert**: a note with an existing `notes` row reconciles
+//!   its derived indexes (emit `note:content-changed` `{path}`); a note with no
+//!   row is a create — insert the row, reconcile, and emit `ledger:tree-changed`.
+//!   A path that is gone is a **remove**: drop the `notes` row and its derived
+//!   indexes and emit `note:removed` `{path}`.
+//! - A rename/move surfaces either as a native `notify` rename (whose `from` and
+//!   `to` paths are processed independently) or as a delete+create pair; both
+//!   resolve to remove-old + create-new here, so the tree follows the file to its
+//!   new location. Following a rename *while the note is open* is a later slice.
 //!
-//! Create / delete / rename and the bulk-op fallback are later slices: a create
-//! has no `notes` row (skipped here), and a delete leaves nothing on disk to
-//! re-read (skipped here).
+//! The bulk-op fallback (`rebuild_all_from_ledger` on a large coalesced batch) is
+//! a later slice.
 //!
 //! The watcher handle lives in its own managed [`LedgerWatcher`] state rather
 //! than on `LedgerState`: the event handler locks `AppLedger`, so keeping the
@@ -27,7 +35,8 @@
 //! thread to stop (it does not join), so tearing a watcher down never blocks.
 
 use crate::ledger::AppLedger;
-use crate::db::models::Note;
+use crate::commands::import::{parent_path_from, title_from_path};
+use crate::db::models::{NewNote, Note};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use notify_debouncer_full::notify::{EventKind, RecursiveMode};
@@ -54,6 +63,13 @@ pub struct LedgerWatcher(pub Mutex<Option<LedgerDebouncer>>);
 /// note whose `.md` file changed on disk.
 #[derive(Clone, serde::Serialize)]
 struct NoteContentChanged {
+    path: String,
+}
+
+/// Payload for the `note:removed` event: the ledger-relative path of the note
+/// whose `.md` file was deleted or moved away on disk.
+#[derive(Clone, serde::Serialize)]
+struct NoteRemoved {
     path: String,
 }
 
@@ -141,27 +157,69 @@ pub fn stop(app: &AppHandle) {
     }
 }
 
-/// Handle one filesystem path from a debounced batch: filter to genuine external
-/// `.md` modifies inside the open ledger, then reconcile and notify the frontend.
-fn process_path(app: &AppHandle, canonical_root: &Path, event_path: &Path) {
-    // A path that can't be canonicalized no longer exists (deleted/moved) — out
-    // of scope for this slice.
-    let Ok(canonical) = std::fs::canonicalize(event_path) else {
-        return;
-    };
-    let Some(rel_path) = relative_md(canonical_root, &canonical) else {
-        return;
-    };
-    let Ok(bytes) = std::fs::read(&canonical) else {
-        return;
-    };
-    // The app's own write? Consume the record and stop — no self-triggered
-    // reload or re-index loop.
-    if crate::note_write::is_recent_write(&canonical, &bytes) {
-        return;
-    }
-    let content = String::from_utf8_lossy(&bytes).into_owned();
+/// A classified external change to a single `.md` path, with all disk I/O
+/// (existence check, content read, echo-suppression) already done — so the
+/// ledger lock is only ever held around DB work, never a filesystem read.
+enum Change {
+    /// The file exists on disk: a create (no `notes` row yet) or a modify.
+    Upsert { rel_path: String, content: String },
+    /// The file is gone: a delete or the source half of a move.
+    Remove { rel_path: String },
+}
 
+/// What the frontend must be told after a change is applied.
+enum Notify {
+    /// An existing note's content changed — the open editor can live-reload.
+    ContentChanged(String),
+    /// A new note appeared — refetch the Files tree / notes store.
+    TreeChanged,
+    /// A note was removed — refetch and drop it from the tree.
+    Removed(String),
+    /// Nothing observable happened (echo already handled, or a no-op remove).
+    Nothing,
+}
+
+/// Handle one filesystem path from a debounced batch: classify it as a genuine
+/// external `.md` create/modify/delete inside the open ledger, apply it to the
+/// `notes` table + derived indexes, then notify the frontend.
+fn process_path(app: &AppHandle, canonical_root: &Path, event_path: &Path) {
+    let Some(change) = classify(canonical_root, event_path) else {
+        return;
+    };
+    apply(app, canonical_root, change);
+}
+
+/// Classify an event path into an intended [`Change`], performing every
+/// filesystem read up front. Returns `None` when the path is out of scope (not a
+/// surfaced `.md` note, under a dot-segment, or our own write echo).
+fn classify(canonical_root: &Path, event_path: &Path) -> Option<Change> {
+    match std::fs::canonicalize(event_path) {
+        // The file exists — create or modify.
+        Ok(canonical) => {
+            let rel_path = relative_md(canonical_root, &canonical)?;
+            let bytes = std::fs::read(&canonical).ok()?;
+            // The app's own write? Consume the record and stop — no self-triggered
+            // reload or re-index loop.
+            if crate::note_write::is_recent_write(&canonical, &bytes) {
+                return None;
+            }
+            Some(Change::Upsert {
+                rel_path,
+                content: String::from_utf8_lossy(&bytes).into_owned(),
+            })
+        }
+        // The file is gone — delete or the `from` half of a move. Its own path
+        // can't be canonicalized, so resolve it via the (still-present) parent.
+        Err(_) => Some(Change::Remove {
+            rel_path: missing_relative_md(canonical_root, event_path)?,
+        }),
+    }
+}
+
+/// Apply a classified [`Change`] under the ledger lock, then emit the matching
+/// frontend event. The lock is released before emitting so a frontend listener
+/// that turns around and calls a command can't contend with this handler.
+fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
     let ledger = app.state::<AppLedger>();
     let mut guard = match ledger.lock() {
         Ok(g) => g,
@@ -176,28 +234,54 @@ fn process_path(app: &AppHandle, canonical_root: &Path, event_path: &Path) {
         return;
     }
 
-    let result = {
+    let notify = {
         let state_ref = &mut *guard;
         let Some(conn) = state_ref.connection.as_mut() else {
             return;
         };
         let index = state_ref.search_index.as_ref();
-        reconcile_external_change(conn, index, &ledger_path, &rel_path, &content)
+        match change {
+            Change::Upsert { rel_path, content } => {
+                match upsert_external_note(conn, index, &ledger_path, &rel_path, &content) {
+                    Ok(Upserted::Modified) => Notify::ContentChanged(rel_path),
+                    Ok(Upserted::Created) => Notify::TreeChanged,
+                    Err(e) => {
+                        log::warn!("[ledger_watch] upsert failed for {rel_path}: {e}");
+                        Notify::Nothing
+                    }
+                }
+            }
+            Change::Remove { rel_path } => {
+                match remove_external_note(conn, index, &ledger_path, &rel_path) {
+                    Ok(true) => Notify::Removed(rel_path),
+                    Ok(false) => Notify::Nothing,
+                    Err(e) => {
+                        log::warn!("[ledger_watch] remove failed for {rel_path}: {e}");
+                        Notify::Nothing
+                    }
+                }
+            }
+        }
     };
-    // Release the ledger lock before emitting so a frontend listener that turns
-    // around and calls a command can't contend with this handler.
     drop(guard);
 
-    match result {
-        Ok(true) => {
-            if let Err(e) = app.emit("note:content-changed", NoteContentChanged { path: rel_path })
-            {
+    match notify {
+        Notify::ContentChanged(path) => {
+            if let Err(e) = app.emit("note:content-changed", NoteContentChanged { path }) {
                 log::warn!("[ledger_watch] failed to emit note:content-changed: {e}");
             }
         }
-        // No `notes` row (a brand-new file) — out of scope for this slice.
-        Ok(false) => {}
-        Err(e) => log::warn!("[ledger_watch] reconcile failed for {rel_path}: {e}"),
+        Notify::TreeChanged => {
+            if let Err(e) = app.emit("ledger:tree-changed", ()) {
+                log::warn!("[ledger_watch] failed to emit ledger:tree-changed: {e}");
+            }
+        }
+        Notify::Removed(path) => {
+            if let Err(e) = app.emit("note:removed", NoteRemoved { path }) {
+                log::warn!("[ledger_watch] failed to emit note:removed: {e}");
+            }
+        }
+        Notify::Nothing => {}
     }
 }
 
@@ -220,16 +304,81 @@ fn relative_md(canonical_root: &Path, canonical_path: &Path) -> Option<String> {
     Some(rel_str)
 }
 
-/// Reconcile a single note's derived indexes from `content` after an external
-/// edit. Returns `Ok(true)` when a `notes` row exists and was reconciled (the
-/// caller should emit `note:content-changed`), `Ok(false)` when there is no row
-/// for `rel_path` (a create — out of scope here).
-pub(crate) fn reconcile_external_change(
+/// Ledger-relative `.md` path for an event path that no longer exists on disk (a
+/// delete or a move's `from` side), so `canonicalize` on the path itself fails.
+/// Canonicalizes the still-present parent directory and rejoins the file name so
+/// the same prefix-strip + filtering as [`relative_md`] applies. `None` if the
+/// parent is gone too, or the result is out of scope.
+fn missing_relative_md(canonical_root: &Path, event_path: &Path) -> Option<String> {
+    let parent = event_path.parent()?;
+    let file_name = event_path.file_name()?;
+    let canonical_parent = std::fs::canonicalize(parent).ok()?;
+    relative_md(canonical_root, &canonical_parent.join(file_name))
+}
+
+/// Whether an upsert created a new note row or reconciled an existing one.
+pub(crate) enum Upserted {
+    Created,
+    Modified,
+}
+
+/// Apply an external create-or-modify of `rel_path` from its on-disk `content`.
+/// A note that already has a `notes` row reconciles its derived indexes in place
+/// ([`Upserted::Modified`]); a note with no row is inserted with a title/parent
+/// derived from its path, then reconciled ([`Upserted::Created`]).
+pub(crate) fn upsert_external_note(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
     ledger_path: &Path,
     rel_path: &str,
     content: &str,
+) -> Result<Upserted, String> {
+    use crate::db::schema::notes::dsl as n;
+
+    let maybe_note = n::notes
+        .filter(n::path.eq(rel_path))
+        .first::<Note>(conn)
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    match maybe_note {
+        Some(note) => {
+            // prev_path == path: same-path reconcile, no re-key (matches write_note_content).
+            let outcome = crate::note_index::reconcile(conn, index, &note, content, Some(rel_path))?;
+            crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+            Ok(Upserted::Modified)
+        }
+        None => {
+            let now = chrono::Utc::now().to_rfc3339();
+            let title = title_from_path(rel_path);
+            let parent = parent_path_from(rel_path);
+            let new_note = NewNote {
+                path: rel_path,
+                title: &title,
+                parent_path: parent.as_deref(),
+                modified_at: &now,
+            };
+            let created: Note = diesel::insert_into(n::notes)
+                .values(&new_note)
+                .returning(Note::as_returning())
+                .get_result(conn)
+                .map_err(|e| e.to_string())?;
+            let outcome = crate::note_index::reconcile(conn, index, &created, content, None)?;
+            crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+            Ok(Upserted::Created)
+        }
+    }
+}
+
+/// Apply an external delete/move-away of `rel_path`: clear the note's derived
+/// indexes (while the row still exists, mirroring `delete_note`) and delete the
+/// `notes` row. Returns `Ok(true)` when a row existed and was removed (emit
+/// `note:removed`), `Ok(false)` when there was no row (nothing to do).
+pub(crate) fn remove_external_note(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    rel_path: &str,
 ) -> Result<bool, String> {
     use crate::db::schema::notes::dsl as n;
 
@@ -243,15 +392,19 @@ pub(crate) fn reconcile_external_change(
         return Ok(false);
     };
 
-    // prev_path == path: same-path reconcile, no re-key (matches write_note_content).
-    let outcome = crate::note_index::reconcile(conn, index, &note, content, Some(rel_path))?;
+    let outcome = crate::note_index::remove(conn, index, note.id, &note.path)?;
     crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+
+    diesel::delete(n::notes.find(note.id))
+        .execute(conn)
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::schema::note_aliases::dsl as na;
     use crate::db::schema::note_links::dsl as nl;
     use crate::db::schema::note_tags::dsl as nt;
     use diesel::connection::SimpleConnection;
@@ -303,7 +456,36 @@ mod tests {
         );
     }
 
-    // ── reconcile_external_change ──────────────────────────────────────────────
+    // ── missing_relative_md ────────────────────────────────────────────────────
+
+    #[test]
+    fn missing_relative_md_resolves_a_deleted_note_via_its_parent() {
+        // The parent dir must exist for canonicalize(parent) to succeed.
+        let root = TempDir::new().unwrap();
+        std::fs::create_dir(root.path().join("Characters")).unwrap();
+        let canonical_root = std::fs::canonicalize(root.path()).unwrap();
+        // The note file itself is already gone (deleted) — only the path remains.
+        let deleted = root.path().join("Characters").join("Aldric.md");
+        assert_eq!(
+            missing_relative_md(&canonical_root, &deleted),
+            Some("Characters/Aldric.md".to_string())
+        );
+    }
+
+    #[test]
+    fn missing_relative_md_rejects_non_md_and_dot_segments() {
+        let root = TempDir::new().unwrap();
+        std::fs::create_dir(root.path().join(".grimoire")).unwrap();
+        let canonical_root = std::fs::canonicalize(root.path()).unwrap();
+
+        let png = root.path().join("map.png");
+        assert_eq!(missing_relative_md(&canonical_root, &png), None);
+
+        let hidden = root.path().join(".grimoire").join("ledger.db");
+        assert_eq!(missing_relative_md(&canonical_root, &hidden), None);
+    }
+
+    // ── upsert_external_note / remove_external_note ────────────────────────────
 
     fn test_conn() -> SqliteConnection {
         let mut conn = SqliteConnection::establish(":memory:").expect("in-memory db");
@@ -346,17 +528,21 @@ mod tests {
         .unwrap();
     }
 
+    use crate::db::schema::notes::dsl as n;
+
     #[test]
-    fn external_change_reconciles_indexes_and_reports_reconciled() {
+    fn upsert_of_existing_note_reconciles_indexes_and_reports_modified() {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Ash.md");
 
         // An external editor rewrote the file with a new tag and wikilink.
         let content = "---\ntags: [npc]\n---\nSee [[Dragon.md]].";
-        let reconciled =
-            reconcile_external_change(&mut conn, None, dir.path(), "Ash.md", content).unwrap();
-        assert!(reconciled, "an existing note must reconcile and be reported");
+        let result = upsert_external_note(&mut conn, None, dir.path(), "Ash.md", content).unwrap();
+        assert!(
+            matches!(result, Upserted::Modified),
+            "an existing note must reconcile in place, not create a new row"
+        );
 
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
         assert_eq!(tags, vec!["npc"]);
@@ -365,38 +551,92 @@ mod tests {
     }
 
     #[test]
-    fn external_change_to_unknown_path_is_a_noop() {
+    fn upsert_of_new_path_inserts_a_note_row_and_reconciles_indexes() {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
-        // No notes row for this path — a freshly created file (out of scope).
-        let reconciled = reconcile_external_change(
-            &mut conn,
-            None,
-            dir.path(),
-            "BrandNew.md",
-            "---\ntags: [x]\n---\n",
-        )
-        .unwrap();
-        assert!(!reconciled, "a path with no notes row must not reconcile");
+        // No notes row for this path — a file created on disk outside the app.
+        let content = "---\ntags: [creature]\naliases: [Drake]\n---\nSee [[Lair.md]].";
+        let result =
+            upsert_external_note(&mut conn, None, dir.path(), "Bestiary/Dragon.md", content)
+                .unwrap();
+        assert!(
+            matches!(result, Upserted::Created),
+            "a path with no row must insert one"
+        );
 
+        // Row inserted with title/parent derived from the path.
+        let row: Note = n::notes
+            .filter(n::path.eq("Bestiary/Dragon.md"))
+            .first(&mut conn)
+            .unwrap();
+        assert_eq!(row.title, "Dragon");
+        assert_eq!(row.parent_path, Some("Bestiary".to_string()));
+
+        // Derived indexes reconciled from the new file's content.
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
-        assert!(tags.is_empty(), "no indexes written for an unknown note");
+        assert_eq!(tags, vec!["creature"]);
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["Lair.md"]);
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert_eq!(aliases, vec!["Drake"]);
     }
 
     #[test]
-    fn external_change_replaces_prior_derived_rows() {
+    fn upsert_replaces_prior_derived_rows_on_repeat() {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Ash.md");
 
-        reconcile_external_change(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [old]\n---\n[[Old.md]].")
+        upsert_external_note(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [old]\n---\n[[Old.md]].")
             .unwrap();
-        reconcile_external_change(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [new]\n---\n[[New.md]].")
+        upsert_external_note(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [new]\n---\n[[New.md]].")
             .unwrap();
 
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
         assert_eq!(tags, vec!["new"], "stale tags must be replaced, not accumulated");
         let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
         assert_eq!(links, vec!["New.md"]);
+    }
+
+    #[test]
+    fn remove_of_existing_note_drops_row_and_indexes_and_reports_removed() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "Ash.md");
+        // Populate derived indexes so we can prove they're cleared.
+        upsert_external_note(
+            &mut conn,
+            None,
+            dir.path(),
+            "Ash.md",
+            "---\ntags: [npc]\naliases: [The Ash]\n---\nSee [[Dragon.md]].",
+        )
+        .unwrap();
+
+        let removed = remove_external_note(&mut conn, None, dir.path(), "Ash.md").unwrap();
+        assert!(removed, "an existing note must be removed and reported");
+
+        let rows: Vec<String> = n::notes.select(n::path).load(&mut conn).unwrap();
+        assert!(rows.is_empty(), "notes row must be deleted");
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(tags.is_empty(), "note_tags must be cleared");
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert!(links.is_empty(), "note_links must be cleared");
+        let aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        assert!(aliases.is_empty(), "note_aliases must be cleared");
+    }
+
+    #[test]
+    fn remove_of_unknown_path_is_a_noop() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "Kept.md");
+
+        let removed = remove_external_note(&mut conn, None, dir.path(), "Ghost.md").unwrap();
+        assert!(!removed, "a path with no row reports nothing removed");
+
+        // The unrelated row must survive.
+        let rows: Vec<String> = n::notes.select(n::path).load(&mut conn).unwrap();
+        assert_eq!(rows, vec!["Kept.md"]);
     }
 }
