@@ -19,6 +19,12 @@
   export function discardPendingEdit(): void {
     editorCalls.discard++;
   }
+
+  // The live buffer, read by the deleted-while-open banner's "Save to recreate".
+  // The stub has no editing surface, so it echoes the content it was seeded with.
+  export function getMarkdown(): string {
+    return initialContent;
+  }
 </script>
 
 <!-- data-content lets tests observe which body the (re)mounted editor was seeded with. -->

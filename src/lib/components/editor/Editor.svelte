@@ -182,6 +182,15 @@
   }
 
   /**
+   * The editor's current buffer as markdown. Used by the deleted-while-open
+   * banner's "Save to recreate" (ADR-0013 Stage 4) to write the live buffer —
+   * including edits made after the file vanished — back to the original path.
+   */
+  export function getMarkdown(): string {
+    return editor?.getMarkdown() ?? initialContent;
+  }
+
+  /**
    * Freeze the autosave debounce while an external-change conflict banner is up
    * (issue #129), cancelling any already-scheduled save. Without this the 500ms
    * debounce fires while the banner waits and silently overwrites the external

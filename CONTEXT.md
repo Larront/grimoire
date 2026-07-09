@@ -244,7 +244,7 @@ _Avoid_: "highlight" (the visual treatment, not the entity; and generic highligh
 
 ### Ledger Watcher
 
-The backend `notify`-based file watcher rooted at the open ledger that keeps the app live-synced with external `.md` changes (edits, creates, deletes, moves) made by other tools — Obsidian, an editor, `git`, cloud sync. Lives entirely in `src-tauri`, drives the [[Derived Index]] `reconcile`/`remove` verbs and `rebuild_all_from_ledger` directly, and emits Tauri events (`note:content-changed`, `note:removed`, `ledger:tree-changed`, `ledger:rebuilt`) to the frontend. Starts on `open_ledger`, tears down on ledger switch / window close. Excludes `<ledger>/.grimoire/` so it never sees the app's own DB/index/media writes. See [ADR-0013](./docs/adr/0013-external-file-watching-live-sync.md).
+The backend `notify`-based file watcher rooted at the open ledger that keeps the app live-synced with external `.md` changes (edits, creates, deletes, moves) made by other tools — Obsidian, an editor, `git`, cloud sync. Lives entirely in `src-tauri`, drives the [[Derived Index]] `reconcile`/`remove` verbs and `rebuild_all_from_ledger` directly, and emits Tauri events (`note:content-changed`, `note:removed`, `note:moved`, `ledger:tree-changed`, `ledger:rebuilt`) to the frontend. Starts on `open_ledger`, tears down on ledger switch / window close. Excludes `<ledger>/.grimoire/` so it never sees the app's own DB/index/media writes. See [ADR-0013](./docs/adr/0013-external-file-watching-live-sync.md).
 _Avoid_: "file listener" (overloaded with DOM/event listeners), "sync engine" (implies remote/cloud replication — this is local-disk only), "hot reload" (a dev-tooling term).
 
 ### Write Chokepoint

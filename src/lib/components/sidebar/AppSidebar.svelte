@@ -80,6 +80,9 @@
     const unlisten = Promise.all([
       listen("ledger:tree-changed", () => syncFromDisk()),
       listen("note:removed", () => syncFromDisk()),
+      // An external move re-keyed a note's row in place (same id, new path); refetch
+      // so the tree shows it at its new location and open panes follow it there.
+      listen("note:moved", () => syncFromDisk()),
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger and emitted one coarse event — refetch notes + tree wholesale.
       listen("ledger:rebuilt", () => syncFromDisk()),

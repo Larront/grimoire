@@ -21,6 +21,7 @@
   import NoteDetails from "$lib/components/NoteDetails.svelte";
   import { createNoteDetailsSource } from "$lib/details/note-details-source.svelte";
   import { getDockMode, floatTransition } from "$lib/utils/dock-threshold";
+  import type { Note } from "$lib/types/ledger";
 
   interface Props {
     noteId: number;
@@ -31,7 +32,16 @@
   }
   let { noteId, rename, pane, tabIndex, rail }: Props = $props();
 
-  let note = $derived(notes.notes.find((n) => n.id === noteId) ?? null);
+  let liveNote = $derived(notes.notes.find((n) => n.id === noteId) ?? null);
+  // When this note's file is deleted externally the notes store drops its row —
+  // but blanking the pane to "Note not found" would yank the GM's buffer away
+  // (ADR-0013 Stage 4). We snapshot the note here and keep rendering from it,
+  // behind a Save-to-recreate / Close banner, until the GM decides — cleared when
+  // they recreate it (Save to recreate remounts the pane on the new row) or close
+  // the tab. An externally restored file lands as a *new* note id, so it opens
+  // separately rather than silently retiring this banner.
+  let deletedNote = $state<Note | null>(null);
+  let note = $derived(liveNote ?? deletedNote);
 
   // ── Content loading ──────────────────────────────────────────────────────
   let body = $state<string | null>(null);
@@ -53,6 +63,7 @@
         pauseAutosave: () => void;
         resumeAutosave: () => void;
         discardPendingEdit: () => void;
+        getMarkdown: () => string;
       }
     | undefined
   >(undefined);
@@ -143,11 +154,45 @@
     conflictBody = null;
   }
 
+  // ── Deleted while open (ADR-0013 Stage 4) ──────────────────────────────────
+  // The open note's file was deleted (or moved away, with no move correlated) on
+  // disk. The pane must not vanish: snapshot the note so the notes store dropping
+  // its row (via the sidebar's own note:removed sync) can't blank the pane, and
+  // raise the Save-to-recreate / Close banner. The buffer simply becomes unsaved —
+  // handleSave finds no row for this id, so autosave can never resurrect the file.
+  function handleExternalRemove(removedPath: string) {
+    // Read `note` synchronously, before the concurrent notes.load() drops the row.
+    const current = note;
+    if (!current || current.path !== removedPath) return;
+    deletedNote = { ...current };
+  }
+
+  // "Save to recreate": write the live buffer back to the original path. The row
+  // was deleted, so createNote inserts a fresh one (new id) then we write the
+  // buffer into it; repoint the tab at that new id so the pane keeps this note.
+  async function saveToRecreate() {
+    const snap = deletedNote;
+    if (!snap) return;
+    const markdown = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
+    try {
+      const created = await api.createNote(snap.title, snap.path, snap.parent_path);
+      await api.writeNoteContent(created.path, markdown);
+      await notes.load();
+      deletedNote = null;
+      tabs.repointNoteTab(snap.id, created.id, created.title);
+    } catch (e) {
+      console.error("recreate note failed:", e);
+    }
+  }
+
   onMount(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     const unlisten = Promise.all([
       listen<{ path: string }>("note:content-changed", (event) =>
         handleExternalChange(event.payload.path),
+      ),
+      listen<{ path: string }>("note:removed", (event) =>
+        handleExternalRemove(event.payload.path),
       ),
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger under one coarse event. This note's file may be among the
@@ -434,6 +479,43 @@
                        text-primary-foreground hover:bg-primary/90 transition-colors
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >Keep my version</button>
+            </div>
+          </div>
+        {/if}
+        {#if deletedNote !== null}
+          <!-- Deleted-while-open bar (ADR-0013 Stage 4). The file vanished on
+               disk; the buffer is kept as an unsaved copy so nothing the GM was
+               viewing is lost. Sticky, not modal. -->
+          <div
+            data-testid="deleted-banner"
+            role="alert"
+            class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
+                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <FileWarning class="size-4 shrink-0 text-primary" />
+              <p class="text-xs text-muted-foreground">
+                This note's file was deleted outside Grimoire. Your unsaved copy
+                is still here.
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                data-testid="deleted-close"
+                onclick={closeThisTab}
+                class="inline-flex h-7 items-center rounded-md border border-border bg-background
+                       px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
+                       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >Close</button>
+              <button
+                type="button"
+                data-testid="deleted-recreate"
+                onclick={saveToRecreate}
+                class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
+                       text-primary-foreground hover:bg-primary/90 transition-colors
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >Save to recreate</button>
             </div>
           </div>
         {/if}
