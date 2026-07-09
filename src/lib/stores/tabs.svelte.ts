@@ -356,6 +356,22 @@ function createTabsStore() {
     persist();
   }
 
+  // Repoint every note tab bound to `oldId` at a freshly-created note row
+  // (`newId`). Used when a deleted-while-open note is recreated from its buffer
+  // (ADR-0013 Stage 4): the recreated file gets a new DB id, so the tab must
+  // follow it there or it would show "Note not found".
+  function repointNoteTab(oldId: number, newId: number, title: string) {
+    const update = (pane: TabPane) => ({
+      ...pane,
+      tabs: pane.tabs.map((t) =>
+        t.type === "note" && t.id === oldId ? { ...t, id: newId, title } : t,
+      ),
+    });
+    left = update(left);
+    if (right) right = update(right);
+    persist();
+  }
+
   function updateTemplateTab(oldPath: string, newTitle: string, newPath: string) {
     const update = (pane: TabPane) => ({
       ...pane,
@@ -582,6 +598,7 @@ function createTabsStore() {
     closeTabByTypeAndId,
     closeTabsByPdfPath,
     updateTabTitle,
+    repointNoteTab,
     updateTemplateTab,
     updatePdfTab,
     clearRenameFlag,

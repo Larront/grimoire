@@ -46,6 +46,11 @@
   // True while an edit is waiting on the save debounce; cleared when a save
   // starts. Lets flush() know whether teardown must save (issue #106).
   let dirty = false;
+  // Frozen while a conflict banner awaits the GM's choice (issue #129): a
+  // queued or subsequent edit must NOT reach disk and clobber the external
+  // change before they decide. Edits still mark the buffer dirty; only the
+  // debounced write is suspended.
+  let autosavePaused = false;
   let inFlightSave: Promise<void> | null = null;
   let unregisterFlush: (() => void) | undefined;
   // Bumped on every doc edit so the broken-link resolver re-runs when links change.
@@ -124,6 +129,7 @@
       onUpdate: () => {
         docVersion++;
         dirty = true;
+        if (autosavePaused) return;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 500);
       },
@@ -163,6 +169,56 @@
     clearTimeout(saveTimer);
     if (dirty) await save();
     else if (inFlightSave) await inFlightSave;
+  }
+
+  /**
+   * True when the buffer holds no unsaved work — no edit waiting on the save
+   * debounce and no save in flight. An external live-reload (ADR-0013 Stage 3)
+   * only replaces the buffer when this holds, so a note being edited is never
+   * clobbered by a change on disk.
+   */
+  export function isClean(): boolean {
+    return !dirty && !inFlightSave;
+  }
+
+  /**
+   * The editor's current buffer as markdown. Used by the deleted-while-open
+   * banner's "Save to recreate" (ADR-0013 Stage 4) to write the live buffer —
+   * including edits made after the file vanished — back to the original path.
+   */
+  export function getMarkdown(): string {
+    return editor?.getMarkdown() ?? initialContent;
+  }
+
+  /**
+   * Freeze the autosave debounce while an external-change conflict banner is up
+   * (issue #129), cancelling any already-scheduled save. Without this the 500ms
+   * debounce fires while the banner waits and silently overwrites the external
+   * edit on disk — the exact clobber ADR-0013's banner exists to prevent.
+   */
+  export function pauseAutosave(): void {
+    autosavePaused = true;
+    clearTimeout(saveTimer);
+  }
+
+  /**
+   * Unfreeze autosave and persist the kept buffer now ("Keep my version"): the
+   * GM chose their edits, so write them to disk immediately rather than leaving
+   * the editor and disk silently diverged until the next keystroke.
+   */
+  export function resumeAutosave(): void {
+    autosavePaused = false;
+    if (dirty) void save();
+  }
+
+  /**
+   * Drop the unsaved buffer without persisting it ("Reload from disk"): the
+   * external version wins, so neither the debounce nor the teardown flush may
+   * write the stale buffer. The pane then remounts this editor with disk content.
+   */
+  export function discardPendingEdit(): void {
+    clearTimeout(saveTimer);
+    dirty = false;
   }
 
   // Resolve which wikilink targets don't exist — path miss AND alias miss, the same

@@ -1,7 +1,9 @@
 ﻿mod commands;
 mod db;
 mod ledger;
+mod ledger_watch;
 mod note_index;
+mod note_write;
 mod search;
 
 use commands::app_prefs::*;
@@ -24,6 +26,7 @@ use commands::templates::*;
 use commands::tree::*;
 
 use crate::ledger::{AppLedger, LedgerState};
+use crate::ledger_watch::LedgerWatcher;
 
 /// Export-only tauri-specta builder (ADR-0009). It collects the specta-annotated
 /// commands purely so their TypeScript bindings can be generated; the runtime
@@ -222,6 +225,7 @@ pub fn run() {
 
     builder
         .manage(AppLedger::new(LedgerState::new(client_id)))
+        .manage(LedgerWatcher::default())
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,

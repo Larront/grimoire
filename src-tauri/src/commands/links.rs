@@ -5,6 +5,7 @@
 // ledger scan; see ADR-0005 and CONTEXT.md §Link Index / §Note Alias.
 
 use crate::commands::frontmatter;
+use crate::note_write::write_note_file;
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::notes::dsl as n;
@@ -436,7 +437,7 @@ pub fn rewrite_backlinks_on_rename_on_conn(
         };
         let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
         if changed {
-            fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
+            write_note_file(&full_path, new_content.as_bytes())?;
             rewrites.push((source, new_content));
         }
     }
@@ -716,7 +717,7 @@ pub fn set_note_aliases(
     let full_path = ledger_path.join(&note.path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
-    fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
+    write_note_file(&full_path, new_content.as_bytes())?;
 
     let outcome = crate::note_index::reconcile(conn, index, &note, &new_content, None)?;
     crate::note_index::mark_stale_if_needed(&outcome, &ledger_path);
