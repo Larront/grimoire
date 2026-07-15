@@ -2,8 +2,8 @@
 //
 // Called once at open_ledger time. Walks the on-disk tree and brings the
 // `notes` table into agreement with what is actually present on disk.
-// Must run before rebuild_note_tags_from_ledger / rebuild_note_links_from_ledger
-// so those passes see fully-populated notes rows.
+// Must run before `note_index::rebuild_all_from_ledger` so that pass sees
+// fully-populated notes rows.
 
 use crate::db::models::NewNote;
 use crate::db::schema::notes::dsl as n;
