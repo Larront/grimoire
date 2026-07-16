@@ -584,10 +584,8 @@ pub fn set_note_aliases(
     let full_path = ledger_path.join(&note.path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
-    write_note_file(&full_path, new_content.as_bytes())?;
 
-    let outcome = crate::note_index::reconcile(conn, index, &note, &new_content, None)?;
-    crate::note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    crate::note_mutation::commit(conn, index, &ledger_path, &full_path, &note, &new_content)?;
     Ok(())
 }
 

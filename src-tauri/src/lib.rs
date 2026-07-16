@@ -3,6 +3,7 @@ mod db;
 mod ledger;
 mod ledger_watch;
 mod note_index;
+mod note_mutation;
 mod note_write;
 mod search;
 

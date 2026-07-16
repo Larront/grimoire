@@ -15,7 +15,7 @@ use crate::db::schema::note_tags::dsl as nt;
 use crate::db::schema::notes::dsl as nd;
 use crate::db::schema::pin_tags::dsl as pt;
 use crate::ledger::AppLedger;
-use crate::note_index::ReconcileManyItem;
+use crate::note_mutation::CommitItem;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -120,7 +120,10 @@ pub fn retag_tag_on_conn(
     let note_count = affected_paths.len();
 
     if note_count > 0 {
-        let mut items: Vec<ReconcileManyItem> = Vec::with_capacity(note_count);
+        // Route the bulk rewrite through the note_mutation envelope: each file
+        // is written via the Write Chokepoint (echo-suppressed, unlike the old
+        // raw `fs::write`) and all N notes reconcile in one batch.
+        let mut items: Vec<CommitItem> = Vec::with_capacity(note_count);
         for note_path in &affected_paths {
             let full_path = ledger_path.join(note_path);
             let content = fs::read_to_string(&full_path)
@@ -130,19 +133,15 @@ pub fn retag_tag_on_conn(
             let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
             let new_content = frontmatter::apply_tags(&content, &new_tags);
 
-            fs::write(&full_path, &new_content)
-                .map_err(|e| format!("Failed to write '{note_path}': {e}"))?;
-
             let note: Note = nd::notes
                 .filter(nd::path.eq(note_path))
                 .first(conn)
                 .map_err(|e| format!("Note '{note_path}' not in DB: {e}"))?;
 
-            items.push(ReconcileManyItem { note, content: new_content, prev_path: None });
+            items.push(CommitItem { full_path, note, content: new_content });
         }
 
-        let outcome = crate::note_index::reconcile_many(conn, index, &items)?;
-        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+        crate::note_mutation::commit_many(conn, index, ledger_path, items)?;
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────

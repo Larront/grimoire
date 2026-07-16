@@ -1,7 +1,7 @@
 use crate::commands::frontmatter;
 use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::note_index;
-use crate::note_write::write_note_file;
+use crate::note_mutation;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
 use crate::ledger::AppLedger;
@@ -99,8 +99,6 @@ pub fn create_note(
         .to_string_lossy()
         .replace('\\', "/");
 
-    write_note_file(&full_path, "".as_bytes())?;
-
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
@@ -120,8 +118,7 @@ pub fn create_note(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let outcome = note_index::reconcile(conn, index, &created, "", None)?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    note_mutation::create(conn, index, &ledger_path, &full_path, &created, "")?;
 
     Ok(created)
 }
@@ -156,8 +153,6 @@ pub fn create_note_from_template(
         .to_string_lossy()
         .replace('\\', "/");
 
-    write_note_file(&full_path, content.as_bytes())?;
-
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
@@ -177,8 +172,7 @@ pub fn create_note_from_template(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let outcome = note_index::reconcile(conn, index, &created, &content, None)?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    note_mutation::create(conn, index, &ledger_path, &full_path, &created, &content)?;
 
     Ok(created)
 }
@@ -362,10 +356,9 @@ pub fn write_note_content(
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     let full_path = validate_parent_path(&ledger_path, &note_path)?;
-    write_note_file(&full_path, content.as_bytes())?;
 
     // Borrow connection and search_index as separate fields of *state so the
-    // borrow checker allows both to be live when calling reconcile.
+    // borrow checker allows both to be live when calling the mutation envelope.
     let state_ref = &mut *state;
     let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
     let index = state_ref.search_index.as_ref();
@@ -375,10 +368,7 @@ pub fn write_note_content(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(ref note) = maybe_note {
-        let outcome = note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
-        note_index::mark_stale_if_needed(&outcome, &ledger_path);
-    }
+    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &content)?;
 
     Ok(())
 }
@@ -405,7 +395,6 @@ pub fn write_note_tags(
     let full_path = validate_path(&ledger_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
-    write_note_file(&full_path, new_content.as_bytes())?;
 
     // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
     let state_ref = &mut *state;
@@ -417,10 +406,7 @@ pub fn write_note_tags(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(note) = maybe_note {
-        let outcome = note_index::reconcile(conn, index, &note, &new_content, None)?;
-        note_index::mark_stale_if_needed(&outcome, &ledger_path);
-    }
+    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &new_content)?;
     Ok(())
 }
 
