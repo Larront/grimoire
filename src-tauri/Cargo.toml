@@ -1,10 +1,10 @@
 [package]
 name = "grimoire"
-version = "0.1.1"
+version = "0.1.2"
 description = "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes."
 authors = ["Aaron Lamont"]
 license = "GPL-3.0-or-later"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -43,6 +43,10 @@ chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 sha2 = "0.10"
 tokio = { version = "1", features = ["time"] }
+# Backend file watcher (ADR-0013). The `-full` debouncer coalesces atomic-save
+# churn over a short window and surfaces native rename events for later slices;
+# it re-exports the `notify` crate so we don't depend on it separately.
+notify-debouncer-full = "0.7"
 tantivy = "0.22"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }

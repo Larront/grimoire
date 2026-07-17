@@ -5,7 +5,8 @@
   import * as Rename from "$lib/components/ui/rename";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import { setContext, type ComponentProps } from "svelte";
+  import { onMount, setContext, type ComponentProps } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import AppSearch from "../AppSearch.svelte";
   import {
     FilePlus,
@@ -28,7 +29,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import { toastUndo } from "$lib/toast";
+  import { toastUndo, toastExternalMoveLinks, toastSuccess } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import FileTree from "./FileTree.svelte";
@@ -59,6 +60,54 @@
       console.error("FileTree refresh failed:", e);
     }
   }
+
+  // ── External file watching (ADR-0013) ─────────────────────────────────────
+  // When a note's .md file is created, deleted, or moved outside Grimoire, the
+  // backend syncs the notes table + derived indexes and emits a targeted event.
+  // Refetch the notes store (which cascades a tree rebuild via the $effect
+  // below) so the Files tree reflects the change without reopening the ledger.
+  // The allowlist is enforced by the disk-walking tree builder, so a non-note
+  // file can never leak into the tree here.
+  async function syncFromDisk() {
+    // Reload the notes store first — the tree's note_id lookups and the frontend
+    // noteMap are keyed off it — then rebuild the tree from disk.
+    await notes.load();
+    refresh();
+  }
+
+  onMount(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const unlisten = Promise.all([
+      listen("ledger:tree-changed", () => syncFromDisk()),
+      listen("note:removed", () => syncFromDisk()),
+      // An external move re-keyed a note's row in place (same id, new path); refetch
+      // so the tree shows it at its new location and open panes follow it there.
+      listen("note:moved", () => syncFromDisk()),
+      // Bulk external change (git checkout, cloud sync): the backend rebuilt the
+      // whole ledger and emitted one coarse event — refetch notes + tree wholesale.
+      listen("ledger:rebuilt", () => syncFromDisk()),
+      // A targeted external move left other notes linking to the old path. Offer
+      // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
+      // The count is display-only; the command recomputes the real set on Update.
+      listen<{ from: string; to: string; count: number }>(
+        "note:external-move-links-stale",
+        (event) => {
+          const { from, to, count } = event.payload;
+          const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
+          toastExternalMoveLinks(oldName, count, () => {
+            void api.applyBacklinkRewrite(from, to).then((n) => {
+              if (n > 0) {
+                toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
+              }
+            });
+          });
+        },
+      ),
+    ]);
+    return () => {
+      void unlisten.then((fns) => fns.forEach((fn) => fn()));
+    };
+  });
 
   $effect(() => {
     noteMap.clear();

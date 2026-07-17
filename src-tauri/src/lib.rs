@@ -1,7 +1,10 @@
 ﻿mod commands;
 mod db;
 mod ledger;
+mod ledger_watch;
 mod note_index;
+mod note_mutation;
+mod note_write;
 mod search;
 
 use commands::app_prefs::*;
@@ -24,6 +27,7 @@ use commands::templates::*;
 use commands::tree::*;
 
 use crate::ledger::{AppLedger, LedgerState};
+use crate::ledger_watch::LedgerWatcher;
 
 /// Export-only tauri-specta builder (ADR-0009). It collects the specta-annotated
 /// commands purely so their TypeScript bindings can be generated; the runtime
@@ -40,6 +44,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(tauri_specta::collect_commands![
             add_recent_ledger,
             adopt_sample_ledger,
+            apply_backlink_rewrite,
             assign_map_image,
             close_ledger,
             copy_audio_bytes,
@@ -144,7 +149,6 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             toggle_scene_favorite,
             update_annotation,
             update_map,
-            update_note,
             update_pin,
             update_pin_category,
             update_scene,
@@ -222,6 +226,7 @@ pub fn run() {
 
     builder
         .manage(AppLedger::new(LedgerState::new(client_id)))
+        .manage(LedgerWatcher::default())
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
@@ -238,11 +243,11 @@ pub fn run() {
             remove_recent_ledger,
             explore_sample_ledger,
             adopt_sample_ledger,
+            apply_backlink_rewrite,
             create_note,
             create_note_from_template,
             get_notes,
             read_note_content,
-            update_note,
             rename_note,
             write_note_content,
             delete_note,

@@ -257,18 +257,19 @@ describe("note rename — confirmation dialog (toggle on)", () => {
         "rename_note",
         expect.objectContaining({
           note: expect.objectContaining({ title: "Aldric 2" }),
+          rewriteBacklinks: true,
         }),
       );
     });
   });
 
-  it("'Rename only' calls update_note (not rename_note)", async () => {
+  it("'Rename only' calls rename_note with rewrite_backlinks: false", async () => {
     const invokeSpy = vi.mocked(invoke);
     const { container } = await openNotePane(async (cmd) => {
       if (cmd === "get_notes") return [testNote];
       if (cmd === "get_note_backlink_count") return 2;
-      if (cmd === "update_note")
-        return { ...testNote, title: "Aldric 2", path: "Aldric 2.md" };
+      if (cmd === "rename_note")
+        return { note: { ...testNote, title: "Aldric 2", path: "Aldric 2.md" }, updated_count: 0 };
       return null;
     });
 
@@ -290,13 +291,15 @@ describe("note rename — confirmation dialog (toggle on)", () => {
 
     await waitFor(() => {
       expect(invokeSpy).toHaveBeenCalledWith(
-        "update_note",
+        "rename_note",
         expect.objectContaining({
           note: expect.objectContaining({ title: "Aldric 2" }),
+          rewriteBacklinks: false,
         }),
       );
+      // update_note no longer exists — the links choice is the boolean argument.
       expect(invokeSpy).not.toHaveBeenCalledWith(
-        "rename_note",
+        "update_note",
         expect.anything(),
       );
     });

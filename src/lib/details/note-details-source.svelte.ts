@@ -50,21 +50,10 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     catch { allTags = []; }
   }
 
-  // Reload the fan-out whenever the note (keyed by path) changes.
-  $effect(() => {
-    const n = getNote();
-    if (!n) {
-      tags = [];
-      aliases = [];
-      aliasCollisions = [];
-      backlinks = [];
-      outboundLinks = [];
-      loadedForPath = null;
-      tagsLoadError = false;
-      aliasesLoadError = false;
-      return;
-    }
-    if (n.path === loadedForPath) return;
+  // Fetch the whole fan-out for `n`. Split out from the note-change $effect so a
+  // wholesale refetch (bulk external rebuild — ledger:rebuilt) can rerun it for
+  // the *current* note, whose path is unchanged and so wouldn't retrigger below.
+  function loadAll(n: Note) {
     const targetPath = n.path;
     const noteId = n.id;
     loadedForPath = targetPath;
@@ -83,6 +72,24 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
       .catch(() => { aliasCollisions = []; });
     loadLinks(noteId);
     refreshAllTags();
+  }
+
+  // Reload the fan-out whenever the note (keyed by path) changes.
+  $effect(() => {
+    const n = getNote();
+    if (!n) {
+      tags = [];
+      aliases = [];
+      aliasCollisions = [];
+      backlinks = [];
+      outboundLinks = [];
+      loadedForPath = null;
+      tagsLoadError = false;
+      aliasesLoadError = false;
+      return;
+    }
+    if (n.path === loadedForPath) return;
+    loadAll(n);
   });
 
   // Any successful note save (anywhere) may change this note's backlinks.
@@ -140,6 +147,14 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     await lastFailedSave?.();
   }
 
+  // Force a wholesale refetch of the current note's details. Used when a bulk
+  // external change rebuilt the ledger and the note's own path didn't change,
+  // so the path-keyed $effect above wouldn't otherwise refire.
+  function reload() {
+    const n = untrack(() => getNote());
+    if (n) loadAll(n);
+  }
+
   return {
     get tags() { return tags; },
     set tags(v: string[]) { tags = v; },
@@ -155,6 +170,7 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     saveTags,
     saveAliases,
     retrySave,
+    reload,
   };
 }
 

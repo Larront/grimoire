@@ -1,40 +1,27 @@
-import { ledger } from "./ledger.svelte";
 import { api } from "$lib/api";
+import { createLedgerCollection } from "./ledger-collection.svelte";
 import type { TemplateEntry } from "$lib/types/ledger";
 
 function createTemplatesStore() {
-  let templatesList = $state<TemplateEntry[]>([]);
-  let isLoading = $state(false);
-
-  async function load() {
-    isLoading = true;
-    try {
-      templatesList = (await api.listTemplates()) ?? [];
-    } catch (e) {
-      console.error("list_templates failed:", e);
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  $effect.root(() => {
-    $effect(() => {
-      if (ledger.isOpen) {
-        load();
-      } else {
-        templatesList = [];
-      }
-    });
+  const base = createLedgerCollection<TemplateEntry>({
+    fetch: async () => (await api.listTemplates()) ?? [],
   });
 
   return {
     get templates() {
-      return templatesList;
+      return base.items;
+    },
+    // Present for shape-consistency with the other ledger-backed lists; unused for now.
+    get templateCount() {
+      return base.count;
     },
     get isLoading() {
-      return isLoading;
+      return base.isLoading;
     },
-    load,
+    get error() {
+      return base.error;
+    },
+    load: base.load,
   };
 }
 

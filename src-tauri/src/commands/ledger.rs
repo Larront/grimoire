@@ -7,7 +7,7 @@ use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 pub(crate) fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(), String> {
     let count: i64 = pin_categories::table
@@ -56,7 +56,11 @@ pub struct OpenLedgerResult {
 
 #[tauri::command]
 #[specta::specta]
-pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerResult, String> {
+pub fn open_ledger(
+    path: String,
+    app: AppHandle,
+    ledger: State<AppLedger>,
+) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
 
     if !ledger_path.exists() {
@@ -86,7 +90,7 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
         Err(e) => return Err(e.message()),
     };
 
-    finish_open(path, ledger_path, conn, recovered, &ledger)
+    finish_open(path, ledger_path, conn, recovered, &app, &ledger)
 }
 
 /// Recreate the ledger database from scratch after the GM confirmed the
@@ -96,11 +100,15 @@ pub fn open_ledger(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerR
 /// SQLite-canonical and cannot be recovered this way; the dialog said so.
 #[tauri::command]
 #[specta::specta]
-pub fn rebuild_ledger_db(path: String, ledger: State<AppLedger>) -> Result<OpenLedgerResult, String> {
+pub fn rebuild_ledger_db(
+    path: String,
+    app: AppHandle,
+    ledger: State<AppLedger>,
+) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
     db::move_corrupt_db_aside(&ledger_path)?;
     let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-    finish_open(path, ledger_path, conn, None, &ledger)
+    finish_open(path, ledger_path, conn, None, &app, &ledger)
 }
 
 fn finish_open(
@@ -108,6 +116,7 @@ fn finish_open(
     ledger_path: PathBuf,
     mut conn: SqliteConnection,
     recovered_from_backup: Option<String>,
+    app: &AppHandle,
     ledger: &State<AppLedger>,
 ) -> Result<OpenLedgerResult, String> {
     inject_builtin_templates(&ledger_path)?;
@@ -174,10 +183,21 @@ fn finish_open(
         log::warn!("[open_ledger] database snapshot failed: {e}");
     }
 
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    state.path = Some(ledger_path);
-    state.connection = Some(conn);
-    state.search_index = search_index;
+    // Drop any write hashes remembered for a previously-open ledger before this
+    // one's watcher (started below) can start matching against them.
+    crate::note_write::reset_recent_writes();
+
+    {
+        let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+        state.path = Some(ledger_path.clone());
+        state.connection = Some(conn);
+        state.search_index = search_index;
+    }
+
+    // Start (or re-root) the external-file watcher now that the ledger state is
+    // live (ADR-0013). Done outside the lock above: the watcher's event handler
+    // locks the same `AppLedger`, so we never hold it while touching the watcher.
+    crate::ledger_watch::start(app, &ledger_path);
 
     Ok(OpenLedgerResult {
         path,
@@ -198,7 +218,10 @@ pub fn get_ledger_path(ledger: State<AppLedger>) -> Option<String> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn close_ledger(ledger: State<AppLedger>) -> Result<(), String> {
+pub fn close_ledger(app: AppHandle, ledger: State<AppLedger>) -> Result<(), String> {
+    // Tear the watcher down first so no event fires against a half-closed ledger.
+    crate::ledger_watch::stop(&app);
+
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     state.connection = None;
     state.path = None;

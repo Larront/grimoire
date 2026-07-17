@@ -1,64 +1,41 @@
-import { ledger } from "./ledger.svelte";
 import { api } from "$lib/api";
+import { createLedgerCollection } from "./ledger-collection.svelte";
 import type { Map } from "$lib/types/ledger";
 
 function createMapsStore() {
-  let maps = $state<Map[]>([]);
-  let isLoading = $state(false);
-  let error = $state<string | null>(null);
-
-  async function load() {
-    isLoading = true;
-    error = null;
-    try {
-      maps = await api.getMaps();
-    } catch (e) {
-      error = String(e);
-    } finally {
-      isLoading = false;
-    }
-  }
+  const base = createLedgerCollection<Map>({
+    fetch: () => api.getMaps(),
+  });
 
   // Delete a map that was created but never given an image (abandoned creation).
   // No-op if the map has an image or is already gone. Imageless maps have no
   // pins/annotations (those require the canvas), so a plain delete is safe.
   async function pruneIfImageless(mapId: number) {
-    const m = maps.find((x) => x.id === mapId);
+    const m = base.items.find((x) => x.id === mapId);
     if (!m || m.image_path) return;
     try {
       await api.deleteMap(mapId);
-      await load();
+      await base.load();
     } catch (e) {
       console.error("prune imageless map failed:", e);
     }
   }
 
-  $effect.root(() => {
-    $effect(() => {
-      if (ledger.isOpen) {
-        load();
-      } else {
-        maps = [];
-        error = null;
-      }
-    });
-  });
-
   return {
     get maps() {
-      return maps;
+      return base.items;
     },
     // Called after any create/delete mutation to keep the count reactive.
     get mapCount() {
-      return maps.length;
+      return base.count;
     },
     get isLoading() {
-      return isLoading;
+      return base.isLoading;
     },
     get error() {
-      return error;
+      return base.error;
     },
-    load,
+    load: base.load,
     pruneIfImageless,
   };
 }

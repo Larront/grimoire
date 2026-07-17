@@ -5,6 +5,7 @@
 // ledger scan; see ADR-0005 and CONTEXT.md §Link Index / §Note Alias.
 
 use crate::commands::frontmatter;
+use crate::note_write::write_note_file;
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::notes::dsl as n;
@@ -193,139 +194,6 @@ impl TargetResolver {
     }
 }
 
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
-/// Replace all link rows for `source_id` with `links`.
-pub fn upsert_note_links(
-    conn: &mut SqliteConnection,
-    source_id: i32,
-    links: &[String],
-) -> Result<(), String> {
-    conn.transaction::<_, diesel::result::Error, _>(|c| {
-        diesel::delete(nl::note_links.filter(nl::source_id.eq(source_id))).execute(c)?;
-        for target in links {
-            diesel::insert_into(nl::note_links)
-                .values((nl::source_id.eq(source_id), nl::target_path.eq(target)))
-                .execute(c)?;
-        }
-        Ok(())
-    })
-    .map_err(|e| e.to_string())
-}
-
-/// Replace all alias rows for `note_id` with `aliases`.
-pub fn upsert_note_aliases(
-    conn: &mut SqliteConnection,
-    note_id: i32,
-    aliases: &[String],
-) -> Result<(), String> {
-    conn.transaction::<_, diesel::result::Error, _>(|c| {
-        diesel::delete(na::note_aliases.filter(na::note_id.eq(note_id))).execute(c)?;
-        let mut seen: BTreeSet<String> = BTreeSet::new();
-        for alias in aliases {
-            if seen.insert(alias.to_lowercase()) {
-                diesel::insert_into(na::note_aliases)
-                    .values((na::note_id.eq(note_id), na::alias.eq(alias)))
-                    .execute(c)?;
-            }
-        }
-        Ok(())
-    })
-    .map_err(|e| e.to_string())
-}
-
-/// Walk the ledger scanning every `.md` file; replace both tables with the
-/// results of a fresh scan. Hidden directories are skipped.
-pub fn rebuild_note_links_from_ledger(
-    ledger_path: &Path,
-    conn: &mut SqliteConnection,
-) -> Result<(), String> {
-    // Build a path→id map so the walk can resolve source_id cheaply.
-    let note_rows: Vec<(String, i32)> = n::notes
-        .select((n::path, n::id))
-        .load(conn)
-        .map_err(|e| e.to_string())?;
-    let path_to_id: std::collections::HashMap<String, i32> =
-        note_rows.into_iter().collect();
-
-    let mut link_rows: Vec<(i32, String)> = Vec::new();
-    let mut alias_rows: Vec<(i32, String)> = Vec::new();
-    collect_links_and_aliases(ledger_path, "", &path_to_id, &mut link_rows, &mut alias_rows)?;
-
-    conn.transaction::<_, diesel::result::Error, _>(|c| {
-        diesel::delete(nl::note_links).execute(c)?;
-        diesel::delete(na::note_aliases).execute(c)?;
-
-        for chunk in link_rows.chunks(100) {
-            let vals: Vec<_> = chunk
-                .iter()
-                .map(|(sid, tp)| (nl::source_id.eq(*sid), nl::target_path.eq(tp)))
-                .collect();
-            diesel::insert_into(nl::note_links)
-                .values(&vals)
-                .execute(c)?;
-        }
-
-        let mut seen_aliases: BTreeSet<(i32, String)> = BTreeSet::new();
-        let unique_aliases: Vec<_> = alias_rows
-            .into_iter()
-            .filter(|(nid, alias)| seen_aliases.insert((*nid, alias.to_lowercase())))
-            .collect();
-        for chunk in unique_aliases.chunks(100) {
-            let vals: Vec<_> = chunk
-                .iter()
-                .map(|(nid, alias)| (na::note_id.eq(*nid), na::alias.eq(alias)))
-                .collect();
-            diesel::insert_into(na::note_aliases)
-                .values(&vals)
-                .execute(c)?;
-        }
-
-        Ok(())
-    })
-    .map_err(|e| e.to_string())
-}
-
-fn collect_links_and_aliases(
-    dir: &Path,
-    relative: &str,
-    path_to_id: &std::collections::HashMap<String, i32>,
-    link_rows: &mut Vec<(i32, String)>,
-    alias_rows: &mut Vec<(i32, String)>,
-) -> Result<(), String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(()),
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
-        let entry_path = entry.path();
-        let child_rel = if relative.is_empty() {
-            name.clone()
-        } else {
-            format!("{}/{}", relative, name)
-        };
-        if entry_path.is_dir() {
-            collect_links_and_aliases(&entry_path, &child_rel, path_to_id, link_rows, alias_rows)?;
-        } else if name.ends_with(".md") {
-            if let (Some(&note_id), Ok(content)) =
-                (path_to_id.get(&child_rel), fs::read_to_string(&entry_path))
-            {
-                for target in extract_wikilinks(&content) {
-                    link_rows.push((note_id, target));
-                }
-                for alias in frontmatter::read_aliases(&content) {
-                    alias_rows.push((note_id, alias));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 // ── Backlink rewrite ──────────────────────────────────────────────────────────
 
 /// Walk every `[[...]]` link in `content`; where `map` returns a replacement
@@ -377,9 +245,12 @@ fn rewrite_wikilinks_with(
 /// Must run while the `notes` row still holds `old_path`: the stem-ownership
 /// check below resolves against the pre-rename state.
 /// Returns a list of `(Note, rewritten_content)` pairs for every source note
-/// whose file was modified. Does NOT touch derived indexes — callers are
-/// responsible for routing through `reconcile` / `reconcile_many`.
-pub fn rewrite_backlinks_on_rename_on_conn(
+/// whose text would change — computed but **not** written. Performs no disk
+/// writes and touches no derived indexes, so a caller can either apply the
+/// rewrites (phase B) or just report the affected sources (the deferred plan
+/// for the external-move prompt). [`rewrite_backlinks_on_rename_on_conn`] is the
+/// applying wrapper.
+pub fn collect_backlink_rewrites_on_conn(
     ledger_path: &Path,
     conn: &mut SqliteConnection,
     old_path: &str,
@@ -436,9 +307,29 @@ pub fn rewrite_backlinks_on_rename_on_conn(
         };
         let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
         if changed {
-            fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
             rewrites.push((source, new_content));
         }
+    }
+    Ok(rewrites)
+}
+
+/// Apply the backlink rewrites a rename implies: like
+/// [`collect_backlink_rewrites_on_conn`] but writes each rewritten source file
+/// through the [`write_note_file`] Write Chokepoint before returning it. The
+/// caller reconciles the returned sources' derived indexes itself.
+///
+/// Used by the folder-rename path. The single-note rename routes through
+/// `note_mutation::rename`, which applies phase B via `commit_many` (one batched
+/// write-and-reconcile) instead.
+pub fn rewrite_backlinks_on_rename_on_conn(
+    ledger_path: &Path,
+    conn: &mut SqliteConnection,
+    old_path: &str,
+    new_path: &str,
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
+    let rewrites = collect_backlink_rewrites_on_conn(ledger_path, conn, old_path, new_path)?;
+    for (source, new_content) in &rewrites {
+        write_note_file(&ledger_path.join(&source.path), new_content.as_bytes())?;
     }
     Ok(rewrites)
 }
@@ -716,10 +607,8 @@ pub fn set_note_aliases(
     let full_path = ledger_path.join(&note.path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
-    fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
 
-    let outcome = crate::note_index::reconcile(conn, index, &note, &new_content, None)?;
-    crate::note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    crate::note_mutation::commit(conn, index, &ledger_path, &full_path, &note, &new_content)?;
     Ok(())
 }
 
@@ -768,6 +657,43 @@ mod tests {
             "INSERT INTO notes (id, path, title) VALUES ({id}, '{path}', '{title}')"
         ))
         .unwrap();
+    }
+
+    // Test fixtures: seed the derived link/alias tables directly. Production
+    // writes go solely through `note_index`; these only populate rows so the
+    // resolver / backlink / collision tests below have data to read.
+    fn seed_note_links(
+        conn: &mut SqliteConnection,
+        source_id: i32,
+        links: &[String],
+    ) -> Result<(), String> {
+        diesel::delete(nl::note_links.filter(nl::source_id.eq(source_id)))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        for target in links {
+            diesel::insert_into(nl::note_links)
+                .values((nl::source_id.eq(source_id), nl::target_path.eq(target)))
+                .execute(conn)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn seed_note_aliases(
+        conn: &mut SqliteConnection,
+        note_id: i32,
+        aliases: &[String],
+    ) -> Result<(), String> {
+        diesel::delete(na::note_aliases.filter(na::note_id.eq(note_id)))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        for alias in aliases {
+            diesel::insert_into(na::note_aliases)
+                .values((na::note_id.eq(note_id), na::alias.eq(alias)))
+                .execute(conn)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     // ── extract_wikilinks ────────────────────────────────────────────────────
@@ -833,211 +759,26 @@ mod tests {
         assert!(extract_wikilinks("[[unclosed").is_empty());
     }
 
-    // ── upsert_note_links ────────────────────────────────────────────────────
-
-    #[test]
-    fn upsert_note_links_inserts_rows() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_links(&mut conn, 1, &["b.md".to_string(), "c.md".to_string()]).unwrap();
-        let mut rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        rows.sort();
-        assert_eq!(
-            rows,
-            vec![(1, "b.md".to_string()), (1, "c.md".to_string())]
-        );
-    }
-
-    #[test]
-    fn upsert_note_links_replaces_rows_for_one_note_only() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        insert_note(&mut conn, 2, "b.md", "B");
-        upsert_note_links(&mut conn, 1, &["x.md".to_string()]).unwrap();
-        upsert_note_links(&mut conn, 2, &["y.md".to_string()]).unwrap();
-        // Replace note 1's links; note 2 should be untouched.
-        upsert_note_links(&mut conn, 1, &["z.md".to_string()]).unwrap();
-        let mut rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        rows.sort();
-        assert_eq!(
-            rows,
-            vec![(1, "z.md".to_string()), (2, "y.md".to_string())]
-        );
-    }
-
-    #[test]
-    fn upsert_note_links_to_empty_clears_rows() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
-        upsert_note_links(&mut conn, 1, &[]).unwrap();
-        let rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert!(rows.is_empty());
-    }
+    // ── note_links / note_aliases FK cascade ─────────────────────────────────
 
     #[test]
     fn deleting_note_cascades_to_link_rows() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
         conn.batch_execute("DELETE FROM notes WHERE id = 1").unwrap();
         let rows: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
         assert!(rows.is_empty(), "cascade delete should remove link rows");
-    }
-
-    // ── upsert_note_aliases ──────────────────────────────────────────────────
-
-    #[test]
-    fn upsert_note_aliases_inserts_rows() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_aliases(&mut conn, 1, &["Captain A".to_string()]).unwrap();
-        let rows: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
-        assert_eq!(rows, vec![(1, "Captain A".to_string())]);
-    }
-
-    #[test]
-    fn upsert_note_aliases_deduplicates_case_insensitively() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_aliases(
-            &mut conn,
-            1,
-            &["Captain A".to_string(), "captain a".to_string(), "Ash".to_string()],
-        )
-        .unwrap();
-        let mut rows: Vec<String> = na::note_aliases
-            .select(na::alias)
-            .load(&mut conn)
-            .unwrap();
-        rows.sort();
-        assert_eq!(rows, vec!["Ash".to_string(), "Captain A".to_string()]);
-    }
-
-    #[test]
-    fn upsert_note_aliases_to_empty_clears_rows() {
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_aliases(&mut conn, 1, &["Captain A".to_string()]).unwrap();
-        upsert_note_aliases(&mut conn, 1, &[]).unwrap();
-        let rows: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
-        assert!(rows.is_empty());
     }
 
     #[test]
     fn deleting_note_cascades_to_alias_rows() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_aliases(&mut conn, 1, &["Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Ash".to_string()]).unwrap();
         conn.batch_execute("DELETE FROM notes WHERE id = 1").unwrap();
         let rows: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
         assert!(rows.is_empty(), "cascade delete should remove alias rows");
-    }
-
-    // ── rebuild_note_links_from_ledger ────────────────────────────────────────
-
-    #[test]
-    fn rebuild_from_empty_ledger_yields_no_rows() {
-        let dir = TempDir::new().unwrap();
-        let mut conn = test_conn();
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        let aliases: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
-        assert!(links.is_empty());
-        assert!(aliases.is_empty());
-    }
-
-    #[test]
-    fn rebuild_picks_up_wikilinks_and_aliases() {
-        let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("aldric.md"),
-            "---\naliases: [Captain Aldric]\n---\nSee [[dragon.md]].",
-        )
-        .unwrap();
-        fs::write(dir.path().join("dragon.md"), "Body only.").unwrap();
-
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "aldric.md", "Aldric");
-        insert_note(&mut conn, 2, "dragon.md", "Dragon");
-
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-
-        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert_eq!(links, vec![(1, "dragon.md".to_string())]);
-
-        let aliases: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
-        assert_eq!(aliases, vec![(1, "Captain Aldric".to_string())]);
-    }
-
-    #[test]
-    fn rebuild_is_idempotent() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("a.md"), "[[b.md]]").unwrap();
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-
-        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert_eq!(links.len(), 1);
-    }
-
-    #[test]
-    fn rebuild_skips_hidden_directories() {
-        let dir = TempDir::new().unwrap();
-        fs::create_dir(dir.path().join(".grimoire")).unwrap();
-        fs::write(
-            dir.path().join(".grimoire").join("hidden.md"),
-            "[[should_not_appear.md]]",
-        )
-        .unwrap();
-        let mut conn = test_conn();
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert!(links.is_empty());
-    }
-
-    #[test]
-    fn rebuild_skips_files_with_no_note_record() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("unregistered.md"), "[[b.md]]").unwrap();
-        let mut conn = test_conn();
-        // No matching note in DB for "unregistered.md" → no links inserted.
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
-        assert!(links.is_empty());
-    }
-
-    #[test]
-    fn stub_detection_target_path_not_in_notes() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("a.md"), "[[nonexistent.md]]").unwrap();
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "a.md", "A");
-
-        rebuild_note_links_from_ledger(dir.path(), &mut conn).unwrap();
-
-        // target_path "nonexistent.md" does not appear in notes.path → stub
-        let stub_count: i64 = diesel::sql_query(
-            "SELECT COUNT(*) as cnt FROM note_links
-             WHERE target_path NOT IN (SELECT path FROM notes)
-               AND target_path NOT IN (SELECT alias FROM note_aliases)",
-        )
-        .load::<CountRow>(&mut conn)
-        .unwrap()
-        .into_iter()
-        .next()
-        .map(|r| r.cnt)
-        .unwrap_or(0);
-        assert_eq!(stub_count, 1);
-    }
-
-    #[derive(QueryableByName)]
-    struct CountRow {
-        #[diesel(sql_type = diesel::sql_types::BigInt)]
-        cnt: i64,
     }
 
     // ── rewrite_wikilinks_with ───────────────────────────────────────────────
@@ -1120,7 +861,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "b.md", "B");
-        upsert_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
 
         let rewrites =
             rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "b.md", "b-renamed.md")
@@ -1162,8 +903,8 @@ mod tests {
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "target.md", "Target");
         insert_note(&mut conn, 3, "c.md", "C");
-        upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
-        upsert_note_links(&mut conn, 3, &["target.md".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
+        seed_note_links(&mut conn, 3, &["target.md".to_string()]).unwrap();
 
         let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
@@ -1214,7 +955,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "note.md", "Note");
         insert_note(&mut conn, 2, "target.md", "Target");
-        upsert_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
 
         let rewrites =
             rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "target.md", "renamed.md")
@@ -1243,8 +984,8 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "Note A");
         insert_note(&mut conn, 2, "b.md", "Note B");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        upsert_note_aliases(&mut conn, 2, &["Dragon".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 2, &["Dragon".to_string()]).unwrap();
         let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
         assert!(collisions.is_empty());
     }
@@ -1254,8 +995,8 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "Note A");
         insert_note(&mut conn, 2, "b.md", "Note B");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        upsert_note_aliases(&mut conn, 2, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 2, &["Captain Ash".to_string()]).unwrap();
         let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
         assert_eq!(collisions.len(), 1);
         assert_eq!(collisions[0].alias, "Captain Ash");
@@ -1268,8 +1009,8 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "Note A");
         insert_note(&mut conn, 2, "b.md", "Note B");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
-        upsert_note_aliases(&mut conn, 2, &["captain ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 2, &["captain ash".to_string()]).unwrap();
         let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
         assert_eq!(collisions.len(), 1);
         assert_eq!(collisions[0].other_note_id, 2);
@@ -1287,7 +1028,7 @@ mod tests {
     fn collisions_not_self_reported() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "Note A");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let collisions = get_alias_collisions_on_conn(&mut conn, 1).unwrap();
         assert!(collisions.is_empty(), "own aliases should not be reported as collisions");
     }
@@ -1298,7 +1039,7 @@ mod tests {
     fn alias_search_prefix_matches() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let results = search_notes_by_alias_on_conn(&mut conn, "Captain").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, 1);
@@ -1310,7 +1051,7 @@ mod tests {
     fn alias_search_case_insensitive() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let results = search_notes_by_alias_on_conn(&mut conn, "captain").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, 1);
@@ -1320,7 +1061,7 @@ mod tests {
     fn alias_search_no_match_returns_empty() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let results = search_notes_by_alias_on_conn(&mut conn, "Dragon").unwrap();
         assert!(results.is_empty());
     }
@@ -1329,7 +1070,7 @@ mod tests {
     fn alias_search_empty_query_returns_empty() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let results = search_notes_by_alias_on_conn(&mut conn, "").unwrap();
         assert!(results.is_empty());
     }
@@ -1338,7 +1079,7 @@ mod tests {
     fn alias_search_deduplicates_same_note_multiple_aliases() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(
+        seed_note_aliases(
             &mut conn,
             1,
             &["Captain Ash".to_string(), "Captain Ashford".to_string()],
@@ -1355,7 +1096,7 @@ mod tests {
     fn resolve_by_alias_exact_match() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let result = resolve_note_target_on_conn(&mut conn, "Captain Ash").unwrap();
         assert!(result.is_some());
         let r = result.unwrap();
@@ -1368,7 +1109,7 @@ mod tests {
     fn resolve_by_alias_no_match_returns_none() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let result = resolve_note_target_on_conn(&mut conn, "Unknown").unwrap();
         assert!(result.is_none());
     }
@@ -1377,7 +1118,7 @@ mod tests {
     fn resolve_by_alias_case_insensitive() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let result = resolve_note_target_on_conn(&mut conn, "captain ash").unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().id, 1);
@@ -1387,7 +1128,7 @@ mod tests {
     fn resolve_by_alias_partial_does_not_match() {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "ash.md", "Ash");
-        upsert_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
+        seed_note_aliases(&mut conn, 1, &["Captain Ash".to_string()]).unwrap();
         let result = resolve_note_target_on_conn(&mut conn, "Captain").unwrap();
         assert!(result.is_none(), "partial alias must not resolve");
     }
@@ -1495,7 +1236,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "Atlas/Aspects/The Spark.md", "The Spark");
-        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
         let backlinks = get_backlinks_on_conn(&mut conn, 2).unwrap();
         assert_eq!(backlinks.len(), 1);
@@ -1508,8 +1249,8 @@ mod tests {
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "b.md", "B");
         insert_note(&mut conn, 3, "Atlas/Aspects/The Spark.md", "The Spark");
-        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
-        upsert_note_links(&mut conn, 2, &["atlas/aspects/the spark".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+        seed_note_links(&mut conn, 2, &["atlas/aspects/the spark".to_string()]).unwrap();
 
         let count =
             get_note_backlink_count_on_conn(&mut conn, "Atlas/Aspects/The Spark.md").unwrap();
@@ -1521,7 +1262,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "Atlas/Aspects/The Spark.md", "The Spark");
-        upsert_note_links(
+        seed_note_links(
             &mut conn,
             1,
             &["The Spark".to_string(), "Nowhere".to_string()],
@@ -1561,7 +1302,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
-        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
         let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
@@ -1584,7 +1325,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
-        upsert_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
         let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),
@@ -1609,7 +1350,7 @@ mod tests {
         // "Plan.md" at the root wins stem resolution over the nested one.
         insert_note(&mut conn, 2, "Plan.md", "Plan");
         insert_note(&mut conn, 3, "deep/Plan.md", "Plan (deep)");
-        upsert_note_links(&mut conn, 1, &["Plan".to_string()]).unwrap();
+        seed_note_links(&mut conn, 1, &["Plan".to_string()]).unwrap();
 
         let rewrites = rewrite_backlinks_on_rename_on_conn(
             dir.path(),

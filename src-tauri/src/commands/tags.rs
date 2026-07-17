@@ -1,7 +1,7 @@
 // Ledger-global tag index.
 //
 // The `note_tags` table is a derived index. Markdown frontmatter is the source
-// of truth; this table is fully regenerable by `rebuild_note_tags_from_ledger`.
+// of truth; this table is fully regenerable by `note_index::rebuild_all_from_ledger`.
 // Wiping `.grimoire/index.db` (or just the `note_tags` table) and re-opening
 // the ledger reconstructs the index from a fresh frontmatter scan.
 //
@@ -15,7 +15,7 @@ use crate::db::schema::note_tags::dsl as nt;
 use crate::db::schema::notes::dsl as nd;
 use crate::db::schema::pin_tags::dsl as pt;
 use crate::ledger::AppLedger;
-use crate::note_index::ReconcileManyItem;
+use crate::note_mutation::CommitItem;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -120,7 +120,10 @@ pub fn retag_tag_on_conn(
     let note_count = affected_paths.len();
 
     if note_count > 0 {
-        let mut items: Vec<ReconcileManyItem> = Vec::with_capacity(note_count);
+        // Route the bulk rewrite through the note_mutation envelope: each file
+        // is written via the Write Chokepoint (echo-suppressed, unlike the old
+        // raw `fs::write`) and all N notes reconcile in one batch.
+        let mut items: Vec<CommitItem> = Vec::with_capacity(note_count);
         for note_path in &affected_paths {
             let full_path = ledger_path.join(note_path);
             let content = fs::read_to_string(&full_path)
@@ -130,19 +133,15 @@ pub fn retag_tag_on_conn(
             let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
             let new_content = frontmatter::apply_tags(&content, &new_tags);
 
-            fs::write(&full_path, &new_content)
-                .map_err(|e| format!("Failed to write '{note_path}': {e}"))?;
-
             let note: Note = nd::notes
                 .filter(nd::path.eq(note_path))
                 .first(conn)
                 .map_err(|e| format!("Note '{note_path}' not in DB: {e}"))?;
 
-            items.push(ReconcileManyItem { note, content: new_content, prev_path: None });
+            items.push(CommitItem { full_path, note, content: new_content });
         }
 
-        let outcome = crate::note_index::reconcile_many(conn, index, &items)?;
-        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+        crate::note_mutation::commit_many(conn, index, ledger_path, items)?;
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────
@@ -235,96 +234,6 @@ pub fn get_tag_usage_counts_from_conn(
         .collect();
     result.sort_by(|a, b| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()));
     Ok(result)
-}
-
-/// Walk the ledger scanning every `.md` file for frontmatter tags, then replace
-/// the `note_tags` table contents with the fresh scan. Hidden directories
-/// (anything starting with '.') are skipped.
-pub fn rebuild_note_tags_from_ledger(
-    ledger_path: &Path,
-    conn: &mut SqliteConnection,
-) -> Result<(), String> {
-    let mut rows: Vec<(String, String)> = Vec::new();
-    collect_md_tags(ledger_path, "", &mut rows)?;
-
-    conn.transaction::<_, diesel::result::Error, _>(|c| {
-        diesel::delete(nt::note_tags).execute(c)?;
-        if !rows.is_empty() {
-            // De-dupe (note_path, lowercased-tag) so insert respects PK.
-            let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
-            let unique: Vec<_> = rows
-                .into_iter()
-                .filter(|(path, tag)| seen.insert((path.clone(), tag.to_lowercase())))
-                .collect();
-            for chunk in unique.chunks(100) {
-                let values: Vec<_> = chunk
-                    .iter()
-                    .map(|(path, tag)| (nt::note_path.eq(path), nt::tag.eq(tag)))
-                    .collect();
-                diesel::insert_into(nt::note_tags)
-                    .values(&values)
-                    .execute(c)?;
-            }
-        }
-        Ok(())
-    })
-    .map_err(|e| e.to_string())
-}
-
-fn collect_md_tags(
-    dir: &Path,
-    relative: &str,
-    out: &mut Vec<(String, String)>,
-) -> Result<(), String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        // Ledger may be brand new / empty — not an error.
-        Err(_) => return Ok(()),
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
-        let entry_path = entry.path();
-        let child_rel = if relative.is_empty() {
-            name.clone()
-        } else {
-            format!("{}/{}", relative, name)
-        };
-        if entry_path.is_dir() {
-            collect_md_tags(&entry_path, &child_rel, out)?;
-        } else if name.ends_with(".md") {
-            if let Ok(content) = fs::read_to_string(&entry_path) {
-                for tag in frontmatter::read_tags(&content) {
-                    out.push((child_rel.clone(), tag));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Replace this note's rows in the index with `tags`. Called from
-/// `write_note_tags` after the file write succeeds.
-pub fn upsert_note_tags(
-    conn: &mut SqliteConnection,
-    note_path: &str,
-    tags: &[String],
-) -> Result<(), String> {
-    conn.transaction::<_, diesel::result::Error, _>(|c| {
-        diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path))).execute(c)?;
-        let mut seen: BTreeSet<String> = BTreeSet::new();
-        for t in tags {
-            if seen.insert(t.to_lowercase()) {
-                diesel::insert_into(nt::note_tags)
-                    .values((nt::note_path.eq(note_path), nt::tag.eq(t)))
-                    .execute(c)?;
-            }
-        }
-        Ok(())
-    })
-    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -464,152 +373,24 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
-    fn rebuild_from_empty_ledger_yields_no_rows() {
-        let dir = TempDir::new().unwrap();
-        let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-        let rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        assert!(rows.is_empty());
-    }
-
-    #[test]
-    fn rebuild_picks_up_inline_frontmatter_tags() {
-        let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("dragon.md"),
-            "---\ntags: [creature, fire]\n---\nBody",
-        )
-        .unwrap();
-        fs::create_dir(dir.path().join("npcs")).unwrap();
-        fs::write(
-            dir.path().join("npcs").join("ash.md"),
-            "---\ntags: [npc, allied]\n---\nBody",
-        )
-        .unwrap();
-
-        let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-
-        let mut rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        rows.sort();
-        assert_eq!(
-            rows,
-            vec![
-                ("dragon.md".to_string(), "creature".to_string()),
-                ("dragon.md".to_string(), "fire".to_string()),
-                ("npcs/ash.md".to_string(), "allied".to_string()),
-                ("npcs/ash.md".to_string(), "npc".to_string()),
-            ]
-        );
-    }
-
-    #[test]
-    fn rebuild_is_idempotent_and_replaces_existing_rows() {
-        let dir = TempDir::new().unwrap();
-        fs::write(
-            dir.path().join("a.md"),
-            "---\ntags: [one]\n---\n",
-        )
-        .unwrap();
-        let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-
-        // Tag changes on disk; rebuild reflects the new state.
-        fs::write(
-            dir.path().join("a.md"),
-            "---\ntags: [two]\n---\n",
-        )
-        .unwrap();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-
-        let rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        assert_eq!(rows, vec![("a.md".to_string(), "two".to_string())]);
-    }
-
-    #[test]
-    fn rebuild_skips_hidden_directories() {
-        let dir = TempDir::new().unwrap();
-        fs::create_dir(dir.path().join(".grimoire")).unwrap();
-        fs::write(
-            dir.path().join(".grimoire").join("hidden.md"),
-            "---\ntags: [should_not_appear]\n---\n",
-        )
-        .unwrap();
-        let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-        let rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        assert!(rows.is_empty());
-    }
-
-    #[test]
-    fn upsert_replaces_rows_for_one_note_only() {
-        let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["one".to_string(), "two".to_string()]).unwrap();
-        upsert_note_tags(&mut conn, "b.md", &["three".to_string()]).unwrap();
-        // Replace a.md's set
-        upsert_note_tags(&mut conn, "a.md", &["four".to_string()]).unwrap();
-
-        let mut rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        rows.sort();
-        assert_eq!(
-            rows,
-            vec![
-                ("a.md".to_string(), "four".to_string()),
-                ("b.md".to_string(), "three".to_string()),
-            ]
-        );
-    }
-
-    #[test]
-    fn upsert_to_empty_set_clears_rows() {
-        let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["one".to_string()]).unwrap();
-        upsert_note_tags(&mut conn, "a.md", &[]).unwrap();
-        let rows: Vec<(String, String)> =
-            nt::note_tags.load(&mut conn).unwrap();
-        assert!(rows.is_empty());
-    }
-
-    #[test]
-    fn upsert_deduplicates_case_insensitively() {
-        let mut conn = test_conn();
-        upsert_note_tags(
-            &mut conn,
-            "a.md",
-            &["NPC".to_string(), "npc".to_string(), "Allied".to_string()],
-        )
-        .unwrap();
-        let mut rows: Vec<String> = nt::note_tags
-            .select(nt::tag)
-            .load(&mut conn)
-            .unwrap();
-        rows.sort();
-        assert_eq!(rows, vec!["Allied".to_string(), "NPC".to_string()]);
-    }
-
-    #[test]
-    fn garbage_collection_via_rebuild_drops_orphan_tags() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("a.md"), "---\ntags: [keep, drop]\n---\n").unwrap();
-        let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-
-        // Remove `drop` from the note. After rebuild it should disappear from
-        // the index entirely — no orphan retention.
-        fs::write(dir.path().join("a.md"), "---\ntags: [keep]\n---\n").unwrap();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
-
-        let rows: Vec<String> = nt::note_tags
-            .select(nt::tag)
-            .load(&mut conn)
-            .unwrap();
-        assert_eq!(rows, vec!["keep".to_string()]);
+    // Test fixture: seed the derived `note_tags` table directly. Production
+    // writes go solely through `note_index`; this only populates rows so the
+    // retag / usage-count / list-all tests below have data to read.
+    fn seed_note_tags(
+        conn: &mut SqliteConnection,
+        note_path: &str,
+        tags: &[String],
+    ) -> Result<(), String> {
+        diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path)))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        for t in tags {
+            diesel::insert_into(nt::note_tags)
+                .values((nt::note_path.eq(note_path), nt::tag.eq(t)))
+                .execute(conn)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     // ── pin_tags tests ───────────────────────────────────────────────────────
@@ -687,10 +468,8 @@ mod tests {
 
     #[test]
     fn list_all_tags_includes_pin_only_tags() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("a.md"), "---\ntags: [note-tag]\n---\n").unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["note-tag".to_string()]).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["pin-only".to_string()]).unwrap();
 
@@ -711,8 +490,8 @@ mod tests {
     #[test]
     fn usage_counts_note_count_reflects_distinct_notes() {
         let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["creature".to_string()]).unwrap();
-        upsert_note_tags(&mut conn, "b.md", &["creature".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["creature".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "b.md", &["creature".to_string()]).unwrap();
         let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
         let entry = result.iter().find(|e| e.tag == "creature").unwrap();
         assert_eq!(entry.note_count, 2);
@@ -735,7 +514,7 @@ mod tests {
     #[test]
     fn usage_counts_combines_note_and_pin_counts() {
         let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
         let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
@@ -747,7 +526,7 @@ mod tests {
     #[test]
     fn usage_counts_deduplicates_case_insensitively() {
         let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["NPC".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["NPC".to_string()]).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
         let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
@@ -761,7 +540,7 @@ mod tests {
     #[test]
     fn usage_counts_sorted_alphabetically() {
         let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["zebra".to_string(), "ant".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["zebra".to_string(), "ant".to_string()]).unwrap();
         let result = get_tag_usage_counts_from_conn(&mut conn).unwrap();
         assert_eq!(result[0].tag, "ant");
         assert_eq!(result[1].tag, "zebra");
@@ -769,10 +548,8 @@ mod tests {
 
     #[test]
     fn list_all_tags_deduplicates_across_note_and_pin_sources() {
-        let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("a.md"), "---\ntags: [shared]\n---\n").unwrap();
         let mut conn = test_conn();
-        rebuild_note_tags_from_ledger(dir.path(), &mut conn).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["shared".to_string()]).unwrap();
         insert_pin(&mut conn, 1);
         upsert_pin_tags(&mut conn, 1, &["shared".to_string()]).unwrap();
 
@@ -818,7 +595,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "dragon.md", "Dragon");
         insert_pin(&mut conn, 1);
-        upsert_note_tags(&mut conn, "dragon.md", &["creature".to_string(), "fire".to_string()])
+        seed_note_tags(&mut conn, "dragon.md", &["creature".to_string(), "fire".to_string()])
             .unwrap();
         upsert_pin_tags(&mut conn, 1, &["creature".to_string()]).unwrap();
 
@@ -856,7 +633,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
         insert_pin(&mut conn, 1);
-        upsert_note_tags(
+        seed_note_tags(
             &mut conn,
             "a.md",
             &["npc".to_string(), "creature".to_string()],
@@ -894,7 +671,7 @@ mod tests {
         .unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_tags(
+        seed_note_tags(
             &mut conn,
             "a.md",
             &["npc".to_string(), "character".to_string()],
@@ -929,7 +706,7 @@ mod tests {
         fs::write(dir.path().join("a.md"), "---\ntags: [npc]\n---\nBody").unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "a.md", "A");
-        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
 
         let result = retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("NPC")).unwrap();
         assert_eq!(result.note_count, 1);
@@ -954,8 +731,8 @@ mod tests {
         insert_note(&mut conn, 2, "b.md", "B");
         insert_pin(&mut conn, 1);
         insert_pin(&mut conn, 2);
-        upsert_note_tags(&mut conn, "a.md", &["loc".to_string()]).unwrap();
-        upsert_note_tags(&mut conn, "b.md", &["loc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["loc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "b.md", &["loc".to_string()]).unwrap();
         upsert_pin_tags(&mut conn, 1, &["loc".to_string()]).unwrap();
         upsert_pin_tags(&mut conn, 2, &["loc".to_string()]).unwrap();
 
@@ -980,7 +757,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "---\ntags: [npc]\n---\n").unwrap();
         let mut conn = test_conn();
-        upsert_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
 
         let result =
             retag_tag_on_conn(&mut conn, None, dir.path(), "ghost", Some("phantom")).unwrap();

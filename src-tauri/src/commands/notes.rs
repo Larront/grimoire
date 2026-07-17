@@ -1,6 +1,6 @@
 use crate::commands::frontmatter;
-use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::note_index;
+use crate::note_mutation;
 use crate::db::models::{Map, NewNote, Note, Scene};
 use crate::db::schema::{maps, notes::dsl::*, scenes};
 use crate::ledger::AppLedger;
@@ -98,8 +98,6 @@ pub fn create_note(
         .to_string_lossy()
         .replace('\\', "/");
 
-    fs::write(&full_path, "").map_err(|e| e.to_string())?;
-
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
@@ -119,8 +117,7 @@ pub fn create_note(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let outcome = note_index::reconcile(conn, index, &created, "", None)?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    note_mutation::create(conn, index, &ledger_path, &full_path, &created, "")?;
 
     Ok(created)
 }
@@ -155,8 +152,6 @@ pub fn create_note_from_template(
         .to_string_lossy()
         .replace('\\', "/");
 
-    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
-
     let now = chrono::Utc::now().to_rfc3339();
     let new_note = NewNote {
         path: &resolved_path,
@@ -176,8 +171,7 @@ pub fn create_note_from_template(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let outcome = note_index::reconcile(conn, index, &created, &content, None)?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    note_mutation::create(conn, index, &ledger_path, &full_path, &created, &content)?;
 
     Ok(created)
 }
@@ -205,47 +199,6 @@ fn is_same_file(old_full: &Path, new_full: &Path) -> bool {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-
-    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-
-    // Fetch the current record to detect path changes
-    let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
-
-    // Rename file on disk if the path changed
-    if old_note.path != note.path {
-        let old_full = validate_path(&ledger_path, &old_note.path)?;
-        let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() && !is_same_file(&old_full, &new_full) {
-            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
-        }
-        if old_full.exists() {
-            fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
-        }
-        // note_tags re-key handled inside reconcile via prev_path
-    }
-
-    let updated: Note = diesel::update(notes.find(note.id))
-        .set(&note)
-        .returning(Note::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
-
-    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
-
-    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
-
-    Ok(updated)
-}
-
 #[derive(Serialize, specta::Type)]
 pub struct RenameNoteResult {
     pub note: Note,
@@ -253,12 +206,23 @@ pub struct RenameNoteResult {
     pub updated_count: usize,
 }
 
-/// Like `update_note` but also rewrites all wikilinks that reference the old
-/// path in every other note in the ledger.  Returns the count of notes whose
-/// files were actually rewritten so the frontend can show a toast.
+/// Rename a note (change its filename/path). Always re-keys the moved note's own
+/// row and derived indexes; when `rewrite_backlinks` is true it also rewrites
+/// every `[[old path]]` wikilink in every other note and returns the count of
+/// files rewritten so the frontend can toast "N notes updated". When false it
+/// leaves those backlinks as-is (the "Rename only" choice).
+///
+/// Replaces the former `update_note` + `rename_note` pair: the frontend's
+/// yes/no-links choice is now the `rewrite_backlinks` boolean. Both share the
+/// one `note_mutation::rename` implementation with the Ledger Watcher's external
+/// move, so in-app and external renames can never diverge.
 #[tauri::command]
 #[specta::specta]
-pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteResult, String> {
+pub fn rename_note(
+    note: Note,
+    rewrite_backlinks: bool,
+    ledger: State<AppLedger>,
+) -> Result<RenameNoteResult, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
 
@@ -269,51 +233,76 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
-    let mut updated_count = 0usize;
-
-    if old_note.path != note.path {
-        let old_full = validate_path(&ledger_path, &old_note.path)?;
-        let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() && !is_same_file(&old_full, &new_full) {
-            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
-        }
-        if old_full.exists() {
-            fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
-        }
-        // note_tags re-key handled inside reconcile via prev_path.
-        // Backlink sources get their note_links + Tantivy refreshed via reconcile_many.
-        let backlink_rewrites =
-            rewrite_backlinks_on_rename_on_conn(&ledger_path, conn, &old_note.path, &note.path)?;
-        updated_count = backlink_rewrites.len();
-        if !backlink_rewrites.is_empty() {
-            let backlink_items: Vec<note_index::ReconcileManyItem> = backlink_rewrites
-                .into_iter()
-                .map(|(n, c)| note_index::ReconcileManyItem {
-                    note: n,
-                    content: c,
-                    prev_path: None,
-                })
-                .collect();
-            let bl_outcome = note_index::reconcile_many(conn, index, &backlink_items)?;
-            note_index::mark_stale_if_needed(&bl_outcome, &ledger_path);
-        }
+    // Move the file on disk (the app half of the rename), then run the shared
+    // rename envelope for the row re-key, reconcile, and backlinks. The frontend
+    // only calls this on an actual filename change; the guard keeps a no-op
+    // path from renaming a file onto itself.
+    let old_full = validate_path(&ledger_path, &old_note.path)?;
+    let new_full = validate_parent_path(&ledger_path, &note.path)?;
+    if new_full.exists() && !is_same_file(&old_full, &new_full) {
+        return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
+    }
+    if old_note.path != note.path && old_full.exists() {
+        fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
     }
 
-    let updated: Note = diesel::update(notes.find(note.id))
-        .set(&note)
-        .returning(Note::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    let raw_content = read_note_for_reconcile(&ledger_path.join(&note.path))?;
+    let renamed = note_mutation::rename(
+        conn,
+        index,
+        &ledger_path,
+        &old_note.path,
+        &note,
+        &raw_content,
+        rewrite_backlinks,
+    )?;
 
-    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
-
-    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
-
+    let updated_count = match renamed.backlinks {
+        note_mutation::RenamedBacklinks::Rewritten(n) => n,
+        note_mutation::RenamedBacklinks::Deferred(_) => 0,
+    };
     Ok(RenameNoteResult {
-        note: updated,
+        note: renamed.note,
         updated_count,
     })
+}
+
+/// Heal the inbound wikilinks left broken by an *external* move of `from_path`
+/// → `to_path` — the *Update* action on the external-move prompt (issue #135).
+///
+/// The moved note's own row was already re-keyed by the Ledger Watcher's phase-A
+/// pass when the move was detected; this performs **phase B** on demand: rewrite
+/// every other note's `[[old path]]` wikilinks to the new path and reconcile
+/// those sources through the [`note_mutation`] envelope (so the rewrites are
+/// echo-suppressed like every other write).
+///
+/// The affected set is **recomputed here** from the current ledger, not trusted
+/// from the count the toast displayed: the ledger may have changed while the
+/// prompt sat on screen, so a stale count can never cause the wrong notes to be
+/// edited. Returns the number of notes whose files were actually rewritten.
+#[tauri::command]
+#[specta::specta]
+pub fn apply_backlink_rewrite(
+    from_path: String,
+    to_path: String,
+    ledger: State<AppLedger>,
+) -> Result<u32, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+
+    // Field-split so conn (mut) and search_index (ref) can be borrowed together.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
+    let rewrites = crate::commands::links::collect_backlink_rewrites_on_conn(
+        &ledger_path,
+        conn,
+        &from_path,
+        &to_path,
+    )?;
+    let count = note_mutation::commit_backlink_rewrites(conn, index, &ledger_path, rewrites)?;
+    Ok(count as u32)
 }
 
 #[tauri::command]
@@ -361,10 +350,9 @@ pub fn write_note_content(
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     let full_path = validate_parent_path(&ledger_path, &note_path)?;
-    fs::write(&full_path, &content).map_err(|e| e.to_string())?;
 
     // Borrow connection and search_index as separate fields of *state so the
-    // borrow checker allows both to be live when calling reconcile.
+    // borrow checker allows both to be live when calling the mutation envelope.
     let state_ref = &mut *state;
     let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
     let index = state_ref.search_index.as_ref();
@@ -374,10 +362,7 @@ pub fn write_note_content(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(ref note) = maybe_note {
-        let outcome = note_index::reconcile(conn, index, note, &content, Some(&note_path))?;
-        note_index::mark_stale_if_needed(&outcome, &ledger_path);
-    }
+    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &content)?;
 
     Ok(())
 }
@@ -404,7 +389,6 @@ pub fn write_note_tags(
     let full_path = validate_path(&ledger_path, &note_path)?;
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_tags(&content, &tags);
-    fs::write(&full_path, &new_content).map_err(|e| e.to_string())?;
 
     // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
     let state_ref = &mut *state;
@@ -416,10 +400,7 @@ pub fn write_note_tags(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    if let Some(note) = maybe_note {
-        let outcome = note_index::reconcile(conn, index, &note, &new_content, None)?;
-        note_index::mark_stale_if_needed(&outcome, &ledger_path);
-    }
+    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &new_content)?;
     Ok(())
 }
 

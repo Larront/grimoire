@@ -511,6 +511,36 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_deduplicates_aliases_case_insensitively() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        // Case variants of the same alias must collapse to one row (first casing wins).
+        let content = "---\naliases: [Captain A, captain a, Ash]\n---\nBody.";
+        reconcile(&mut conn, None, &note, content, None).unwrap();
+
+        let mut aliases: Vec<String> = na::note_aliases.select(na::alias).load(&mut conn).unwrap();
+        aliases.sort();
+        assert_eq!(aliases, vec!["Ash", "Captain A"]);
+    }
+
+    #[test]
+    fn reconcile_deduplicates_tags_case_insensitively() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        // Case variants of the same tag must collapse to one row (first casing wins).
+        let content = "---\ntags: [NPC, npc, Allied]\n---\nBody.";
+        reconcile(&mut conn, None, &note, content, None).unwrap();
+
+        let mut tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        tags.sort();
+        assert_eq!(tags, vec!["Allied", "NPC"]);
+    }
+
+    #[test]
     fn reconcile_returns_search_stale_true_when_no_index() {
         let mut conn = test_conn();
         let note = make_note(1, "ash.md");
@@ -804,6 +834,20 @@ mod tests {
     }
 
     // ── rebuild_all_from_ledger ───────────────────────────────────────────────
+
+    #[test]
+    fn rebuild_all_from_empty_ledger_yields_no_rows() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        rebuild_all_from_ledger(dir.path(), &mut conn, &[], &[]).unwrap();
+
+        let tags: Vec<(String, String)> = nt::note_tags.load(&mut conn).unwrap();
+        let links: Vec<(i32, String)> = nl::note_links.load(&mut conn).unwrap();
+        let aliases: Vec<(i32, String)> = na::note_aliases.load(&mut conn).unwrap();
+        assert!(tags.is_empty());
+        assert!(links.is_empty());
+        assert!(aliases.is_empty());
+    }
 
     #[test]
     fn rebuild_all_populates_tags_links_aliases_from_single_walk() {
