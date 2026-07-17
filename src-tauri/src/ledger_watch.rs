@@ -645,9 +645,15 @@ pub(crate) fn remove_external_note(
 /// `notes` row in place: its `path`/`title`/`parent_path` follow the file to its
 /// new location and the row keeps its **id** (so an open editor pane bound to
 /// that id follows the move without losing its session — the whole point of
-/// correlating a move instead of treating it as delete+create). The note's
-/// derived indexes are reconciled from `content` with `prev_path = from_rel`,
-/// which clears the old-path-keyed rows exactly as `rename_note` does.
+/// correlating a move instead of treating it as delete+create).
+///
+/// Routes through the shared [`crate::note_mutation::rename`] so an external
+/// move and an in-app rename can never diverge. External moves do **phase A
+/// only** (`rewrite_backlinks = false`): the moved note is re-keyed and
+/// reconciled, but inbound `[[old path]]` wikilinks in other notes are left as
+/// the external tool wrote them — exactly today's behaviour. (The prompt that
+/// offers to heal those backlinks lands in a follow-up; the plan `rename`
+/// returns is intentionally not acted on here.)
 ///
 /// Returns `Ok(true)` when a row existed and was re-keyed (emit `note:moved`),
 /// `Ok(false)` when the old path had no row (the caller falls back to creating
@@ -672,20 +678,16 @@ pub(crate) fn move_external_note(
         return Ok(false);
     };
 
-    let title = title_from_path(to_rel);
-    let parent = parent_path_from(to_rel);
-    let updated: Note = diesel::update(n::notes.find(old.id))
-        .set((
-            n::path.eq(to_rel),
-            n::title.eq(&title),
-            n::parent_path.eq(parent.as_deref()),
-        ))
-        .returning(Note::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    // The target row: same id/icon/etc., with path/title/parent derived from the
+    // new location. `note_mutation::rename` persists exactly path/title/parent.
+    let target = Note {
+        path: to_rel.to_string(),
+        title: title_from_path(to_rel),
+        parent_path: parent_path_from(to_rel),
+        ..old
+    };
 
-    let outcome = crate::note_index::reconcile(conn, index, &updated, content, Some(from_rel))?;
-    crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+    crate::note_mutation::rename(conn, index, ledger_path, from_rel, &target, content, false)?;
     Ok(true)
 }
 

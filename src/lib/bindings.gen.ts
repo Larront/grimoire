@@ -121,11 +121,18 @@ export const commands = {
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
 	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
 	/**
-	 *  Like `update_note` but also rewrites all wikilinks that reference the old
-	 *  path in every other note in the ledger.  Returns the count of notes whose
-	 *  files were actually rewritten so the frontend can show a toast.
+	 *  Rename a note (change its filename/path). Always re-keys the moved note's own
+	 *  row and derived indexes; when `rewrite_backlinks` is true it also rewrites
+	 *  every `[[old path]]` wikilink in every other note and returns the count of
+	 *  files rewritten so the frontend can toast "N notes updated". When false it
+	 *  leaves those backlinks as-is (the "Rename only" choice).
+	 * 
+	 *  Replaces the former `update_note` + `rename_note` pair: the frontend's
+	 *  yes/no-links choice is now the `rewrite_backlinks` boolean. Both share the
+	 *  one `note_mutation::rename` implementation with the Ledger Watcher's external
+	 *  move, so in-app and external renames can never diverge.
 	 */
-	renameNote: (note: Note) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note }),
+	renameNote: (note: Note, rewriteBacklinks: boolean) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note, rewriteBacklinks }),
 	renamePdf: (oldPath: string, newStem: string) => __TAURI_INVOKE<string>("rename_pdf", { oldPath, newStem }),
 	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
@@ -163,7 +170,6 @@ export const commands = {
 	toggleSceneFavorite: (id: number) => __TAURI_INVOKE<null>("toggle_scene_favorite", { id }),
 	updateAnnotation: (annotation: MapAnnotation) => __TAURI_INVOKE<MapAnnotation>("update_annotation", { annotation }),
 	updateMap: (map: Map) => __TAURI_INVOKE<Map>("update_map", { map }),
-	updateNote: (note: Note) => __TAURI_INVOKE<Note>("update_note", { note }),
 	updatePin: (pin: Pin) => __TAURI_INVOKE<Pin>("update_pin", { pin }),
 	updatePinCategory: (category: PinCategory) => __TAURI_INVOKE<PinCategory>("update_pin_category", { category }),
 	updateScene: (id: number, name: string) => __TAURI_INVOKE<Scene>("update_scene", { id, name }),

@@ -245,9 +245,12 @@ fn rewrite_wikilinks_with(
 /// Must run while the `notes` row still holds `old_path`: the stem-ownership
 /// check below resolves against the pre-rename state.
 /// Returns a list of `(Note, rewritten_content)` pairs for every source note
-/// whose file was modified. Does NOT touch derived indexes — callers are
-/// responsible for routing through `reconcile` / `reconcile_many`.
-pub fn rewrite_backlinks_on_rename_on_conn(
+/// whose text would change — computed but **not** written. Performs no disk
+/// writes and touches no derived indexes, so a caller can either apply the
+/// rewrites (phase B) or just report the affected sources (the deferred plan
+/// for the external-move prompt). [`rewrite_backlinks_on_rename_on_conn`] is the
+/// applying wrapper.
+pub fn collect_backlink_rewrites_on_conn(
     ledger_path: &Path,
     conn: &mut SqliteConnection,
     old_path: &str,
@@ -304,9 +307,29 @@ pub fn rewrite_backlinks_on_rename_on_conn(
         };
         let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
         if changed {
-            write_note_file(&full_path, new_content.as_bytes())?;
             rewrites.push((source, new_content));
         }
+    }
+    Ok(rewrites)
+}
+
+/// Apply the backlink rewrites a rename implies: like
+/// [`collect_backlink_rewrites_on_conn`] but writes each rewritten source file
+/// through the [`write_note_file`] Write Chokepoint before returning it. The
+/// caller reconciles the returned sources' derived indexes itself.
+///
+/// Used by the folder-rename path. The single-note rename routes through
+/// `note_mutation::rename`, which applies phase B via `commit_many` (one batched
+/// write-and-reconcile) instead.
+pub fn rewrite_backlinks_on_rename_on_conn(
+    ledger_path: &Path,
+    conn: &mut SqliteConnection,
+    old_path: &str,
+    new_path: &str,
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
+    let rewrites = collect_backlink_rewrites_on_conn(ledger_path, conn, old_path, new_path)?;
+    for (source, new_content) in &rewrites {
+        write_note_file(&ledger_path.join(&source.path), new_content.as_bytes())?;
     }
     Ok(rewrites)
 }

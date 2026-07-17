@@ -269,13 +269,13 @@
     isSavingTitle = true;
     try {
       if (updateLinks) {
-        const result = await api.renameNote({ ...note, title, path: newPath });
+        const result = await api.renameNote({ ...note, title, path: newPath }, true);
         if (result.updated_count > 0) {
           const n = result.updated_count;
           toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
         }
       } else {
-        await api.updateNote({ ...note, title, path: newPath });
+        await api.renameNote({ ...note, title, path: newPath }, false);
       }
       await notes.load();
     } catch (e) {

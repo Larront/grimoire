@@ -1,5 +1,4 @@
 use crate::commands::frontmatter;
-use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::note_index;
 use crate::note_mutation;
 use crate::db::models::{Map, NewNote, Note, Scene};
@@ -200,47 +199,6 @@ fn is_same_file(old_full: &Path, new_full: &Path) -> bool {
     }
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn update_note(note: Note, ledger: State<AppLedger>) -> Result<Note, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-
-    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-
-    // Fetch the current record to detect path changes
-    let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
-
-    // Rename file on disk if the path changed
-    if old_note.path != note.path {
-        let old_full = validate_path(&ledger_path, &old_note.path)?;
-        let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() && !is_same_file(&old_full, &new_full) {
-            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
-        }
-        if old_full.exists() {
-            fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
-        }
-        // note_tags re-key handled inside reconcile via prev_path
-    }
-
-    let updated: Note = diesel::update(notes.find(note.id))
-        .set(&note)
-        .returning(Note::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
-
-    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
-
-    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
-
-    Ok(updated)
-}
-
 #[derive(Serialize, specta::Type)]
 pub struct RenameNoteResult {
     pub note: Note,
@@ -248,12 +206,23 @@ pub struct RenameNoteResult {
     pub updated_count: usize,
 }
 
-/// Like `update_note` but also rewrites all wikilinks that reference the old
-/// path in every other note in the ledger.  Returns the count of notes whose
-/// files were actually rewritten so the frontend can show a toast.
+/// Rename a note (change its filename/path). Always re-keys the moved note's own
+/// row and derived indexes; when `rewrite_backlinks` is true it also rewrites
+/// every `[[old path]]` wikilink in every other note and returns the count of
+/// files rewritten so the frontend can toast "N notes updated". When false it
+/// leaves those backlinks as-is (the "Rename only" choice).
+///
+/// Replaces the former `update_note` + `rename_note` pair: the frontend's
+/// yes/no-links choice is now the `rewrite_backlinks` boolean. Both share the
+/// one `note_mutation::rename` implementation with the Ledger Watcher's external
+/// move, so in-app and external renames can never diverge.
 #[tauri::command]
 #[specta::specta]
-pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteResult, String> {
+pub fn rename_note(
+    note: Note,
+    rewrite_backlinks: bool,
+    ledger: State<AppLedger>,
+) -> Result<RenameNoteResult, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
     let ledger_path = state.path.clone().ok_or("No ledger open")?;
 
@@ -264,49 +233,36 @@ pub fn rename_note(note: Note, ledger: State<AppLedger>) -> Result<RenameNoteRes
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
-    let mut updated_count = 0usize;
-
-    if old_note.path != note.path {
-        let old_full = validate_path(&ledger_path, &old_note.path)?;
-        let new_full = validate_parent_path(&ledger_path, &note.path)?;
-        if new_full.exists() && !is_same_file(&old_full, &new_full) {
-            return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
-        }
-        if old_full.exists() {
-            fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
-        }
-        // note_tags re-key handled inside reconcile via prev_path.
-        // Backlink sources get their note_links + Tantivy refreshed via reconcile_many.
-        let backlink_rewrites =
-            rewrite_backlinks_on_rename_on_conn(&ledger_path, conn, &old_note.path, &note.path)?;
-        updated_count = backlink_rewrites.len();
-        if !backlink_rewrites.is_empty() {
-            let backlink_items: Vec<note_index::ReconcileManyItem> = backlink_rewrites
-                .into_iter()
-                .map(|(n, c)| note_index::ReconcileManyItem {
-                    note: n,
-                    content: c,
-                    prev_path: None,
-                })
-                .collect();
-            let bl_outcome = note_index::reconcile_many(conn, index, &backlink_items)?;
-            note_index::mark_stale_if_needed(&bl_outcome, &ledger_path);
-        }
+    // Move the file on disk (the app half of the rename), then run the shared
+    // rename envelope for the row re-key, reconcile, and backlinks. The frontend
+    // only calls this on an actual filename change; the guard keeps a no-op
+    // path from renaming a file onto itself.
+    let old_full = validate_path(&ledger_path, &old_note.path)?;
+    let new_full = validate_parent_path(&ledger_path, &note.path)?;
+    if new_full.exists() && !is_same_file(&old_full, &new_full) {
+        return Err(format!("ERR_NAME_TAKEN: A file already exists at '{}'", note.path));
+    }
+    if old_note.path != note.path && old_full.exists() {
+        fs::rename(&old_full, &new_full).map_err(|e| e.to_string())?;
     }
 
-    let updated: Note = diesel::update(notes.find(note.id))
-        .set(&note)
-        .returning(Note::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    let raw_content = read_note_for_reconcile(&ledger_path.join(&note.path))?;
+    let renamed = note_mutation::rename(
+        conn,
+        index,
+        &ledger_path,
+        &old_note.path,
+        &note,
+        &raw_content,
+        rewrite_backlinks,
+    )?;
 
-    let raw_content = read_note_for_reconcile(&ledger_path.join(&updated.path))?;
-
-    let outcome = note_index::reconcile(conn, index, &updated, &raw_content, Some(&old_note.path))?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
-
+    let updated_count = match renamed.backlinks {
+        note_mutation::RenamedBacklinks::Rewritten(n) => n,
+        note_mutation::RenamedBacklinks::Deferred(_) => 0,
+    };
     Ok(RenameNoteResult {
-        note: updated,
+        note: renamed.note,
         updated_count,
     })
 }

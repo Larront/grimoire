@@ -18,12 +18,17 @@
 //! `(conn, index, ledger_path, …)`, matching `note_index`'s style, so a command
 //! splits its `LedgerState` borrow once and passes the refs in.
 //!
-//! `rename` (path change + backlink rewrite) and `delete` (a removal, not a
-//! write) are deliberately **not** here — see the parent spec (#131).
+//! `rename` (path change + backlink rewrite) lives here too: it is the one
+//! implementation shared by the in-app rename and the Ledger Watcher's external
+//! move, so the two can never diverge in how they treat backlinks. `delete` (a
+//! removal, not a write) is deliberately **not** here — see the parent spec
+//! (#131).
 
 use crate::db::models::Note;
+use crate::db::schema::notes::dsl as nd;
 use crate::note_index::{self, ReconcileManyItem};
 use crate::note_write::write_note_file;
+use diesel::prelude::*;
 use diesel::SqliteConnection;
 use std::path::{Path, PathBuf};
 
@@ -129,6 +134,106 @@ pub fn commit_many(
     Ok(())
 }
 
+/// What phase B did to the notes that linked to the renamed note.
+///
+// `Deferred`'s source list is the plan the external-move prompt consumes; that
+// prompt lands in the next ticket, so nothing in non-test lib code reads it yet.
+#[allow(dead_code)]
+pub enum RenamedBacklinks {
+    /// `rewrite_backlinks` was true: phase B ran and rewrote this many source
+    /// notes' `[[old path]]` wikilinks (only those whose text actually changed).
+    Rewritten(usize),
+    /// `rewrite_backlinks` was false: phase B was skipped. These are the
+    /// ledger-relative paths of the source notes that still link to the old
+    /// path — the plan a caller can offer to apply later (the external-move
+    /// prompt). Empty when nothing linked to the old path.
+    Deferred(Vec<String>),
+}
+
+/// The outcome of a [`rename`]: the re-keyed note row and the disposition of the
+/// backlink sources that pointed at it.
+pub struct Renamed {
+    pub note: Note,
+    pub backlinks: RenamedBacklinks,
+}
+
+/// Move a note from `old_path` to `new_note.path`, keeping every derived index
+/// consistent. The single rename implementation shared by the in-app rename and
+/// the Ledger Watcher's external move.
+///
+/// The note's file must already be at its new location on disk (the in-app
+/// command has run `fs::rename`; an external move moved it) and `content` is the
+/// note's current content there.
+///
+/// - **Phase A (always):** re-key the moved note's own row — its `path`, `title`,
+///   and `parent_path` follow the file — then reconcile it, passing `old_path`
+///   as `prev_path` so the old path's `note_tags` rows are cleared. This is the
+///   single place the re-key rule is applied.
+/// - **Phase B (`rewrite_backlinks` only):** rewrite every other note's
+///   `[[old path]]` wikilinks to the new path and reconcile those sources
+///   through [`commit_many`]. When `rewrite_backlinks` is false, phase B is
+///   skipped and the affected sources are returned as a
+///   [`RenamedBacklinks::Deferred`] plan instead.
+///
+/// Phase B (or the plan computation) runs **before** phase A re-keys the row, so
+/// the backlink resolver still sees the pre-rename state.
+pub fn rename(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    old_path: &str,
+    new_note: &Note,
+    content: &str,
+    rewrite_backlinks: bool,
+) -> Result<Renamed, String> {
+    // Compute the affected sources while the moved note's row still holds
+    // `old_path`: the backlink resolver's stem-ownership check resolves against
+    // the pre-rename state. Then either apply the rewrites (phase B) or just
+    // report the sources as a deferred plan.
+    let rewrites = crate::commands::links::collect_backlink_rewrites_on_conn(
+        ledger_path,
+        conn,
+        old_path,
+        &new_note.path,
+    )?;
+    let backlinks = if rewrite_backlinks {
+        let count = rewrites.len();
+        let items: Vec<CommitItem> = rewrites
+            .into_iter()
+            .map(|(note, content)| CommitItem {
+                full_path: ledger_path.join(&note.path),
+                note,
+                content,
+            })
+            .collect();
+        commit_many(conn, index, ledger_path, items)?;
+        RenamedBacklinks::Rewritten(count)
+    } else {
+        RenamedBacklinks::Deferred(rewrites.into_iter().map(|(note, _)| note.path).collect())
+    };
+
+    // Phase A: re-key exactly the three columns a move changes (using `.eq` so a
+    // move to the ledger root correctly nulls `parent_path`), then reconcile the
+    // moved note with `prev_path = old_path`.
+    let persisted: Note = diesel::update(nd::notes.find(new_note.id))
+        .set((
+            nd::path.eq(&new_note.path),
+            nd::title.eq(&new_note.title),
+            nd::parent_path.eq(new_note.parent_path.as_deref()),
+        ))
+        .returning(Note::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+
+    let outcome = note_index::reconcile(conn, index, &persisted, content, Some(old_path))?;
+    note_index::mark_stale_if_needed(&outcome, ledger_path);
+
+    Ok(Renamed {
+        note: persisted,
+        backlinks,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,7 +242,6 @@ mod tests {
     use crate::db::schema::note_links::dsl as nl;
     use crate::db::schema::note_tags::dsl as nt;
     use diesel::connection::SimpleConnection;
-    use diesel::prelude::*;
     use diesel::Connection;
     use tempfile::TempDir;
 
@@ -419,5 +523,202 @@ mod tests {
         let mut conn = test_conn();
         commit_many(&mut conn, None, dir.path(), vec![]).unwrap();
         assert!(nt::note_tags.load::<(String, String)>(&mut conn).unwrap().is_empty());
+    }
+
+    // ── rename ────────────────────────────────────────────────────────────────
+
+    /// Seed a moved note (row + file + derived indexes) and a source note whose
+    /// body links to it, returning `(index, moved, source)`. The moved note has a
+    /// tag so we can prove the phase-A re-key clears the old path's `note_tags`.
+    fn seed_rename_fixture(
+        conn: &mut SqliteConnection,
+        dir: &Path,
+    ) -> (tantivy::Index, Note, Note) {
+        let index = crate::search::rebuild_index(dir, &[], &[], &[]).unwrap();
+        let moved = make_note(1, "Aldric.md");
+        let source = make_note(2, "Story.md");
+        insert_note(conn, &moved);
+        insert_note(conn, &source);
+
+        // The moved note carries a tag (proves the re-key) and its own outbound
+        // link (proves reconcile re-derives it at the new path).
+        create(
+            conn,
+            Some(&index),
+            dir,
+            &dir.join("Aldric.md"),
+            &moved,
+            "---\ntags: [npc]\n---\nAldric of the Keep.",
+        )
+        .unwrap();
+        // The source note links to the moved note by full path.
+        create(
+            conn,
+            Some(&index),
+            dir,
+            &dir.join("Story.md"),
+            &source,
+            "The tale of [[Aldric.md]] begins.",
+        )
+        .unwrap();
+
+        (index, moved, source)
+    }
+
+    /// The target row for a rename: same id, new path/title, parent unchanged.
+    fn rename_target(moved: &Note, new_path: &str, new_title: &str) -> Note {
+        Note {
+            path: new_path.to_string(),
+            title: new_title.to_string(),
+            ..moved.clone()
+        }
+    }
+
+    #[test]
+    fn rename_with_rewrite_true_rewrites_backlinks_and_reports_the_count() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        let (index, moved, _source) = seed_rename_fixture(&mut conn, dir.path());
+
+        // Move the moved note's file on disk, as its caller would.
+        std::fs::rename(dir.path().join("Aldric.md"), dir.path().join("Aldric 2.md")).unwrap();
+        let target = rename_target(&moved, "Aldric 2.md", "Aldric 2");
+
+        let result = rename(
+            &mut conn,
+            Some(&index),
+            dir.path(),
+            "Aldric.md",
+            &target,
+            "---\ntags: [npc]\n---\nAldric of the Keep.",
+            true,
+        )
+        .unwrap();
+
+        // Phase B ran: the one source was rewritten.
+        match result.backlinks {
+            RenamedBacklinks::Rewritten(n) => assert_eq!(n, 1),
+            RenamedBacklinks::Deferred(_) => panic!("expected phase B to run"),
+        }
+        // The source file on disk now points at the new path...
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("Story.md")).unwrap(),
+            "The tale of [[Aldric 2.md]] begins."
+        );
+        // ...and its outbound link row was reconciled to match.
+        let links: Vec<String> =
+            nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["Aldric 2.md"]);
+    }
+
+    #[test]
+    fn rename_with_rewrite_false_leaves_backlinks_and_returns_the_plan() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        let (index, moved, _source) = seed_rename_fixture(&mut conn, dir.path());
+
+        std::fs::rename(dir.path().join("Aldric.md"), dir.path().join("Aldric 2.md")).unwrap();
+        let target = rename_target(&moved, "Aldric 2.md", "Aldric 2");
+
+        let result = rename(
+            &mut conn,
+            Some(&index),
+            dir.path(),
+            "Aldric.md",
+            &target,
+            "---\ntags: [npc]\n---\nAldric of the Keep.",
+            false,
+        )
+        .unwrap();
+
+        // Phase B was skipped: the plan lists the affected source, untouched.
+        match result.backlinks {
+            RenamedBacklinks::Deferred(sources) => assert_eq!(sources, vec!["Story.md"]),
+            RenamedBacklinks::Rewritten(_) => panic!("phase B must not run when the bool is false"),
+        }
+        // The source file is byte-for-byte unchanged — nothing was rewritten.
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("Story.md")).unwrap(),
+            "The tale of [[Aldric.md]] begins."
+        );
+        let links: Vec<String> =
+            nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["Aldric.md"], "the source's link row must be untouched");
+    }
+
+    #[test]
+    fn rename_always_rekeys_the_moved_note_regardless_of_the_bool() {
+        // Phase A runs in both modes: re-key the row and its path-keyed tags.
+        for rewrite in [true, false] {
+            let dir = TempDir::new().unwrap();
+            let mut conn = test_conn();
+            let (index, moved, _source) = seed_rename_fixture(&mut conn, dir.path());
+
+            std::fs::rename(dir.path().join("Aldric.md"), dir.path().join("Aldric 2.md")).unwrap();
+            let target = rename_target(&moved, "Aldric 2.md", "Aldric 2");
+
+            let result = rename(
+                &mut conn,
+                Some(&index),
+                dir.path(),
+                "Aldric.md",
+                &target,
+                "---\ntags: [npc]\n---\nAldric of the Keep.",
+                rewrite,
+            )
+            .unwrap();
+
+            // The returned row is re-keyed to the new path/title.
+            assert_eq!(result.note.path, "Aldric 2.md");
+            assert_eq!(result.note.title, "Aldric 2");
+            // The row in the DB followed.
+            let row: Note = nd::notes.find(1).first(&mut conn).unwrap();
+            assert_eq!(row.path, "Aldric 2.md");
+            // note_tags are path-keyed: the old path's row was cleared and re-keyed.
+            let tag_paths: Vec<String> =
+                nt::note_tags.select(nt::note_path).load(&mut conn).unwrap();
+            assert_eq!(
+                tag_paths, vec!["Aldric 2.md"],
+                "phase A must re-key note_tags (rewrite_backlinks = {rewrite})"
+            );
+        }
+    }
+
+    #[test]
+    fn rename_to_the_ledger_root_nulls_parent_path() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+
+        // A note that lives in a subfolder, with parent_path stored non-null.
+        std::fs::create_dir_all(dir.path().join("People")).unwrap();
+        let mut moved = make_note(1, "People/Aldric.md");
+        moved.parent_path = Some("People".to_string());
+        conn.batch_execute(
+            "INSERT INTO notes (id, path, title, parent_path) \
+             VALUES (1, 'People/Aldric.md', 'Aldric', 'People')",
+        )
+        .unwrap();
+        create(&mut conn, Some(&index), dir.path(), &dir.path().join("People/Aldric.md"), &moved, "body")
+            .unwrap();
+        // Precondition: the row really does start non-null.
+        let before: Note = nd::notes.find(1).first(&mut conn).unwrap();
+        assert_eq!(before.parent_path, Some("People".to_string()));
+
+        // Move it to the ledger root — parent_path must become NULL, not stay "People".
+        std::fs::rename(dir.path().join("People/Aldric.md"), dir.path().join("Aldric.md")).unwrap();
+        let target = Note {
+            path: "Aldric.md".to_string(),
+            title: "Aldric".to_string(),
+            parent_path: None,
+            ..moved.clone()
+        };
+        let result =
+            rename(&mut conn, Some(&index), dir.path(), "People/Aldric.md", &target, "body", false)
+                .unwrap();
+
+        assert_eq!(result.note.parent_path, None);
+        let row: Note = nd::notes.find(1).first(&mut conn).unwrap();
+        assert_eq!(row.parent_path, None, "a move to root must null parent_path");
     }
 }
