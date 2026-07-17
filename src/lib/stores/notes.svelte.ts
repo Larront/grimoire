@@ -1,62 +1,39 @@
 import { api } from "$lib/api";
-import { ledger } from "./ledger.svelte";
+import { createLedgerCollection } from "./ledger-collection.svelte";
 import type { Note } from "$lib/types/ledger";
 
 function createNotesStore() {
-  let notes = $state<Note[]>([]);
-  let isLoading = $state(false);
-  let error = $state<string | null>(null);
-
-  async function load() {
-    isLoading = true;
-    error = null;
-    try {
-      notes = await api.getNotes();
-    } catch (e) {
-      error = String(e);
-    } finally {
-      isLoading = false;
-    }
-  }
+  const base = createLedgerCollection<Note>({
+    fetch: () => api.getNotes(),
+  });
 
   async function readContent(id: number): Promise<string | null> {
     try {
-      const note = notes.find((n) => n.id === id);
+      const note = base.items.find((n) => n.id === id);
       if (!note) return null;
       return await api.readNoteContent(note.path);
     } catch (e) {
-      error = String(e);
+      base.setError(String(e));
       return null;
     }
   }
 
-  $effect.root(() => {
-    $effect(() => {
-      if (ledger.isOpen) {
-        load();
-      } else {
-        notes = [];
-        error = null;
-      }
-    });
-  });
-
   return {
     get notes() {
-      return notes;
+      return base.items;
     },
     // Called after any create/delete mutation to keep the count reactive.
     // AppSidebar calls notes.load() after handleNewNote and delete operations.
     get noteCount() {
-      return notes.length;
+      return base.count;
     },
     get isLoading() {
-      return isLoading;
+      return base.isLoading;
     },
     get error() {
-      return error;
+      return base.error;
     },
-    load,
+    load: base.load,
     readContent,
   };
 }

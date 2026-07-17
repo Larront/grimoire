@@ -1,5 +1,5 @@
-import { ledger } from "./ledger.svelte";
 import { api } from "$lib/api";
+import { createLedgerCollection } from "./ledger-collection.svelte";
 import type { Scene, SceneSlot, SceneWithCount } from "$lib/types/ledger";
 
 interface CreateSlotParams {
@@ -21,25 +21,14 @@ interface UpdateSlotParams {
 }
 
 function createScenesStore() {
-  let scenes = $state<SceneWithCount[]>([]);
-  let isLoading = $state(false);
-  let error = $state<string | null>(null);
-
   // Slot cache: keyed by scene_id. Populated on first getSlots() call per scene.
-  // Cleared entirely on ledger close. Invalidated per-scene on mutations.
+  // Cleared entirely on ledger close (via onClose). Invalidated per-scene on mutations.
   const slotCache = new Map<number, SceneSlot[]>();
 
-  async function load() {
-    isLoading = true;
-    error = null;
-    try {
-      scenes = await api.getScenesWithSlotCounts();
-    } catch (e) {
-      error = String(e);
-    } finally {
-      isLoading = false;
-    }
-  }
+  const base = createLedgerCollection<SceneWithCount>({
+    fetch: () => api.getScenesWithSlotCounts(),
+    onClose: () => slotCache.clear(),
+  });
 
   async function getSlots(sceneId: number): Promise<SceneSlot[]> {
     if (slotCache.has(sceneId)) {
@@ -62,56 +51,56 @@ function createScenesStore() {
 
   async function createScene(name: string): Promise<Scene> {
     const scene = await api.createScene(name);
-    await load();
+    await base.load();
     return scene;
   }
 
   async function deleteScene(id: number): Promise<void> {
     await api.deleteScene(id);
-    await load();
+    await base.load();
   }
 
   async function updateScene(id: number, name: string): Promise<void> {
     await api.updateScene(id, name);
-    await load();
+    await base.load();
   }
 
   async function toggleFavorite(id: number): Promise<void> {
     await api.toggleSceneFavorite(id);
-    await load();
+    await base.load();
   }
 
   async function applyThumbnailColor(id: number, color: string | null): Promise<void> {
-    const scene = scenes.find((s) => s.id === id);
+    const scene = base.items.find((s) => s.id === id);
     await api.updateSceneThumbnail(
       id,
       scene?.thumbnail_path ?? null,
       color,
       scene?.thumbnail_icon ?? null,
     );
-    await load();
+    await base.load();
   }
 
   async function applyThumbnailIcon(id: number, icon: string | null): Promise<void> {
-    const scene = scenes.find((s) => s.id === id);
+    const scene = base.items.find((s) => s.id === id);
     await api.updateSceneThumbnail(
       id,
       scene?.thumbnail_path ?? null,
       scene?.thumbnail_color ?? null,
       icon,
     );
-    await load();
+    await base.load();
   }
 
   async function setThumbnailImage(id: number, path: string | null): Promise<void> {
-    const scene = scenes.find((s) => s.id === id);
+    const scene = base.items.find((s) => s.id === id);
     await api.updateSceneThumbnail(
       id,
       path,
       scene?.thumbnail_color ?? null,
       scene?.thumbnail_icon ?? null,
     );
-    await load();
+    await base.load();
   }
 
   // --- Slot mutations ---
@@ -131,7 +120,7 @@ function createScenesStore() {
     );
     invalidateSlots(sceneId);
     const slots = await getSlots(sceneId);
-    await load(); // refresh slot_count on parent scene
+    await base.load(); // refresh slot_count on parent scene
     return slots;
   }
 
@@ -139,7 +128,7 @@ function createScenesStore() {
     await api.deleteSceneSlot(slotId);
     invalidateSlots(sceneId);
     const slots = await getSlots(sceneId);
-    await load(); // refresh slot_count on parent scene
+    await base.load(); // refresh slot_count on parent scene
     return slots;
   }
 
@@ -156,32 +145,20 @@ function createScenesStore() {
     return getSlots(sceneId);
   }
 
-  $effect.root(() => {
-    $effect(() => {
-      if (ledger.isOpen) {
-        load();
-      } else {
-        scenes = [];
-        error = null;
-        slotCache.clear();
-      }
-    });
-  });
-
   return {
     get scenes() {
-      return scenes;
+      return base.items;
     },
     get sceneCount() {
-      return scenes.length;
+      return base.count;
     },
     get isLoading() {
-      return isLoading;
+      return base.isLoading;
     },
     get error() {
-      return error;
+      return base.error;
     },
-    load,
+    load: base.load,
     getSlots,
     invalidateSlots,
     createScene,
