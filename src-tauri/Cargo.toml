@@ -1,6 +1,6 @@
 [package]
 name = "grimoire"
-version = "0.1.1"
+version = "0.1.2"
 description = "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes."
 authors = ["Aaron Lamont"]
 license = "GPL-3.0-or-later"
