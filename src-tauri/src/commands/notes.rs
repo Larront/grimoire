@@ -267,6 +267,44 @@ pub fn rename_note(
     })
 }
 
+/// Heal the inbound wikilinks left broken by an *external* move of `from_path`
+/// → `to_path` — the *Update* action on the external-move prompt (issue #135).
+///
+/// The moved note's own row was already re-keyed by the Ledger Watcher's phase-A
+/// pass when the move was detected; this performs **phase B** on demand: rewrite
+/// every other note's `[[old path]]` wikilinks to the new path and reconcile
+/// those sources through the [`note_mutation`] envelope (so the rewrites are
+/// echo-suppressed like every other write).
+///
+/// The affected set is **recomputed here** from the current ledger, not trusted
+/// from the count the toast displayed: the ledger may have changed while the
+/// prompt sat on screen, so a stale count can never cause the wrong notes to be
+/// edited. Returns the number of notes whose files were actually rewritten.
+#[tauri::command]
+#[specta::specta]
+pub fn apply_backlink_rewrite(
+    from_path: String,
+    to_path: String,
+    ledger: State<AppLedger>,
+) -> Result<u32, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+
+    // Field-split so conn (mut) and search_index (ref) can be borrowed together.
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+
+    let rewrites = crate::commands::links::collect_backlink_rewrites_on_conn(
+        &ledger_path,
+        conn,
+        &from_path,
+        &to_path,
+    )?;
+    let count = note_mutation::commit_backlink_rewrites(conn, index, &ledger_path, rewrites)?;
+    Ok(count as u32)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {

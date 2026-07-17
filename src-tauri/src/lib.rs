@@ -44,6 +44,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(tauri_specta::collect_commands![
             add_recent_ledger,
             adopt_sample_ledger,
+            apply_backlink_rewrite,
             assign_map_image,
             close_ledger,
             copy_audio_bytes,
@@ -242,6 +243,7 @@ pub fn run() {
             remove_recent_ledger,
             explore_sample_ledger,
             adopt_sample_ledger,
+            apply_backlink_rewrite,
             create_note,
             create_note_from_template,
             get_notes,

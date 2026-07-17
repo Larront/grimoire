@@ -11,6 +11,22 @@ export const commands = {
 	 *  vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
 	 */
 	adoptSampleLedger: (parent: string, name: string) => __TAURI_INVOKE<string>("adopt_sample_ledger", { parent, name }),
+	/**
+	 *  Heal the inbound wikilinks left broken by an *external* move of `from_path`
+	 *  → `to_path` — the *Update* action on the external-move prompt (issue #135).
+	 * 
+	 *  The moved note's own row was already re-keyed by the Ledger Watcher's phase-A
+	 *  pass when the move was detected; this performs **phase B** on demand: rewrite
+	 *  every other note's `[[old path]]` wikilinks to the new path and reconcile
+	 *  those sources through the [`note_mutation`] envelope (so the rewrites are
+	 *  echo-suppressed like every other write).
+	 * 
+	 *  The affected set is **recomputed here** from the current ledger, not trusted
+	 *  from the count the toast displayed: the ledger may have changed while the
+	 *  prompt sat on screen, so a stale count can never cause the wrong notes to be
+	 *  edited. Returns the number of notes whose files were actually rewritten.
+	 */
+	applyBacklinkRewrite: (fromPath: string, toPath: string) => __TAURI_INVOKE<number>("apply_backlink_rewrite", { fromPath, toPath }),
 	assignMapImage: (mapId: number, sourceImagePath: string, destFolder: string | null) => __TAURI_INVOKE<Map>("assign_map_image", { mapId, sourceImagePath, destFolder }),
 	closeLedger: () => __TAURI_INVOKE<null>("close_ledger"),
 	/**

@@ -134,11 +134,41 @@ pub fn commit_many(
     Ok(())
 }
 
+/// Write and reconcile an already-computed set of backlink rewrites (the
+/// plan-to-commit half of phase B): map each `(source, rewritten content)` to a
+/// [`CommitItem`] and issue one batched [`commit_many`], returning how many
+/// source files were rewritten.
+///
+/// Shared by [`rename`]'s phase B and the on-demand `apply_backlink_rewrite`
+/// command so the mechanics live in one place. Takes the rewrites already
+/// collected (via `links::collect_backlink_rewrites_on_conn`) rather than
+/// collecting itself: `rename` must collect once — before phase A re-keys the
+/// row — and reuse the same plan for its deferred branch, while the command
+/// recomputes the plan fresh at apply time.
+pub fn commit_backlink_rewrites(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    rewrites: Vec<(Note, String)>,
+) -> Result<usize, String> {
+    let count = rewrites.len();
+    let items: Vec<CommitItem> = rewrites
+        .into_iter()
+        .map(|(note, content)| CommitItem {
+            full_path: ledger_path.join(&note.path),
+            note,
+            content,
+        })
+        .collect();
+    commit_many(conn, index, ledger_path, items)?;
+    Ok(count)
+}
+
 /// What phase B did to the notes that linked to the renamed note.
 ///
-// `Deferred`'s source list is the plan the external-move prompt consumes; that
-// prompt lands in the next ticket, so nothing in non-test lib code reads it yet.
-#[allow(dead_code)]
+/// `Deferred`'s source list is the plan the external-move prompt consumes: the
+/// Ledger Watcher reads its length to decide whether to offer a heal, and the
+/// `apply_backlink_rewrite` command later recomputes and applies it.
 pub enum RenamedBacklinks {
     /// `rewrite_backlinks` was true: phase B ran and rewrote this many source
     /// notes' `[[old path]]` wikilinks (only those whose text actually changed).
@@ -197,16 +227,7 @@ pub fn rename(
         &new_note.path,
     )?;
     let backlinks = if rewrite_backlinks {
-        let count = rewrites.len();
-        let items: Vec<CommitItem> = rewrites
-            .into_iter()
-            .map(|(note, content)| CommitItem {
-                full_path: ledger_path.join(&note.path),
-                note,
-                content,
-            })
-            .collect();
-        commit_many(conn, index, ledger_path, items)?;
+        let count = commit_backlink_rewrites(conn, index, ledger_path, rewrites)?;
         RenamedBacklinks::Rewritten(count)
     } else {
         RenamedBacklinks::Deferred(rewrites.into_iter().map(|(note, _)| note.path).collect())

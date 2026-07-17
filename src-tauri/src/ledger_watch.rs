@@ -99,6 +99,19 @@ struct NoteMoved {
     to: String,
 }
 
+/// Payload for the `note:external-move-links-stale` event: after an external
+/// move re-keyed the moved note's row (phase A only), this many *other* notes
+/// still hold `[[old path]]` wikilinks that now point nowhere. Emitted only when
+/// `count > 0`, so the frontend's heal prompt fires only when there is something
+/// to offer; the count is display-only (the `apply_backlink_rewrite` command
+/// recomputes the real set at apply time). See ADR-0014.
+#[derive(Clone, serde::Serialize)]
+struct NoteExternalMoveLinksStale {
+    from: String,
+    to: String,
+    count: u32,
+}
+
 /// Start (or re-root) the ledger watcher on `ledger_path`, replacing any watcher
 /// from a previously-open ledger. Best-effort: a watcher that can't be built or
 /// rooted is logged and skipped — live-sync degrades, the app keeps working.
@@ -261,8 +274,15 @@ enum Notify {
     TreeChanged,
     /// A note was removed — refetch and drop it from the tree.
     Removed(String),
-    /// A note's file moved — the open pane follows it to the new path.
-    Moved(String, String),
+    /// A note's file moved — the open pane follows it to the new path
+    /// (`note:moved`). `stale_backlinks` is how many other notes still link to
+    /// the old path (phase A leaves their wikilink text untouched); when > 0 an
+    /// additional `note:external-move-links-stale` event offers to heal them.
+    Moved {
+        from: String,
+        to: String,
+        stale_backlinks: usize,
+    },
     /// Nothing observable happened (echo already handled, or a no-op remove).
     Nothing,
 }
@@ -417,11 +437,16 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
             Change::Moved { from_rel, to_rel, content } => {
                 match move_external_note(conn, index, &ledger_path, &from_rel, &to_rel, &content) {
                     // Re-keyed an existing row: the note keeps its id, so an open
-                    // pane follows the move seamlessly.
-                    Ok(true) => Notify::Moved(from_rel, to_rel),
+                    // pane follows the move seamlessly. `stale_backlinks` rides
+                    // along so the emit step can offer to heal them.
+                    Ok(Moved::Rekeyed { stale_backlinks }) => Notify::Moved {
+                        from: from_rel,
+                        to: to_rel,
+                        stale_backlinks,
+                    },
                     // No row for the old path — nothing to follow; the new file is
                     // just a create. Insert it and let the tree pick it up.
-                    Ok(false) => match upsert_external_note(conn, index, &ledger_path, &to_rel, &content) {
+                    Ok(Moved::NoRow) => match upsert_external_note(conn, index, &ledger_path, &to_rel, &content) {
                         Ok(_) => Notify::TreeChanged,
                         Err(e) => {
                             log::warn!("[ledger_watch] move-create failed for {to_rel}: {e}");
@@ -454,9 +479,24 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
                 log::warn!("[ledger_watch] failed to emit note:removed: {e}");
             }
         }
-        Notify::Moved(from, to) => {
-            if let Err(e) = app.emit("note:moved", NoteMoved { from, to }) {
+        Notify::Moved { from, to, stale_backlinks } => {
+            // The existing move event — the open pane follows the file. Untouched
+            // by the heal prompt so its refetch listener keeps working as before.
+            if let Err(e) = app.emit(
+                "note:moved",
+                NoteMoved { from: from.clone(), to: to.clone() },
+            ) {
                 log::warn!("[ledger_watch] failed to emit note:moved: {e}");
+            }
+            // Only when other notes still link to the old path do we offer to heal
+            // them — the prompt subscriber fires only when there's something to do.
+            if stale_backlinks > 0 {
+                if let Err(e) = app.emit(
+                    "note:external-move-links-stale",
+                    NoteExternalMoveLinksStale { from, to, count: stale_backlinks as u32 },
+                ) {
+                    log::warn!("[ledger_watch] failed to emit note:external-move-links-stale: {e}");
+                }
             }
         }
         Notify::Nothing => {}
@@ -562,6 +602,17 @@ pub(crate) enum Upserted {
     Modified,
 }
 
+/// The outcome of a [`move_external_note`].
+pub(crate) enum Moved {
+    /// The old path had a row: it was re-keyed in place (phase A). Phase B is
+    /// deliberately skipped for external moves, so `stale_backlinks` is the count
+    /// of other notes whose `[[old path]]` wikilinks were left as the external
+    /// tool wrote them — the number the heal prompt offers to fix.
+    Rekeyed { stale_backlinks: usize },
+    /// No row for the old path — the caller falls back to creating the new path.
+    NoRow,
+}
+
 /// Apply an external create-or-modify of `rel_path` from its on-disk `content`.
 /// A note that already has a `notes` row reconciles its derived indexes in place
 /// ([`Upserted::Modified`]); a note with no row is inserted with a title/parent
@@ -651,13 +702,15 @@ pub(crate) fn remove_external_note(
 /// move and an in-app rename can never diverge. External moves do **phase A
 /// only** (`rewrite_backlinks = false`): the moved note is re-keyed and
 /// reconciled, but inbound `[[old path]]` wikilinks in other notes are left as
-/// the external tool wrote them — exactly today's behaviour. (The prompt that
-/// offers to heal those backlinks lands in a follow-up; the plan `rename`
-/// returns is intentionally not acted on here.)
+/// the external tool wrote them. The plan `rename` returns is not applied here;
+/// instead its length is reported (see [`Moved::Rekeyed`]) so the frontend can
+/// offer a non-destructive heal prompt, which calls `apply_backlink_rewrite`
+/// on consent (issue #135, ADR-0014).
 ///
-/// Returns `Ok(true)` when a row existed and was re-keyed (emit `note:moved`),
-/// `Ok(false)` when the old path had no row (the caller falls back to creating
-/// the new path).
+/// Returns [`Moved::Rekeyed`] when a row existed and was re-keyed (emit
+/// `note:moved`), carrying the count of other notes still linking to the old
+/// path so the caller can offer to heal them; [`Moved::NoRow`] when the old path
+/// had no row (the caller falls back to creating the new path).
 pub(crate) fn move_external_note(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
@@ -665,7 +718,7 @@ pub(crate) fn move_external_note(
     from_rel: &str,
     to_rel: &str,
     content: &str,
-) -> Result<bool, String> {
+) -> Result<Moved, String> {
     use crate::db::schema::notes::dsl as n;
 
     let maybe_note = n::notes
@@ -675,7 +728,7 @@ pub(crate) fn move_external_note(
         .map_err(|e| e.to_string())?;
 
     let Some(old) = maybe_note else {
-        return Ok(false);
+        return Ok(Moved::NoRow);
     };
 
     // The target row: same id/icon/etc., with path/title/parent derived from the
@@ -687,8 +740,15 @@ pub(crate) fn move_external_note(
         ..old
     };
 
-    crate::note_mutation::rename(conn, index, ledger_path, from_rel, &target, content, false)?;
-    Ok(true)
+    let renamed =
+        crate::note_mutation::rename(conn, index, ledger_path, from_rel, &target, content, false)?;
+    // rewrite_backlinks was false, so phase B was skipped and the affected
+    // sources came back as a deferred plan — its length is the heal count.
+    let stale_backlinks = match renamed.backlinks {
+        crate::note_mutation::RenamedBacklinks::Deferred(sources) => sources.len(),
+        crate::note_mutation::RenamedBacklinks::Rewritten(_) => 0,
+    };
+    Ok(Moved::Rekeyed { stale_backlinks })
 }
 
 #[cfg(test)]
@@ -972,7 +1032,10 @@ mod tests {
             "---\ntags: [npc]\n---\nSee [[Keep.md]].",
         )
         .unwrap();
-        assert!(moved, "an existing note must be re-keyed and reported moved");
+        assert!(
+            matches!(moved, Moved::Rekeyed { .. }),
+            "an existing note must be re-keyed and reported moved"
+        );
 
         // Same row (id 7), now at the new path with title/parent derived from it.
         let row: Note = n::notes.find(7).first(&mut conn).unwrap();
@@ -998,9 +1061,69 @@ mod tests {
         let moved =
             move_external_note(&mut conn, None, dir.path(), "Ghost.md", "Risen.md", "body")
                 .unwrap();
-        assert!(!moved, "a move whose old path has no row reports false");
+        assert!(
+            matches!(moved, Moved::NoRow),
+            "a move whose old path has no row reports NoRow"
+        );
         let rows: Vec<String> = n::notes.select(n::path).load(&mut conn).unwrap();
         assert_eq!(rows, vec!["Kept.md"], "no phantom row is created here");
+    }
+
+    #[test]
+    fn move_reports_stale_backlinks_and_leaves_them_untouched() {
+        // An external move re-keys the moved note (phase A) but must NOT rewrite
+        // inbound wikilinks (phase B is skipped); it reports how many are stale so
+        // the frontend can offer to heal them.
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "Aldric.md");
+        insert_note(&mut conn, 2, "Story.md");
+        // Seed the moved note and a source that links to it by full path. Both
+        // files must exist on disk so collect_backlink_rewrites_on_conn can read
+        // the source to count it.
+        upsert_external_note(&mut conn, None, dir.path(), "Aldric.md", "Aldric of the Keep.").unwrap();
+        std::fs::write(dir.path().join("Story.md"), "The tale of [[Aldric.md]] begins.").unwrap();
+        upsert_external_note(&mut conn, None, dir.path(), "Story.md", "The tale of [[Aldric.md]] begins.").unwrap();
+
+        let moved = move_external_note(
+            &mut conn,
+            None,
+            dir.path(),
+            "Aldric.md",
+            "Aldric the Bold.md",
+            "Aldric of the Keep.",
+        )
+        .unwrap();
+
+        // One inbound backlink is now stale.
+        match moved {
+            Moved::Rekeyed { stale_backlinks } => assert_eq!(stale_backlinks, 1),
+            Moved::NoRow => panic!("existing note must re-key"),
+        }
+        // The source file is byte-for-byte untouched — phase B did not run.
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("Story.md")).unwrap(),
+            "The tale of [[Aldric.md]] begins.",
+            "an external move must not rewrite inbound wikilinks"
+        );
+    }
+
+    #[test]
+    fn move_with_no_inbound_links_reports_zero_stale() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "Aldric.md");
+        upsert_external_note(&mut conn, None, dir.path(), "Aldric.md", "No one links here.").unwrap();
+
+        let moved =
+            move_external_note(&mut conn, None, dir.path(), "Aldric.md", "Renamed.md", "No one links here.")
+                .unwrap();
+
+        // No inbound links → count 0, so the caller emits no heal prompt.
+        match moved {
+            Moved::Rekeyed { stale_backlinks } => assert_eq!(stale_backlinks, 0),
+            Moved::NoRow => panic!("existing note must re-key"),
+        }
     }
 
     // ── classify_rename ────────────────────────────────────────────────────────

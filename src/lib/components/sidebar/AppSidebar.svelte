@@ -29,7 +29,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import { toastUndo } from "$lib/toast";
+  import { toastUndo, toastExternalMoveLinks, toastSuccess } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import FileTree from "./FileTree.svelte";
@@ -86,6 +86,23 @@
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger and emitted one coarse event — refetch notes + tree wholesale.
       listen("ledger:rebuilt", () => syncFromDisk()),
+      // A targeted external move left other notes linking to the old path. Offer
+      // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
+      // The count is display-only; the command recomputes the real set on Update.
+      listen<{ from: string; to: string; count: number }>(
+        "note:external-move-links-stale",
+        (event) => {
+          const { from, to, count } = event.payload;
+          const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
+          toastExternalMoveLinks(oldName, count, () => {
+            void api.applyBacklinkRewrite(from, to).then((n) => {
+              if (n > 0) {
+                toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
+              }
+            });
+          });
+        },
+      ),
     ]);
     return () => {
       void unlisten.then((fns) => fns.forEach((fn) => fn()));
