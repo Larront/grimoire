@@ -253,10 +253,16 @@
   <Sidebar.Content>
     <Sidebar.Group>
       <Sidebar.GroupContent>
-        <AppSearch />
-        <div
-          class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50"
-        >
+        <!-- Search + quick-actions keep the default sidebar width and center as
+             the sidebar widens (#140): the extra room becomes side padding
+             rather than stretching the bar and spreading the buttons apart.
+             15rem matches the default content width, so at that width this is a
+             no-op. The file tree below still uses the full width. -->
+        <div class="mx-auto w-full max-w-[15rem]">
+          <AppSearch />
+          <div
+            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50"
+          >
           <Tooltip.Root delayDuration={600}>
             <Tooltip.Trigger
               class="{buttonVariants({
@@ -311,6 +317,7 @@
             </Tooltip.Trigger>
             <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
           </Tooltip.Root>
+          </div>
         </div>
       </Sidebar.GroupContent>
     </Sidebar.Group>
