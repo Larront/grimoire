@@ -108,15 +108,17 @@
     isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
   );
 
-  // Scene thumbnail chip (color + icon — falls back to deterministic accent
-  // when the scene has none set, matching ScenesDashboard's `cardBg/cardFg`).
+  // Scene thumbnail chip (color + icon). A resolved scene uses its own identity
+  // color (its saved thumbnail_color, or a deterministic pick from the palette);
+  // when the scene reference is unresolved we fall back to the accent theme so
+  // the placeholder tracks the current accent rather than a fixed crimson.
   const chipColor = $derived(
     thisScene
       ? (thisScene.thumbnail_color ?? ACCENT_BG[thisScene.id % ACCENT_BG.length])
-      : ACCENT_BG[0],
+      : "var(--primary-subtle)",
   );
   const chipIconColor = $derived(
-    thisScene ? ACCENT_FG[thisScene.id % ACCENT_FG.length] : ACCENT_FG[0],
+    thisScene ? ACCENT_FG[thisScene.id % ACCENT_FG.length] : "var(--primary)",
   );
   const ChipIcon = $derived(
     thisScene?.thumbnail_icon
