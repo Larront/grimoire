@@ -9,7 +9,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { api } from "$lib/api";
-  import type { Core, LayoutOptions, StylesheetJson } from "cytoscape";
+  import type { Core, Layouts, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
@@ -57,6 +57,9 @@
 
   let container: HTMLDivElement;
   let cy: Core | null = null;
+  // The running d3-force layout. Held at component scope (not just inside
+  // onMount) so onDestroy can stop it explicitly — see the teardown note there.
+  let sim: Layouts | null = null;
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -515,7 +518,7 @@
       // Run the force sim explicitly (rather than via the constructor's `layout`
       // option) so we keep a handle on it. The preset layout above just seeds the
       // ring positions; d3-force relaxes them from there.
-      const sim = cy.layout(layout);
+      sim = cy.layout(layout);
       sim.run();
 
       // The plugin pins the sim's alphaTarget at ~0.33 on every grab AND free and
@@ -584,6 +587,14 @@
 
   onDestroy(() => {
     observer?.disconnect();
+    // Stop the d3-force simulation ourselves rather than trusting the plugin's
+    // own `destroy` handler: it deregisters that handler the first time the sim
+    // cools (d3-force reset()), so after the graph has settled once, cy.destroy()
+    // would leave a still-running sim ticking against destroyed nodes. That
+    // throws inside d3-timer's shared animation loop and kills physics for every
+    // future GraphPane mount — the permanent freeze after navigating back (#139).
+    // stop() before destroy() halts the timer while the nodes still exist.
+    sim?.stop();
     cy?.destroy();
   });
 </script>
