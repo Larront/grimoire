@@ -186,6 +186,7 @@
     {#if !node.is_dir}
       <Sidebar.MenuButton
         {isActive}
+        title={node.name}
         onclick={() => {
           if (renamingPath === node.path) return;
           if (node.note_id !== null) {
@@ -242,6 +243,7 @@
             {#snippet child({ props })}
               <Sidebar.MenuButton
                 {...props}
+                title={node.name}
                 ondragover={handleDragOver}
                 ondragleave={() => (isDropTarget = false)}
                 ondrop={handleDrop}

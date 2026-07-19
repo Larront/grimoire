@@ -43,6 +43,8 @@ let mockNodes: CyNode[] = [];
 let mockEdges: CyEdge[] = [];
 const mockFit = vi.fn();
 const mockDestroy = vi.fn();
+// The force layout's stop() — asserted by the teardown regression test (#139).
+const mockLayoutStop = vi.fn();
 const mockStyleFn = vi.fn();
 const mockAnimate = vi.fn();
 // Per-node style stores: maps node id → { display: ..., opacity: ..., ... }
@@ -162,7 +164,13 @@ vi.mock("cytoscape", () => {
       // and reaches into layout.simulation.alphaTarget on node release.
       layout: (opts: unknown) => {
         runLayoutOptions = opts;
-        return { run: vi.fn(), simulation: { alphaTarget: vi.fn() } };
+        // stop() mirrors cytoscape's Layouts API — GraphPane's onDestroy calls it
+        // to halt the d3-force sim before cy.destroy() (see #139).
+        return {
+          run: vi.fn(),
+          stop: mockLayoutStop,
+          simulation: { alphaTarget: vi.fn() },
+        };
       },
       getElementById: (id: string) => {
         const node = nodeMap.get(id);
@@ -321,6 +329,7 @@ beforeEach(() => {
   edgeStyleStores.clear();
   mockFit.mockClear();
   mockDestroy.mockClear();
+  mockLayoutStop.mockClear();
   mockStyleFn.mockClear();
   mockAnimate.mockClear();
   vi.mocked(tabs.openTab).mockClear();
@@ -395,6 +404,21 @@ describe("GraphPane – shell", () => {
     await waitFor(() => {
       expect(mockFit).toHaveBeenCalled();
     });
+  });
+
+  // Regression for #139: the d3-force plugin deregisters its own cy-destroy
+  // cleanup once the sim first cools, so GraphPane must stop the simulation
+  // itself on unmount. Without this, a sim left running against a destroyed cy
+  // throws inside d3-timer's shared loop and freezes physics for every later
+  // graph — the permanent freeze when navigating back to the graph.
+  it("stops the force simulation on unmount before destroying cytoscape", async () => {
+    const { unmount } = render(GraphPane);
+    await waitFor(() => expect(runLayoutOptions).toBeTruthy());
+
+    unmount();
+
+    expect(mockLayoutStop).toHaveBeenCalled();
+    expect(mockDestroy).toHaveBeenCalled();
   });
 });
 

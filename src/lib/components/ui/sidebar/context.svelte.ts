@@ -1,7 +1,17 @@
 import { IsMobile } from "$lib/hooks/is-mobile.svelte.js";
 import { overlay } from "$lib/stores/overlay.svelte.js";
 import { getContext, setContext } from "svelte";
-import { SIDEBAR_KEYBOARD_SHORTCUT } from "./constants.js";
+import {
+  SIDEBAR_KEYBOARD_SHORTCUT,
+  SIDEBAR_WIDTH_DEFAULT_PX,
+  SIDEBAR_WIDTH_MAX_PX,
+  SIDEBAR_WIDTH_MIN_PX,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+} from "./constants.js";
+
+function clampSidebarWidth(px: number): number {
+  return Math.min(SIDEBAR_WIDTH_MAX_PX, Math.max(SIDEBAR_WIDTH_MIN_PX, px));
+}
 
 type Getter<T> = () => T;
 
@@ -33,11 +43,50 @@ class SidebarState {
   #isMobile: IsMobile;
   state = $derived.by(() => (this.open ? "expanded" : "collapsed"));
 
+  // Drag-to-resize width (px) for the expanded desktop sidebar, restored from
+  // localStorage. `resizing` suppresses the width transition mid-drag so the
+  // edge tracks the pointer instead of lagging behind it.
+  #width = $state(SIDEBAR_WIDTH_DEFAULT_PX);
+  #resizing = $state(false);
+
   constructor(props: SidebarStateProps) {
     this.setOpen = props.setOpen;
     this.#isMobile = new IsMobile(1024);
     this.props = props;
+
+    if (typeof localStorage !== "undefined") {
+      const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+      if (Number.isFinite(saved) && saved > 0) {
+        this.#width = clampSidebarWidth(saved);
+      }
+    }
   }
+
+  get width() {
+    return this.#width;
+  }
+
+  get resizing() {
+    return this.#resizing;
+  }
+
+  setResizing = (value: boolean) => {
+    this.#resizing = value;
+  };
+
+  // Live update during a drag (not persisted); call persistWidth() on release.
+  setWidth = (px: number) => {
+    this.#width = clampSidebarWidth(px);
+  };
+
+  persistWidth = () => {
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(this.#width));
+    } catch {
+      // Storage disabled/full — the width just won't survive a restart.
+    }
+  };
 
   // Convenience getter for checking if the sidebar is mobile
   // without this, we would need to use `sidebar.isMobile.current` everywhere
