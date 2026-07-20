@@ -1,3 +1,9 @@
+# Normalise line endings for the whole repo. Everything is stored as LF in the
+# repository, and checked out as LF in the working tree — matching what our
+# tooling (bun, tauri, vite codegen) writes. `eol=lf` overrides each developer's
+# `core.autocrlf`, so nobody's machine config can reintroduce CRLF churn.
+* text=auto eol=lf
+
 # Treat binary assets as binary so Git never applies line-ending conversion.
 *.mp3 binary
 *.wav binary
