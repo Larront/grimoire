@@ -5,6 +5,15 @@ import { logWarn, logError } from "$lib/log";
 
 const INSTALL_TOAST_ID = "update-install-progress";
 
+// A persistent progress toast can't use `duration: Infinity`: svelte-sonner's
+// "toast was updated" effect ignores the infinite-duration guard and calls
+// startTimer() with an Infinity delay, which setTimeout coerces to 0 and fires
+// immediately — deleting and re-adding the toast on every update, making it
+// flicker in and out. A large finite duration keeps the persistent behaviour
+// (each update resets the timer, so it never expires mid-download) without
+// tripping that path. An hour is far longer than any real download/install.
+const INSTALL_TOAST_DURATION = 60 * 60 * 1000;
+
 /**
  * Check GitHub Releases for a newer signed bundle and, if one exists, offer to
  * install it. Verification is handled by the updater plugin against the public
@@ -52,31 +61,40 @@ export async function checkForUpdates(): Promise<void> {
 async function installAndRestart(update: Update): Promise<void> {
   toast.loading("Downloading update…", {
     id: INSTALL_TOAST_ID,
-    duration: Infinity,
+    duration: INSTALL_TOAST_DURATION,
   });
 
   try {
     let total = 0;
     let downloaded = 0;
+    // Progress fires per chunk — many times a second — but the label only
+    // changes ~100 times over the whole download. Skip updates that wouldn't
+    // change the rendered text, so we're not re-rendering the toast needlessly.
+    let lastLabel = "";
 
     await update.downloadAndInstall((progress) => {
       switch (progress.event) {
         case "Started":
           total = progress.data.contentLength ?? 0;
           break;
-        case "Progress":
+        case "Progress": {
           downloaded += progress.data.chunkLength;
-          toast.loading(
+          const label =
             total > 0
               ? `Downloading update… ${Math.round((downloaded / total) * 100)}%`
-              : `Downloading update… ${Math.round(downloaded / 1_000_000)} MB`,
-            { id: INSTALL_TOAST_ID, duration: Infinity },
-          );
+              : `Downloading update… ${Math.round(downloaded / 1_000_000)} MB`;
+          if (label === lastLabel) break;
+          lastLabel = label;
+          toast.loading(label, {
+            id: INSTALL_TOAST_ID,
+            duration: INSTALL_TOAST_DURATION,
+          });
           break;
+        }
         case "Finished":
           toast.loading("Installing — restarting…", {
             id: INSTALL_TOAST_ID,
-            duration: Infinity,
+            duration: INSTALL_TOAST_DURATION,
           });
           break;
       }
