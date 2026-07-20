@@ -157,12 +157,10 @@
         class="mt-16 flex flex-col items-center justify-center py-20 text-center"
       >
         <div
-          class="flex size-20 items-center justify-center rounded-lg"
-          style="background: {ACCENT_BG[0]}"
+          class="flex size-20 items-center justify-center rounded-lg bg-primary-subtle"
         >
           <Clapperboard
-            class="size-10"
-            style="color: {ACCENT_FG[0]}"
+            class="size-10 text-primary"
             strokeWidth={1.5}
           />
         </div>
