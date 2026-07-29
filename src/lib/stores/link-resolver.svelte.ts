@@ -31,6 +31,7 @@ import { api } from "$lib/api";
 import { notes } from "./notes.svelte";
 import { stripWikiFragment } from "$lib/editor/wiki-target";
 import { SvelteMap } from "svelte/reactivity";
+import type { Note } from "$lib/types/ledger";
 
 /** What a resolved target is: enough to navigate to it. */
 export interface ResolvedNote {
@@ -47,14 +48,18 @@ function createLinkResolver() {
   // The notes list this cache's answers were computed against, and a counter
   // bumped each time we drop them. A prime that started before an invalidation
   // discards its results rather than writing answers about a vanished world.
-  let cachedAgainst: unknown = null;
+  // Reactive so `isKnown` — a pure read that must not clear the cache itself —
+  // can still tell that its answers describe a superseded world. `$state.raw`,
+  // not `$state`: plain `$state` would deep-proxy the array and the identity
+  // comparison below would never match, invalidating the cache on every read.
+  let notesListWhenCached = $state.raw<Note[] | null>(null);
   let generation = 0;
 
   /** Drop every cached answer if the notes store has moved on since we last looked. */
   function syncToNotes(): void {
     const list = notes.notes;
-    if (list === cachedAgainst) return;
-    cachedAgainst = list;
+    if (list === notesListWhenCached) return;
+    notesListWhenCached = list;
     known.clear();
     generation++;
   }
@@ -70,7 +75,13 @@ function createLinkResolver() {
    * briefly as a faded, unclickable stub. Synchronous and side-effect-free.
    */
   function isKnown(target: string): boolean {
-    return known.get(stripWikiFragment(target)) ?? true;
+    // Read the entry first, unconditionally: a SvelteMap tracks reads of absent
+    // keys too, so this is what re-runs the caller when the answer lands.
+    const answer = known.get(stripWikiFragment(target));
+    // The notes store has moved on and nothing has re-primed yet — every answer
+    // here describes a world that no longer exists, so fall back to the default.
+    if (notes.notes !== notesListWhenCached) return true;
+    return answer ?? true;
   }
 
   /**

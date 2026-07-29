@@ -64,6 +64,16 @@ describe("linkResolver.isKnown", () => {
     await linkResolver.prime(["Nowhere"]);
     expect(linkResolver.isKnown("Nowhere")).toBe(false);
   });
+
+  it("falls back to the default the moment the notes store moves on, before any re-prime", async () => {
+    await linkResolver.prime(["Blackreach"]);
+    expect(linkResolver.isKnown("Blackreach")).toBe(false);
+
+    // A create/rename lands. Nothing has re-primed yet — the cached "broken" was
+    // computed against a world that no longer exists, so it must not be served.
+    noteList = [note(1, "Somewhere Else")];
+    expect(linkResolver.isKnown("Blackreach")).toBe(true);
+  });
 });
 
 // ─── prime — warming the cache the drawing read consults ──────────────────────
