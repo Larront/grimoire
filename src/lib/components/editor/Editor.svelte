@@ -28,6 +28,7 @@
   import WikiLinkSuggestion from "./WikiLinkSuggestion.svelte";
   import WikiLinkPreview from "./WikiLinkPreview.svelte";
   import { notes } from "$lib/stores/notes.svelte";
+  import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
   import { parseFrontmatter } from "$lib/utils";
@@ -221,37 +222,32 @@
     dirty = false;
   }
 
-  // Resolve which wikilink targets don't exist — path miss AND alias miss, the same
-  // test handleClick uses to navigate — and feed the set to the broken-link plugin so
-  // stubs render faded. Unresolved-yet links stay full accent (never flash as stubs).
-  function refreshBrokenLinks() {
+  // Ask the Link Resolver which wikilink targets don't resolve and feed the set to
+  // the broken-link plugin so stubs render faded. Drawing, so it reads the cached
+  // answer: unresolved-yet links stay full accent (never flash as stubs).
+  async function refreshBrokenLinks() {
     const ed = editor;
     if (!ed) return;
     const paths = new Set<string>();
     ed.state.doc.descendants((n) => {
       if (n.type.name === "wikiLink" && n.attrs.path) paths.add(n.attrs.path as string);
     });
-    const noteList = notes.notes;
-    (async () => {
-      const broken = new Set<string>();
-      for (const p of paths) {
-        const target = stripWikiFragment(p);
-        if (noteList.some((n) => n.path === target)) continue;
-        const resolved = await api.resolveNoteTarget(target).catch(() => null);
-        if (resolved == null) broken.add(p);
-      }
-      // Guard against a torn-down / swapped editor after the await.
-      if (editor === ed) ed.view.dispatch(ed.state.tr.setMeta(wikiBrokenLinkKey, broken));
-    })();
+    await linkResolver.prime(paths);
+    // Guard against a torn-down / swapped editor after the await.
+    if (editor !== ed) return;
+    const broken = new Set([...paths].filter((p) => !linkResolver.isKnown(p)));
+    ed.view.dispatch(ed.state.tr.setMeta(wikiBrokenLinkKey, broken));
   }
 
   // Re-resolve when the editor mounts, the doc changes (docVersion), or the ledger's
-  // notes load/change (notes.notes). The meta-only dispatch above doesn't change the
-  // doc, so it neither bumps docVersion nor re-triggers this effect.
+  // notes load/change (notes.notes — which is also what invalidates the resolver's
+  // cache, so this is the re-prime that turns a newly-created target live). The
+  // meta-only dispatch above doesn't change the doc, so it neither bumps docVersion
+  // nor re-triggers this effect.
   $effect(() => {
     notes.notes;
     docVersion;
-    if (editor) refreshBrokenLinks();
+    if (editor) void refreshBrokenLinks();
   });
 
   function handleKeydown(e: KeyboardEvent) {
@@ -295,14 +291,10 @@
     if (!link?.dataset.path) return;
     const target = stripWikiFragment(link.dataset.path);
 
-    const note = notes.notes.find((n) => n.path === target);
-    if (note) {
-      tabs.navigate({ type: "note", id: note.id, title: note.title });
-      return;
-    }
-
     try {
-      const resolved = await api.resolveNoteTarget(target);
+      // Acting, not drawing: this chooses between navigating and writing a file to
+      // disk, so it takes the authoritative check rather than the cached answer.
+      const resolved = await linkResolver.resolve(target);
       if (resolved) {
         tabs.navigate({ type: "note", id: resolved.id, title: resolved.title });
       } else {
@@ -321,9 +313,8 @@
     const title = link.dataset.title ?? "";
     clearTimeout(previewTimer);
     previewTimer = setTimeout(async () => {
-      const note =
-        notes.notes.find((n) => n.path === target) ??
-        (await api.silent.resolveNoteTarget(target).catch(() => null));
+      // A hover preview owns its own (absent) error UI, so this lookup is silent.
+      const note = await linkResolver.resolve(target, { silent: true }).catch(() => null);
       if (!note) return;
       try {
         const raw = await api.readNoteContent(note.path);

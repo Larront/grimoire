@@ -2,49 +2,28 @@
   import { createBlankEvent, insertEventAt, moveEventUp, moveEventDown, renderTimelineText, type TimelineEvent } from "$lib/editor/timeline-block";
   import { tick } from "svelte";
   import { api } from "$lib/api";
-  import { stripWikiFragment, type NoteSearchResult } from "$lib/editor/wiki-link";
+  import { parseWikiTarget, type NoteSearchResult } from "$lib/editor/wiki-link";
   import { notes } from "$lib/stores/notes.svelte";
+  import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { FileText, ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
 
-  // Wikilink stub-vs-resolved styling. A link is "known" if it would navigate —
-  // i.e. its path matches a note, or (mirroring Editor.svelte's click handler) it
-  // resolves via an alias. Alias lookups are async, so results are cached here and
-  // consulted by isKnownPath. A path that hasn't resolved yet defaults to known
-  // (full accent) so a real link is never briefly shown as a faded, unclickable
-  // stub; only paths that fail both checks settle to broken.
-  let linkResolution = $state(new Map<string, boolean>());
-
-  const isKnownPath = (path: string) => linkResolution.get(path) ?? true;
+  // Wikilink stub-vs-resolved styling, answered by the Link Resolver — drawing, so
+  // the cached read (a target that hasn't resolved yet stays full accent rather than
+  // flashing as a faded, unclickable stub). The effect below only warms the cache
+  // for the targets this timeline draws.
+  const isKnownPath = (path: string) => linkResolver.isKnown(path);
 
   $effect(() => {
     const paths = new Set<string>();
     for (const ev of _events) {
       for (const field of [ev.date, ev.title, ev.description]) {
         for (const m of field.matchAll(/\[\[([^\]]+)\]\]/g)) {
-          const inner = m[1].trim();
-          const pipe = inner.indexOf("|");
-          paths.add((pipe >= 0 ? inner.slice(0, pipe) : inner).trim());
+          paths.add(parseWikiTarget(m[1]).path);
         }
       }
     }
-    const noteList = notes.notes; // tracked: re-resolve when the ledger's notes load/change
-    let cancelled = false;
-    (async () => {
-      const next = new Map<string, boolean>();
-      for (const p of paths) {
-        const target = stripWikiFragment(p);
-        if (noteList.some((n) => n.path === target)) {
-          next.set(p, true);
-        } else {
-          const resolved = await api.resolveNoteTarget(target).catch(() => null);
-          next.set(p, resolved != null);
-        }
-      }
-      if (!cancelled) linkResolution = next;
-    })();
-    return () => {
-      cancelled = true;
-    };
+    notes.notes; // tracked: re-prime when the ledger's notes load/change
+    void linkResolver.prime(paths);
   });
 
   let {
