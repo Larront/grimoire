@@ -1,5 +1,6 @@
 ﻿mod commands;
 mod db;
+mod format_version;
 mod ledger;
 mod ledger_watch;
 mod note_index;

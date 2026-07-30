@@ -119,6 +119,18 @@ fn finish_open(
     app: &AppHandle,
     ledger: &State<AppLedger>,
 ) -> Result<OpenLedgerResult, String> {
+    // The [[Ledger Format Version]] gate (ADR-0017). Placed at the one choke
+    // point every open passes through, so a code path that opens a ledger
+    // without asking meets a locked door — the refusal is the safety property,
+    // not a courtesy check some caller is trusted to have run.
+    //
+    // First here, so nothing touches the GM's *notes* or templates before the
+    // comparison. Grimoire's own store has already been written by this point:
+    // the callers above opened (and silently migrated) `.grimoire`'s SQLite, and
+    // may have restored it from its snapshot. That is the intended asymmetry —
+    // the database migrates on its own terms and its number is separate.
+    crate::format_version::enforce_at_open(&ledger_path)?;
+
     inject_builtin_templates(&ledger_path)?;
     seed_default_categories(&mut conn)?;
 

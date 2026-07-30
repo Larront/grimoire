@@ -28,6 +28,19 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_DB_LOCKED:
     "Another program is using this ledger's database — close it and try again.",
   ERR_DB_CORRUPT: "This ledger's database is damaged.",
+  // [[Ledger Format Version]] refusals (ADR-0017). Both directions of mismatch
+  // refuse to open, so this copy is the whole GM-facing story for each.
+  ERR_FORMAT_AHEAD:
+    "This ledger's notes were written by a newer Grimoire — update Grimoire to open it.",
+  // Placeholder until the consent prompt lands; the prompt, not a toast, is
+  // where a behind ledger is meant to be resolved.
+  ERR_FORMAT_MIGRATION_REQUIRED:
+    "This ledger's notes need updating before it can be opened.",
+  // Coded rather than generic because there is a next step and it is a file the
+  // GM owns: the generic "please try again" would be a lie, since a re-open
+  // reads the same damaged stamp.
+  ERR_FORMAT_STAMP_UNREADABLE:
+    "Grimoire couldn't tell what format this ledger's notes are in — check .grimoire/format-version.",
 };
 
 // Honest for both reads and writes — "your work is safe" would mislead when a
