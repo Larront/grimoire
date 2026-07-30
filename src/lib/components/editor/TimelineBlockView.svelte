@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { createBlankEvent, insertEventAt, moveEventUp, moveEventDown, renderTimelineText, type TimelineEvent } from "$lib/editor/timeline-block";
+  import { createBlankEvent, renderTimelineText, type TimelineEvent } from "$lib/editor/timeline-block";
+  import RowList from "$lib/components/editor/RowList.svelte";
+  import { remapRowIndices, type RowChange } from "$lib/editor/row-list";
   import { tick } from "svelte";
   import { api } from "$lib/api";
   import { parseWikiTarget, type NoteSearchResult } from "$lib/editor/wiki-link";
   import { notes } from "$lib/stores/notes.svelte";
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
-  import { FileText, ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
+  import { FileText, ChevronDown } from "@lucide/svelte";
 
   // Wikilink stub-vs-resolved styling, answered by the Link Resolver — drawing, so
   // the cached read (a target that hasn't resolved yet stays full accent rather than
@@ -37,7 +39,6 @@
   // svelte-ignore state_referenced_locally
   let _events = $state<TimelineEvent[]>(events);
   let editingIndex = $state(-1);
-  let hoveredIndex = $state<number | null>(null);
   // Set of expanded event indices (description visible)
   let expandedSet = $state(new Set<number>());
 
@@ -70,9 +71,8 @@
     editingIndex = -1;
   }
 
-  function handleFocusOut(e: FocusEvent, i: number) {
+  function handleFocusOut(i: number, container: HTMLElement) {
     if (editingIndex !== i) return;
-    const container = e.currentTarget as HTMLElement;
     // Defer: during the display→edit swap the clicked button unmounts and fires
     // focusout before the new input is focused (relatedTarget is null at that
     // instant). Check where focus actually landed once it has settled.
@@ -107,56 +107,21 @@
     expandedSet = s;
   }
 
-  // Swap the expanded state of two indices after reordering them
-  function swapExpanded(a: number, b: number) {
-    const s = new Set(expandedSet);
-    const aExp = s.has(a), bExp = s.has(b);
-    if (bExp) s.add(a); else s.delete(a);
-    if (aExp) s.add(b); else s.delete(b);
-    expandedSet = s;
-  }
-
-  function deleteEvent(i: number) {
-    _events = _events.filter((_, idx) => idx !== i);
-    // Compact expanded set: remove i, shift indices > i down by 1
-    const shifted = new Set<number>();
-    for (const idx of expandedSet) {
-      if (idx === i) continue;
-      shifted.add(idx > i ? idx - 1 : idx);
+  // Order changes come from the Row List, which owns the controls and the
+  // arithmetic; what is left here is Timeline's own business — carrying the
+  // expanded set along with the rows, and deciding which changes commit. A move
+  // and a delete commit at once; a freshly inserted event is blank and opens for
+  // editing, so it commits when the GM leaves it (handleFocusOut).
+  function handleRowChange(next: TimelineEvent[], change: RowChange) {
+    _events = next;
+    expandedSet = remapRowIndices(expandedSet, change);
+    if (change.kind === "insert") {
+      expandedSet = new Set([...expandedSet, change.index]); // description visible
+      editingIndex = change.index;
+      return;
     }
-    expandedSet = shifted;
-    editingIndex = -1;
+    if (change.kind === "delete") editingIndex = -1;
     onCommit($state.snapshot(_events) as TimelineEvent[]);
-  }
-
-  function insertAt(index: number) {
-    _events = insertEventAt($state.snapshot(_events) as TimelineEvent[], index, createBlankEvent());
-    // Shift expanded indices >= index up by 1, then auto-expand new event
-    const shifted = new Set<number>();
-    for (const idx of expandedSet) {
-      shifted.add(idx >= index ? idx + 1 : idx);
-    }
-    shifted.add(index);
-    expandedSet = shifted;
-    editingIndex = index;
-  }
-
-  function nudgeUp(i: number) {
-    if (i <= 0) return;
-    _events = moveEventUp($state.snapshot(_events) as TimelineEvent[], i);
-    swapExpanded(i, i - 1);
-    onCommit($state.snapshot(_events) as TimelineEvent[]);
-  }
-
-  function nudgeDown(i: number) {
-    if (i >= _events.length - 1) return;
-    _events = moveEventDown($state.snapshot(_events) as TimelineEvent[], i);
-    swapExpanded(i, i + 1);
-    onCommit($state.snapshot(_events) as TimelineEvent[]);
-  }
-
-  function gapVisible(g: number): boolean {
-    return hoveredIndex === g - 1 || hoveredIndex === g;
   }
 
   async function handleTrigger(
@@ -234,21 +199,125 @@
   }
 </script>
 
-{#snippet insertionPoint(index: number, label: string, visible: boolean)}
-  <button
-    type="button"
-    class="insertion-point w-full flex items-center gap-1 h-5 rounded transition-opacity duration-150 motion-reduce:transition-none
-           focus-visible:opacity-100 focus-visible:pointer-events-auto
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-    class:opacity-0={!visible}
-    class:pointer-events-none={!visible}
-    onclick={() => insertAt(index)}
-    aria-label={label}
-  >
-    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    <Plus size={11} class="text-muted-foreground/60 shrink-0" aria-hidden="true" />
-    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-  </button>
+<!-- One event, drawn by Timeline: the Row List draws the controls over this and
+     the insert-between gaps around it, and knows nothing of dates or titles.
+     Values are read off `event` and bound through `_events[i]`, which is the same
+     record — the bindings write to Timeline's own state, not to a snippet
+     argument. -->
+{#snippet eventRow(event: TimelineEvent, i: number)}
+  <!-- Spine column: continuous line + node. The connecting line starts under the
+       node and extends past the row bottom (-bottom-[34px]) to bridge the 20px
+       insertion gap and meet the next node, which paints over its tail. The last
+       event draws no descending line. The node turns Crimson only while editing —
+       the timeline's single use of the accent. -->
+  <div class="relative w-4 flex-none self-stretch" aria-hidden="true">
+    {#if i < _events.length - 1}
+      <div
+        class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[34px] w-px bg-muted-foreground/25"
+      ></div>
+    {/if}
+    <div
+      class="absolute left-1/2 -translate-x-1/2 top-[9px] size-[9px] rounded-full border bg-background
+             {editingIndex === i ? 'border-primary' : 'border-muted-foreground/50'}"
+    ></div>
+  </div>
+
+  <!-- Content column — pr-14 reserves the gutter the Row List's controls sit in -->
+  <div class="flex-1 min-w-0 pb-2 pr-14">
+    {#if editingIndex === i}
+      <!-- Edit mode: all fields visible -->
+      <input
+        bind:this={titleInput}
+        bind:value={_events[i].title}
+        type="text"
+        placeholder="Title"
+        class="w-full bg-transparent border-b border-border text-sm outline-none font-heading
+               text-foreground mb-1 focus-visible:border-primary"
+        oninput={(e) => handleTrigger(e.currentTarget, i, "title")}
+        onkeydown={(e) => handleFieldKeydown(e, i, "title")}
+      />
+      <input
+        bind:value={_events[i].date}
+        type="text"
+        placeholder="Date (optional)"
+        class="w-full bg-transparent border-b border-border text-[11px] outline-none font-heading
+               text-muted-foreground mb-1 focus-visible:border-primary"
+      />
+      <textarea
+        bind:this={descTextarea}
+        bind:value={_events[i].description}
+        placeholder="Description (optional)"
+        rows={2}
+        class="w-full bg-transparent border-b border-border text-xs outline-none resize-none
+               font-sans text-muted-foreground focus-visible:border-primary"
+        oninput={(e) => handleTrigger(e.currentTarget, i, "description")}
+        onkeydown={(e) => handleFieldKeydown(e, i, "description")}
+      ></textarea>
+    {:else}
+      <!-- Display mode: date + title always visible; description collapsible on click -->
+
+      <!-- Header row: date + title (click to edit) + chevron (click to expand/collapse) -->
+      <div class="flex items-start gap-1">
+        <button
+          type="button"
+          class="flex-1 min-w-0 text-left rounded
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          onclick={(e) => editFromHeader(e, i)}
+          onkeydown={(e) => e.key === 'Enter' && startEdit(i)}
+          aria-label={`Edit event: ${event.title || 'Untitled event'}`}
+        >
+          {#if event.date}
+            <!-- Date label: Metamorphous, small, ember-muted -->
+            <div class="font-heading text-[11px] leading-tight text-muted-foreground mb-0.5">
+              {@html renderTimelineText(event.date, isKnownPath)}
+            </div>
+          {/if}
+          <!-- Title: Metamorphous (world voice) -->
+          <div
+            class="font-heading text-sm leading-snug {event.title
+              ? 'text-foreground'
+              : 'text-muted-foreground/60 italic'}"
+          >
+            {#if event.title}{@html renderTimelineText(event.title, isKnownPath)}{:else}Untitled event{/if}
+          </div>
+        </button>
+
+        {#if event.description}
+          <!-- Expand/collapse toggle for description -->
+          <button
+            type="button"
+            class="shrink-0 mt-1 p-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground
+                   transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2
+                   focus-visible:ring-primary focus-visible:ring-offset-2"
+            onclick={() => toggleExpand(i)}
+            aria-label={expandedSet.has(i) ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
+            aria-expanded={expandedSet.has(i)}
+          >
+            <ChevronDown
+              size={12}
+              class="transition-transform duration-150 motion-reduce:transition-none {expandedSet.has(i) ? 'rotate-180' : ''}"
+            />
+          </button>
+        {/if}
+      </div>
+
+      <!-- Collapsible description: grid-rows slide (snaps under prefers-reduced-motion) -->
+      {#if event.description}
+        <div
+          class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
+          style="grid-template-rows: {expandedSet.has(i) ? '1fr' : '0fr'}"
+          aria-hidden={!expandedSet.has(i)}
+        >
+          <div class="min-h-0">
+            <!-- Description: Nunito (reading prose voice) -->
+            <div class="font-sans text-xs text-muted-foreground whitespace-pre-wrap pt-1 pb-1">
+              {@html renderTimelineText(event.description, isKnownPath)}
+            </div>
+          </div>
+        </div>
+      {/if}
+    {/if}
+  </div>
 {/snippet}
 
 <div class="timeline-block my-2 select-none" contenteditable="false">
@@ -256,187 +325,17 @@
     <div class="ml-6 text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>
   {/if}
 
-  {#each _events as event, i (i)}
-    <!-- Gap before event i (hover-revealed, focus-visible) — offset to align with content column -->
-    <div class="pl-6">
-      {@render insertionPoint(
-        i,
-        i === 0 ? "Insert event at top" : `Insert event after position ${i}`,
-        gapVisible(i),
-      )}
-    </div>
-
-    <!-- Event row: spine column + content column -->
-    <div
-      class="timeline-event group flex items-start gap-2"
-      role="group"
-      aria-label={`Event ${i + 1}`}
-      onfocusout={(e) => handleFocusOut(e, i)}
-      onmouseenter={() => (hoveredIndex = i)}
-      onmouseleave={() => (hoveredIndex = null)}
-    >
-      <!-- Spine column: continuous line + node. The connecting line starts under the
-           node and extends past the row bottom (-bottom-[34px]) to bridge the 20px
-           insertion gap and meet the next node, which paints over its tail. The last
-           event draws no descending line. The node turns Crimson only while editing —
-           the timeline's single use of the accent. -->
-      <div class="relative w-4 flex-none self-stretch" aria-hidden="true">
-        {#if i < _events.length - 1}
-          <div
-            class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[34px] w-px bg-muted-foreground/25"
-          ></div>
-        {/if}
-        <div
-          class="absolute left-1/2 -translate-x-1/2 top-[9px] size-[9px] rounded-full border bg-background
-                 {editingIndex === i ? 'border-primary' : 'border-muted-foreground/50'}"
-        ></div>
-      </div>
-
-      <!-- Content column -->
-      <div class="flex-1 min-w-0 pb-2 relative pr-14">
-        <!-- Up / down nudge controls — revealed on hover / keyboard focus -->
-        <div
-          class="absolute top-0 right-6 flex flex-col opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-                 group-hover:opacity-100 group-focus-within:opacity-100"
-        >
-          <button
-            type="button"
-            class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
-                   disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
-                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-            disabled={i === 0}
-            onclick={() => nudgeUp(i)}
-            aria-label="Move event up"
-          >
-            <ChevronUp size={13} />
-          </button>
-          <button
-            type="button"
-            class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
-                   disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
-                   focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-            disabled={i === _events.length - 1}
-            onclick={() => nudgeDown(i)}
-            aria-label="Move event down"
-          >
-            <ChevronDown size={13} />
-          </button>
-        </div>
-
-        <!-- Delete button — revealed on hover / keyboard focus -->
-        <button
-          type="button"
-          class="absolute top-0 right-0 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
-                 opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-                 group-hover:opacity-100 group-focus-within:opacity-100
-                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          onclick={() => deleteEvent(i)}
-          aria-label="Delete event"
-        >
-          <X size={13} />
-        </button>
-
-        {#if editingIndex === i}
-          <!-- Edit mode: all fields visible -->
-          <input
-            bind:this={titleInput}
-            bind:value={event.title}
-            type="text"
-            placeholder="Title"
-            class="w-full bg-transparent border-b border-border text-sm outline-none font-heading
-                   text-foreground mb-1 focus-visible:border-primary"
-            oninput={(e) => handleTrigger(e.currentTarget, i, "title")}
-            onkeydown={(e) => handleFieldKeydown(e, i, "title")}
-          />
-          <input
-            bind:value={event.date}
-            type="text"
-            placeholder="Date (optional)"
-            class="w-full bg-transparent border-b border-border text-[11px] outline-none font-heading
-                   text-muted-foreground mb-1 focus-visible:border-primary"
-          />
-          <textarea
-            bind:this={descTextarea}
-            bind:value={event.description}
-            placeholder="Description (optional)"
-            rows={2}
-            class="w-full bg-transparent border-b border-border text-xs outline-none resize-none
-                   font-sans text-muted-foreground focus-visible:border-primary"
-            oninput={(e) => handleTrigger(e.currentTarget, i, "description")}
-            onkeydown={(e) => handleFieldKeydown(e, i, "description")}
-          ></textarea>
-        {:else}
-          <!-- Display mode: date + title always visible; description collapsible on click -->
-
-          <!-- Header row: date + title (click to edit) + chevron (click to expand/collapse) -->
-          <div class="flex items-start gap-1">
-            <button
-              type="button"
-              class="flex-1 min-w-0 text-left rounded
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-              onclick={(e) => editFromHeader(e, i)}
-              onkeydown={(e) => e.key === 'Enter' && startEdit(i)}
-              aria-label={`Edit event: ${event.title || 'Untitled event'}`}
-            >
-              {#if event.date}
-                <!-- Date label: Metamorphous, small, ember-muted -->
-                <div class="font-heading text-[11px] leading-tight text-muted-foreground mb-0.5">
-                  {@html renderTimelineText(event.date, isKnownPath)}
-                </div>
-              {/if}
-              <!-- Title: Metamorphous (world voice) -->
-              <div
-                class="font-heading text-sm leading-snug {event.title
-                  ? 'text-foreground'
-                  : 'text-muted-foreground/60 italic'}"
-              >
-                {#if event.title}{@html renderTimelineText(event.title, isKnownPath)}{:else}Untitled event{/if}
-              </div>
-            </button>
-
-            {#if event.description}
-              <!-- Expand/collapse toggle for description -->
-              <button
-                type="button"
-                class="shrink-0 mt-1 p-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground
-                       transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2
-                       focus-visible:ring-primary focus-visible:ring-offset-2"
-                onclick={() => toggleExpand(i)}
-                aria-label={expandedSet.has(i) ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
-                aria-expanded={expandedSet.has(i)}
-              >
-                <ChevronDown
-                  size={12}
-                  class="transition-transform duration-150 motion-reduce:transition-none {expandedSet.has(i) ? 'rotate-180' : ''}"
-                />
-              </button>
-            {/if}
-          </div>
-
-          <!-- Collapsible description: grid-rows slide (snaps under prefers-reduced-motion) -->
-          {#if event.description}
-            <div
-              class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-              style="grid-template-rows: {expandedSet.has(i) ? '1fr' : '0fr'}"
-              aria-hidden={!expandedSet.has(i)}
-            >
-              <div class="min-h-0">
-                <!-- Description: Nunito (reading prose voice) -->
-                <div class="font-sans text-xs text-muted-foreground whitespace-pre-wrap pt-1 pb-1">
-                  {@html renderTimelineText(event.description, isKnownPath)}
-                </div>
-              </div>
-            </div>
-          {/if}
-        {/if}
-      </div>
-    </div>
-  {/each}
-
-  <!-- Trailing gap: always visible — offset to align with content column -->
-  <div class="pl-6">
-    {@render insertionPoint(_events.length, "Add event", true)}
-  </div>
+  <!-- Order, the hover-revealed move / delete / insert-between controls and their
+       gaps are the Row List's; the gaps are indented to clear the spine. -->
+  <RowList
+    rows={_events}
+    row={eventRow}
+    noun="event"
+    insertionPointClass="pl-6"
+    createRow={createBlankEvent}
+    onChange={handleRowChange}
+    onRowFocusOut={handleFocusOut}
+  />
 </div>
 
 {#if suggestion}

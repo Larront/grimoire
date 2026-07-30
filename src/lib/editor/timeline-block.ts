@@ -29,29 +29,8 @@ function isBlankEvent(e: TimelineEvent): boolean {
   return !e.date && !e.title && !e.description;
 }
 
-export function insertEventAt(
-  events: TimelineEvent[],
-  index: number,
-  event: TimelineEvent,
-): TimelineEvent[] {
-  const result = [...events];
-  result.splice(index, 0, event);
-  return result;
-}
-
-export function moveEventUp(events: TimelineEvent[], index: number): TimelineEvent[] {
-  if (index <= 0 || index >= events.length) return events;
-  const result = [...events];
-  [result[index - 1], result[index]] = [result[index], result[index - 1]];
-  return result;
-}
-
-export function moveEventDown(events: TimelineEvent[], index: number): TimelineEvent[] {
-  if (index < 0 || index >= events.length - 1) return events;
-  const result = [...events];
-  [result[index], result[index + 1]] = [result[index + 1], result[index]];
-  return result;
-}
+// Order — inserting, moving and deleting events — is the Row List's (#173), which
+// the view reaches directly. Nothing about ordering lives here any more.
 
 // ─── Display rendering ───────────────────────────────────────────────────────
 

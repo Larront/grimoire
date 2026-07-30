@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
+// Event order is no longer this block's business — it moved to the Row List
+// (#173), and its arithmetic is tested in row-list.test.ts with Timeline's use of
+// it in timeline-row-list.test.ts. What is left here is the fence format.
 import {
   parseTimelineBody,
   serializeTimelineEvents,
   createBlankEvent,
-  insertEventAt,
-  moveEventUp,
-  moveEventDown,
   renderTimelineText,
   TimelineBlock,
   type TimelineEvent,
@@ -337,130 +337,6 @@ describe("createBlankEvent", () => {
   });
 });
 
-// ─── insertEventAt ────────────────────────────────────────────────────────────
-
-describe("insertEventAt", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-  const blank = createBlankEvent();
-
-  it("inserts at index 0 (before all events)", () => {
-    const result = insertEventAt([alpha, beta], 0, blank);
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual(blank);
-    expect(result[1]).toEqual(alpha);
-    expect(result[2]).toEqual(beta);
-  });
-
-  it("inserts in the middle", () => {
-    const result = insertEventAt([alpha, gamma], 1, beta);
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual(alpha);
-    expect(result[1]).toEqual(beta);
-    expect(result[2]).toEqual(gamma);
-  });
-
-  it("inserts at the end (index === length)", () => {
-    const result = insertEventAt([alpha, beta], 2, gamma);
-    expect(result).toHaveLength(3);
-    expect(result[2]).toEqual(gamma);
-  });
-
-  it("inserts into empty array", () => {
-    const result = insertEventAt([], 0, alpha);
-    expect(result).toEqual([alpha]);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    insertEventAt(original, 1, gamma);
-    expect(original).toHaveLength(2);
-  });
-
-  it("insert-at-index round-trips through serialize → parse correctly", () => {
-    const result = insertEventAt([alpha, gamma], 1, beta);
-    const parsed = parseTimelineBody(fenceBody(serializeTimelineEvents(result)));
-    expect(parsed).toEqual([alpha, beta, gamma]);
-  });
-});
-
-// ─── moveEventUp ─────────────────────────────────────────────────────────────
-
-describe("moveEventUp", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-
-  it("swaps event at index 1 with event at index 0", () => {
-    const result = moveEventUp([alpha, beta], 1);
-    expect(result[0]).toEqual(beta);
-    expect(result[1]).toEqual(alpha);
-  });
-
-  it("moves last event up one position", () => {
-    const result = moveEventUp([alpha, beta, gamma], 2);
-    expect(result).toEqual([alpha, gamma, beta]);
-  });
-
-  it("is a no-op at index 0", () => {
-    const original = [alpha, beta];
-    const result = moveEventUp(original, 0);
-    expect(result).toEqual(original);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    moveEventUp(original, 1);
-    expect(original[0]).toEqual(alpha);
-    expect(original[1]).toEqual(beta);
-  });
-
-  it("adjacent swap round-trips through serialize → parse correctly", () => {
-    const result = moveEventUp([alpha, beta, gamma], 1);
-    const parsed = parseTimelineBody(fenceBody(serializeTimelineEvents(result)));
-    expect(parsed).toEqual([beta, alpha, gamma]);
-  });
-});
-
-// ─── moveEventDown ────────────────────────────────────────────────────────────
-
-describe("moveEventDown", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-
-  it("swaps event at index 0 with event at index 1", () => {
-    const result = moveEventDown([alpha, beta], 0);
-    expect(result[0]).toEqual(beta);
-    expect(result[1]).toEqual(alpha);
-  });
-
-  it("moves middle event down one position", () => {
-    const result = moveEventDown([alpha, beta, gamma], 1);
-    expect(result).toEqual([alpha, gamma, beta]);
-  });
-
-  it("is a no-op at last index", () => {
-    const original = [alpha, beta];
-    const result = moveEventDown(original, 1);
-    expect(result).toEqual(original);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    moveEventDown(original, 0);
-    expect(original[0]).toEqual(alpha);
-    expect(original[1]).toEqual(beta);
-  });
-
-  it("moveDown is symmetric inverse of moveUp for middle elements", () => {
-    const events = [alpha, beta, gamma];
-    const up = moveEventUp(events, 2);
-    const down = moveEventDown(up, 1);
-    expect(down).toEqual(events);
-  });
-});
 
 // ─── renderTimelineText ───────────────────────────────────────────────────────
 
