@@ -47,16 +47,16 @@
   let loadError = $state(false);
   let containerEl: HTMLDivElement | undefined = $state();
 
-  export function setAttrs(
-    newAlign: string,
-    newWidth: string,
-    newSrc: string,
-    newAlt: string,
-  ) {
-    _align = newAlign;
-    _width = newWidth;
-    _src = newSrc;
-    _alt = newAlt;
+  export function setAttrs(attrs: {
+    align: string;
+    width: string;
+    src: string;
+    alt: string;
+  }) {
+    _align = attrs.align;
+    _width = attrs.width;
+    _src = attrs.src;
+    _alt = attrs.alt;
   }
 
   export function setSelected(val: boolean) {

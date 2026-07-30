@@ -43,9 +43,12 @@
   // svelte-ignore state_referenced_locally
   let _expanded = $state(expanded);
 
-  export function setAttrs(newSceneId: number | null, newExpanded: boolean) {
-    _sceneId = newSceneId;
-    _expanded = newExpanded;
+  export function setAttrs(attrs: {
+    sceneId: number | null;
+    expanded: boolean;
+  }) {
+    _sceneId = attrs.sceneId;
+    _expanded = attrs.expanded;
   }
 
   // ── Placeholder search ────────────────────────────────────────────────────

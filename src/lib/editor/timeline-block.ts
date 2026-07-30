@@ -1,6 +1,9 @@
 import { Node, mergeAttributes } from "@tiptap/core";
-import { mount, unmount } from "svelte";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
+import {
+  createBlockNodeView,
+  type BlockView,
+} from "$lib/editor/node-view-connector";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,8 +13,8 @@ export interface TimelineEvent {
   description: string;
 }
 
-interface TimelineBlockViewExports {
-  setAttrs: (events: TimelineEvent[]) => void;
+/** A freshly inserted timeline opens its one blank event, so its view must let it. */
+interface TimelineBlockViewExports extends BlockView {
   openEdit: (index: number) => void;
 }
 
@@ -210,49 +213,17 @@ export const TimelineBlock = Node.create({
   },
 
   addNodeView() {
-    return ({ node, getPos, editor }) => {
-      const dom = document.createElement("div");
-      dom.setAttribute("contenteditable", "false");
-
-      const events = node.attrs.events as TimelineEvent[];
-
-      function onCommit(newEvents: TimelineEvent[]) {
-        const pos = typeof getPos === "function" ? getPos() : undefined;
-        if (pos == null) return;
-        editor
-          .chain()
-          .command(({ tr }) => {
-            tr.setNodeMarkup(pos, null, { events: newEvents });
-            return true;
-          })
-          .run();
-      }
-
-      const raw = mount(TimelineBlockView, {
-        target: dom,
-        props: { events, onCommit },
-      });
-      const component = raw as unknown as TimelineBlockViewExports;
-
-      // Fresh /timeline insert: one blank event → open it in edit mode immediately
-      if (events.length === 1 && isBlankEvent(events[0])) {
-        component.openEdit(0);
-      }
-
-      return {
-        dom,
-        stopEvent(event: Event) {
-          return dom.contains(event.target as globalThis.Node);
-        },
-        update(updatedNode) {
-          if (updatedNode.type !== node.type) return false;
-          component.setAttrs(updatedNode.attrs.events as TimelineEvent[]);
-          return true;
-        },
-        destroy() {
-          unmount(raw);
-        },
-      };
-    };
+    return createBlockNodeView<TimelineBlockViewExports>({
+      component: TimelineBlockView,
+      defaults: { events: [] },
+      props: ({ updateAttributes }) => ({
+        onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
+      }),
+      mounted: (view, attrs) => {
+        // Fresh /timeline insert: one blank event → open it in edit mode immediately
+        const events = attrs.events as TimelineEvent[];
+        if (events.length === 1 && isBlankEvent(events[0])) view.openEdit(0);
+      },
+    });
   },
 });

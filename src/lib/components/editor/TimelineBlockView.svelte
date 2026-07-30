@@ -224,8 +224,8 @@
     });
   }
 
-  export function setAttrs(newEvents: TimelineEvent[]) {
-    _events = newEvents;
+  export function setAttrs(attrs: { events: TimelineEvent[] }) {
+    _events = attrs.events;
     editingIndex = -1;
   }
 

@@ -1,13 +1,16 @@
 import Image from "@tiptap/extension-image";
 import { api } from "$lib/api";
-import { mount, unmount } from "svelte";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
+import {
+  createBlockNodeView,
+  type BlockView,
+} from "$lib/editor/node-view-connector";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ImageBlockViewExports {
-  setAttrs: (align: string, width: string, src: string, alt: string) => void;
+/** Image draws its own selected state, so its view must accept one. */
+interface ImageBlockViewExports extends BlockView {
   setSelected: (selected: boolean) => void;
 }
 
@@ -91,65 +94,25 @@ export const ImageBlock = Image.extend({
   },
 
   addNodeView() {
-    return ({ node, editor, getPos }) => {
-      const dom = document.createElement("div");
-      dom.setAttribute("contenteditable", "false");
-      dom.setAttribute("data-image-block", "");
+    return createBlockNodeView<ImageBlockViewExports>({
+      component: ImageBlockView,
+      domAttrs: { "data-image-block": "" },
+      defaults: { src: "", alt: "", align: "center", width: "100%" },
+      drawsOwnSelection: true,
+      props: ({ updateAttributes }) => ({
+        onUpdate: updateAttributes,
+        onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
+        onSrcReplace: (src: string) => updateAttributes({ src }),
+      }),
 
-      function updateNodeAttrs(partial: Record<string, unknown>) {
-        const pos = (getPos as () => number | undefined)();
-        if (pos === undefined) return;
-        editor.commands.command(({ tr }) => {
-          const currentNode = tr.doc.nodeAt(pos);
-          if (!currentNode) return false;
-          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, ...partial });
-          return true;
-        });
-      }
-
-      const raw = mount(ImageBlockView, {
-        target: dom,
-        props: {
-          src: node.attrs.src ?? "",
-          alt: node.attrs.alt ?? "",
-          align: node.attrs.align ?? "center",
-          width: node.attrs.width ?? "100%",
-          onUpdate: updateNodeAttrs,
-          onCaptionUpdate: (alt) => updateNodeAttrs({ alt }),
-          onSrcReplace: (src) => updateNodeAttrs({ src }),
-        },
-      });
-      const component = raw as unknown as ImageBlockViewExports;
-
-      return {
-        dom,
-        stopEvent(event: Event) {
-          if (dom.hasAttribute("data-resizing")) return true;
-          // Let mousedown reach ProseMirror so it can select this node
-          if (event.type === "mousedown") return false;
-          return dom.contains(event.target as globalThis.Node);
-        },
-        update(updatedNode) {
-          if (updatedNode.type !== node.type) return false;
-          component.setAttrs(
-            updatedNode.attrs.align ?? "center",
-            updatedNode.attrs.width ?? "100%",
-            updatedNode.attrs.src ?? "",
-            updatedNode.attrs.alt ?? "",
-          );
-          return true;
-        },
-        selectNode() {
-          component.setSelected(true);
-        },
-        deselectNode() {
-          component.setSelected(false);
-        },
-        destroy() {
-          unmount(raw);
-        },
-      };
-    };
+      // Image's use of the connector's event hole: a mousedown must reach
+      // ProseMirror so it can select this node, and a resize drag must not.
+      stopEvent: ({ dom }) => (event) => {
+        if (dom.hasAttribute("data-resizing")) return true;
+        if (event.type === "mousedown") return false;
+        return undefined;
+      },
+    });
   },
 });
 

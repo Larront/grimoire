@@ -375,26 +375,20 @@ describe("SceneBlock node view — attribute write-back", () => {
     expect(writes[0].attrs.sceneId).toBe(null);
   });
 
-  // KNOWN FAILING — recorded, not papered over (#170).
-  //
-  // The write-back replaces the whole attribute set with the two keys it knows
-  // about, so any other attribute on the node is dropped. Scene has no third
-  // attribute today, which is the only reason this is invisible. The shared
-  // node-view connector fixes it by construction (it merges rather than
-  // replaces); when it lands, drop the `.fails` and this test goes green.
-  it.fails(
-    "write-back merges attributes, leaving the others intact",
-    async () => {
-      mockScenes = [makeScene({ id: 1 })];
-      mounted = mountNodeView({ sceneId: 1, marker: "keep me" });
-      const { view, writes } = mounted;
+  // Recorded as KNOWN FAILING by #170: the old write-back replaced the whole
+  // attribute set with the two keys it knew about, dropping any other attribute
+  // on the node. Green since #172 — the shared node-view connector merges rather
+  // than replaces, so the bug is gone by construction rather than by patch.
+  it("write-back merges attributes, leaving the others intact", async () => {
+    mockScenes = [makeScene({ id: 1 })];
+    mounted = mountNodeView({ sceneId: 1, marker: "keep me" });
+    const { view, writes } = mounted;
 
-      const change = view.dom.querySelector(
-        '[aria-label="Change scene"]',
-      ) as HTMLElement;
-      await fireEvent.click(change);
+    const change = view.dom.querySelector(
+      '[aria-label="Change scene"]',
+    ) as HTMLElement;
+    await fireEvent.click(change);
 
-      expect(writes[0].attrs.marker).toBe("keep me");
-    },
-  );
+    expect(writes[0].attrs.marker).toBe("keep me");
+  });
 });

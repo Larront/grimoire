@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { ImageBlock, isImageFile, preprocessImageAttrs, serializeImageNode } from "$lib/editor/image-block";
 
 function makeFile(name: string, type: string): File {
@@ -209,5 +209,78 @@ describe("markdown round-trip (serialize → preprocess)", () => {
     expect(roundTrip({ src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" })).toBe(
       '<img src="images/a.png" alt="人物の肖像" data-align="left" data-width="60%">',
     );
+  });
+});
+
+// ─── Node view: ProseMirror event handling ────────────────────────────────────
+//
+// Image's use of the shared connector's event hole (ADR-0016 §4). A mousedown
+// must reach ProseMirror or the image cannot be selected at all, which is the
+// divergence the connector must not paper over; a resize drag must not.
+
+interface TestNodeView {
+  dom: HTMLElement;
+  stopEvent: (event: Event) => boolean;
+  destroy: () => void;
+}
+
+describe("ImageBlock node view — event handling", () => {
+  let mounted: TestNodeView | null = null;
+  let outsideEl: HTMLElement | null = null;
+
+  afterEach(() => {
+    mounted?.destroy();
+    mounted?.dom.remove();
+    mounted = null;
+    outsideEl?.remove();
+    outsideEl = null;
+  });
+
+  // Node views are mounted imperatively against a fake editor: nothing here
+  // writes an attribute, so the editor only has to exist.
+  function mountNodeView(): TestNodeView {
+    const addNodeView = (
+      ImageBlock.config as unknown as {
+        addNodeView: () => (props: {
+          node: unknown;
+          getPos: () => number;
+          editor: unknown;
+        }) => TestNodeView;
+      }
+    ).addNodeView;
+
+    const view = addNodeView()({
+      node: {
+        type: { name: "image" },
+        attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" },
+      },
+      getPos: () => 1,
+      editor: { commands: { command: () => true } },
+    });
+    document.body.appendChild(view.dom);
+    mounted = view;
+    return view;
+  }
+
+  function eventOn(target: globalThis.Node, type: string): Event {
+    return { type, target } as unknown as Event;
+  }
+
+  it("lets a mousedown through so ProseMirror can select the image", () => {
+    const view = mountNodeView();
+    const inside = view.dom.firstElementChild ?? view.dom;
+
+    expect(view.stopEvent(eventOn(inside, "mousedown"))).toBe(false);
+  });
+
+  it("keeps everything while a resize drag is underway, wherever the pointer is", () => {
+    const view = mountNodeView();
+    outsideEl = document.body.appendChild(document.createElement("div"));
+
+    expect(view.stopEvent(eventOn(outsideEl, "mousemove"))).toBe(false);
+
+    view.dom.setAttribute("data-resizing", "");
+    expect(view.stopEvent(eventOn(outsideEl, "mousemove"))).toBe(true);
+    expect(view.stopEvent(eventOn(outsideEl, "mousedown"))).toBe(true);
   });
 });
