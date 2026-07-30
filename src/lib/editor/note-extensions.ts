@@ -16,6 +16,7 @@ import type { Extensions } from "@tiptap/core";
 
 import { CalloutBlock } from "$lib/editor/callout-block";
 import { ImageBlock } from "$lib/editor/image-block";
+import { InfoboxBlock } from "$lib/editor/infobox-block";
 import { SceneBlock } from "$lib/editor/scene-block.svelte";
 import { TimelineBlock } from "$lib/editor/timeline-block";
 import { WikiLink } from "$lib/editor/wiki-link";
@@ -41,6 +42,7 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
     // code block claims every fence.
     CalloutBlock,
     ImageBlock,
+    InfoboxBlock,
     SceneBlock,
     TimelineBlock,
     WikiLink.configure({

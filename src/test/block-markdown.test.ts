@@ -13,6 +13,7 @@
 import { describe, it, expect } from "vitest";
 import { MarkdownManager } from "@tiptap/markdown";
 import { noteExtensions } from "$lib/editor/note-extensions";
+import { parseFrontmatter } from "$lib/utils";
 import type { JSONContent } from "@tiptap/core";
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
@@ -81,6 +82,126 @@ describe("Timeline claims its fence", () => {
     ].join("\n");
 
     expect(nodesOfType(read(md), "timelineBlock")).toHaveLength(2);
+    expect(roundTrip(md)).toBe(md);
+  });
+});
+
+// ─── Infobox ──────────────────────────────────────────────────────────────────
+//
+// The format itself is pinned by infobox-block.test.ts. What only this seam can show
+// is the fence being *claimed* — read as a panel rather than as a grey code box —
+// including inside a Callout, which is where #158's column-zero scan failed.
+
+describe("Infobox claims its fence", () => {
+  const PANEL = [
+    "```infobox",
+    "# Harbor's End",
+    "Population: 4,200",
+    "Ruler: [[Captain Ash]]",
+    "Founded: 812 AR",
+    "```",
+  ].join("\n");
+
+  it("reads an infobox fence as an infobox block", () => {
+    const doc = read(PANEL);
+    const panel = onlyNode(doc, "infoboxBlock");
+
+    expect(panel.attrs?.title).toBe("Harbor's End");
+    expect(panel.attrs?.rows).toEqual([
+      { label: "Population", value: "4,200" },
+      { label: "Ruler", value: "[[Captain Ash]]" },
+      { label: "Founded", value: "812 AR" },
+    ]);
+    expect(nodesOfType(doc, "codeBlock")).toHaveLength(0);
+  });
+
+  it("round-trips an infobox fence byte for byte", () => {
+    expect(roundTrip(PANEL)).toBe(PANEL);
+  });
+
+  it("keeps a wikilink in a row value as the characters the GM typed", () => {
+    // The link extractor is a fence-blind raw scan, so this is already a real link in
+    // the Link Index, Backlinks and the graph (ADR-0016 §2). What must not happen is
+    // the editor lifting it into a node and losing the `[[…]]` on the next autosave.
+    expect(nodesOfType(read(PANEL), "wikiLink")).toHaveLength(0);
+    expect(roundTrip(PANEL)).toContain("Ruler: [[Captain Ash]]");
+  });
+
+  it("reads two infoboxes in one note", () => {
+    const md = [
+      "Some prose.",
+      "",
+      "```infobox\n# Harbor's End\nPopulation: 4,200\n```",
+      "",
+      "More prose.",
+      "",
+      "```infobox\n# The Ember Keep\nGarrison: 40\n```",
+    ].join("\n");
+
+    expect(nodesOfType(read(md), "infoboxBlock")).toHaveLength(2);
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("reads an infobox fence nested inside a callout", () => {
+    const md = "> [!note] The Bay\n> ```infobox\n> Population: 4,200\n> ```";
+    const quote = onlyNode(read(md), "blockquote");
+
+    expect(nodesOfType(quote, "infoboxBlock")).toHaveLength(1);
+    expect(nodesOfType(read(md), "codeBlock")).toHaveLength(0);
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it.each([
+    ["a panel with no title", "```infobox\nPopulation: 4,200\n```"],
+    ["an empty panel", "```infobox\n```"],
+    ["a title and no rows", "```infobox\n# Harbor's End\n```"],
+    ["a row labelled Image", "```infobox\nImage: a woodcut of the harbour\n```"],
+    ["a value holding a colon", "```infobox\nRuler: Ash, styled: the Grey\n```"],
+    ["a title holding a colon", "```infobox\n# Harbor's End: the docks\n```"],
+    ["an unlabelled row", "```infobox\n![The harbour](images/harbor.png)\n```"],
+    ["a shielded title-shaped row", "```infobox\n#\n# The docks\n```"],
+  ])("round-trips %s byte for byte", (_what, md) => {
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("drops the blank lines a GM used as decoration and nothing else", () => {
+    // Blank lines inside the fence are decoration: they are not re-emitted, which is
+    // the same reason a load-and-save cannot grow one either.
+    const md = "```infobox\n# Harbor's End\n\nPopulation: 4,200\n```";
+
+    expect(roundTrip(md)).toBe("```infobox\n# Harbor's End\nPopulation: 4,200\n```");
+  });
+
+  it("neither reads frontmatter into its rows nor writes it from them", () => {
+    // Independent by doctrine (#175): frontmatter holds what the tool consumes, an
+    // Infobox holds what the reader sees. No promotion either direction — which the
+    // seam makes structural, because frontmatter is split off before the editor sees
+    // a byte of the note and foreign keys never come near a row.
+    const raw = [
+      "---",
+      "tags: [location]",
+      "aliases: [The Harbour]",
+      "---",
+      "```infobox",
+      "Population: 4,200",
+      "```",
+    ].join("\n");
+    const { body } = parseFrontmatter(raw);
+
+    expect(onlyNode(read(body), "infoboxBlock").attrs?.rows).toEqual([
+      { label: "Population", value: "4,200" },
+    ]);
+    expect(roundTrip(body)).toBe(body);
+    expect(raw.slice(0, raw.length - body.length)).toBe(
+      "---\ntags: [location]\naliases: [The Harbour]\n---\n",
+    );
+  });
+
+  it("declines a fence whose info string carries more than the block's name", () => {
+    const md = "```infobox wide\nPopulation: 4,200\n```";
+
+    expect(nodesOfType(read(md), "infoboxBlock")).toHaveLength(0);
+    expect(nodesOfType(read(md), "codeBlock")).toHaveLength(1);
     expect(roundTrip(md)).toBe(md);
   });
 });

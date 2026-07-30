@@ -4,6 +4,7 @@ import Suggestion from "@tiptap/suggestion";
 import { PluginKey } from "prosemirror-state";
 import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
+import { blankInfobox } from "./infobox-block";
 import { createBlankEvent } from "./timeline-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,6 +129,19 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
           type: "sceneBlock",
           attrs: { sceneId: null, expanded: false },
         })
+        .run(),
+  },
+  {
+    group: "Insert",
+    label: "Infobox",
+    keywords: ["infobox", "panel", "facts", "summary", "sidebar", "stats"],
+    icon: "PanelRight",
+    command: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({ type: "infoboxBlock", attrs: blankInfobox() })
         .run(),
   },
   {

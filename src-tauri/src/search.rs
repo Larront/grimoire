@@ -1001,6 +1001,38 @@ mod tests {
         assert_eq!(r.match_count, 1);
     }
 
+    // A labelled row's label and value are searchable because the index reads the
+    // note's body verbatim — and that is the whole of it (ADR-0016 §8): nothing
+    // records a row's label or value outside the note it sits in. Asserted rather
+    // than assumed, which is what #175 asks for, because "it works for free" is
+    // exactly the kind of claim that quietly stops being true.
+    #[test]
+    fn body_search_finds_an_infobox_row_label_and_value() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "The Bay Area", "bay.md");
+        let content = "```infobox\n# Harbor's End\nWeather: monsoon\n```";
+        std::fs::write(dir.path().join("bay.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        for term in ["monsoon", "Weather"] {
+            let results = search_notes_in_index(&index, dir.path(), term, 10).unwrap();
+            assert_eq!(results.len(), 1, "'{term}' in an infobox row must match");
+            assert_eq!(results[0].id, 1);
+        }
+    }
+
+    #[test]
+    fn body_search_finds_a_wikilinked_infobox_row_value() {
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "The Bay Area", "bay.md");
+        let content = "```infobox\nRuler: [[Captain Ash]]\n```";
+        std::fs::write(dir.path().join("bay.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "Captain", 10).unwrap();
+        assert_eq!(results.len(), 1, "a linked row value is searchable by its text");
+    }
+
     #[test]
     fn body_search_excerpt_centred_on_match() {
         let dir = TempDir::new().unwrap();

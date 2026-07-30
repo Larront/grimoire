@@ -748,6 +748,24 @@ mod tests {
         assert_eq!(extract_wikilinks(content), vec!["a.md"]);
     }
 
+    // A wikilink inside a fenced Note Block is a real link, because this scan is
+    // fence-blind — which is what puts an Infobox row's `[[…]]` in the Link Index,
+    // Backlinks and the graph for free (ADR-0016 §2, #175). Asserted rather than
+    // assumed: the whole no-opt-in rule for Linked Text Fields rests on it.
+    #[test]
+    fn extract_wikilinks_reads_inside_an_infobox_fence() {
+        let content = "```infobox\n# Harbor's End\nRuler: [[Captain Ash.md]]\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_an_infobox_row_label() {
+        // A link typed into a *label* is filed too — an opt-out field would be
+        // drawing flat text over a link Grimoire has already recorded.
+        let content = "```infobox\n[[Captain Ash.md]]: the ruler\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
     #[test]
     fn extract_wikilinks_empty_body() {
         assert!(extract_wikilinks("").is_empty());
@@ -831,6 +849,17 @@ mod tests {
         let content = "[[old.md]] and also [[old.md|alias]] and [[other.md]].";
         let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
         assert_eq!(out, "[[new.md]] and also [[new.md|alias]] and [[other.md]].");
+        assert!(changed);
+    }
+
+    // Rename-rewrite edits raw note bytes, so it reaches inside a fence as readily as
+    // into prose — the other half of why a fenced block writes its wikilinks
+    // literally, never quoted or encoded (#175).
+    #[test]
+    fn rewrite_wikilink_inside_an_infobox_fence() {
+        let content = "```infobox\n# Harbor's End\nRuler: [[old.md]]\n```";
+        let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
+        assert_eq!(out, "```infobox\n# Harbor's End\nRuler: [[new.md]]\n```");
         assert!(changed);
     }
 
