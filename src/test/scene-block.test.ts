@@ -279,6 +279,13 @@ function mountNodeView(attrs: Record<string, unknown> = { sceneId: 1 }) {
     commands: {
       command(fn: (props: { tr: unknown }) => boolean) {
         const tr = {
+          // The connector closes the history group before writing (ADR-0016 §6), which
+          // is a `setMeta`. Recording nothing is enough here — the rule itself is
+          // pinned in node-view-connector.test.ts; this stub only has to be a
+          // transaction the connector can talk to.
+          setMeta() {
+            return tr;
+          },
           setNodeMarkup(
             pos: number,
             _type: unknown,

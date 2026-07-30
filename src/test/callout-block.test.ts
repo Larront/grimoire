@@ -11,7 +11,6 @@ import { filterCommands } from "$lib/editor/slash-command";
 import {
   CALLOUT_TYPES,
   calloutHeaderLine,
-  calloutLabel,
   isInitiallyCollapsed,
   recognisedCalloutType,
   titleCaseCalloutType,
@@ -64,19 +63,16 @@ describe("the shipped types", () => {
   });
 });
 
-// ─── The displayed title ──────────────────────────────────────────────────────
+// ─── The fallback title ───────────────────────────────────────────────────────
+//
+// What a callout displays when the GM wrote no title. It is never written to the
+// file, which since #181 is true by construction rather than by care: the node view
+// hands it to the title field as a *placeholder*, so there is no value to commit and
+// no attribute carrying it. These tests are the type-word rule alone.
 
-describe("the displayed title", () => {
-  it("is the title the GM wrote", () => {
-    expect(
-      calloutLabel({ calloutType: "warning", calloutTitle: "The bridge is out", foldMarker: null }),
-    ).toBe("The bridge is out");
-  });
-
-  it("falls back to the type word in title case", () => {
-    expect(calloutLabel({ calloutType: "warning", calloutTitle: null, foldMarker: null })).toBe(
-      "Warning",
-    );
+describe("the fallback title", () => {
+  it("is the type word in title case", () => {
+    expect(titleCaseCalloutType("warning")).toBe("Warning");
   });
 
   it("title-cases each word of a hyphenated type", () => {
@@ -84,19 +80,11 @@ describe("the displayed title", () => {
   });
 
   it("title-cases an unrecognised type the same way", () => {
-    expect(calloutLabel({ calloutType: "prophecy", calloutTitle: null, foldMarker: null })).toBe(
-      "Prophecy",
-    );
+    expect(titleCaseCalloutType("prophecy")).toBe("Prophecy");
   });
 
   it("keeps the GM's casing of a type they shouted", () => {
-    expect(calloutLabel({ calloutType: "WARNING", calloutTitle: null, foldMarker: null })).toBe(
-      "WARNING",
-    );
-  });
-
-  it("is empty for an ordinary quote", () => {
-    expect(calloutLabel({ calloutType: null, calloutTitle: null, foldMarker: null })).toBe("");
+    expect(titleCaseCalloutType("WARNING")).toBe("WARNING");
   });
 });
 
@@ -200,15 +188,13 @@ describe("the callout element", () => {
     expect(rendered).not.toContain("data-callout-known");
   });
 
-  it("shows the type word when the GM wrote no title", () => {
-    expect(html({ calloutType: "read-aloud" })).toContain('data-callout-label="Read Aloud"');
-  });
-
-  it("keeps a displayed-only title out of the title attribute the file round-trips", () => {
+  it("carries no title attribute when the GM wrote none", () => {
+    // The displayed fallback is the node view's placeholder and lives nowhere else
+    // (#181), so there is no attribute here that could be read back as a real title.
     const rendered = html({ calloutType: "warning" });
 
-    expect(rendered).toContain('data-callout-label="Warning"');
     expect(rendered).not.toContain("data-callout-title");
+    expect(rendered).not.toContain("Warning");
   });
 
   it("leaves an ordinary quote an ordinary blockquote", () => {

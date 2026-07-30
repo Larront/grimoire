@@ -118,11 +118,11 @@ export function isInitiallyCollapsed(attrs: Pick<CalloutAttrs, "foldMarker">): b
   return attrs.foldMarker === "-";
 }
 
-/** The text a callout's title bar shows: the GM's title, else the type word. */
-export function calloutLabel(attrs: CalloutAttrs): string {
-  if (attrs.calloutTitle) return attrs.calloutTitle;
-  return attrs.calloutType ? titleCaseCalloutType(attrs.calloutType) : "";
-}
+// There is no `calloutLabel(attrs)` resolving *title else type word* any more. The
+// node view (#181) draws the title as a Linked Text Field whose value is the GM's
+// title and whose **placeholder** is the type word, so the two halves of the old
+// composition now sit either side of the field's own empty state — and the fallback
+// has no path to the file by construction rather than by a caller remembering.
 
 // ─── The header line ──────────────────────────────────────────────────────────
 
@@ -330,6 +330,38 @@ function leaveCalloutBodyTop(editor: Editor): boolean {
   });
 }
 
+/**
+ * Moves the caret out of the callout at `pos`, if it is in there.
+ *
+ * Called as a body is collapsed. The body is real document content, so a caret left
+ * inside a hidden one would type invisibly — an edit to a note the GM cannot see. The
+ * caret goes where the keyboard boundary above sends it, to just before the box: one
+ * idea about leaving a callout, reached by two gestures.
+ *
+ * Nothing here touches the document's content, so a collapse still writes no bytes.
+ */
+function caretOutOfCallout(editor: Editor, getPos: () => number | undefined): void {
+  const pos = getPos();
+  if (pos == null) return;
+
+  const { state } = editor;
+  const callout = state.doc.nodeAt(pos);
+  if (!callout) return;
+
+  // Only this callout's own caret is ours to move. A caret elsewhere in the note — or
+  // in a *different* collapsed box — is none of this view's business.
+  const { from } = state.selection;
+  if (from <= pos || from >= pos + callout.nodeSize) return;
+
+  const target = TextSelection.near(state.doc.resolve(pos), -1);
+  // Nowhere above to land: a callout opening the note, whose body is the only place in
+  // it to type. Leaving the caret alone is the lesser wrong — the GM can expand again,
+  // where dropping them into a paragraph this code invented is a document write.
+  if (target.from > pos) return;
+
+  editor.view.dispatch(state.tr.setSelection(target).scrollIntoView());
+}
+
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const CalloutBlock = Blockquote.extend({
@@ -357,28 +389,30 @@ export const CalloutBlock = Blockquote.extend({
   },
 
   // `data-callout` is Obsidian's own attribute name, so the CSS reads the same in
-  // both tools. Two more attributes are display-only, and deliberately *not* read
-  // back by any `parseHTML`:
+  // both tools. One more attribute is display-only, and deliberately *not* read back
+  // by any `parseHTML`:
   //
-  //   * `data-callout-label` — the title as displayed, an omitted one resolved to
-  //     the type word. If this reached `calloutTitle` a fallback would be written
-  //     into the GM's file.
   //   * `data-callout-known` — present when the type is one of the shipped ten.
   //     Recognition is decided here, against `CALLOUT_TYPES`, so the vocabulary
   //     lives in one place and the case-insensitive match is the one in this
   //     file. The stylesheet then needs a single rule rather than ten, and an
   //     unrecognised type is styled neutrally by simply not matching it.
   //
-  // The title is drawn from an attribute rather than a DOM child so the element
-  // stays a plain `<blockquote>` with one content hole — the node view that turns
-  // the title into a live field, and adds the per-type icon, is the next ticket.
+  // There was a second such attribute, `data-callout-label`, carrying the title as
+  // displayed for the stylesheet's `::before` to draw. Both are gone: the node view
+  // (#181) draws the header, so the only reader disappeared, and an attribute
+  // holding a *resolved fallback* is exactly the kind of thing that later gets read
+  // back into `calloutTitle` and written into a GM's file.
+  //
+  // What is left is a plain `<blockquote>` with one content hole. The node view
+  // draws its own `<blockquote>` inside this element's place, which is why these
+  // attributes are still the ones the stylesheet matches on.
   renderHTML({ node, HTMLAttributes }) {
     const attrs = node.attrs as CalloutAttrs;
     const display = attrs.calloutType
-      ? {
-          "data-callout-label": calloutLabel(attrs),
-          ...(recognisedCalloutType(attrs.calloutType) ? { "data-callout-known": "" } : {}),
-        }
+      ? recognisedCalloutType(attrs.calloutType)
+        ? { "data-callout-known": "" }
+        : {}
       : {};
 
     return [
@@ -484,13 +518,16 @@ export const CalloutBlock = Blockquote.extend({
   // a quote with no type simply draws no header, and its markup stays the ordinary
   // `<blockquote>` the stylesheet already knows.
   addNodeView() {
+    const editor = this.editor;
+
     return createBlockNodeView({
       component: CalloutBlockView,
       mode: "container",
-      props: ({ updateAttributes }) => ({
+      props: ({ getPos, updateAttributes }) => ({
         // A merge, so the type and the fold marker the GM never touched survive an edit
         // to the title. The connector's write-back is what makes that true.
         onTitleCommit: (calloutTitle: string | null) => updateAttributes({ calloutTitle }),
+        onCollapse: () => caretOutOfCallout(editor, getPos),
       }),
     });
   },

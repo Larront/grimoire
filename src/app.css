@@ -526,9 +526,12 @@
   color: var(--callout-accent);
 }
 
+/* Recessive but not faint: DESIGN.md's Sub-AA Exception reserves below-AA contrast
+   for decorative labels and placeholders and prohibits it for interactive elements,
+   and this chevron is the callout's one control. */
 .tiptap .callout-toggle {
   color: var(--callout-accent);
-  opacity: 0.5;
+  opacity: 0.7;
 }
 
 .tiptap .callout-toggle:hover {

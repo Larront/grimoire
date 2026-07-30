@@ -17,19 +17,8 @@
   // before typing into an aside would be absurd. The one piece of chrome that is not a
   // field is the collapse chevron, and collapse is **view state** — it never reaches the
   // file, in either direction. Obsidian's fold marker seeds it and is otherwise a no-op.
-  import {
-    ChevronDown,
-    CircleQuestionMark,
-    Info,
-    Lightbulb,
-    ListChecks,
-    OctagonAlert,
-    Quote,
-    Speech,
-    StickyNote,
-    Swords,
-    TriangleAlert,
-  } from "@lucide/svelte";
+  import { ChevronDown } from "@lucide/svelte";
+  import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { oneLine } from "$lib/editor/labelled-row";
   import {
@@ -39,35 +28,23 @@
     type CalloutAttrs,
   } from "$lib/editor/callout-block";
 
-  // The icons `CALLOUT_TYPES` names, resolved to components — the same shape
-  // SlashCommandMenu uses, because a Lucide import cannot be built from a string.
-  // Only the shipped ten appear here: an unrecognised type is drawn neutrally, and
-  // that includes having no icon.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ICONS: Record<string, any> = {
-    StickyNote,
-    Info,
-    Lightbulb,
-    TriangleAlert,
-    OctagonAlert,
-    CircleQuestionMark,
-    ListChecks,
-    Quote,
-    Speech,
-    Swords,
-  };
-
   let {
     calloutType = null,
     calloutTitle = null,
     foldMarker = null,
     onTitleCommit,
+    onCollapse,
   }: {
     calloutType?: string | null;
     calloutTitle?: string | null;
     foldMarker?: string | null;
     /** The edited title, `null` when the GM cleared it back to nothing. */
     onTitleCommit: (title: string | null) => void;
+    /**
+     * Called as the body is hidden, so the caret is not left inside it. Nothing about
+     * the document changes — this is view state asking the editor to look away.
+     */
+    onCollapse?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -82,7 +59,11 @@
   let collapsed = $state(isInitiallyCollapsed({ foldMarker }));
 
   const known = $derived(recognisedCalloutType(_type));
-  const icon = $derived(known ? ICONS[known.icon] : null);
+
+  // Only a recognised type has an icon: an unrecognised one is drawn neutrally, and
+  // that includes having none. The name comes off `CALLOUT_TYPES`, so the vocabulary
+  // is still declared in exactly one place.
+  const icon = $derived(known ? BLOCK_ICONS[known.icon] : null);
 
   /**
    * What the header shows when the GM wrote no title: the type word in title case.
@@ -93,6 +74,16 @@
    * so a GM can see the box is unnamed and click to name it.
    */
   const fallback = $derived(_type ? titleCaseCalloutType(_type) : "");
+
+  /**
+   * Collapsing hides real document content, so the caret must not still be in it — a
+   * caret inside a hidden body would type invisibly, editing a note the GM cannot see.
+   * Expanding needs no such care.
+   */
+  function toggleCollapsed() {
+    collapsed = !collapsed;
+    if (collapsed) onCollapse?.();
+  }
 
   function setTitle(next: string) {
     // An emptied field is an *absent* title, not an empty one — the header line then
@@ -141,7 +132,7 @@
                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label={collapsed ? "Expand callout" : "Collapse callout"}
         aria-expanded={!collapsed}
-        onclick={() => (collapsed = !collapsed)}
+        onclick={toggleCollapsed}
       >
         <ChevronDown
           size={14}

@@ -433,6 +433,26 @@ describe("nested content is editable in place", () => {
 
     expect(saved(editor)).toBe("> [!encounter] The Ambush\n> - and one with a sling");
   });
+
+  it("takes an edit inside a nested fence's own node view", async () => {
+    // Rendering at depth is half the requirement. This is the other half: the nested
+    // block's own fields are live, so a GM editing a statblock inside
+    // `> [!encounter] The Ambush` is editing it in place, and the bytes that change
+    // are the inner fence's.
+    const md = "> [!encounter] The Ambush\n> ```infobox\n> Population: 4,200\n> ```";
+    const editor = note(md);
+    const value = dom(editor).querySelector<HTMLElement>('[aria-label="Row 1 value"]')!;
+
+    await fireEvent.click(value);
+    await fireEvent.input(dom(editor).querySelector('[aria-label="Row 1 value"]')!, {
+      target: { value: "4,300" },
+    });
+    await fireEvent.blur(dom(editor).querySelector('[aria-label="Row 1 value"]')!);
+
+    expect(saved(editor)).toBe(
+      "> [!encounter] The Ambush\n> ```infobox\n> Population: 4,300\n> ```",
+    );
+  });
 });
 
 // ─── Collapse ─────────────────────────────────────────────────────────────────
@@ -460,6 +480,29 @@ describe("collapsing a callout", () => {
     expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute(
       "hidden",
     );
+  });
+
+  it("takes the caret out of a body it hides", async () => {
+    // The body is real document content, so a caret left inside a hidden one would
+    // type invisibly — an edit to a note the GM cannot see. It leaves the way the
+    // keyboard boundary sends it: to just before the box.
+    const editor = note(`Before the box.\n\n${MD}`);
+    caretAt(editor, bodyStart(editor));
+    expect(caretIn(editor)).toBe("Four goblins.");
+
+    await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
+
+    expect(caretIn(editor)).toBe("Before the box.");
+    expect(saved(editor)).toBe(`Before the box.\n\n${MD}`);
+  });
+
+  it("leaves a caret that was never in the body where it is", async () => {
+    const editor = note(`Before the box.\n\n${MD}`);
+    caretAt(editor, 2);
+
+    await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
+
+    expect(editor.state.selection.from).toBe(2);
   });
 
   it("starts collapsed when the file's fold marker asks for it", () => {

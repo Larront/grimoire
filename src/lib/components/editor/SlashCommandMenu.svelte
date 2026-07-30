@@ -1,55 +1,6 @@
 <script lang="ts">
-  import {
-    Pilcrow,
-    Heading1,
-    Heading2,
-    Heading3,
-    Quote,
-    Code,
-    List,
-    ListOrdered,
-    Minus,
-    Image,
-    Music2,
-    CalendarDays,
-    PanelRight,
-    StickyNote,
-    Info,
-    Lightbulb,
-    TriangleAlert,
-    OctagonAlert,
-    CircleQuestionMark,
-    ListChecks,
-    Speech,
-    Swords,
-  } from "@lucide/svelte";
+  import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ICON_MAP: Record<string, any> = {
-    Pilcrow,
-    Heading1,
-    Heading2,
-    Heading3,
-    Quote,
-    Code,
-    List,
-    ListOrdered,
-    Minus,
-    Image,
-    Music2,
-    CalendarDays,
-    PanelRight,
-    StickyNote,
-    Info,
-    Lightbulb,
-    TriangleAlert,
-    OctagonAlert,
-    CircleQuestionMark,
-    ListChecks,
-    Speech,
-    Swords,
-  };
 
   interface Props {
     state: SlashCommandSuggestionState;
@@ -84,7 +35,7 @@
         {item.group}
       </div>
     {/if}
-    {@const Icon = ICON_MAP[item.icon]}
+    {@const Icon = BLOCK_ICONS[item.icon]}
     <button
       bind:this={itemRefs[i]}
       class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors

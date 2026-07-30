@@ -9,10 +9,13 @@
 // no markup a GM sees beyond the wrapper element, and holds no opinion about how
 // a block looks (ADR-0016 §8).
 //
-// One rule it does *not* yet implement: §6's "every mutation is one undo". No
-// shipped block groups its writes today, and the block that needs it is the one
-// with play-state (#153); when it lands, here is where it belongs.
+// It also implements §6's "every mutation is one undo": a write-back through this
+// connector closes the history group first, so a block's edit is never folded into an
+// adjacent prose edit by `prosemirror-history`'s 500 ms grouping. Written here rather
+// than per block because §6 states it universally — the play-state block (#153) needs
+// it most sharply, and Callout's title field (#181) needs it already.
 import { mount, unmount } from "svelte";
+import { closeHistory } from "@tiptap/pm/history";
 import type { Component } from "svelte";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -40,6 +43,17 @@ export interface BlockNodeViewContext {
   dom: HTMLElement;
   /** Merges `partial` into the node's current attributes and writes it back. */
   updateAttributes: (partial: BlockAttrs) => void;
+  /**
+   * Where this node currently sits, or undefined once it is gone — ProseMirror's own
+   * `getPos`, handed on unchanged.
+   *
+   * A block needs it to reason about its *surroundings* rather than its content: the
+   * Callout moves the caret out of a body it is about to hide (#181), and answering
+   * "is the caret in me, and what is before me?" from the DOM instead would be
+   * archaeology. Reading it is safe; writing through it is what `updateAttributes` is
+   * for.
+   */
+  getPos: () => number | undefined;
 }
 
 /**
@@ -149,6 +163,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
 
     const ctx: BlockNodeViewContext = {
       dom,
+      getPos,
       updateAttributes(partial) {
         const pos = getPos();
         if (pos == null) return;
@@ -162,6 +177,10 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
           const atPos = tr.doc?.nodeAt(pos) ?? null;
           if (atPos && atPos.type !== current.type) return false;
           const attrs = (atPos ?? current).attrs;
+          // ADR-0016 §6: every mutation is one undo. Without this, a write landing
+          // within 500 ms of a prose edit is appended to it, and one Ctrl+Z takes
+          // both back — the block's change *and* the GM's sentence.
+          closeHistory(tr);
           tr.setNodeMarkup(pos, undefined, { ...attrs, ...partial });
           return true;
         });

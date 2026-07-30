@@ -21,6 +21,12 @@ interface RecordedAttrWrite {
   attrs: Record<string, unknown>;
 }
 
+/** One `tr.setMeta` the node view asked for, and whether it preceded the write. */
+interface RecordedMeta {
+  value: unknown;
+  beforeWrite: boolean;
+}
+
 /** The document position the harness reports the node sits at. */
 const NODE_POS = 3;
 
@@ -36,6 +42,7 @@ interface MountedNodeView {
     destroy?: () => void;
   };
   writes: RecordedAttrWrite[];
+  metas: RecordedMeta[];
   nodeType: { name: string };
 }
 
@@ -74,6 +81,7 @@ function mountNodeView(
   nodeAtPos?: (ownType: NodeAtPos["type"]) => NodeAtPos | null,
 ): MountedNodeView {
   const writes: RecordedAttrWrite[] = [];
+  const metas: RecordedMeta[] = [];
   const nodeType = { name: "fixtureBlock" };
   const node = { type: nodeType, attrs };
   const editor = {
@@ -81,6 +89,14 @@ function mountNodeView(
       command(fn: (props: { tr: unknown }) => boolean) {
         const tr = {
           doc: nodeAtPos ? { nodeAt: () => nodeAtPos(nodeType) } : undefined,
+          // `closeHistory(tr)` is a `setMeta` under a private key, so what the stub
+          // records is *that* a meta was set before the markup change — enough to
+          // pin the ordering ADR-0016 §6 needs, without reaching into
+          // prosemirror-history's key.
+          setMeta(_key: unknown, value: unknown) {
+            metas.push({ value, beforeWrite: writes.length === 0 });
+            return tr;
+          },
           setNodeMarkup(
             pos: number,
             _type: unknown,
@@ -97,7 +113,7 @@ function mountNodeView(
 
   const view = (render as TestRenderer)({ node, getPos, editor });
   document.body.appendChild(view.dom);
-  mounted = { view, writes, nodeType };
+  mounted = { view, writes, metas, nodeType };
   return mounted;
 }
 
@@ -165,6 +181,25 @@ describe("node-view connector — attribute write-back", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0].pos).toBe(NODE_POS);
     expect(writes[0].attrs.count).toBe(3);
+  });
+
+  // ADR-0016 §6: every mutation is one undo. `prosemirror-history` groups adjacent
+  // steps inside 500 ms, so without closing the group first a block's write is
+  // appended to whatever prose edit preceded it and one Ctrl+Z takes back both.
+  it("closes the history group before writing, so the change is its own undo step", async () => {
+    const { view, metas, writes } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
+      }),
+      { label: "Ambush", count: 2 },
+    );
+
+    await fireEvent.click(view.dom.querySelector("button") as HTMLElement);
+
+    expect(writes).toHaveLength(1);
+    expect(metas).toHaveLength(1);
+    expect(metas[0].beforeWrite).toBe(true);
   });
 
   // The bug the connector fixes by construction: a block that names two
