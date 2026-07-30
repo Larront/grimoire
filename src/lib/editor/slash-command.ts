@@ -2,13 +2,14 @@ import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import Suggestion from "@tiptap/suggestion";
 import { PluginKey } from "prosemirror-state";
+import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
 import { createBlankEvent } from "./timeline-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SlashCommandItem {
-  group: "Text" | "List" | "Insert";
+  group: "Text" | "List" | "Insert" | "Callout";
   label: string;
   keywords: string[]; // extra search terms beyond label
   icon: string; // lucide icon name — resolved to Component in SlashCommandMenu
@@ -167,6 +168,33 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       }
     },
   },
+  // ── Callout ───────────────────────────────────────────────────────────────
+  // One entry per shipped type (#180). These ten are an *offer*, not the set:
+  // the vocabulary is open, so a GM may write any word as a callout's type and
+  // get a neutrally styled callout. Nothing here validates or autocompletes.
+  //
+  // A callout wraps the paragraph the cursor is already in rather than being
+  // inserted beside it, so the GM lands inside the new aside typing.
+  ...CALLOUT_TYPES.map(
+    (spec): SlashCommandItem => ({
+      group: "Callout",
+      label: spec.label,
+      keywords: [spec.type, ...spec.keywords],
+      icon: spec.icon,
+      command: (editor, range) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .wrapIn("blockquote")
+          .updateAttributes("blockquote", {
+            calloutType: spec.type,
+            calloutTitle: null,
+            foldMarker: null,
+          })
+          .run(),
+    }),
+  ),
 ];
 
 // ─── Filter ───────────────────────────────────────────────────────────────────

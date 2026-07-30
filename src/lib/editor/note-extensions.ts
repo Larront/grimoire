@@ -14,6 +14,7 @@ import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import type { Extensions } from "@tiptap/core";
 
+import { CalloutBlock } from "$lib/editor/callout-block";
 import { ImageBlock } from "$lib/editor/image-block";
 import { SceneBlock } from "$lib/editor/scene-block.svelte";
 import { TimelineBlock } from "$lib/editor/timeline-block";
@@ -38,13 +39,17 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
   return [
     // Blocks first: each one claims its own markdown token before StarterKit's
     // code block claims every fence.
+    CalloutBlock,
     ImageBlock,
     SceneBlock,
     TimelineBlock,
     WikiLink.configure({
       onSuggestion: options.onWikiSuggestion ?? (() => {}),
     }),
-    StarterKit,
+    // Callout *is* the blockquote — the ordinary quote carrying two optional
+    // attributes (#180) — so StarterKit must not register a second one under the
+    // same name. Nothing else about StarterKit changes.
+    StarterKit.configure({ blockquote: false }),
     Markdown,
     SlashCommand.configure({
       onSlashCommand: options.onSlashCommand ?? (() => {}),

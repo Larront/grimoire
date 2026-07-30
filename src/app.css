@@ -444,6 +444,58 @@
   font-style: italic;
 }
 
+/* ── Callouts ──────────────────────────────────────────────────── */
+/*
+  A callout is the ordinary blockquote carrying a type (#180), so it starts by
+  undoing the quote's italic and then paints everything from one accent variable.
+
+  A per-type hue was considered and refused: ten colours is a second palette, and
+  DESIGN.md's One Accent Rule and No Decorative Color Rule both forbid one —
+  "differentiate with shape, icon, or text". So a *recognised* type takes the
+  user's accent and an unrecognised one stays neutral, which is the whole of the
+  distinction Grimoire draws in the file. What tells `warning` from `encounter` is
+  the title word, and — once #181 brings the node view — the per-type icon that
+  `CALLOUT_TYPES` already names. #180's own case for shipping `encounter` was an
+  icon, not a colour.
+
+  Recognition arrives as `data-callout-known`, decided in callout-block.ts against
+  `CALLOUT_TYPES`: one rule here rather than ten selectors restating a vocabulary
+  that lives in TypeScript.
+
+  The title comes from `data-callout-label`, which is display-only and resolves an
+  omitted title to the type word in title case. The document's own title attribute
+  is `data-callout-title`, and stays absent when the GM wrote no title — the
+  displayed fallback must never reach the file. The live title field is #181.
+*/
+.tiptap blockquote[data-callout] {
+  --callout-accent: var(--foreground-muted);
+  border-left: 3px solid var(--callout-accent);
+  border-radius: var(--radius-structural);
+  background: color-mix(in oklab, var(--callout-accent) 8%, transparent);
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0;
+  color: var(--foreground);
+  font-style: normal;
+}
+
+.tiptap blockquote[data-callout-known] {
+  --callout-accent: var(--primary);
+}
+
+.tiptap blockquote[data-callout]::before {
+  content: attr(data-callout-label);
+  display: block;
+  margin-bottom: 0.375rem;
+  font-family: "Metamorphous", serif;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  color: var(--callout-accent);
+}
+
+.tiptap blockquote[data-callout] > :last-child {
+  margin-bottom: 0;
+}
+
 .tiptap hr {
   border: none;
   border-top: 1px solid var(--border);

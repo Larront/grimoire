@@ -12,6 +12,15 @@
     Image,
     Music2,
     CalendarDays,
+    StickyNote,
+    Info,
+    Lightbulb,
+    TriangleAlert,
+    OctagonAlert,
+    CircleQuestionMark,
+    ListChecks,
+    Speech,
+    Swords,
   } from "@lucide/svelte";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 
@@ -29,6 +38,15 @@
     Image,
     Music2,
     CalendarDays,
+    StickyNote,
+    Info,
+    Lightbulb,
+    TriangleAlert,
+    OctagonAlert,
+    CircleQuestionMark,
+    ListChecks,
+    Speech,
+    Swords,
   };
 
   interface Props {
@@ -52,7 +70,9 @@
   role="listbox"
   aria-label="Slash commands"
 >
-  {#each state.items as item, i (item.label)}
+  <!-- Keyed by group and label: "Quote" names both a plain blockquote under Text
+       and a quote callout under Callout, and a label alone would collide. -->
+  {#each state.items as item, i (`${item.group}/${item.label}`)}
     {#if i === 0 || item.group !== state.items[i - 1].group}
       <div
         class="px-3 pt-2.5 pb-0.5 font-heading text-[0.6rem] uppercase tracking-widest

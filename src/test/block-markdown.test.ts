@@ -85,6 +85,234 @@ describe("Timeline claims its fence", () => {
   });
 });
 
+// ─── Callout ──────────────────────────────────────────────────────────────────
+//
+// Callout is not a new node: it is the ordinary blockquote carrying an optional
+// type and title (#180). So every assertion here is about `blockquote` — what
+// makes one a callout is the attributes, and a quote with neither *is* a quote.
+
+describe("Callout is a blockquote with a type", () => {
+  it("reads a header line as a type and a title", () => {
+    const md = "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.";
+    const quote = onlyNode(read(md), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe("warning");
+    expect(quote.attrs?.calloutTitle).toBe("The bridge is out");
+    expect(quote.attrs?.foldMarker).toBe(null);
+  });
+
+  it("keeps the header out of the body", () => {
+    const md = "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.";
+    const quote = onlyNode(read(md), "blockquote");
+
+    expect(quote.content).toHaveLength(1);
+    expect(quote.content?.[0].content?.[0].text).toBe(
+      "The eastern crossing collapsed last winter.",
+    );
+  });
+
+  it("reads a header with no title", () => {
+    const quote = onlyNode(read("> [!warning]\n> Mind the gap."), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe("warning");
+    expect(quote.attrs?.calloutTitle).toBe(null);
+  });
+
+  it("reads a title-only callout, giving its empty body somewhere to type", () => {
+    const quote = onlyNode(read("> [!warning] The bridge is out"), "blockquote");
+
+    expect(quote.attrs?.calloutTitle).toBe("The bridge is out");
+    expect(quote.content).toEqual([{ type: "paragraph", content: [] }]);
+  });
+
+  it("leaves a quote with no header an ordinary quote", () => {
+    const quote = onlyNode(read("> Just a quotation."), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe(null);
+    expect(quote.attrs?.calloutTitle).toBe(null);
+  });
+
+  // The vocabulary is open — a type is a word the GM typed, styled if Grimoire
+  // recognises it and neutrally if not. Nothing here validates or substitutes.
+  it("reads an unrecognised type as itself, not as a default", () => {
+    const quote = onlyNode(read("> [!prophecy] The Ashen King returns"), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe("prophecy");
+    expect(quote.attrs?.calloutTitle).toBe("The Ashen King returns");
+  });
+
+  it("keeps the GM's casing of the type word", () => {
+    expect(onlyNode(read("> [!WaRnInG] Careful"), "blockquote").attrs?.calloutType).toBe(
+      "WaRnInG",
+    );
+  });
+
+  it("reads a fold marker without acting on the file", () => {
+    const quote = onlyNode(read("> [!warning]- The bridge is out\n> Mind the gap."), "blockquote");
+
+    expect(quote.attrs?.foldMarker).toBe("-");
+    expect(quote.attrs?.calloutTitle).toBe("The bridge is out");
+  });
+
+  it("leaves a bracketed phrase in a quote as prose", () => {
+    // A type is one word. `[!not a type]` is text a GM typed, and stays text.
+    const quote = onlyNode(read("> [!not a type] hello"), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe(null);
+  });
+
+  it("leaves a title welded to the marker as prose", () => {
+    // A line is a header only if Grimoire would write it back exactly. Claiming
+    // `[!note]Body` would insert the missing space on the next autosave.
+    const quote = onlyNode(read("> [!note]Body inline"), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe(null);
+  });
+
+  it("leaves a header line further down a quote as prose", () => {
+    const quote = onlyNode(read("> Some prose.\n> [!warning] not a header"), "blockquote");
+
+    expect(quote.attrs?.calloutType).toBe(null);
+  });
+
+  it("leaves a header line with no quote around it as the paragraph it is", () => {
+    // Nothing is banned, because a ban has nowhere to bite: the file is the
+    // store, so a construct Grimoire did not expect must survive being read.
+    const doc = read("[!warning] The bridge is out");
+
+    expect(nodesOfType(doc, "blockquote")).toHaveLength(0);
+    expect(onlyNode(doc, "paragraph").content?.[0].text).toBe("[!warning] The bridge is out");
+  });
+});
+
+describe("Callout round-trips byte for byte", () => {
+  it.each([
+    ["a title", "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter."],
+    ["no title", "> [!warning]\n> Mind the gap."],
+    ["an empty body", "> [!warning]"],
+    ["a title-only callout", "> [!warning] The bridge is out"],
+    ["an unrecognised type", "> [!prophecy] The Ashen King returns\n> Three moons, then ash."],
+    ["mixed casing", "> [!WaRnInG] Careful\n> Mind the gap."],
+    ["a fold marker", "> [!warning]- The bridge is out\n> Mind the gap."],
+    ["a fold marker and no title", "> [!warning]-\n> Mind the gap."],
+    ["an open fold marker", "> [!warning]+ The bridge is out\n> Mind the gap."],
+    ["a hyphenated type", "> [!read-aloud] The Ember Gate\n> The doors stand open."],
+    ["an ordinary quote", "> Just a quotation."],
+    ["a header line outside a quote", "[!warning] The bridge is out"],
+    // A blank line under the header is the GM's, and a load-and-save that grew
+    // one every time would rewrite their file with no user action.
+    ["a blank line under the header", "> [!note] The Ledger\n>\n> Signed in ash."],
+    ["a blank line and several blocks", "> [!note] The Ledger\n>\n> One.\n>\n> Two."],
+    // Lines Grimoire could not write back exactly, and so does not claim.
+    ["a title welded to the marker", "> [!note]Body inline"],
+    ["a title with trailing spaces", "> [!note] Trailing  "],
+    ["a marker with a lone trailing space", "> [!note] "],
+  ])("round-trips %s", (_what, md) => {
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("round-trips two callouts and a quote in one note", () => {
+    const md = [
+      "> [!warning] The bridge is out",
+      "> Mind the gap.",
+      "",
+      "Some prose.",
+      "",
+      "> Just a quotation.",
+      "",
+      "> [!encounter] The Ambush",
+      "> Four goblins.",
+    ].join("\n");
+
+    expect(nodesOfType(read(md), "blockquote")).toHaveLength(3);
+    expect(roundTrip(md)).toBe(md);
+  });
+});
+
+// Nothing is banned inside a callout, because markdown permits any block inside
+// a `>` and the file is the store — a banned construct is never *prevented*,
+// only met on load, where flatten, drop and refuse are all silent corruption.
+
+describe("a callout holds arbitrary block content", () => {
+  const CASES: [string, string][] = [
+    [
+      "two paragraphs",
+      "> [!note] The Ledger\n> First thought.\n>\n> Second thought.",
+    ],
+    [
+      "a bullet list",
+      "> [!encounter] The Ambush\n> Four goblins:\n>\n> - one with a sling\n> - three with knives",
+    ],
+    [
+      "a heading",
+      "> [!note] The Ledger\n> ## The terms\n>\n> Signed in ash.",
+    ],
+    [
+      "a timeline fence",
+      "> [!encounter] The Ambush\n> ```timeline\n> Title: Goblins strike\n> ```",
+    ],
+    [
+      "a timeline fence under a blank line",
+      "> [!encounter] The Ambush\n>\n> ```timeline\n> Title: Goblins strike\n> ```",
+    ],
+    [
+      "a python fence",
+      "> [!note] The Ledger\n> ```python\n> print('hello')\n> ```",
+    ],
+    [
+      "a nested callout",
+      "> [!note] The Ledger\n> > [!warning] The bridge is out\n> > Mind the gap.",
+    ],
+    [
+      "a nested ordinary quote",
+      "> [!note] The Ledger\n> > Someone else said it first.",
+    ],
+    [
+      "a wikilink",
+      "> [!read-aloud] The Ember Gate\n> The road runs on to [[Blackreach]].",
+    ],
+    [
+      "an aligned image",
+      "> [!read-aloud] The Ember Gate\n> ![portrait](images/a.png){align=left width=60%}",
+    ],
+    [
+      "a horizontal rule",
+      "> [!note] The Ledger\n> Before.\n>\n> ---\n>\n> After.",
+    ],
+  ];
+
+  it.each(CASES)("round-trips %s unchanged", (_what, md) => {
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("rejects, flattens and drops nothing", () => {
+    // Read as one document so a block that survives its own case but eats a
+    // neighbour's bytes has nowhere to hide.
+    const md = CASES.map(([, m]) => m).join("\n\n");
+
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("keeps a nested block's own identity", () => {
+    const quote = onlyNode(
+      read("> [!encounter] The Ambush\n> ```timeline\n> Title: Goblins strike\n> ```"),
+      "blockquote",
+    );
+
+    expect(quote.attrs?.calloutType).toBe("encounter");
+    expect(nodesOfType(quote, "timelineBlock")).toHaveLength(1);
+  });
+
+  it("keeps an inner callout's type distinct from its outer one", () => {
+    const quotes = nodesOfType(
+      read("> [!note] The Ledger\n> > [!warning] The bridge is out\n> > Mind the gap."),
+      "blockquote",
+    );
+
+    expect(quotes.map((q) => q.attrs?.calloutType)).toEqual(["note", "warning"]);
+  });
+});
+
 // ─── Depth blindness ──────────────────────────────────────────────────────────
 //
 // The reason this ticket exists (#158): the scan it replaces only ever matched at
