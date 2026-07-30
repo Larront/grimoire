@@ -34,7 +34,12 @@
 //     a paragraph instead.
 import { Blockquote } from "@tiptap/extension-blockquote";
 import { mergeAttributes } from "@tiptap/core";
-import type { JSONContent, MarkdownToken } from "@tiptap/core";
+import type { Editor, JSONContent, MarkdownToken } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
+import type { ResolvedPos } from "@tiptap/pm/model";
+import CalloutBlockView from "$lib/components/editor/CalloutBlockView.svelte";
+import { createBlockNodeView } from "$lib/editor/node-view-connector";
 
 // ─── The type vocabulary ──────────────────────────────────────────────────────
 //
@@ -224,6 +229,107 @@ export function serializeBlockquote(
   return `${header}\n${quoteChildren(content, h)}`;
 }
 
+// ─── Keyboard boundaries ──────────────────────────────────────────────────────
+//
+// The named cost of a non-editable header above an editable body (#181), paid here once
+// so the shipped-block migration and every future container inherit it.
+//
+// The body is ordinary content, so ProseMirror already handles everything *inside* it
+// and everything below it — the boundary that needs help is the top edge, where the
+// header sits. A `contenteditable="false"` element above the caret is somewhere the
+// browser will happily put a caret the document has no position for, and the GM's arrow
+// key then appears to do nothing.
+//
+// Both handlers fire only at the *first* position inside a callout and only for a
+// collapsed selection, so every other keystroke reaches ProseMirror's own defaults
+// untouched. Which position that is comes from ProseMirror rather than from arithmetic
+// about paragraph depths: a caret inside a list inside a callout is at the top of the
+// body just as much as one in a leading paragraph.
+
+/** The innermost callout the caret sits inside, as its depth — or null. */
+function calloutDepth($from: ResolvedPos): number | null {
+  for (let depth = $from.depth; depth >= 1; depth--) {
+    const node = $from.node(depth);
+    if (node.type.name === "blockquote" && node.attrs.calloutType) return depth;
+  }
+  return null;
+}
+
+/** The depth of the callout whose body the caret sits at the very top of, or null. */
+function calloutAtBodyTop(state: EditorState): number | null {
+  const { selection, doc } = state;
+  if (!selection.empty) return null;
+
+  const depth = calloutDepth(selection.$from);
+  if (depth === null) return null;
+
+  const top = TextSelection.near(doc.resolve(selection.$from.start(depth)), 1);
+  return top.from === selection.from ? depth : null;
+}
+
+/**
+ * Moves the caret to just before the callout at `depth`, as a command joining the
+ * editor's own transaction — a keymap handler dispatching a transaction of its own would
+ * have it overwritten by the chain that called it.
+ *
+ * Answers false when there is nowhere above the callout to go: one opening the note, or
+ * one opening another callout's body.
+ */
+function moveCaretBefore(depth: number) {
+  return ({ tr, dispatch }: { tr: Transaction; dispatch?: () => void }): boolean => {
+    const before = tr.selection.$from.before(depth);
+    const target = TextSelection.near(tr.doc.resolve(before), -1);
+    if (target.from >= before) return false;
+
+    if (dispatch) tr.setSelection(target).scrollIntoView();
+    return true;
+  };
+}
+
+/** Whether a callout holds nothing a GM typed — the one empty textblock the schema needs. */
+function hasEmptyBody($from: ResolvedPos, depth: number): boolean {
+  const callout = $from.node(depth);
+  return (
+    callout.childCount === 1 &&
+    callout.firstChild!.isTextblock &&
+    callout.firstChild!.content.size === 0
+  );
+}
+
+/**
+ * Backspace at the top of an **empty** body leaves the callout rather than deleting it.
+ * An empty body is a valid state — a GM titles a box before filling it — and the title
+ * beside it is content they typed, so swallowing the whole callout on one keystroke
+ * would delete what they wrote. Leaving puts them outside it, where ProseMirror's own
+ * backspace selects the node and a second press removes it.
+ *
+ * A body with anything in it is not this case, and falls through to the defaults.
+ *
+ * The key is claimed even when there is nowhere above the box to land. Falling through
+ * there would hand the keystroke to ProseMirror's own backspace, which lifts or removes
+ * the quote and takes the GM's title with it — the corruption this rule exists to
+ * prevent, arriving in the one case the caret has no escape from. Removing such a
+ * callout is a node selection away and never one keystroke.
+ */
+function exitEmptyCallout(editor: Editor): boolean {
+  return editor.commands.command((props) => {
+    const depth = calloutAtBodyTop(props.state);
+    if (depth === null) return false;
+    if (!hasEmptyBody(props.state.selection.$from, depth)) return false;
+
+    moveCaretBefore(depth)(props);
+    return true;
+  });
+}
+
+/** An arrow key at the top of a body moves past the header instead of into it. */
+function leaveCalloutBodyTop(editor: Editor): boolean {
+  return editor.commands.command((props) => {
+    const depth = calloutAtBodyTop(props.state);
+    return depth === null ? false : moveCaretBefore(depth)(props);
+  });
+}
+
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const CalloutBlock = Blockquote.extend({
@@ -356,4 +462,36 @@ export const CalloutBlock = Blockquote.extend({
   },
 
   renderMarkdown: serializeBlockquote,
+
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      Backspace: () => exitEmptyCallout(this.editor),
+      ArrowUp: () => leaveCalloutBodyTop(this.editor),
+      ArrowLeft: () => leaveCalloutBodyTop(this.editor),
+    };
+  },
+
+  // The **container mode** of the shared connector (ADR-0016 §4–5), built against sealed
+  // consumers and executed for real here: the view marks one hole with
+  // `data-node-view-content` and ProseMirror owns everything in it. Nothing node-view
+  // shaped is written in this file — no `contentDOM`, no `stopEvent`, no
+  // `ignoreMutation`. The connector's default event rule is already the one the title
+  // input needs: an event on the block's own chrome is the block's, an event inside the
+  // hole is ProseMirror's.
+  //
+  // The view is mounted for *every* blockquote, because a callout is not a second node —
+  // a quote with no type simply draws no header, and its markup stays the ordinary
+  // `<blockquote>` the stylesheet already knows.
+  addNodeView() {
+    return createBlockNodeView({
+      component: CalloutBlockView,
+      mode: "container",
+      props: ({ updateAttributes }) => ({
+        // A merge, so the type and the fold marker the GM never touched survive an edit
+        // to the title. The connector's write-back is what makes that true.
+        onTitleCommit: (calloutTitle: string | null) => updateAttributes({ calloutTitle }),
+      }),
+    });
+  },
 });
