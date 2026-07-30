@@ -31,6 +31,7 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { api } from "$lib/api";
+  import { portal } from "$lib/utils/portal";
   import type { NoteSearchResult } from "$lib/editor/wiki-link";
   import WikiLinkSuggestion from "$lib/components/editor/WikiLinkSuggestion.svelte";
 
@@ -257,9 +258,14 @@
 {#if suggestion}
   <!-- `mousedown` is swallowed so choosing a note with the pointer does not blur the
        input first — a blur would commit the edit and unmount the dropdown under the
-       click. The dropdown itself is `position: fixed`, so this wrapper adds no box. -->
+       click. The dropdown itself is `position: fixed`, so this wrapper adds no box.
+
+       Portalled to the body because the field is drawn inside the editor, and the
+       prose column is a query container: its layout containment would make it the
+       containing block for a fixed-position descendant, putting a dropdown positioned
+       in viewport coordinates in the wrong place and scrolling it with the prose. -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div onmousedown={(e) => e.preventDefault()}>
+  <div use:portal onmousedown={(e) => e.preventDefault()}>
     <WikiLinkSuggestion
       items={suggestion.items}
       selectedIndex={suggestion.selectedIndex}

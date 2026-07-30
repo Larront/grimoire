@@ -7,6 +7,7 @@
   import { parseWikiTarget, type NoteSearchResult } from "$lib/editor/wiki-link";
   import { notes } from "$lib/stores/notes.svelte";
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
+  import { portal } from "$lib/utils/portal";
   import { FileText, ChevronDown } from "@lucide/svelte";
 
   // Wikilink stub-vs-resolved styling, answered by the Link Resolver — drawing, so
@@ -339,7 +340,11 @@
 </div>
 
 {#if suggestion}
+  <!-- Portalled for the reason LinkedTextField's copy of this is: the prose column is
+       a query container, whose layout containment would otherwise make it the
+       containing block for this `fixed` dropdown. -->
   <div
+    use:portal
     class="fixed z-50 min-w-[240px] max-h-[240px] overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-xl shadow-black/30"
     style="left: {suggestion.x}px; top: {suggestion.y}px;"
     role="listbox"

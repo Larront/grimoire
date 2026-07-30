@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { convertFileSrc } from "@tauri-apps/api/core";
-  import { api } from "$lib/api";
+  import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
+  import { portal } from "$lib/utils/portal";
   import {
     AlignLeft,
     AlignCenter,
@@ -43,8 +43,9 @@
   let _selected = $state(selected);
   let _lightboxOpen = $state(false);
 
-  let imageUrl = $state<string | null>(null);
-  let loadError = $state(false);
+  // The src's resolution, loading and not-found states included — the same helper the
+  // Infobox's thumbnail uses, which is what keeps one race fixed in one place.
+  const file = ledgerImage(() => _src);
   let containerEl: HTMLDivElement | undefined = $state();
 
   export function setAttrs(attrs: {
@@ -63,52 +64,20 @@
     _selected = val;
   }
 
-  $effect(() => {
-    imageUrl = null;
-    loadError = false;
-    api.getImageAbsolutePath(_src)
-      .then((abs) => {
-        imageUrl = convertFileSrc(abs);
-      })
-      .catch(() => {
-        loadError = true;
-      });
-  });
-
   const alignMap: Record<string, string> = {
     left: "flex-start",
     center: "center",
     right: "flex-end",
   };
 
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return {
-      destroy() {
-        node.remove();
-      },
-    };
-  }
-
   function closeLightbox() {
     _lightboxOpen = false;
   }
 
   async function replaceImage() {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({
-      multiple: false,
-      filters: [
-        { name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
-      ],
-    });
-    if (typeof picked !== "string") return;
-    try {
-      const newSrc = await api.copyImageFile(picked);
-      onSrcReplace?.(newSrc);
-    } catch {
-      // mirror other insertion routes: swallow; no node mutation
-    }
+    // A failed copy leaves the node alone, as every other insertion route does.
+    const newSrc = await pickLedgerImage();
+    if (newSrc) onSrcReplace?.(newSrc);
   }
 
   function onBackdropClick(e: MouseEvent) {
@@ -240,14 +209,15 @@
       </div>
     {/if}
 
-    {#if imageUrl}
+    {#if file.url}
       <img
-        src={imageUrl}
+        src={file.url}
         alt={_alt}
         class="block w-full rounded"
         draggable="false"
+        onerror={file.markMissing}
       />
-    {:else if loadError}
+    {:else if file.missing}
       <div
         class="flex flex-col items-center justify-center gap-2 w-full min-h-20 py-3 rounded
                border border-border/60 bg-card text-muted-foreground/60 text-xs font-sans"
@@ -314,7 +284,7 @@
   {/if}
 </div>
 
-{#if _lightboxOpen && imageUrl}
+{#if _lightboxOpen && file.url}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -344,7 +314,7 @@
       onclick={onBackdropClick}
     >
       <img
-        src={imageUrl}
+        src={file.url}
         alt={_alt}
         data-lightbox-img
         class="max-w-none block"

@@ -186,10 +186,33 @@ describe("Infobox claims its fence", () => {
     ["a row labelled Image", "```infobox\nImage: a woodcut of the harbour\n```"],
     ["a value holding a colon", "```infobox\nRuler: Ash, styled: the Grey\n```"],
     ["a title holding a colon", "```infobox\n# Harbor's End: the docks\n```"],
-    ["an unlabelled row", "```infobox\n![The harbour](images/harbor.png)\n```"],
+    ["a thumbnail", "```infobox\n![The harbour](images/harbor.png)\n```"],
+    ["a thumbnail under a title", "```infobox\n# Harbor's End\n![The harbour](images/harbor.png)\n```"],
+    ["a thumbnail with no caption", "```infobox\n![](images/harbor.png)\n```"],
     ["a shielded title-shaped row", "```infobox\n#\n# The docks\n```"],
+    ["a shielded image-shaped row", "```infobox\n![]()\n![a](images/a.png)\n```"],
   ])("round-trips %s byte for byte", (_what, md) => {
     expect(roundTrip(md)).toBe(md);
+  });
+
+  it("reads the thumbnail as the panel's own path, not as an Image node", () => {
+    // Not a composed Image node (#176): the panel carries the path itself, so the
+    // document holds one node rather than a container with a single fixed child.
+    const doc = read("```infobox\n# Harbor's End\n![The harbour](images/harbor.png)\n```");
+    const panel = onlyNode(doc, "infoboxBlock");
+
+    expect(panel.attrs?.image).toBe("images/harbor.png");
+    expect(panel.attrs?.imageAlt).toBe("The harbour");
+    expect(nodesOfType(doc, "image")).toHaveLength(0);
+  });
+
+  it("keeps an image line outside a fence an ordinary Image node", () => {
+    // The claim is the fence's, not the syntax's: the same characters in prose are
+    // still Image's, which is what stops the Infobox's own line being a new grammar.
+    const doc = read("![The harbour](images/harbor.png)");
+
+    expect(nodesOfType(doc, "image")).toHaveLength(1);
+    expect(nodesOfType(doc, "infoboxBlock")).toHaveLength(0);
   });
 
   it("drops the blank lines a GM used as decoration and nothing else", () => {

@@ -767,6 +767,26 @@ mod tests {
     }
 
     #[test]
+    fn extract_wikilinks_reads_an_infobox_caption() {
+        // The thumbnail's alt text doubles as its caption (#176), and it is free text
+        // in a fence like any other — so a link typed into it is filed too, and the
+        // caption is a Linked Text Field for the same reason a label is.
+        let content = "```infobox\n![the docks of [[Captain Ash.md]]](images/ash.png)\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_skips_a_caption_that_opens_with_a_link() {
+        // The one place the caption is not equal to a row, documented rather than
+        // fixed: `![[` is Obsidian's transclusion syntax, so a link at the very start
+        // of a caption is skipped by the embed rule above. Teaching this scan the
+        // difference would mean teaching it the image grammar, which is exactly the
+        // fence-blindness #160 keeps — so a caption may lead with prose instead.
+        let content = "```infobox\n![[[Captain Ash.md]] at the docks](images/ash.png)\n```";
+        assert!(extract_wikilinks(content).is_empty());
+    }
+
+    #[test]
     fn extract_wikilinks_empty_body() {
         assert!(extract_wikilinks("").is_empty());
         assert!(extract_wikilinks("No links here.").is_empty());

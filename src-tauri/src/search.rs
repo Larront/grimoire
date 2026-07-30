@@ -1022,6 +1022,35 @@ mod tests {
     }
 
     #[test]
+    fn body_search_skips_an_infobox_caption_but_keeps_its_rows() {
+        // The Infobox's thumbnail line is `![alt](path)`, and `strip_images` above
+        // removes an image's alt text along with its path — so the one part of a panel
+        // that is *not* searchable is its caption (#176). Pinned here because it is the
+        // single exception to "everything in a fence is findable", and because the row
+        // beside it shows the rule is otherwise intact.
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "The Bay Area", "bay.md");
+        let content =
+            "```infobox\n![The harbour at dusk](images/harbor.png)\nWeather: monsoon\n```";
+        std::fs::write(dir.path().join("bay.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        assert!(
+            search_notes_in_index(&index, dir.path(), "dusk", 10)
+                .unwrap()
+                .is_empty(),
+            "a caption is stripped with the image syntax that carries it"
+        );
+        assert_eq!(
+            search_notes_in_index(&index, dir.path(), "monsoon", 10)
+                .unwrap()
+                .len(),
+            1,
+            "a row beside a thumbnail is still searchable"
+        );
+    }
+
+    #[test]
     fn body_search_finds_a_wikilinked_infobox_row_value() {
         let dir = TempDir::new().unwrap();
         let note = make_note(1, "The Bay Area", "bay.md");

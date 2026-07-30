@@ -325,6 +325,13 @@
 .tiptap {
   line-height: 1.75;
   font-kerning: normal;
+  /* The prose column is a query container, which is what lets a block respond to the
+     width it actually has rather than to the window's (see the Infobox below). It is
+     `.tiptap` and not the pane, because the column is what the GM reads across: the
+     pane's own container query sizes this element, so a threshold read off the pane
+     would jump by ~340px at the point the column stops being pane-width. */
+  container-type: inline-size;
+  container-name: note-column;
 }
 
 /* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
@@ -381,6 +388,11 @@
   color: var(--foreground);
   line-height: 1.25;
   font-weight: 400;
+  /* A heading following a floated Infobox starts below it rather than beside it. The
+     built-in Location template is consecutive `##` headings, so a heading wrapping
+     raggedly into the gutter beside a panel is the common case, not an edge one — a
+     paragraph wrapping around the panel is the whole point and is left alone. */
+  clear: both;
 }
 
 .tiptap h1 {
@@ -530,10 +542,64 @@
   margin-bottom: 0;
 }
 
+/* ── Infobox presentation ──────────────────────────────────────── */
+/*
+  The wiki posture (#176): the panel floats beside the prose where there is room for
+  prose worth reading next to it, and is a full-width stacked panel where there is
+  not. **None of this is in the note.** There is no float, width or alignment
+  attribute anywhere in the fence (#148) — layout is CSS, and floatability belongs to
+  the block type rather than to the instance — so the same panel reads both ways
+  depending only on the space available.
+
+  THE THRESHOLD IS A DERIVATION, NOT A NUMBER. The float earns its place only while
+  *readable* prose fits beside the panel: ~45 characters, which is ~320px at the body
+  size. So 300 (panel) + 24 (gap) + 320 (prose) = 640px. If the body font changes,
+  re-derive it from those three parts rather than nudging the total.
+
+  MEASURED ON THE BLOCK'S OWN COLUMN, NOT THE WINDOW. The container is `.tiptap`, the
+  prose column itself. A note in a half-width pane on an ultrawide has a narrow column
+  inside a huge window, so a media query would float the panel into ~270px of prose —
+  four or five words a line, the panel squashed and the paragraph unreadable at the
+  same time. Accepted consequence, signed off: at the default window size, splitting
+  the view stops every Infobox floating. Ultrawide splits still float. Panels visibly
+  jumping from beside-the-text to full-width on split is this rule working.
+*/
+.tiptap [data-infobox-block] {
+  /* The derivation's two sizes, named once so the thumbnail's cap below cannot drift
+     away from the panel it is a cap on. */
+  --infobox-float-width: 300px;
+  --infobox-float-gap: 24px;
+}
+
+@container note-column (min-width: 640px) {
+  .tiptap [data-infobox-block] {
+    float: right;
+    width: var(--infobox-float-width);
+    margin-left: var(--infobox-float-gap);
+    /* A panel clears any panel already floating. A Location note carries one per
+       district, and two floats side by side would squeeze the prose to a third of the
+       column — the very thing the threshold above exists to prevent. */
+    clear: right;
+  }
+}
+
+/* Stacked, the thumbnail holds its floated size rather than growing with the panel:
+   the panel's floated width less its `px-3` padding either side. These are files a GM
+   dropped in, not hero art — upscaling past the source's pixels goes visibly soft, and
+   a column-wide portrait makes an inline summary the dominant thing on the page. A
+   stacked panel therefore has empty space to its right, which is accepted and rare:
+   unsplit is precisely when it floats. */
+.tiptap .infobox-thumb {
+  max-width: calc(var(--infobox-float-width) - 2 * 0.75rem);
+}
+
 .tiptap hr {
   border: none;
   border-top: 1px solid var(--border);
   margin: 2rem 0;
+  /* Clears a floated Infobox for the headings' reason above: a rule drawn across the
+     prose gutter alone reads as a broken line rather than as a section break. */
+  clear: both;
 }
 
 .tiptap pre {

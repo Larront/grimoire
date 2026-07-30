@@ -6,8 +6,10 @@
 // The Row List's own controls are tested in row-list.test.ts. What these tests assert
 // is that the Infobox is a working consumer of them — which is why the block went
 // first among the new three.
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import InfoboxBlockView from "$lib/components/editor/InfoboxBlockView.svelte";
 import type { Infobox } from "$lib/editor/infobox-block";
 import type { LabelledRow } from "$lib/editor/labelled-row";
@@ -23,10 +25,19 @@ const HARBOR: LabelledRow[] = [
   { label: "Ruler", value: "[[Captain Ash]]" },
 ];
 
-function panel(props: { title?: string; rows?: LabelledRow[] } = {}) {
+function panel(
+  props: { title?: string; image?: string; imageAlt?: string; rows?: LabelledRow[] } = {},
+) {
   const onCommit = vi.fn();
   const rendered = render(InfoboxBlockView, {
-    props: { title: "Harbor's End", rows: HARBOR, onCommit, ...props },
+    props: {
+      title: "Harbor's End",
+      image: "",
+      imageAlt: "",
+      rows: HARBOR,
+      onCommit,
+      ...props,
+    },
   });
   return { ...rendered, onCommit };
 }
@@ -69,6 +80,227 @@ describe("an Infobox draws its facts", () => {
   it("says so when there are no rows yet", () => {
     const { getByText } = panel({ rows: [] });
     expect(getByText("No rows yet")).toBeInTheDocument();
+  });
+});
+
+// ─── The thumbnail ────────────────────────────────────────────────────────────
+//
+// The panel's own ledger-relative path (#176), not a composed Image node — so what
+// these assert is the block drawing an image itself: the resolved file, the alt text
+// standing in as the caption, and a path that resolves to nothing costing the GM the
+// portrait and nothing else.
+
+describe("an Infobox's thumbnail", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(open).mockReset();
+  });
+
+  /** The ledger resolves every path, as it does when the file is really there. */
+  function imagesResolve() {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_image_absolute_path") {
+        return `/ledger/${(args as { relativePath: string }).relativePath}`;
+      }
+      if (cmd === "copy_image_file") return ".grimoire/images/portrait.png";
+      return null;
+    });
+  }
+
+  /** The ledger resolves nothing, as after the GM moved the file in Finder. */
+  function imagesMissing() {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "get_image_absolute_path") throw new Error("not found");
+      if (cmd === "copy_image_file") return ".grimoire/images/portrait.png";
+      return null;
+    });
+  }
+
+  it("draws the image the panel points at", async () => {
+    imagesResolve();
+    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour at dusk" });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image]")).toHaveAttribute(
+        "src",
+        "/ledger/images/harbor.png",
+      );
+    });
+  });
+
+  it("draws the alt text as the visible caption", async () => {
+    imagesResolve();
+    const { getByLabelText } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour at dusk",
+    });
+
+    expect(getByLabelText("Image caption")).toHaveTextContent("The harbour at dusk");
+  });
+
+  it("labels the image with the same text, so it is not caption-only", async () => {
+    imagesResolve();
+    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour at dusk" });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image]")).toHaveAttribute(
+        "alt",
+        "The harbour at dusk",
+      );
+    });
+  });
+
+  it("draws no image at all when the panel has none", () => {
+    imagesResolve();
+    const { container } = panel();
+
+    expect(container.querySelector("[data-infobox-image]")).toBeNull();
+    expect(container.querySelector("[data-infobox-image-missing]")).toBeNull();
+  });
+
+  it("says an unresolvable path is missing rather than breaking the panel", async () => {
+    imagesMissing();
+    const { container, getByLabelText } = panel({
+      image: "images/gone.png",
+      imageAlt: "The harbour",
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image-missing]")).toBeTruthy();
+    });
+    // The rest of the panel is untouched: a missing file costs the portrait only.
+    expect(getByLabelText("Infobox title")).toHaveTextContent("Harbor's End");
+    expect(getByLabelText("Row 1 label")).toHaveTextContent("Population");
+  });
+
+  it("says a file it cannot draw is missing too, not just one it cannot find", async () => {
+    // A path can resolve to a real file the webview still cannot decode — a truncated
+    // copy, or something renamed to `.png`. Watching the path alone would leave the
+    // browser's broken-image glyph in a panel that had said nothing was wrong.
+    imagesResolve();
+    const { container } = panel({ image: "images/truncated.png", imageAlt: "The harbour" });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image]")).toBeTruthy();
+    });
+    await fireEvent.error(container.querySelector("[data-infobox-image]")!);
+
+    expect(container.querySelector("[data-infobox-image]")).toBeNull();
+    expect(container.querySelector("[data-infobox-image-missing]")).toBeTruthy();
+  });
+
+  it("commits an edited caption and nothing else", async () => {
+    imagesResolve();
+    const { getByLabelText, onCommit } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
+
+    await fireEvent.click(getByLabelText("Image caption"));
+    await fireEvent.input(getByLabelText("Image caption"), {
+      target: { value: "The harbour at dusk" },
+    });
+    await fireEvent.blur(getByLabelText("Image caption"));
+
+    expect(committed(onCommit)).toEqual({
+      title: "Harbor's End",
+      image: "images/harbor.png",
+      imageAlt: "The harbour at dusk",
+      rows: HARBOR,
+    });
+  });
+
+  it("adds an image the GM picks, copied into the ledger", async () => {
+    imagesResolve();
+    vi.mocked(open).mockResolvedValue("C:/Users/gm/Pictures/portrait.png");
+    const { getByLabelText, onCommit } = panel();
+
+    await fireEvent.click(getByLabelText("Add image"));
+
+    await waitFor(() => expect(onCommit).toHaveBeenCalled());
+    expect(committed(onCommit).image).toBe(".grimoire/images/portrait.png");
+  });
+
+  it("writes nothing when the GM cancels the file dialog", async () => {
+    imagesResolve();
+    vi.mocked(open).mockResolvedValue(null);
+    const { getByLabelText, onCommit } = panel();
+
+    await fireEvent.click(getByLabelText("Add image"));
+    await Promise.resolve();
+
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("replaces a missing image without touching its caption", async () => {
+    imagesMissing();
+    vi.mocked(open).mockResolvedValue("C:/Users/gm/Pictures/portrait.png");
+    const { container, onCommit } = panel({ image: "images/gone.png", imageAlt: "The harbour" });
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image-replace]")).toBeTruthy();
+    });
+    await fireEvent.click(container.querySelector("[data-infobox-image-replace]")!);
+
+    await waitFor(() => expect(onCommit).toHaveBeenCalled());
+    expect(committed(onCommit).image).toBe(".grimoire/images/portrait.png");
+    expect(committed(onCommit).imageAlt).toBe("The harbour");
+  });
+
+  it("removing the thumbnail takes its caption with it", async () => {
+    // A caption with no image would be a record the fence cannot hold: the image line
+    // is what carries the alt text, so there is nowhere to write it.
+    imagesResolve();
+    const { getByLabelText, onCommit } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
+
+    await fireEvent.click(getByLabelText("Remove image"));
+
+    expect(committed(onCommit).image).toBe("");
+    expect(committed(onCommit).imageAlt).toBe("");
+    expect(committed(onCommit).rows).toEqual(HARBOR);
+  });
+
+  it("keeps the thumbnail when a row changes", async () => {
+    imagesResolve();
+    const { getAllByLabelText, onCommit } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
+
+    await fireEvent.click(getAllByLabelText("Delete row")[0]);
+
+    expect(committed(onCommit).image).toBe("images/harbor.png");
+    expect(committed(onCommit).imageAlt).toBe("The harbour");
+  });
+
+  it("draws the thumbnail in the element the stylesheet caps at its floated size", async () => {
+    // Stacked, the thumbnail holds its floated size rather than growing with the
+    // panel — a stylesheet rule on this hook, asserted in infobox-presentation.test.ts.
+    imagesResolve();
+    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour" });
+
+    expect(container.querySelector(".infobox-thumb")).toBeTruthy();
+  });
+
+  it("redraws its thumbnail from the attributes it is given, as after an undo", async () => {
+    imagesResolve();
+    const { container, component } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
+
+    (component as unknown as { setAttrs: (a: unknown) => void }).setAttrs({
+      title: "Harbor's End",
+      image: "",
+      imageAlt: "",
+      rows: HARBOR,
+    });
+    await waitFor(() => {
+      expect(container.querySelector("[data-infobox-image]")).toBeNull();
+    });
   });
 });
 
@@ -187,7 +419,12 @@ describe("editing an Infobox", () => {
     await fireEvent.input(getByLabelText("Infobox title"), { target: { value: "The Docks" } });
     await fireEvent.blur(getByLabelText("Infobox title"));
 
-    expect(committed(onCommit)).toEqual({ title: "The Docks", rows: HARBOR });
+    expect(committed(onCommit)).toEqual({
+      title: "The Docks",
+      image: "",
+      imageAlt: "",
+      rows: HARBOR,
+    });
   });
 
   it("takes a title the GM adds to a panel that had none", async () => {
@@ -235,6 +472,7 @@ describe("an Infobox has nothing that plays", () => {
 
     expect(labels.sort()).toEqual(
       [
+        "Add image",
         "Add row",
         "Delete row",
         "Infobox title",
@@ -257,6 +495,8 @@ describe("an Infobox follows the document", () => {
 
     (component as unknown as { setAttrs: (a: unknown) => void }).setAttrs({
       title: "The Ember Keep",
+      image: "",
+      imageAlt: "",
       rows: [{ label: "Garrison", value: "40" }],
     });
     await Promise.resolve();
