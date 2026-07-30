@@ -57,7 +57,7 @@ function onlyNode(doc: JSONContent, type: string): JSONContent {
 
 describe("Timeline claims its fence", () => {
   it("reads a timeline fence as a timeline block", () => {
-    const doc = read("```timeline\nDate: 3rd of Frostfall\nTitle: The Shattering\n```");
+    const doc = read("```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```");
 
     expect(onlyNode(doc, "timelineBlock").attrs?.events).toEqual([
       { date: "3rd of Frostfall", title: "The Shattering", description: "" },
@@ -66,19 +66,47 @@ describe("Timeline claims its fence", () => {
   });
 
   it("round-trips a timeline fence byte for byte", () => {
-    const md = "```timeline\nDate: 3rd of Frostfall\nTitle: The Shattering\nThe council voted.\n```";
+    const md =
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\n```";
     expect(roundTrip(md)).toBe(md);
+  });
+
+  it("a two-paragraph description survives a load-and-save cycle", () => {
+    // The corruption the grammar change fixes (#184), asserted where it used to
+    // happen: an autosave rewrites the whole note, and under the old grammar the
+    // blank line between the paragraphs became a record boundary — so this note
+    // came back with a second, untitled event.
+    const md = [
+      "```timeline",
+      "# The Order Takes the Keep",
+      "Date: Year 0",
+      "",
+      "They finished the walls before the first frost.",
+      "",
+      "The library came later, and took nine years.",
+      "```",
+    ].join("\n");
+
+    expect(roundTrip(md)).toBe(md);
+    expect(onlyNode(read(md), "timelineBlock").attrs?.events).toEqual([
+      {
+        date: "Year 0",
+        title: "The Order Takes the Keep",
+        description:
+          "They finished the walls before the first frost.\n\nThe library came later, and took nine years.",
+      },
+    ]);
   });
 
   it("reads two timeline fences in one note", () => {
     const md = [
       "Some prose.",
       "",
-      "```timeline\nTitle: Alpha\n```",
+      "```timeline\n# Alpha\n```",
       "",
       "More prose.",
       "",
-      "```timeline\nTitle: Beta\n```",
+      "```timeline\n# Beta\n```",
     ].join("\n");
 
     expect(nodesOfType(read(md), "timelineBlock")).toHaveLength(2);
@@ -370,11 +398,11 @@ describe("a callout holds arbitrary block content", () => {
     ],
     [
       "a timeline fence",
-      "> [!encounter] The Ambush\n> ```timeline\n> Title: Goblins strike\n> ```",
+      "> [!encounter] The Ambush\n> ```timeline\n> # Goblins strike\n> ```",
     ],
     [
       "a timeline fence under a blank line",
-      "> [!encounter] The Ambush\n>\n> ```timeline\n> Title: Goblins strike\n> ```",
+      "> [!encounter] The Ambush\n>\n> ```timeline\n> # Goblins strike\n> ```",
     ],
     [
       "a python fence",
@@ -416,7 +444,7 @@ describe("a callout holds arbitrary block content", () => {
 
   it("keeps a nested block's own identity", () => {
     const quote = onlyNode(
-      read("> [!encounter] The Ambush\n> ```timeline\n> Title: Goblins strike\n> ```"),
+      read("> [!encounter] The Ambush\n> ```timeline\n> # Goblins strike\n> ```"),
       "blockquote",
     );
 
@@ -441,7 +469,7 @@ describe("a callout holds arbitrary block content", () => {
 // group a fight once Callout ships — rendered as a dead grey code box.
 
 describe("a claim is depth-blind", () => {
-  const NESTED_TIMELINE = "> The Ambush\n>\n> ```timeline\n> Title: Goblins strike\n> ```";
+  const NESTED_TIMELINE = "> The Ambush\n>\n> ```timeline\n> # Goblins strike\n> ```";
   const NESTED_SCENE =
     '> The Ambush\n>\n> <scene-block data-id="7" data-expanded="false"></scene-block>';
   const NESTED_IMAGE = "> Read aloud:\n>\n> ![portrait](images/a.png){align=left width=60%}";
@@ -509,7 +537,7 @@ describe("a block declines what is not its own", () => {
   it("declines a fence whose info string carries more than the block's name", () => {
     // Claiming this and re-emitting ```timeline alone would delete the rest of the
     // GM's info string on the next autosave. Declining keeps every byte.
-    const md = "```timeline extra\nTitle: Goblins strike\n```";
+    const md = "```timeline extra\n# Goblins strike\n```";
 
     expect(nodesOfType(read(md), "timelineBlock")).toHaveLength(0);
     expect(nodesOfType(read(md), "codeBlock")).toHaveLength(1);

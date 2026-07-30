@@ -1,6 +1,7 @@
 <script lang="ts">
   import AppShell from "$lib/components/AppShell.svelte";
   import DbRecoveryDialog from "$lib/components/DbRecoveryDialog.svelte";
+  import FormatMigrationDialog from "$lib/components/FormatMigrationDialog.svelte";
   import ThemeWatcher from "$lib/components/ThemeWatcher.svelte";
   import { Toaster } from "svelte-sonner";
   import { ledger } from "../lib/stores/ledger.svelte";
@@ -63,6 +64,7 @@
      and undo toasts stay clean; see $lib/toast. -->
 <Toaster richColors />
 <DbRecoveryDialog />
+<FormatMigrationDialog />
 
 {#if ledger.isOpen}
   <AppShell />

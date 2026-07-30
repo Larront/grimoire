@@ -120,7 +120,45 @@ export const commands = {
 	getTagUsageCounts: () => __TAURI_INVOKE<TagUsageEntry[]>("get_tag_usage_counts"),
 	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
 	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
+	/**
+	 *  The GM said yes: back the affected notes up, rewrite them, write the report,
+	 *  and open the ledger.
+	 * 
+	 *  The plan is **recomputed here** rather than taken from what the prompt showed
+	 *  — the vault may have changed while the dialog sat on screen, so a stale list
+	 *  can never decide which files are edited (the same rule as
+	 *  `apply_backlink_rewrite`).
+	 * 
+	 *  The vault opens even when some notes could not be rewritten: consent was
+	 *  given and the casualties are named in the returned report. What a partial
+	 *  failure withholds is the *stamp*, so the next open finds the remainder.
+	 */
+	migrateLedgerFormat: (path: string) => __TAURI_INVOKE<MigrateFormatResult>("migrate_ledger_format", { path }),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
+	/**
+	 *  What the consent prompt is built from, or `None` when no pending migration
+	 *  finds work — in which case there is no prompt at all and `open_ledger` will
+	 *  have stamped the vault forward in silence.
+	 * 
+	 *  This is [`crate::format_migration::run`] with the write left off, so the
+	 *  numbers and sentences shown to the GM are the ones the rewrite will use.
+	 */
+	planFormatMigration: (path: string) => __TAURI_INVOKE<{
+	from: number,
+	to: number,
+	/**
+	 *  One sentence per pending migration **that found work**. A migration
+	 *  finding nothing contributes nothing.
+	 */
+	sentences: string[],
+	/**
+	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
+	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
+	 */
+	file_count: number,
+	/**  Warnings the scan produced, each prefixed with the file it came from. */
+	warnings: string[],
+} | null>("plan_format_migration", { path }),
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
 	readTemplate: (path: string) => __TAURI_INVOKE<string>("read_template", { path }),
@@ -219,6 +257,11 @@ export type BacklinkNote = {
 	title: string,
 };
 
+export type FailedFile = {
+	path: string,
+	reason: string,
+};
+
 export type FailedImport = {
 	path: string,
 	reason: string,
@@ -312,6 +355,55 @@ export type MapAnnotation = {
 export type MapSearchResult = {
 	id: number,
 	title: string,
+};
+
+export type MigrateFormatResult = {
+	report: MigrationReport,
+	ledger: OpenLedgerResult,
+};
+
+/**
+ *  What the GM is asked to consent to: assembled from the migrations that found
+ *  work, never written by hand.
+ */
+export type MigrationPlan = {
+	from: number,
+	to: number,
+	/**
+	 *  One sentence per pending migration **that found work**. A migration
+	 *  finding nothing contributes nothing.
+	 */
+	sentences: string[],
+	/**
+	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
+	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
+	 */
+	file_count: number,
+	/**  Warnings the scan produced, each prefixed with the file it came from. */
+	warnings: string[],
+};
+
+/**  What happened, once the GM said yes. */
+export type MigrationReport = {
+	from: number,
+	to: number,
+	/**  Vault-relative paths of the files actually rewritten. */
+	migrated: string[],
+	/**
+	 *  Files that could not be written, with the reason — the casualties the
+	 *  partial-failure path is required to name.
+	 */
+	failed: FailedFile[],
+	warnings: string[],
+	/**  Absolute path of the folder holding the copies made before the rewrite. */
+	backup_dir: string,
+	/**  Absolute path of the markdown report inside it. */
+	report_path: string,
+	/**
+	 *  Whether the vault's format stamp was advanced — false after any failure,
+	 *  which is what makes re-opening find the remainder.
+	 */
+	stamped: boolean,
 };
 
 export type Note = {

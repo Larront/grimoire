@@ -82,51 +82,114 @@ export function renderTimelineText(
   return parts.join("");
 }
 
+// ─── Grammar ──────────────────────────────────────────────────────────────────
+//
+// An event begins at a column-zero `#` heading carrying its title, then an
+// optional `Date:` line, then free description prose in which blank lines are
+// legal. The heading is the record boundary.
+//
+// This replaced a grammar in which `Title:` was a labelled line and *any* blank
+// line ended the record, which meant a hand-authored two-paragraph description
+// was silently split into a second, untitled event on the next autosave (#184).
+// The `#` form also matches Infobox and Statblock, where `#` names the thing.
+// A parser-only fix was available and free; it lost because it leaves the
+// boundary as a special case a GM has to know about.
+//
+// Existing vaults are brought across by the Timeline [[Format Migration]]
+// (`src-tauri/src/format_migration/timeline_v1.rs`), which is this file's old
+// parser followed by this file's new serializer — including the heading escape
+// below, which is why the migration warns about it.
+
+/** A column-zero heading line: `# Title`, or a bare `#` for an untitled event. */
+const HEADING_LINE = /^#(?: (.*))?$/;
+
+/** Drop leading and trailing empty lines, leaving interior blank lines alone. */
+function trimBlankLines(lines: string[]): string[] {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start] === "") start++;
+  while (end > start && lines[end - 1] === "") end--;
+  return lines.slice(start, end);
+}
+
 // ─── Parse ────────────────────────────────────────────────────────────────────
 
 /**
  * Parses the body of a fenced ```timeline block into TimelineEvent records.
- * Records are blank-line-separated. Within a record, the header is the leading
- * lines: an optional "Date: " line followed by the "Title: " line (the order the
- * serializer always emits). The "Title: " line ends the header — every line after
- * it is description, even if it starts with "Date: " or "Title: ", so description
- * content that happens to look like a label round-trips without being clobbered.
+ *
+ * A `Date:` line counts as the date only immediately under the heading — which
+ * is what the blank line the serializer writes between header and description
+ * buys: a description whose first line reads `Date: yesterday` stays prose.
+ * Everything after the header is description, with the blank lines that separate
+ * one record from the next trimmed off the ends.
+ *
+ * Read forgivingly on two points, so a file hand-edited in Obsidian survives:
+ * the blank line under the header is optional, and lines before the first
+ * heading belong to no event and are dropped rather than guessed at.
  */
 export function parseTimelineBody(body: string): TimelineEvent[] {
-  const rawRecords = body.split(/\n\n+/).filter((r) => r.trim());
-  return rawRecords.map((record) => {
-    let date = "";
-    let title = "";
-    let titleSeen = false;
-    const descLines: string[] = [];
+  const events: TimelineEvent[] = [];
+  let current: TimelineEvent | null = null;
+  let descLines: string[] = [];
+  // Whether anything has followed the current event's heading yet — a `Date:`
+  // line is only the date when nothing has.
+  let underHeading = false;
 
-    for (const line of record.split("\n")) {
-      if (!titleSeen && line.startsWith("Date: ")) {
-        date = line.slice(6);
-      } else if (!titleSeen && line.startsWith("Title: ")) {
-        title = line.slice(7);
-        titleSeen = true;
-      } else {
-        descLines.push(line);
-      }
+  const flush = () => {
+    if (current) {
+      current.description = trimBlankLines(descLines).join("\n");
+      events.push(current);
     }
+  };
 
-    return { date, title, description: descLines.join("\n") };
-  });
+  for (const line of body.split("\n")) {
+    const heading = HEADING_LINE.exec(line);
+    if (heading) {
+      flush();
+      current = { date: "", title: heading[1] ?? "", description: "" };
+      descLines = [];
+      underHeading = true;
+      continue;
+    }
+    if (!current) continue;
+    if (underHeading && line.startsWith("Date: ")) {
+      current.date = line.slice(6);
+      underHeading = false;
+      continue;
+    }
+    underHeading = false;
+    descLines.push(line);
+  }
+  flush();
+
+  return events;
 }
 
 // ─── Serialize ────────────────────────────────────────────────────────────────
 
 /**
+ * A description line that is itself a column-zero heading would read back as the
+ * start of a new event, so it gets one leading space. This is the only place the
+ * Timeline format edits what the GM typed rather than Grimoire's own syntax —
+ * hence the [[Format Migration]] raising a warning wherever it has to do it.
+ */
+function escapeHeadingLines(description: string): string {
+  return description
+    .split("\n")
+    .map((line) => (HEADING_LINE.test(line) ? ` ${line}` : line))
+    .join("\n");
+}
+
+/**
  * Serializes an array of TimelineEvents to a fenced ```timeline block.
- * Date and description are omitted when empty; records are blank-line-separated.
+ * Date and description are omitted when empty; a description is separated from
+ * the header by a blank line, and records by a blank line from each other.
  */
 export function serializeTimelineEvents(events: TimelineEvent[]): string {
   const records = events.map((evt) => {
-    const lines: string[] = [];
+    const lines: string[] = [`# ${evt.title}`];
     if (evt.date) lines.push(`Date: ${evt.date}`);
-    lines.push(`Title: ${evt.title}`);
-    if (evt.description) lines.push(evt.description);
+    if (evt.description) lines.push("", escapeHeadingLines(evt.description));
     return lines.join("\n");
   });
   return "```timeline\n" + records.join("\n\n") + "\n```";
@@ -164,7 +227,9 @@ export const TimelineBlock = Node.create({
     return [
       "timeline-block",
       mergeAttributes(
-        { "data-events": encodeURIComponent(JSON.stringify(node.attrs.events)) },
+        {
+          "data-events": encodeURIComponent(JSON.stringify(node.attrs.events)),
+        },
         HTMLAttributes,
       ),
     ];

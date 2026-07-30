@@ -1,5 +1,6 @@
 ﻿mod commands;
 mod db;
+mod format_migration;
 mod format_version;
 mod ledger;
 mod ledger_watch;
@@ -110,7 +111,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_tag_usage_counts,
             list_all_tags,
             list_templates,
+            migrate_ledger_format,
             open_ledger,
+            plan_format_migration,
             read_note_content,
             read_note_tags,
             read_template,
@@ -231,6 +234,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
+            plan_format_migration,
+            migrate_ledger_format,
             rebuild_ledger_db,
             close_ledger,
             get_app_prefs,

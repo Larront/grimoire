@@ -21,14 +21,11 @@
 
 use std::path::{Path, PathBuf};
 
-/// The note format this build of Grimoire reads and writes.
-///
-/// Zero because no [[Format Migration]] has shipped yet, so every vault —
-/// stamped or not — is on format 0 and opens normally. When the first migration
-/// lands this becomes the highest `to_version` in the registry, *derived* from
-/// the array rather than declared beside it, so shipping a migration that never
-/// runs is not something you can forget your way into.
-pub const APP_FORMAT_VERSION: u32 = 0;
+/// The note format this build of Grimoire reads and writes: the highest
+/// `to_version` in the [[Format Migration]] registry, *derived* from the array
+/// rather than declared beside it, so shipping a migration that never runs is not
+/// something you can forget your way into.
+pub const APP_FORMAT_VERSION: u32 = crate::format_migration::target_version();
 
 /// Where the stamp lives. Inside `.grimoire/` because that is Grimoire's own
 /// bookkeeping — writing it is the one thing exempt from the consent rule.
@@ -146,15 +143,31 @@ pub fn gate(vault: u32, app: u32, has_migratable_content: impl FnOnce() -> bool)
     }
 }
 
-/// Does this vault hold content an as-yet-unrun [[Format Migration]] would
-/// rewrite?
+/// Proof that this gate has been satisfied for one open.
 ///
-/// Always false today: no migration has shipped, so nothing on disk is
-/// old-format. The next ticket replaces this with the scan — every migration
-/// above `from` run over every note and template with the write left off —
-/// which is what makes the prompt unable to lie about what it will touch.
-fn has_migratable_content(_ledger_path: &Path, _from: u32) -> bool {
-    false
+/// `finish_open` in `commands/ledger.rs` takes one, so a code path that opens a
+/// ledger has to obtain one, and the only two ways to do that each *name* how the
+/// vault earned its open: the comparison passing ([`enforce_at_open`]) or a
+/// consented migration having just run ([`cleared_by_consented_migration`]).
+/// That is the guarantee, and it is a guarantee about legibility rather than
+/// safety — a future caller can mint the second one; what it cannot do is open a
+/// ledger without saying which of the two it is claiming.
+#[must_use]
+#[derive(Debug)]
+pub struct FormatCleared(());
+
+/// The refusal a vault ahead of this build earns, in one place because two code
+/// paths reach it: the gate at open, and the migration pass refusing to stamp a
+/// vault backwards.
+pub fn ahead_error(vault: u32, app: u32) -> String {
+    format!("ERR_FORMAT_AHEAD: vault notes are on format {vault}, this Grimoire only reads {app}")
+}
+
+/// The vault's notes are on the format after a [[Format Migration]] the GM
+/// consented to, whether or not every file made it (a partial failure **opens**
+/// the vault and names the casualties; the stamp is what stays behind).
+pub fn cleared_by_consented_migration() -> FormatCleared {
+    FormatCleared(())
 }
 
 /// The gate at ledger open.
@@ -163,35 +176,33 @@ fn has_migratable_content(_ledger_path: &Path, _from: u32) -> bool {
 /// its own rather than trusting a separate check command to have run — the
 /// refusal is the safety property, a check would only be the courtesy, and a
 /// future code path that opens without asking meets a locked door.
-pub fn enforce_at_open(ledger_path: &Path) -> Result<(), String> {
+pub fn enforce_at_open(ledger_path: &Path) -> Result<FormatCleared, String> {
     let vault = read_stamp(ledger_path)?;
     let outcome = gate(vault, APP_FORMAT_VERSION, || {
-        has_migratable_content(ledger_path, vault)
+        crate::format_migration::has_work(ledger_path, vault)
     });
 
     act(ledger_path, outcome)
 }
 
-/// Carry out a gate outcome. Split from `enforce_at_open` so the two behind
-/// branches are exercisable while `APP_FORMAT_VERSION` is still 0 and no vault
-/// can be behind.
-fn act(ledger_path: &Path, outcome: FormatGate) -> Result<(), String> {
+/// Carry out a gate outcome. Split from `enforce_at_open` so every branch is
+/// exercisable without arranging a vault on disk for it.
+fn act(ledger_path: &Path, outcome: FormatGate) -> Result<FormatCleared, String> {
     match outcome {
-        FormatGate::Open => Ok(()),
+        FormatGate::Open => Ok(FormatCleared(())),
         FormatGate::StampThenOpen { to } => {
             write_stamp(ledger_path, to)?;
             log::info!("[format_version] stamped vault at note format {to} (nothing to migrate)");
-            Ok(())
+            Ok(FormatCleared(()))
         }
-        // Placeholder for the consent prompt, the backup, the migration pass and
-        // the report — the next ticket. Refusing is the correct behaviour until
-        // then and stays the behaviour on a decline afterwards.
+        // The refusal *is* the prompt's entry point: the frontend recognises this
+        // code, asks `plan_format_migration` what would change, and comes back
+        // through `migrate_ledger_format` on a yes. A decline opens nothing, which
+        // is this same refusal left standing.
         FormatGate::NeedsMigration { from, to } => Err(format!(
             "ERR_FORMAT_MIGRATION_REQUIRED: vault notes are on format {from}, this Grimoire writes {to}"
         )),
-        FormatGate::Ahead { vault, app } => Err(format!(
-            "ERR_FORMAT_AHEAD: vault notes are on format {vault}, this Grimoire only reads {app}"
-        )),
+        FormatGate::Ahead { vault, app } => Err(ahead_error(vault, app)),
     }
 }
 
@@ -348,11 +359,30 @@ mod tests {
     }
 
     #[test]
-    fn an_unstamped_vault_opens_on_a_build_with_no_migrations() {
-        // Absence is 0 and the app is at 0, so this is the equal case — the
-        // vault opens with no dialog and, deliberately, no stamp written.
+    fn an_unstamped_vault_with_no_old_content_opens_and_is_stamped_in_silence() {
+        // Absence is 0, so an empty folder is behind — but the scan finds nothing
+        // to migrate, so it is stamped forward with no dialog. Covers both a
+        // brand-new vault and a foreign Obsidian folder.
         let dir = tempdir().unwrap();
         assert!(enforce_at_open(dir.path()).is_ok());
+        assert_eq!(read_stamp(dir.path()).unwrap(), APP_FORMAT_VERSION);
+    }
+
+    #[test]
+    fn an_unstamped_vault_holding_old_content_does_not_open() {
+        // End to end through the real scan: an old-grammar timeline is what makes
+        // this vault behind-with-work rather than behind-and-empty.
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Chronicle.md"),
+            "```timeline\nTitle: The Shattering\n```",
+        )
+        .unwrap();
+
+        let err = enforce_at_open(dir.path()).expect_err("an un-migrated vault must not open");
+
+        assert!(err.starts_with("ERR_FORMAT_MIGRATION_REQUIRED:"), "err={err}");
+        assert_eq!(read_stamp(dir.path()).unwrap(), 0, "a refusal may not stamp");
     }
 
     #[test]
