@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { ImageBlock, isImageFile, preprocessImageAttrs, serializeImageNode } from "$lib/editor/image-block";
+import { ImageBlock, isImageFile, serializeImageNode } from "$lib/editor/image-block";
 
 function makeFile(name: string, type: string): File {
   return new File([], name, { type });
@@ -24,76 +24,6 @@ describe("isImageFile", () => {
     ["", "noext"],
   ])("rejects %s", (type, name) => {
     expect(isImageFile(makeFile(name, type))).toBe(false);
-  });
-});
-
-// ─── preprocessImageAttrs ────────────────────────────────────────────────────
-
-describe("preprocessImageAttrs", () => {
-  it("no attrs block — returns string unchanged", () => {
-    const md = "![hello](images/portrait.png)";
-    expect(preprocessImageAttrs(md)).toBe(md);
-  });
-
-  it("caption only — no attrs block, returns unchanged", () => {
-    const md = "![portrait of the villain](images/villain.png)";
-    expect(preprocessImageAttrs(md)).toBe(md);
-  });
-
-  it("align only", () => {
-    expect(preprocessImageAttrs("![](images/a.png){align=left}")).toBe(
-      `<img src="images/a.png" alt="" data-align="left" data-width="100%">`,
-    );
-  });
-
-  it("width only", () => {
-    expect(preprocessImageAttrs("![](images/a.png){width=60%}")).toBe(
-      `<img src="images/a.png" alt="" data-align="center" data-width="60%">`,
-    );
-  });
-
-  it("caption + align", () => {
-    expect(preprocessImageAttrs("![portrait](images/a.png){align=right}")).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="right" data-width="100%">`,
-    );
-  });
-
-  it("caption + width", () => {
-    expect(preprocessImageAttrs("![portrait](images/a.png){width=50%}")).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="center" data-width="50%">`,
-    );
-  });
-
-  it("caption + align + width", () => {
-    expect(
-      preprocessImageAttrs("![portrait](images/a.png){align=left width=75%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="left" data-width="75%">`,
-    );
-  });
-
-  it("caption with double-quotes is HTML-escaped", () => {
-    expect(
-      preprocessImageAttrs(`!["ancient" ruin](images/a.png){align=left}`),
-    ).toBe(
-      `<img src="images/a.png" alt="&quot;ancient&quot; ruin" data-align="left" data-width="100%">`,
-    );
-  });
-
-  it("caption with unicode survives", () => {
-    expect(
-      preprocessImageAttrs("![人物の肖像](images/a.png){width=80%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="人物の肖像" data-align="center" data-width="80%">`,
-    );
-  });
-
-  it("caption with parens in alt text survives", () => {
-    expect(
-      preprocessImageAttrs("![café (portrait)](images/a.png){width=80%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="café (portrait)" data-align="center" data-width="80%">`,
-    );
   });
 });
 
@@ -171,44 +101,6 @@ describe("ImageBlock renderMarkdown", () => {
   it("serializes align/width attrs that would otherwise be lost", () => {
     const attrs = { src: "images/a.png", alt: "portrait", align: "left", width: "75%" };
     expect(renderMarkdown!({ attrs })).toBe("![portrait](images/a.png){align=left width=75%}");
-  });
-});
-
-// ─── markdown round-trip ──────────────────────────────────────────────────────
-
-describe("markdown round-trip (serialize → preprocess)", () => {
-  function roundTrip(attrs: { src: string; alt: string | null; align: string; width: string }): string {
-    return preprocessImageAttrs(serializeImageNode({ attrs }));
-  }
-
-  it("caption + align + width", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "portrait", align: "left", width: "75%" })).toBe(
-      '<img src="images/a.png" alt="portrait" data-align="left" data-width="75%">',
-    );
-  });
-
-  it("align only", () => {
-    expect(roundTrip({ src: "images/a.png", alt: null, align: "right", width: "100%" })).toBe(
-      '<img src="images/a.png" alt="" data-align="right" data-width="100%">',
-    );
-  });
-
-  it("caption only — preprocessor is a no-op (no attrs block)", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "portrait", align: "center", width: "100%" })).toBe(
-      "![portrait](images/a.png)",
-    );
-  });
-
-  it("no attrs, no caption — preprocessor is a no-op", () => {
-    expect(roundTrip({ src: "images/a.png", alt: null, align: "center", width: "100%" })).toBe(
-      "![](images/a.png)",
-    );
-  });
-
-  it("unicode caption + align", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" })).toBe(
-      '<img src="images/a.png" alt="人物の肖像" data-align="left" data-width="60%">',
-    );
   });
 });
 

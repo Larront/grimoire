@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   parseTimelineBody,
   serializeTimelineEvents,
-  preprocessTimelineBlocks,
   createBlankEvent,
   insertEventAt,
   moveEventUp,
@@ -196,65 +195,21 @@ describe("serializeTimelineEvents", () => {
   });
 });
 
-// ─── preprocessTimelineBlocks ─────────────────────────────────────────────────
+// ─── Round-trip (serialize → parse) ──────────────────────────────────────────
+//
+// Timeline's parser is handed a fence body, because stripping the fence is the
+// markdown reader's job and not this block's (ADR-0016 §3). The helper below
+// stands in for that step; block-markdown.test.ts covers the real reader,
+// including a fence nested inside a blockquote.
 
-describe("preprocessTimelineBlocks", () => {
-  it("converts a fenced timeline block to a timeline-block element", () => {
-    const md = "```timeline\nTitle: The Shattering\n```";
-    const result = preprocessTimelineBlocks(md);
-    expect(result).toContain("<timeline-block");
-    expect(result).toContain("data-events=");
-    expect(result).not.toContain("```timeline");
-  });
-
-  it("leaves non-timeline fences unchanged", () => {
-    const md = "```javascript\nconsole.log('hi');\n```";
-    expect(preprocessTimelineBlocks(md)).toBe(md);
-  });
-
-  it("leaves plain text unchanged", () => {
-    const md = "# Hello\n\nSome paragraph.";
-    expect(preprocessTimelineBlocks(md)).toBe(md);
-  });
-
-  it("the encoded events survive decode and parse correctly", () => {
-    const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "" },
-    ];
-    const md = serializeTimelineEvents(events);
-    const html = preprocessTimelineBlocks(md);
-
-    // Extract data-events value
-    const match = html.match(/data-events="([^"]+)"/);
-    expect(match).not.toBeNull();
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual(events);
-  });
-
-  it("handles multiple timeline blocks in one document", () => {
-    const md = [
-      "Some prose.",
-      "",
-      "```timeline\nTitle: Alpha\n```",
-      "",
-      "More prose.",
-      "",
-      "```timeline\nTitle: Beta\n```",
-    ].join("\n");
-    const result = preprocessTimelineBlocks(md);
-    expect(result.match(/<timeline-block/g)).toHaveLength(2);
-  });
-});
-
-// ─── Round-trip (serialize → preprocess → parse) ─────────────────────────────
+/** The body of a one-fence markdown string, as the reader would hand it over. */
+function fenceBody(md: string): string {
+  return md.replace(/^```timeline\n/, "").replace(/\n```$/, "");
+}
 
 describe("round-trip", () => {
   function roundTrip(events: TimelineEvent[]): TimelineEvent[] {
-    const md = serializeTimelineEvents(events);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    if (!match) throw new Error("no data-events in html");
-    return JSON.parse(decodeURIComponent(match[1]));
+    return parseTimelineBody(fenceBody(serializeTimelineEvents(events)));
   }
 
   it("title only", () => {
@@ -306,10 +261,7 @@ describe("round-trip", () => {
       { date: "", title: "Midwinter March", description: "" },
     ];
     const md1 = serializeTimelineEvents(events);
-    const parsed = parseTimelineBody(
-      md1.replace(/^```timeline\n/, "").replace(/\n```$/, ""),
-    );
-    const md2 = serializeTimelineEvents(parsed);
+    const md2 = serializeTimelineEvents(parseTimelineBody(fenceBody(md1)));
     expect(md2).toBe(md1);
   });
 
@@ -426,14 +378,10 @@ describe("insertEventAt", () => {
     expect(original).toHaveLength(2);
   });
 
-  it("insert-at-index round-trips through serialize → preprocess correctly", () => {
-    const events = [alpha, gamma];
-    const result = insertEventAt(events, 1, beta);
-    const md = serializeTimelineEvents(result);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual([alpha, beta, gamma]);
+  it("insert-at-index round-trips through serialize → parse correctly", () => {
+    const result = insertEventAt([alpha, gamma], 1, beta);
+    const parsed = parseTimelineBody(fenceBody(serializeTimelineEvents(result)));
+    expect(parsed).toEqual([alpha, beta, gamma]);
   });
 });
 
@@ -468,14 +416,10 @@ describe("moveEventUp", () => {
     expect(original[1]).toEqual(beta);
   });
 
-  it("adjacent swap round-trips through serialize → preprocess correctly", () => {
-    const events = [alpha, beta, gamma];
-    const result = moveEventUp(events, 1);
-    const md = serializeTimelineEvents(result);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual([beta, alpha, gamma]);
+  it("adjacent swap round-trips through serialize → parse correctly", () => {
+    const result = moveEventUp([alpha, beta, gamma], 1);
+    const parsed = parseTimelineBody(fenceBody(serializeTimelineEvents(result)));
+    expect(parsed).toEqual([beta, alpha, gamma]);
   });
 });
 

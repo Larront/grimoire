@@ -1,22 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { StarterKit } from "@tiptap/starter-kit";
-  import { Markdown } from "@tiptap/markdown";
   import { api } from "$lib/api";
 
+  import { noteExtensions } from "$lib/editor/note-extensions";
+  import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
   import {
-    ImageBlock,
-    preprocessImageAttrs,
-    insertImageFromHandle,
-    isImageFile,
-  } from "$lib/editor/image-block";
-  import { SceneBlock } from "$lib/editor/scene-block.svelte";
-  import { TimelineBlock, preprocessTimelineBlocks } from "$lib/editor/timeline-block";
-  import { SlashCommand } from "$lib/editor/slash-command";
-  import {
-    WikiLink,
-    preprocessWikiLinks,
     wikiBrokenLinkKey,
     parseWikiTarget,
     stripWikiFragment,
@@ -104,28 +93,20 @@
   }
 
   onMount(() => {
-    const preprocessed = preprocessWikiLinks(preprocessImageAttrs(preprocessTimelineBlocks(initialContent)));
-
     editor = new Editor({
       element,
-      extensions: [
-        StarterKit,
-        Markdown,
-        ImageBlock,
-        SceneBlock,
-        TimelineBlock,
-        SlashCommand.configure({
-          onSlashCommand: (state) => {
-            slashState = state;
-          },
-        }),
-        WikiLink.configure({
-          onSuggestion: (state) => {
-            wikiState = state;
-          },
-        }),
-      ],
-      content: preprocessed,
+      // Every block reads its own markdown (ADR-0016 §3), so the note's text goes
+      // to the editor exactly as it sits on disk — there is nothing left to
+      // rewrite on the way in.
+      extensions: noteExtensions({
+        onSlashCommand: (state) => {
+          slashState = state;
+        },
+        onWikiSuggestion: (state) => {
+          wikiState = state;
+        },
+      }),
+      content: initialContent,
       contentType: "markdown",
       onUpdate: () => {
         docVersion++;

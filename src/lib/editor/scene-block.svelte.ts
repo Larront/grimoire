@@ -2,6 +2,31 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import SceneBlockView from "$lib/components/editor/SceneBlockView.svelte";
 import { createBlockNodeView } from "$lib/editor/node-view-connector";
 
+// ─── Reading a scene-block tag ────────────────────────────────────────────────
+//
+// Scene's on-disk form is still an HTML tag: the ` ```scene ` fence carrying the
+// id *and* the scene's name is the vault migration's change, behind the ledger
+// format version stamp. What this file owns is the two readers below, which the
+// element path and the markdown path share so they cannot drift apart.
+
+/** The scene a tag references, or null when it references none. */
+function readSceneId(el: Element): number | null {
+  const raw = (el as HTMLElement).dataset.id;
+  if (!raw) return null;
+  const n = Number(raw);
+  return isNaN(n) ? null : n;
+}
+
+function readExpanded(el: Element): boolean {
+  return (el as HTMLElement).dataset.expanded === "true";
+}
+
+/**
+ * A `<scene-block …>` tag on its own, and nothing else — paired as Grimoire
+ * writes it, or self-closing as a GM may have hand-written it.
+ */
+const SCENE_TAG_RE = /^\s*<scene-block\b[^>]*(?:\/>|>\s*<\/scene-block>)\s*$/i;
+
 export const SceneBlock = Node.create({
   name: "sceneBlock",
   group: "block",
@@ -11,16 +36,11 @@ export const SceneBlock = Node.create({
     return {
       sceneId: {
         default: null,
-        parseHTML: (el) => {
-          const raw = (el as HTMLElement).dataset.id;
-          if (!raw) return null;
-          const n = Number(raw);
-          return isNaN(n) ? null : n;
-        },
+        parseHTML: readSceneId,
       },
       expanded: {
         default: false,
-        parseHTML: (el) => (el as HTMLElement).dataset.expanded === "true",
+        parseHTML: readExpanded,
       },
     };
   },
@@ -40,6 +60,25 @@ export const SceneBlock = Node.create({
         HTMLAttributes,
       ),
     ];
+  },
+
+  // Scene's declaration to the markdown reader. Its own form is not a fence, so
+  // it claims the HTML token instead — and only when that token is a scene-block
+  // tag and nothing else, so a GM's hand-written HTML still reaches the reader's
+  // general HTML handling untouched.
+  markdownTokenName: "html",
+
+  parseMarkdown: (token) => {
+    const raw = String(token.raw ?? token.text ?? "");
+    if (!SCENE_TAG_RE.test(raw)) return [];
+    const holder = document.createElement("div");
+    holder.innerHTML = raw.trim();
+    const el = holder.firstElementChild;
+    if (!el) return [];
+    return {
+      type: "sceneBlock",
+      attrs: { sceneId: readSceneId(el), expanded: readExpanded(el) },
+    };
   },
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField

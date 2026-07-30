@@ -4,6 +4,7 @@ import {
   createBlockNodeView,
   type BlockView,
 } from "$lib/editor/node-view-connector";
+import { fenceInfo } from "$lib/editor/fence-claim";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -152,23 +153,6 @@ export function serializeTimelineEvents(events: TimelineEvent[]): string {
   return "```timeline\n" + records.join("\n\n") + "\n```";
 }
 
-// ─── Preprocessor ────────────────────────────────────────────────────────────
-
-const TIMELINE_FENCE_RE = /```timeline\n([\s\S]*?)\n```/g;
-
-/**
- * Converts fenced ```timeline blocks in a markdown string to
- * <timeline-block data-events="..."> HTML elements so TipTap's HTML parser
- * can pick them up via parseHTML(). Called before passing content to the editor.
- */
-export function preprocessTimelineBlocks(markdown: string): string {
-  return markdown.replace(TIMELINE_FENCE_RE, (_, body: string) => {
-    const events = parseTimelineBody(body);
-    const encoded = encodeURIComponent(JSON.stringify(events));
-    return `<timeline-block data-events="${encoded}"></timeline-block>`;
-  });
-}
-
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const TimelineBlock = Node.create({
@@ -206,6 +190,19 @@ export const TimelineBlock = Node.create({
       ),
     ];
   },
+
+  // Timeline's declaration to the markdown reader: a fenced code token whose
+  // language is `timeline` is one of these, at any nesting depth. Anything else
+  // is declined with `[]` and stays whatever the reader makes of it.
+  markdownTokenName: "code",
+
+  parseMarkdown: (token) =>
+    fenceInfo(token) === "timeline"
+      ? {
+          type: "timelineBlock",
+          attrs: { events: parseTimelineBody(token.text ?? "") },
+        }
+      : [],
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: { attrs: { events: TimelineEvent[] } }) {
