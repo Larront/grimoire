@@ -13,111 +13,34 @@
 // mounted on its own has no document to be right about.
 import { fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { Editor } from "@tiptap/core";
-import { TextSelection } from "@tiptap/pm/state";
-import { noteExtensions } from "$lib/editor/note-extensions";
+import type { Editor } from "@tiptap/core";
+import {
+  bodyStart,
+  caretAt,
+  caretIn,
+  closeNote,
+  dom,
+  note,
+  press,
+  saved,
+} from "./fixtures/note-editor";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
   linkResolver: { isKnown: () => true, prime: vi.fn(), resolve: vi.fn() },
 }));
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
+//
+// The editor itself is `fixtures/note-editor.ts`, shared with the encounter-grouping
+// tests (#182). What is local here is the one selector only a callout has.
 
-// jsdom has no layout, and ProseMirror asks the DOM where the selection is whenever it
-// scrolls it into view — which an undo and a gap-cursor arrow key both do. A text node
-// has no `getClientRects` in jsdom at all, so these stand in with a zero rect: nothing
-// under test here depends on a coordinate, only on not throwing on the way past.
-const ZERO_RECT = {
-  top: 0,
-  bottom: 0,
-  left: 0,
-  right: 0,
-  width: 0,
-  height: 0,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
-const zeroRects = () =>
-  Object.assign([ZERO_RECT], {
-    item: (i: number) => (i === 0 ? ZERO_RECT : null),
-  }) as unknown as DOMRectList;
-
-// `Text` genuinely has no `getClientRects` in the DOM types either — the stub is the
-// point, so the cast says so rather than pretending the property was always there.
-(Text.prototype as unknown as { getClientRects: () => DOMRectList }).getClientRects =
-  zeroRects;
-Element.prototype.getClientRects = zeroRects;
-Range.prototype.getClientRects = zeroRects;
-Range.prototype.getBoundingClientRect = () => ZERO_RECT;
-
-let open: { editor: Editor; element: HTMLElement } | null = null;
-
-afterEach(() => {
-  open?.editor.destroy();
-  open?.element.remove();
-  open = null;
-});
-
-/** A note's markdown, in an editor whose node views are mounted. */
-function note(markdown: string): Editor {
-  const element = document.createElement("div");
-  document.body.appendChild(element);
-  const editor = new Editor({
-    element,
-    extensions: noteExtensions(),
-    content: markdown,
-    contentType: "markdown",
-  });
-  open = { editor, element };
-  return editor;
-}
-
-/** The note as it would be written back to disk — what an autosave does. */
-function saved(editor: Editor): string {
-  return editor.getMarkdown().trimEnd();
-}
-
-/** The editor's DOM, for asking what the GM can see and click. */
-function dom(editor: Editor): HTMLElement {
-  return editor.view.dom as HTMLElement;
-}
+afterEach(closeNote);
 
 function titleField(editor: Editor, index = 0): HTMLElement {
   const fields = dom(editor).querySelectorAll<HTMLElement>(
     '[aria-label="Callout title"]',
   );
   return fields[index];
-}
-
-/** Puts the caret at a document position, as a click or an arrow key would. */
-function caretAt(editor: Editor, pos: number) {
-  const { state } = editor;
-  editor.view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, pos)));
-}
-
-/**
- * A key, pressed on the editor the way a GM presses it. Deliberately a real event on
- * the editor's own DOM rather than `keyboardShortcut()`: that command replays only a
- * handler's document *steps*, so a boundary whose whole job is to move the caret would
- * report success and change nothing. What is asserted below is always the outcome.
- */
-function press(editor: Editor, key: string) {
-  fireEvent.keyDown(editor.view.dom, { key });
-}
-
-/** The textblock the caret is in, by its text — where a boundary left the GM. */
-function caretIn(editor: Editor): string {
-  return editor.state.selection.$from.parent.textContent;
-}
-
-/** The first caret position inside a quote's body — the nth quote in the note. */
-function bodyStart(editor: Editor, index = 0): number {
-  const quotes: number[] = [];
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === "blockquote") quotes.push(pos);
-  });
-  return TextSelection.near(editor.state.doc.resolve(quotes[index] + 1), 1).from;
 }
 
 // ─── The body is ProseMirror's ────────────────────────────────────────────────
