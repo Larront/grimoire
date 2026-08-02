@@ -27,29 +27,41 @@
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
   
+  // `sceneName` is accepted and never read, and that is the decision rather than an
+  // oversight (#185): the name in the file is a copy the database owns, and a stale
+  // copy *lies*. Every name on screen below comes from the store, so the cached one
+  // has no path to being believed — it is declared here only because the node view
+  // hands a block all of its attributes, and a prop this view silently swallowed
+  // would be one a later reader could start reading.
   let {
     sceneId,
-    expanded,
+    sceneName: _cachedName,
     onUpdate,
   }: {
     sceneId: number | null;
-    expanded: boolean;
-    onUpdate: (attrs: { sceneId: number | null; expanded: boolean }) => void;
+    sceneName?: string;
+    onUpdate: (attrs: { sceneId: number | null; sceneName: string }) => void;
   } = $props();
 
-  // Internal copies updated by setAttrs() on undo/redo
+  // Internal copy updated by setAttrs() on undo/redo
   // svelte-ignore state_referenced_locally
   let _sceneId = $state(sceneId);
-  // svelte-ignore state_referenced_locally
-  let _expanded = $state(expanded);
 
-  export function setAttrs(attrs: {
-    sceneId: number | null;
-    expanded: boolean;
-  }) {
+  export function setAttrs(attrs: { sceneId: number | null }) {
     _sceneId = attrs.sceneId;
-    _expanded = attrs.expanded;
   }
+
+  // Whether the mixer panel is open. View state, and it stays that way (#185):
+  // it used to be an `expanded` attribute written into the note, which is UI state
+  // persisted into the GM's file — ADR-0016 §6 forbids it, and it meant collapsing
+  // a mixer was an edit that synced to every other machine.
+  let expanded = $state(false);
+
+  // The name written back beside the id, so the fence stays legible in Obsidian.
+  // Only ever the *live* name from the store; the copy in the file is never read
+  // back as authority.
+  const cachedName = (id: number) =>
+    scenes.scenes.find((s) => s.id === id)?.name ?? "";
 
   // ── Placeholder search ────────────────────────────────────────────────────
 
@@ -61,7 +73,7 @@
   );
 
   function selectScene(id: number) {
-    onUpdate({ sceneId: id, expanded: false });
+    onUpdate({ sceneId: id, sceneName: cachedName(id) });
   }
 
   async function createNewScene() {
@@ -69,7 +81,7 @@
       const trimmed = searchQuery.trim();
       const name = trimmed || "New Scene";
       const scene = await scenes.createScene(name);
-      onUpdate({ sceneId: scene.id, expanded: false });
+      onUpdate({ sceneId: scene.id, sceneName: scene.name });
       searchQuery = "";
     } catch (e) {
       console.error("create scene failed:", e);
@@ -152,11 +164,11 @@
   }
 
   function unbindScene() {
-    onUpdate({ sceneId: null, expanded: false });
+    onUpdate({ sceneId: null, sceneName: "" });
   }
 
   function toggleExpanded() {
-    onUpdate({ sceneId: _sceneId, expanded: !_expanded });
+    expanded = !expanded;
   }
 
   // ── Master volume ─────────────────────────────────────────────────────────
@@ -485,10 +497,10 @@
         onclick={toggleExpanded}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
                hover:bg-muted transition-colors"
-        aria-label={_expanded ? "Collapse mixer" : "Expand mixer"}
-        aria-expanded={_expanded}
+        aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
+        aria-expanded={expanded}
       >
-        {#if _expanded}
+        {#if expanded}
           <ChevronUp class="size-3.5 text-muted-foreground" />
         {:else}
           <ChevronDown class="size-3.5 text-muted-foreground" />
@@ -499,7 +511,7 @@
     <!-- Expandable mixer panel — grid-rows slide (snaps under reduced-motion) -->
     <div
       class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
-      style="grid-template-rows: {_expanded ? '1fr' : '0fr'}"
+      style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
     >
       <div class="min-h-0">
         <div class="border-t border-border/50 px-1 py-1">

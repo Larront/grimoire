@@ -29,9 +29,15 @@ This sample world shows what a populated Grimoire ledger looks like. Explore it 
 
 Scenes layer a music bed under an ambience loop and play them together. Press play — then expand the mixer to balance each layer.
 
-<scene-block data-id="1" data-expanded="true"></scene-block>
+```scene
+# Boss Battle
+Id: 1
+```
 
-<scene-block data-id="2" data-expanded="false"></scene-block>
+```scene
+# Town Market
+Id: 2
+```
 
 You can drop a scene into any note this way, or manage them all from the **Scenes** tab.
 

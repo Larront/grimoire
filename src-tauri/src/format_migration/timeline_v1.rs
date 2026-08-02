@@ -23,14 +23,17 @@
 //! new-format one is not optional: a partial failure means the next run scans a
 //! vault where some files are *already* migrated.
 
-use super::Rewrite;
+use super::{MigrationContext, Rewrite};
 
 /// Rewrite every old-format ` ```timeline ` fence in a note's text.
 ///
 /// `None` means untouched — no timeline fences, or every one of them already on
 /// the new grammar. Fence lines themselves are never rewritten, so a `~~~` fence
 /// or one indented inside a callout keeps the characters the GM used.
-pub fn apply(text: &str) -> Option<Rewrite> {
+///
+/// The context is unused: this rewrite is a function of the text alone, which is
+/// what every migration was until Scene's needed a scene's name (#185).
+pub fn apply(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut out: Vec<String> = Vec::with_capacity(lines.len());
     let mut warnings: Vec<String> = Vec::new();
@@ -305,6 +308,12 @@ fn migrate_body(body: &[&str]) -> Option<(Vec<String>, Vec<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The transform, given the context it ignores. Shadows `super::apply` so every
+    /// assertion below reads as the text-in, text-out function this migration is.
+    fn apply(text: &str) -> Option<Rewrite> {
+        super::apply(text, &MigrationContext::empty())
+    }
 
     fn migrated(text: &str) -> String {
         apply(text).expect("expected a rewrite").text

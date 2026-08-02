@@ -74,7 +74,7 @@ pub fn open_ledger(
     // the last known-good snapshot when one exists (the damaged file is kept
     // aside), otherwise ERR_DB_CORRUPT sends the frontend to the rebuild
     // dialog — real scene/pin loss is never silently accepted.
-    let (conn, recovered) = match db::open_validated_connection(&ledger_path) {
+    let (mut conn, recovered) = match db::open_validated_connection(&ledger_path) {
         Ok(conn) => (conn, None),
         Err(db::DbOpenError::Corrupt(detail)) => {
             log::warn!("[open_ledger] database failed validation: {detail}");
@@ -98,7 +98,13 @@ pub fn open_ledger(
     // ERR_FORMAT_MIGRATION_REQUIRED and the frontend takes over: it asks
     // `plan_format_migration` what would change, and a yes comes back through
     // `migrate_ledger_format`. A decline leaves this refusal standing.
-    let cleared = crate::format_version::enforce_at_open(&ledger_path)?;
+    //
+    // The scan's context is read from the database opened above — Scene's rewrite
+    // needs scene names, which no amount of reading a note can supply.
+    let cleared = crate::format_version::enforce_at_open(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )?;
 
     finish_open(path, ledger_path, conn, recovered, &app, &ledger, cleared)
 }
@@ -112,7 +118,15 @@ pub fn open_ledger(
 #[tauri::command]
 #[specta::specta]
 pub fn plan_format_migration(path: String) -> Result<Option<MigrationPlan>, String> {
-    crate::format_migration::plan(&PathBuf::from(path))
+    let ledger_path = PathBuf::from(path);
+    // Its own connection, because this command is reached from a *refused* open and
+    // therefore holds nothing: the ledger state has no database on it. `open_ledger`
+    // got this far, so the database opens.
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    crate::format_migration::plan(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )
 }
 
 /// The GM said yes: back the affected notes up, rewrite them, write the report,
@@ -140,8 +154,9 @@ pub fn migrate_ledger_format(
     // discovers the database is unopenable. Then the notes — before the reconcile
     // and the index walk inside `finish_open` see them, and before the watcher it
     // starts can read Grimoire's own rewrites back as external edits.
-    let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-    let (_, report) = crate::format_migration::run(&ledger_path, true)?;
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    let ctx = crate::format_migration::MigrationContext::load(&mut conn);
+    let (_, report) = crate::format_migration::run(&ledger_path, &ctx, true)?;
     let report = report.ok_or("The migration reported nothing")?;
 
     // The notes pass has finished, so this open may proceed past the gate even
@@ -175,8 +190,11 @@ pub fn rebuild_ledger_db(
 ) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
     db::move_corrupt_db_aside(&ledger_path)?;
-    let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-    let cleared = crate::format_version::enforce_at_open(&ledger_path)?;
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    let cleared = crate::format_version::enforce_at_open(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )?;
     finish_open(path, ledger_path, conn, None, &app, &ledger, cleared)
 }
 

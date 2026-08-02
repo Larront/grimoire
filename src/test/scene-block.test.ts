@@ -8,12 +8,17 @@
 //
 // Deliberately NOT covered, per #155: the `<scene-block>` HTML serialization and
 // the persisted expanded/collapsed flag. Both are being deleted, so freezing
-// them would cost twice — once to write, once to delete.
+// them would cost twice — once to write, once to delete. Both have since gone
+// (#185), and the fence that replaced the tag is pinned at the bottom of this file.
 import { render, waitFor, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import SceneBlockView from "../lib/components/editor/SceneBlockView.svelte";
-import { SceneBlock } from "../lib/editor/scene-block.svelte";
+import {
+  SceneBlock,
+  parseSceneBody,
+  serializeSceneRef,
+} from "../lib/editor/scene-block.svelte";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
@@ -107,11 +112,9 @@ function makeSlot(overrides: Partial<SceneSlot> = {}): SceneSlot {
   };
 }
 
-// `expanded` is a transitional prop — #155 deletes it. It is set in exactly one
-// place so that deletion is a one-line change, and no test asserts on it.
 function renderView(props: { sceneId: number | null }) {
   return render(SceneBlockView, {
-    props: { ...props, expanded: true, onUpdate: vi.fn() },
+    props: { ...props, onUpdate: vi.fn() },
   });
 }
 
@@ -181,6 +184,27 @@ describe("scene reference resolution", () => {
       '[style*="background-color"]',
     ) as HTMLElement;
     expect(chip?.getAttribute("style")).toContain("--primary-subtle");
+  });
+
+  it("a stale cached name is not treated as authoritative", () => {
+    // The name in the fence is a copy the database owns (#185), and a stale copy
+    // *lies* rather than failing. So the view never draws it: a reference whose id
+    // resolves to nothing renders the not-found state even when the file remembers
+    // a name, and one that resolves draws the scene's live name over the cached one.
+    mockScenes = [makeScene({ id: 4, name: "Renamed Since" })];
+
+    const gone = render(SceneBlockView, {
+      props: { sceneId: 99, sceneName: "Dark Forest", onUpdate: vi.fn() },
+    });
+    expect(gone.container.textContent).toContain("Unknown scene");
+    expect(gone.container.textContent).not.toContain("Dark Forest");
+    cleanup();
+
+    const live = render(SceneBlockView, {
+      props: { sceneId: 4, sceneName: "Dark Forest", onUpdate: vi.fn() },
+    });
+    expect(live.container.textContent).toContain("Renamed Since");
+    expect(live.container.textContent).not.toContain("Dark Forest");
   });
 
   it("no scene bound at all renders the picker, not the not-found state", () => {
@@ -382,6 +406,49 @@ describe("SceneBlock node view — attribute write-back", () => {
     expect(writes[0].attrs.sceneId).toBe(null);
   });
 
+  it("binding a scene writes its name beside the id, so the fence stays legible", async () => {
+    // The name in the file is a copy the database owns (#185). It is written from
+    // the *store's* name at the moment of binding — never composed from the file —
+    // which is what keeps the copy a cache rather than a second source of truth.
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+    mounted = mountNodeView({ sceneId: null, sceneName: "" });
+    const { view, writes } = mounted;
+
+    const row = view.dom.querySelector('[role="option"]') as HTMLElement;
+    await fireEvent.click(row);
+
+    expect(writes[0].attrs.sceneId).toBe(4);
+    expect(writes[0].attrs.sceneName).toBe("Dark Forest");
+  });
+
+  it("unbinding clears the remembered name with the id", async () => {
+    mockScenes = [makeScene({ id: 1, name: "Dark Forest" })];
+    mounted = mountNodeView({ sceneId: 1, sceneName: "Dark Forest" });
+    const { view, writes } = mounted;
+
+    await fireEvent.click(
+      view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement,
+    );
+
+    expect(writes[0].attrs.sceneId).toBe(null);
+    expect(writes[0].attrs.sceneName).toBe("");
+  });
+
+  it("collapsing the mixer writes nothing to the document", async () => {
+    // `expanded` used to be an attribute in the note, so collapsing a mixer was an
+    // edit to the GM's file that synced to every other machine (#185).
+    mockScenes = [makeScene({ id: 1 })];
+    mounted = mountNodeView({ sceneId: 1, sceneName: "Dark Forest" });
+    const { view, writes } = mounted;
+
+    await fireEvent.click(
+      view.dom.querySelector('[aria-label="Expand mixer"]') as HTMLElement,
+    );
+
+    expect(view.dom.querySelector('[aria-label="Collapse mixer"]')).toBeTruthy();
+    expect(writes).toHaveLength(0);
+  });
+
   // Recorded as KNOWN FAILING by #170: the old write-back replaced the whole
   // attribute set with the two keys it knew about, dropping any other attribute
   // on the node. Green since #172 — the shared node-view connector merges rather
@@ -397,5 +464,87 @@ describe("SceneBlock node view — attribute write-back", () => {
     await fireEvent.click(change);
 
     expect(writes[0].attrs.marker).toBe("keep me");
+  });
+});
+
+// ─── The fence (#185) ─────────────────────────────────────────────────────────
+//
+// Text in, text out: the format on its own, with no editor and no DOM. The claim
+// itself — the reader handing a ```scene token to this parser at any nesting depth
+// — is block-markdown.test.ts's seam.
+
+describe("the scene fence", () => {
+  const roundTrip = (md: string) =>
+    serializeSceneRef(parseSceneBody(md.split("\n").slice(1, -1).join("\n")));
+
+  it("reads the name and the id", () => {
+    expect(parseSceneBody("# Boss Battle\nId: 1")).toEqual({
+      sceneId: 1,
+      sceneName: "Boss Battle",
+    });
+  });
+
+  it("writes the name above the id", () => {
+    expect(serializeSceneRef({ sceneId: 1, sceneName: "Boss Battle" })).toBe(
+      "```scene\n# Boss Battle\nId: 1\n```",
+    );
+  });
+
+  it("writes a reference bound to nothing as an empty fence", () => {
+    // A fresh `/scene` the GM has not bound yet: `Id:` with no id after it would
+    // read back as no id anyway, so it is not written.
+    expect(serializeSceneRef({ sceneId: null, sceneName: "" })).toBe(
+      "```scene\n```",
+    );
+  });
+
+  it.each([
+    ["a name and an id", "```scene\n# Boss Battle\nId: 1\n```"],
+    ["an id alone", "```scene\nId: 1\n```"],
+    ["a name alone", "```scene\n# Boss Battle\n```"],
+    ["neither", "```scene\n```"],
+    ["a name holding a colon", "```scene\n# Boss Battle: Act II\nId: 12\n```"],
+    ["a name holding a wikilink", "```scene\n# The [[Ember Keep]] falls\nId: 3\n```"],
+    ["a name holding a hash", "```scene\n# Scene #4\nId: 4\n```"],
+  ])("round-trips %s byte for byte", (_what, md) => {
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("reads a `#` line with no name after it as no name", () => {
+    // Not a name line at all: an empty name has nothing to remember, so writing
+    // one back would make the pair stop being inverse. Unlike an Infobox there is
+    // no first row here for a bare `#` to shield.
+    expect(parseSceneBody("#\nId: 9")).toEqual({ sceneId: 9, sceneName: "" });
+    expect(roundTrip("```scene\n#\nId: 9\n```")).toBe("```scene\nId: 9\n```");
+  });
+
+  it("reads a hand-edited fence whose lines are the other way round", () => {
+    expect(parseSceneBody("Id: 1\n# Boss Battle")).toEqual({
+      sceneId: 1,
+      sceneName: "Boss Battle",
+    });
+  });
+
+  it("reads a hand-edited fence with blank lines in it", () => {
+    expect(parseSceneBody("\n# Boss Battle\n\nId: 1\n")).toEqual({
+      sceneId: 1,
+      sceneName: "Boss Battle",
+    });
+  });
+
+  it.each(["Id:", "Id: ", "Id: abc", "Id: 1.5", "Id: -1", "Id: 1 2"])(
+    "reads %o as no id rather than guessing at one",
+    (line) => {
+      expect(parseSceneBody(`# Boss Battle\n${line}`).sceneId).toBe(null);
+    },
+  );
+
+  it("keeps a name the database hands it on one line", () => {
+    // A scene name cannot hold a newline through Grimoire's own UI, but the copy
+    // written here comes from the database — and a two-line name would write a
+    // second fence line that reads back as something else.
+    expect(serializeSceneRef({ sceneId: 1, sceneName: "Boss\nBattle" })).toBe(
+      "```scene\n# Boss Battle\nId: 1\n```",
+    );
   });
 });

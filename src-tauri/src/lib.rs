@@ -7,6 +7,7 @@ mod ledger_watch;
 mod note_index;
 mod note_mutation;
 mod note_write;
+mod scene_fence;
 mod search;
 
 use commands::app_prefs::*;

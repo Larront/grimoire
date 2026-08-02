@@ -5,6 +5,7 @@ import { PluginKey } from "prosemirror-state";
 import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
 import { blankInfobox } from "./infobox-block";
+import { blankSceneRef } from "./scene-block.svelte";
 import { blankStatblock } from "./statblock-block";
 import { createBlankEvent } from "./timeline-block";
 
@@ -128,7 +129,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .deleteRange(range)
         .insertContent({
           type: "sceneBlock",
-          attrs: { sceneId: null, expanded: false },
+          attrs: blankSceneRef(),
         })
         .run(),
   },

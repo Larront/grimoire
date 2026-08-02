@@ -176,10 +176,17 @@ pub fn cleared_by_consented_migration() -> FormatCleared {
 /// its own rather than trusting a separate check command to have run — the
 /// refusal is the safety property, a check would only be the courtesy, and a
 /// future code path that opens without asking meets a locked door.
-pub fn enforce_at_open(ledger_path: &Path) -> Result<FormatCleared, String> {
+/// `ctx` is what a migration is handed besides a file's text (scene names), and it
+/// is a parameter here rather than loaded inside because this gate must not open a
+/// database: the caller has one open already, and it is the caller's own opening of
+/// it that this gate is sequenced after.
+pub fn enforce_at_open(
+    ledger_path: &Path,
+    ctx: &crate::format_migration::MigrationContext,
+) -> Result<FormatCleared, String> {
     let vault = read_stamp(ledger_path)?;
     let outcome = gate(vault, APP_FORMAT_VERSION, || {
-        crate::format_migration::has_work(ledger_path, vault)
+        crate::format_migration::has_work(ledger_path, vault, ctx)
     });
 
     act(ledger_path, outcome)
@@ -210,6 +217,12 @@ fn act(ledger_path: &Path, outcome: FormatGate) -> Result<FormatCleared, String>
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    /// The scan's context for a vault with no scenes in it — every test here is
+    /// about the *stamp*, and Scene's transform is exercised in its own module.
+    fn no_scenes() -> crate::format_migration::MigrationContext {
+        crate::format_migration::MigrationContext::empty()
+    }
 
     // ── The comparison, table-driven ─────────────────────────────────────────
 
@@ -355,7 +368,7 @@ mod tests {
     fn open_is_allowed_when_the_stamp_matches_the_app() {
         let dir = tempdir().unwrap();
         write_stamp(dir.path(), APP_FORMAT_VERSION).unwrap();
-        assert!(enforce_at_open(dir.path()).is_ok());
+        assert!(enforce_at_open(dir.path(), &no_scenes()).is_ok());
     }
 
     #[test]
@@ -364,7 +377,7 @@ mod tests {
         // to migrate, so it is stamped forward with no dialog. Covers both a
         // brand-new vault and a foreign Obsidian folder.
         let dir = tempdir().unwrap();
-        assert!(enforce_at_open(dir.path()).is_ok());
+        assert!(enforce_at_open(dir.path(), &no_scenes()).is_ok());
         assert_eq!(read_stamp(dir.path()).unwrap(), APP_FORMAT_VERSION);
     }
 
@@ -379,7 +392,7 @@ mod tests {
         )
         .unwrap();
 
-        let err = enforce_at_open(dir.path()).expect_err("an un-migrated vault must not open");
+        let err = enforce_at_open(dir.path(), &no_scenes()).expect_err("an un-migrated vault must not open");
 
         assert!(err.starts_with("ERR_FORMAT_MIGRATION_REQUIRED:"), "err={err}");
         assert_eq!(read_stamp(dir.path()).unwrap(), 0, "a refusal may not stamp");
@@ -389,7 +402,7 @@ mod tests {
     fn a_vault_ahead_of_the_app_refuses_to_open() {
         let dir = tempdir().unwrap();
         write_stamp(dir.path(), APP_FORMAT_VERSION + 1).unwrap();
-        let err = enforce_at_open(dir.path()).expect_err("a vault ahead must not open");
+        let err = enforce_at_open(dir.path(), &no_scenes()).expect_err("a vault ahead must not open");
         assert!(err.starts_with("ERR_FORMAT_AHEAD:"), "err={err}");
     }
 
@@ -418,7 +431,7 @@ mod tests {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
         std::fs::write(stamp_path(dir.path()), "not a version").unwrap();
-        let err = enforce_at_open(dir.path()).expect_err("a corrupt stamp must not open");
+        let err = enforce_at_open(dir.path(), &no_scenes()).expect_err("a corrupt stamp must not open");
         assert!(err.starts_with("ERR_FORMAT_STAMP_UNREADABLE:"), "err={err}");
     }
 }

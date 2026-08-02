@@ -9,6 +9,12 @@
 //! entry, so shipping a migration that never runs is not something you can forget
 //! your way into.
 //!
+//! A migration is also handed a [`MigrationContext`], and it holds exactly what
+//! the shipped migrations need and nothing speculative: **scene names**. That was
+//! the predicted trigger and it arrived on schedule — Scene's rewrite (#185)
+//! writes a scene's name into the note beside its id, which no amount of reading
+//! the file can supply. Timeline's transform ignores it.
+//!
 //! Four properties are load-bearing, and each one is a shape rather than a rule
 //! someone has to remember:
 //!
@@ -32,9 +38,71 @@
 //! resume mechanism for free — work is found by scanning, so the notes already
 //! rewritten need nothing on the next pass.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use diesel::prelude::*;
+use diesel::SqliteConnection;
+
+mod scene_v2;
 mod timeline_v1;
+
+/// What a migration is handed besides the file's text.
+///
+/// Deliberately not a general-purpose bag: it holds what the shipped migrations
+/// actually need, and it grew this one member the day a rewrite could not be a
+/// function of the text alone. Loading it costs one query per pass, not per file.
+pub struct MigrationContext {
+    /// Scene id → name, as the ledger's database holds them right now.
+    scene_names: BTreeMap<i32, String>,
+}
+
+impl MigrationContext {
+    /// Read the context out of an open ledger database.
+    ///
+    /// Best-effort on the query: a database that cannot list its scenes yields an
+    /// empty map, which costs a migrated fence its *name* and never its id. The
+    /// alternative — failing the pass — would refuse to open a vault over a copy
+    /// of a value the file does not depend on.
+    pub fn load(conn: &mut SqliteConnection) -> Self {
+        use crate::db::schema::scenes::dsl as s;
+        let rows: Vec<(i32, String)> = s::scenes
+            .select((s::id, s::name))
+            .load(conn)
+            .unwrap_or_else(|e| {
+                log::warn!("[format_migration] could not read scene names: {e}");
+                Vec::new()
+            });
+        Self {
+            scene_names: rows.into_iter().collect(),
+        }
+    }
+
+    /// A context that knows no scene names. Test-only: in production the context is
+    /// always read from the open database, which answers "no scenes" by coming back
+    /// empty on its own.
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Self {
+            scene_names: BTreeMap::new(),
+        }
+    }
+
+    /// The name a scene id resolves to, or `None` when it resolves to no scene.
+    pub fn scene_name(&self, id: i32) -> Option<&str> {
+        self.scene_names.get(&id).map(String::as_str)
+    }
+
+    #[cfg(test)]
+    pub fn from_scene_names<'a>(pairs: impl IntoIterator<Item = (i32, &'a str)>) -> Self {
+        Self {
+            scene_names: pairs
+                .into_iter()
+                .map(|(id, name)| (id, name.to_string()))
+                .collect(),
+        }
+    }
+}
 
 /// What a migration did to one file's text.
 pub struct Rewrite {
@@ -54,20 +122,29 @@ pub struct Migration {
     /// and it is what lets the prompt be *composed* rather than written.
     pub sentence: &'static str,
     /// Given a file's text: `None` if untouched, otherwise the rewrite.
-    pub apply: fn(&str) -> Option<Rewrite>,
+    pub apply: fn(&str, &MigrationContext) -> Option<Rewrite>,
 }
 
 /// The registry, in ascending `to_version` order (a test enforces it).
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    to_version: 1,
-    // Plain text, not markdown: this same string is read straight into a dialog
-    // and written into the report, and neither renders backticks.
-    sentence: "Timeline events will be written with their title as a heading instead of a \
-               \"Title:\" line, so a description can run to more than one paragraph. Until \
-               now a blank line inside a description split it into a second, untitled event \
-               the next time the note was saved.",
-    apply: timeline_v1::apply,
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        to_version: 1,
+        // Plain text, not markdown: this same string is read straight into a dialog
+        // and written into the report, and neither renders backticks.
+        sentence: "Timeline events will be written with their title as a heading instead of a \
+                   \"Title:\" line, so a description can run to more than one paragraph. Until \
+                   now a blank line inside a description split it into a second, untitled event \
+                   the next time the note was saved.",
+        apply: timeline_v1::apply,
+    },
+    Migration {
+        to_version: 2,
+        sentence: "Scene references will be written as a short block naming the scene instead \
+                   of a line of HTML, so a note that plays a scene reads as one in Obsidian \
+                   and the scene's name can be found by searching your notes.",
+        apply: scene_v2::apply,
+    },
+];
 
 /// The note format this build reads and writes: the highest version any
 /// registered migration takes a vault to. Derived, never declared.
@@ -96,8 +173,8 @@ struct Folded {
 }
 
 /// The fold, over the shipped registry.
-fn fold_migrations(original: &str, from: u32) -> Folded {
-    fold_over(MIGRATIONS, original, from)
+fn fold_migrations(original: &str, from: u32, ctx: &MigrationContext) -> Folded {
+    fold_over(MIGRATIONS, original, from, ctx)
 }
 
 /// The fold itself, taking the registry it threads. The registry is a parameter
@@ -105,14 +182,19 @@ fn fold_migrations(original: &str, from: u32) -> Folded {
 /// wanted to prove the multi-version behaviour would otherwise have to
 /// re-implement this loop — and a second copy of the fold is exactly the thing
 /// that eventually disagrees with the first.
-fn fold_over(migrations: &[Migration], original: &str, from: u32) -> Folded {
+fn fold_over(
+    migrations: &[Migration],
+    original: &str,
+    from: u32,
+    ctx: &MigrationContext,
+) -> Folded {
     let mut current: Option<String> = None;
     let mut warnings = Vec::new();
     let mut versions = Vec::new();
 
     for migration in migrations.iter().filter(|m| m.to_version > from) {
         let input = current.as_deref().unwrap_or(original);
-        if let Some(rewrite) = (migration.apply)(input) {
+        if let Some(rewrite) = (migration.apply)(input, ctx) {
             current = Some(rewrite.text);
             warnings.extend(rewrite.warnings);
             versions.push(migration.to_version);
@@ -191,7 +273,11 @@ pub struct FailedFile {
 ///
 /// `Err` is reserved for the one all-or-nothing failure: a backup that did not
 /// land. Nothing has been rewritten at that point, so aborting costs nothing.
-pub fn run(ledger_path: &Path, write: bool) -> Result<(MigrationPlan, Option<MigrationReport>), String> {
+pub fn run(
+    ledger_path: &Path,
+    ctx: &MigrationContext,
+    write: bool,
+) -> Result<(MigrationPlan, Option<MigrationReport>), String> {
     let from = crate::format_version::read_stamp(ledger_path)?;
     let to = target_version();
 
@@ -204,7 +290,7 @@ pub fn run(ledger_path: &Path, write: bool) -> Result<(MigrationPlan, Option<Mig
         return Err(crate::format_version::ahead_error(from, to));
     }
 
-    let affected = scan(ledger_path, from);
+    let affected = scan(ledger_path, from, ctx);
     let plan = plan_from(&affected, from, to);
 
     if !write {
@@ -291,13 +377,13 @@ pub fn run(ledger_path: &Path, write: bool) -> Result<(MigrationPlan, Option<Mig
 
 /// Does this vault hold content a pending migration would rewrite? The gate's
 /// question, answered by the scan and nothing else.
-pub fn has_work(ledger_path: &Path, from: u32) -> bool {
-    !scan(ledger_path, from).is_empty()
+pub fn has_work(ledger_path: &Path, from: u32, ctx: &MigrationContext) -> bool {
+    !scan(ledger_path, from, ctx).is_empty()
 }
 
 /// The plan the prompt is built from.
-pub fn plan(ledger_path: &Path) -> Result<Option<MigrationPlan>, String> {
-    let (plan, _) = run(ledger_path, false)?;
+pub fn plan(ledger_path: &Path, ctx: &MigrationContext) -> Result<Option<MigrationPlan>, String> {
+    let (plan, _) = run(ledger_path, ctx, false)?;
     Ok((plan.file_count > 0).then_some(plan))
 }
 
@@ -333,7 +419,7 @@ fn plan_from(affected: &[Affected], from: u32, to: u32) -> MigrationPlan {
 /// Walks the GM's notes and, separately, the [[Template]]s under
 /// `.grimoire/templates/` — invisible to the note walk, and an un-migrated one
 /// would quietly produce broken notes forever.
-fn scan(ledger_path: &Path, from: u32) -> Vec<Affected> {
+fn scan(ledger_path: &Path, from: u32, ctx: &MigrationContext) -> Vec<Affected> {
     if from >= target_version() {
         return Vec::new();
     }
@@ -356,7 +442,7 @@ fn scan(ledger_path: &Path, from: u32) -> Vec<Affected> {
                 continue;
             }
         };
-        let folded = fold_migrations(&original, from);
+        let folded = fold_migrations(&original, from, ctx);
         if let Some(new_text) = folded.text {
             affected.push(Affected {
                 rel,
@@ -557,6 +643,27 @@ mod tests {
     const OLD: &str = "```timeline\nDate: Year 0\nTitle: Alpha\nProse.\n```";
     const NEW: &str = "```timeline\n# Alpha\nDate: Year 0\n\nProse.\n```";
 
+    /// The two registered migrations meet here: this file is behind on *both*, so
+    /// one pass over it proves the fold, the union count and the composed prompt
+    /// against the shipped registry rather than a stand-in.
+    const OLD_SCENE: &str = r#"<scene-block data-id="1" data-expanded="false"></scene-block>"#;
+    const NEW_SCENE: &str = "```scene\n# Boss Battle\nId: 1\n```";
+
+    /// The context every test below runs with: one scene, so Scene's transform has
+    /// a name to write.
+    fn ctx() -> MigrationContext {
+        MigrationContext::from_scene_names([(1, "Boss Battle")])
+    }
+
+    /// `run` with the shipped context, which is what every call site does.
+    fn run_with(ledger_path: &Path, write: bool) -> Result<(MigrationPlan, Option<MigrationReport>), String> {
+        run(ledger_path, &ctx(), write)
+    }
+
+    fn plan_of(ledger_path: &Path) -> Result<Option<MigrationPlan>, String> {
+        plan(ledger_path, &ctx())
+    }
+
     fn vault() -> TempDir {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".grimoire").join("templates")).unwrap();
@@ -627,14 +734,14 @@ mod tests {
 
     #[test]
     fn the_fold_skips_migrations_the_vault_is_already_past() {
-        let folded = fold_migrations(OLD, target_version());
+        let folded = fold_migrations(OLD, target_version(), &ctx());
         assert!(folded.text.is_none());
         assert!(folded.versions.is_empty());
     }
 
     #[test]
     fn the_fold_threads_pending_migrations_over_the_same_text() {
-        let folded = fold_migrations(OLD, 0);
+        let folded = fold_migrations(OLD, 0, &ctx());
         assert_eq!(folded.text.as_deref(), Some(NEW));
         assert_eq!(folded.versions, vec![1]);
     }
@@ -645,19 +752,19 @@ mod tests {
         // shape: each one sees the previous one's *output* rather than the file,
         // so a note three versions behind is read once and written once — and the
         // one the vault is already past is not run at all.
-        fn to_one(text: &str) -> Option<Rewrite> {
+        fn to_one(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
             text.contains('a').then(|| Rewrite {
                 text: text.replace('a', "ONE"),
                 warnings: vec!["became one".into()],
             })
         }
-        fn to_two(text: &str) -> Option<Rewrite> {
+        fn to_two(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
             text.contains("one").then(|| Rewrite {
                 text: text.replace("one", "two"),
                 warnings: vec!["became two".into()],
             })
         }
-        fn to_three(text: &str) -> Option<Rewrite> {
+        fn to_three(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
             text.contains("two").then(|| Rewrite {
                 text: text.replace("two", "three"),
                 warnings: vec!["became three".into()],
@@ -669,7 +776,7 @@ mod tests {
             Migration { to_version: 3, sentence: "three", apply: to_three },
         ];
 
-        let folded = fold_over(&registry, "a one", 1);
+        let folded = fold_over(&registry, "a one", 1, &ctx());
 
         // `to_one` was skipped (the vault is at 1), then 2 and 3 threaded in order.
         assert_eq!(folded.text.as_deref(), Some("a three"));
@@ -679,10 +786,10 @@ mod tests {
 
     #[test]
     fn the_fold_skips_a_migration_that_finds_nothing_without_breaking_the_chain() {
-        fn no_op(_text: &str) -> Option<Rewrite> {
+        fn no_op(_text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
             None
         }
-        fn shout(text: &str) -> Option<Rewrite> {
+        fn shout(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
             Some(Rewrite { text: text.to_uppercase(), warnings: Vec::new() })
         }
         let registry = [
@@ -690,7 +797,7 @@ mod tests {
             Migration { to_version: 2, sentence: "shout", apply: shout },
         ];
 
-        let folded = fold_over(&registry, "quiet", 0);
+        let folded = fold_over(&registry, "quiet", 0, &ctx());
 
         assert_eq!(folded.text.as_deref(), Some("QUIET"));
         // Only the migration that found work is recorded, which is what keeps the
@@ -706,12 +813,12 @@ mod tests {
         write(dir.path(), "Chronicle.md", OLD);
         write(dir.path(), "Plain.md", "# Just prose\n");
 
-        let (scanned, no_report) = run(dir.path(), false).unwrap();
+        let (scanned, no_report) = run_with(dir.path(), false).unwrap();
         assert!(no_report.is_none(), "a scan must not report — it did nothing");
         // The scan changed nothing on disk.
         assert_eq!(read(dir.path(), "Chronicle.md"), OLD);
 
-        let (planned, report) = run(dir.path(), true).unwrap();
+        let (planned, report) = run_with(dir.path(), true).unwrap();
         let report = report.unwrap();
 
         // The count the prompt showed is the count that was written, and the
@@ -731,36 +838,84 @@ mod tests {
         write(dir.path(), "New.md", NEW);
         write(dir.path(), "Notes/Prose.md", "nothing to do\n");
 
-        let (plan, _) = run(dir.path(), false).unwrap();
+        let (plan, _) = run_with(dir.path(), false).unwrap();
         assert_eq!(plan.file_count, 1);
     }
 
     #[test]
     fn the_count_is_a_union_not_a_sum() {
-        // One file, two pending migrations that both touch it, one note counted.
-        // Timeline is the only shipped migration, so the union is shown the way
-        // the plan builds it: from the set of affected files, never from the sum
-        // of per-migration hits.
+        // One file, two fences one migration touches, one note counted: the plan is
+        // built from the set of affected *files*, never from the sum of per-migration
+        // hits.
         let dir = vault();
         write(dir.path(), "Two fences.md", &format!("{OLD}\n\n{OLD}\n"));
 
-        let (plan, _) = run(dir.path(), false).unwrap();
+        let (plan, _) = run_with(dir.path(), false).unwrap();
         assert_eq!(plan.file_count, 1);
         assert_eq!(plan.sentences.len(), 1);
+    }
+
+    #[test]
+    fn a_note_behind_on_both_shipped_migrations_is_one_note_and_one_backup() {
+        // Timeline's change and Scene's ride one prompt and one backup, which is what
+        // both being pending at once has to mean: two sentences composed for the GM,
+        // one file in the count, one folder of copies, one write.
+        let dir = vault();
+        write(dir.path(), "Chronicle.md", &format!("{OLD}\n\n{OLD_SCENE}\n"));
+
+        let (plan, report) = run_with(dir.path(), true).unwrap();
+        let report = report.unwrap();
+
+        assert_eq!(plan.file_count, 1, "a file two migrations touch is one file");
+        assert_eq!(plan.sentences.len(), 2, "{:?}", plan.sentences);
+        assert!(plan.sentences[0].contains("Timeline"));
+        assert!(plan.sentences[1].contains("Scene"));
+        assert_eq!(report.migrated, vec!["Chronicle.md"]);
+        assert_eq!(
+            read(dir.path(), "Chronicle.md"),
+            format!("{NEW}\n\n{NEW_SCENE}\n"),
+            "one write carries both changes"
+        );
+        assert!(report.stamped);
+        assert_eq!(
+            crate::format_version::read_stamp(dir.path()).unwrap(),
+            target_version()
+        );
+        // One backup folder, holding the file exactly as it was before either change.
+        assert_eq!(
+            std::fs::read_to_string(backup_dir(dir.path()).join("Chronicle.md")).unwrap(),
+            format!("{OLD}\n\n{OLD_SCENE}\n")
+        );
+    }
+
+    #[test]
+    fn scene_names_reach_the_rewrite_from_the_context() {
+        // The one thing a migration cannot read out of the file. A context that knows
+        // the scene writes its name; one that does not writes the id alone, and the
+        // fence still resolves — a missing name costs legibility, never the reference.
+        let dir = vault();
+        write(dir.path(), "Chronicle.md", OLD_SCENE);
+        run(dir.path(), &MigrationContext::empty(), true).unwrap();
+        assert_eq!(read(dir.path(), "Chronicle.md"), "```scene\nId: 1\n```");
+
+        let named = vault();
+        write(named.path(), "Chronicle.md", OLD_SCENE);
+        run_with(named.path(), true).unwrap();
+        assert_eq!(read(named.path(), "Chronicle.md"), NEW_SCENE);
     }
 
     #[test]
     fn a_vault_with_nothing_to_migrate_yields_no_plan() {
         let dir = vault();
         write(dir.path(), "New.md", NEW);
-        assert!(plan(dir.path()).unwrap().is_none());
+        assert!(plan_of(dir.path()).unwrap().is_none());
     }
 
     #[test]
     fn an_empty_vault_yields_no_plan() {
         let dir = vault();
-        assert!(plan(dir.path()).unwrap().is_none());
-        assert!(!has_work(dir.path(), 0));
+        assert!(plan_of(dir.path()).unwrap().is_none());
+        assert!(!has_work(dir.path(), 0, &ctx()));
     }
 
     #[test]
@@ -768,7 +923,7 @@ mod tests {
         let dir = vault();
         write(dir.path(), "Chronicle.md", "```timeline\nTitle: Alpha\n# a prose heading\n```");
 
-        let plan = plan(dir.path()).unwrap().expect("expected a plan");
+        let plan = plan_of(dir.path()).unwrap().expect("expected a plan");
 
         assert_eq!(plan.from, 0);
         assert_eq!(plan.to, target_version());
@@ -786,7 +941,7 @@ mod tests {
         write(dir.path(), "Chronicle.md", OLD);
         write(dir.path(), ".grimoire/templates/Session.md", OLD);
 
-        let (plan, report) = run(dir.path(), true).unwrap();
+        let (plan, report) = run_with(dir.path(), true).unwrap();
         assert_eq!(plan.file_count, 2);
         assert_eq!(
             report.unwrap().migrated,
@@ -803,7 +958,7 @@ mod tests {
         // precisely to be the un-migrated one.
         write(dir.path(), ".grimoire/format-backup-old/Chronicle.md", OLD);
 
-        assert!(plan(dir.path()).unwrap().is_none());
+        assert!(plan_of(dir.path()).unwrap().is_none());
     }
 
     #[test]
@@ -814,7 +969,7 @@ mod tests {
         let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sample-world");
         assert!(sample.is_dir(), "sample-world fixture not found at {sample:?}");
 
-        let affected = scan(&sample, 0);
+        let affected = scan(&sample, 0, &ctx());
         let names: Vec<&str> = affected.iter().map(|f| f.rel.as_str()).collect();
         assert!(names.is_empty(), "sample world needs migrating: {names:?}");
     }
@@ -828,7 +983,7 @@ mod tests {
         write(dir.path(), "Untouched.md", "prose\n");
         write(dir.path(), ".grimoire/templates/Session.md", OLD);
 
-        run(dir.path(), true).unwrap();
+        run_with(dir.path(), true).unwrap();
         let backup = backup_dir(dir.path());
 
         assert_eq!(
@@ -844,7 +999,7 @@ mod tests {
     fn the_backup_lives_inside_the_dotted_grimoire_directory() {
         let dir = vault();
         write(dir.path(), "Chronicle.md", OLD);
-        run(dir.path(), true).unwrap();
+        run_with(dir.path(), true).unwrap();
 
         // Or the copies show up in the GM's file tree as real notes.
         assert_eq!(backup_dir(dir.path()).parent().unwrap(), dir.path().join(".grimoire"));
@@ -857,7 +1012,7 @@ mod tests {
         write(dir.path(), ".grimoire/format-backup-19990101T000000Z/Old.md", "ancient\n");
         write(dir.path(), "Chronicle.md", OLD);
 
-        run(dir.path(), true).unwrap();
+        run_with(dir.path(), true).unwrap();
 
         let backups: Vec<_> = std::fs::read_dir(dir.path().join(".grimoire"))
             .unwrap()
@@ -878,7 +1033,7 @@ mod tests {
         // `.grimoire` is a *file*, so no backup folder can be created under it.
         std::fs::write(dir.path().join(".grimoire"), "not a directory").unwrap();
 
-        let err = run(dir.path(), true).expect_err("migration must abort");
+        let err = run_with(dir.path(), true).expect_err("migration must abort");
 
         assert!(err.starts_with("ERR_FORMAT_BACKUP_FAILED:"), "{err}");
         // The one place all-or-nothing is right, and it costs nothing: at the
@@ -893,7 +1048,7 @@ mod tests {
         let dir = vault();
         write(dir.path(), "Lore/Chronicle.md", "```timeline\nTitle: Alpha\n# a prose heading\n```");
 
-        let report = run(dir.path(), true).unwrap().1.unwrap();
+        let report = run_with(dir.path(), true).unwrap().1.unwrap();
         let text = std::fs::read_to_string(&report.report_path).unwrap();
 
         assert_eq!(
@@ -944,7 +1099,7 @@ mod tests {
         let dir = vault();
         write(dir.path(), "Chronicle.md", OLD);
 
-        let report = run(dir.path(), true).unwrap().1.unwrap();
+        let report = run_with(dir.path(), true).unwrap().1.unwrap();
 
         assert!(report.stamped);
         assert!(report.failed.is_empty());
@@ -962,7 +1117,7 @@ mod tests {
         let dir = vault();
         write(dir.path(), "New.md", NEW);
 
-        let report = run(dir.path(), true).unwrap().1.unwrap();
+        let report = run_with(dir.path(), true).unwrap().1.unwrap();
 
         assert!(report.stamped);
         assert!(report.migrated.is_empty());
@@ -982,10 +1137,10 @@ mod tests {
         write(dir.path(), "Chronicle.md", OLD);
 
         for write_mode in [false, true] {
-            let err = run(dir.path(), write_mode).expect_err("an ahead vault must be refused");
+            let err = run_with(dir.path(), write_mode).expect_err("an ahead vault must be refused");
             assert!(err.starts_with("ERR_FORMAT_AHEAD:"), "{err}");
         }
-        assert!(plan(dir.path()).is_err());
+        assert!(plan_of(dir.path()).is_err());
         assert_eq!(crate::format_version::read_stamp(dir.path()).unwrap(), ahead);
         assert_eq!(read(dir.path(), "Chronicle.md"), OLD);
     }
@@ -994,10 +1149,14 @@ mod tests {
     fn re_running_after_a_clean_sweep_finds_nothing() {
         let dir = vault();
         write(dir.path(), "Chronicle.md", OLD);
-        run(dir.path(), true).unwrap();
+        run_with(dir.path(), true).unwrap();
 
-        assert!(plan(dir.path()).unwrap().is_none());
-        assert!(!has_work(dir.path(), crate::format_version::read_stamp(dir.path()).unwrap()));
+        assert!(plan_of(dir.path()).unwrap().is_none());
+        assert!(!has_work(
+            dir.path(),
+            crate::format_version::read_stamp(dir.path()).unwrap(),
+            &ctx()
+        ));
     }
 
     /// Make a file un-writable on whichever platform the test is running on.
@@ -1018,7 +1177,7 @@ mod tests {
         let locked = dir.path().join("Locked.md");
         set_readonly(&locked, true);
 
-        let report = run(dir.path(), true).unwrap().1.unwrap();
+        let report = run_with(dir.path(), true).unwrap().1.unwrap();
 
         // Kept going either side of the casualty.
         assert_eq!(report.migrated, vec!["Alpha.md", "Zeta.md"]);
@@ -1038,11 +1197,11 @@ mod tests {
 
         // Re-running is the resume mechanism, for free: the work is found by
         // scanning, so only the remainder is left to do.
-        let plan = plan(dir.path()).unwrap().expect("the remainder is still pending");
+        let plan = plan_of(dir.path()).unwrap().expect("the remainder is still pending");
         assert_eq!(plan.file_count, 1);
 
         set_readonly(&locked, false);
-        let second = run(dir.path(), true).unwrap().1.unwrap();
+        let second = run_with(dir.path(), true).unwrap().1.unwrap();
         assert_eq!(second.migrated, vec!["Locked.md"]);
         assert!(second.stamped);
     }
