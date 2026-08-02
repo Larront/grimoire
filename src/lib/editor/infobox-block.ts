@@ -51,6 +51,7 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import InfoboxBlockView from "$lib/components/editor/InfoboxBlockView.svelte";
 import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
+import { jsonListAttr } from "$lib/editor/block-attrs";
 import {
   blankLabelledRow,
   isBlankLabelledRow,
@@ -234,13 +235,7 @@ export const InfoboxBlock = Node.create({
       },
       rows: {
         default: [],
-        parseHTML: (el) => {
-          try {
-            return JSON.parse(decodeURIComponent((el as HTMLElement).dataset.rows ?? "[]"));
-          } catch {
-            return [];
-          }
-        },
+        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.rows),
       },
     };
   },

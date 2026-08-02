@@ -257,6 +257,126 @@ describe("Infobox claims its fence", () => {
   });
 });
 
+// ─── Statblock ────────────────────────────────────────────────────────────────
+//
+// The format itself is pinned by statblock-block.test.ts. What only this seam can show
+// is the fence being *claimed* — read as a statblock rather than as a grey code box —
+// including inside a Callout, which is how a GM groups a fight (#151).
+
+describe("Statblock claims its fence", () => {
+  const GOBLIN = [
+    "```statblock",
+    "# Goblin Scout",
+    "HP: 12",
+    "Armor Class: 15",
+    "",
+    "## Actions",
+    "Shortbow: +4 to hit, 1d6+2 piercing.",
+    "",
+    "Nimble Escape: Disengages or hides as a bonus action.",
+    "```",
+  ].join("\n");
+
+  it("reads a statblock fence as a statblock block", () => {
+    const doc = read(GOBLIN);
+    const block = onlyNode(doc, "statblockBlock");
+
+    expect(block.attrs?.name).toBe("Goblin Scout");
+    expect(block.attrs?.rows).toEqual([
+      { label: "HP", value: "12" },
+      { label: "Armor Class", value: "15" },
+    ]);
+    expect(block.attrs?.sections).toEqual([
+      {
+        heading: "Actions",
+        entries: [
+          { name: "Shortbow", body: "+4 to hit, 1d6+2 piercing." },
+          { name: "Nimble Escape", body: "Disengages or hides as a bonus action." },
+        ],
+      },
+    ]);
+    expect(nodesOfType(doc, "codeBlock")).toHaveLength(0);
+  });
+
+  it("round-trips a statblock fence byte for byte", () => {
+    expect(roundTrip(GOBLIN)).toBe(GOBLIN);
+  });
+
+  it("reads a header row exactly as the same line in an infobox", () => {
+    // Byte-identical per #150, and asserted rather than assumed: one implementation
+    // reads both, so a header-only fence is exactly an Infobox with pools.
+    const line = "Ruler: Ash, styled: the Grey";
+    const panel = onlyNode(read("```infobox\n" + line + "\n```"), "infoboxBlock");
+    const block = onlyNode(read("```statblock\n" + line + "\n```"), "statblockBlock");
+
+    expect(block.attrs?.rows).toEqual(panel.attrs?.rows);
+  });
+
+  it("keeps a wikilink in an entry body as the characters the GM typed", () => {
+    const md = "```statblock\n## Lore\nBound: Sworn to [[Captain Ash]].\n```";
+
+    expect(nodesOfType(read(md), "wikiLink")).toHaveLength(0);
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("reads several statblocks in one note, as a prepared fight is", () => {
+    const md = [
+      "## Monsters",
+      "",
+      "```statblock\n# Kobold A\nHP: 5/5\n```",
+      "",
+      "```statblock\n# Kobold B\nHP: 5/5\n```",
+    ].join("\n");
+
+    expect(nodesOfType(read(md), "statblockBlock")).toHaveLength(2);
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("reads a statblock fence nested inside a callout", () => {
+    const md = "> [!encounter] The Ambush\n> ```statblock\n> # Kobold A\n> HP: 5/5\n> ```";
+    const quote = onlyNode(read(md), "blockquote");
+
+    expect(nodesOfType(quote, "statblockBlock")).toHaveLength(1);
+    expect(nodesOfType(read(md), "codeBlock")).toHaveLength(0);
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it.each([
+    ["an empty statblock", "```statblock\n```"],
+    ["a name only", "```statblock\n# Aboleth\n```"],
+    ["a header with no name", "```statblock\nHP: 120/135\n```"],
+    ["a header-only fence", "```statblock\n# Aboleth\nArmor Class: 17 (natural armor)\n```"],
+    ["a section with no entries", "```statblock\n## Actions\n```"],
+    ["unnamed prose", "```statblock\n## Description\nIt remembers.\n```"],
+    ["a shielded prose line", "```statblock\n## Lore\n: Rumour: the deep remembers.\n```"],
+    ["a shielded name-shaped row", "```statblock\n#\n# The deep\n```"],
+    ["a shielded section-shaped row", "```statblock\n: ## Actions\n```"],
+    [
+      "an entry whose body wraps",
+      "```statblock\n## Actions\nTentacle: +9 to hit, reach 10 ft.,\none target. Hit: 12 damage.\n```",
+    ],
+    ["a mark track", "```statblock\nConditions: [x] Prone [ ] Charmed\n```"],
+  ])("round-trips %s byte for byte", (_what, md) => {
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("drops the blank lines a GM used as decoration and nothing else", () => {
+    // The documented asymmetry (#150): the serializer writes header rows contiguously,
+    // so a blank line the GM put between two of them goes on the next autosave.
+    const md = "```statblock\nHP: 12\n\nArmor Class: 15\n```";
+
+    expect(roundTrip(md)).toBe("```statblock\nHP: 12\nArmor Class: 15\n```");
+  });
+
+  it("declines a fence whose info string carries more than the block's name", () => {
+    const md = "```statblock 5e\nHP: 12\n```";
+
+    expect(nodesOfType(read(md), "statblockBlock")).toHaveLength(0);
+    expect(nodesOfType(read(md), "codeBlock")).toHaveLength(1);
+    expect(roundTrip(md)).toBe(md);
+  });
+});
+
 // ─── Callout ──────────────────────────────────────────────────────────────────
 //
 // Callout is not a new node: it is the ordinary blockquote carrying an optional
@@ -493,8 +613,7 @@ describe("a callout holds arbitrary block content", () => {
 
 describe("a claim is depth-blind", () => {
   const NESTED_TIMELINE = "> The Ambush\n>\n> ```timeline\n> # Goblins strike\n> ```";
-  const NESTED_SCENE =
-    '> The Ambush\n>\n> <scene-block data-id="7" data-expanded="false"></scene-block>';
+  const NESTED_SCENE = "> The Ambush\n>\n> ```scene\n> # Boss Battle\n> Id: 7\n> ```";
   const NESTED_IMAGE = "> Read aloud:\n>\n> ![portrait](images/a.png){align=left width=60%}";
 
   it("reads a timeline fence nested inside a blockquote", () => {
@@ -514,6 +633,7 @@ describe("a claim is depth-blind", () => {
     const quote = onlyNode(doc, "blockquote");
     expect(nodesOfType(quote, "sceneBlock")).toHaveLength(1);
     expect(nodesOfType(quote, "sceneBlock")[0].attrs?.sceneId).toBe(7);
+    expect(nodesOfType(doc, "codeBlock")).toHaveLength(0);
   });
 
   it("reads an aligned image nested inside a blockquote", () => {
@@ -577,7 +697,7 @@ describe("a block declines what is not its own", () => {
     expect(roundTrip(md)).toBe(md);
   });
 
-  it("leaves HTML that is not a scene block alone", () => {
+  it("leaves a GM's hand-written HTML alone", () => {
     const doc = read('<div class="note">Hand-written HTML</div>');
     expect(nodesOfType(doc, "sceneBlock")).toHaveLength(0);
   });
@@ -651,33 +771,58 @@ describe("Image declares its alignment suffix", () => {
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 //
-// Scene's on-disk form is still the `<scene-block>` tag — the ```scene fence
-// carrying id and name is the vault migration's business, behind the format
-// version stamp. What changes here is that Scene *claims* that tag rather than
-// leaning on the reader's generic HTML fallback.
+// Scene's on-disk form is a ` ```scene ` fence carrying the id and the scene's
+// name (#185). The format itself is pinned by scene-block.test.ts; what only this
+// seam can show is the fence being claimed rather than read as a grey code box —
+// and the legacy `<scene-block>` tag no longer being read at all.
 
-describe("Scene claims its tag", () => {
-  it("reads the tag as a scene block", () => {
-    const doc = read('<scene-block data-id="7" data-expanded="false"></scene-block>');
+describe("Scene claims its fence", () => {
+  it("reads a scene fence as a scene reference", () => {
+    const doc = read("```scene\n# Boss Battle\nId: 7\n```");
 
-    expect(onlyNode(doc, "sceneBlock").attrs?.sceneId).toBe(7);
+    expect(onlyNode(doc, "sceneBlock").attrs).toEqual({
+      sceneId: 7,
+      sceneName: "Boss Battle",
+    });
+    expect(nodesOfType(doc, "codeBlock")).toHaveLength(0);
   });
 
-  it("reads a tag with no id as a scene block bound to nothing", () => {
-    const doc = read('<scene-block data-id="" data-expanded="false"></scene-block>');
+  it("reads an empty scene fence as a reference bound to nothing", () => {
+    const doc = read("```scene\n```");
 
     expect(onlyNode(doc, "sceneBlock").attrs?.sceneId).toBe(null);
   });
 
-  it("reads a hand-written self-closing tag", () => {
-    const doc = read('<scene-block data-id="7" />');
-
-    expect(onlyNode(doc, "sceneBlock").attrs?.sceneId).toBe(7);
+  it.each([
+    "```scene\n# Boss Battle\nId: 7\n```",
+    "```scene\nId: 7\n```",
+    "```scene\n```",
+  ])("round-trips %o byte for byte", (md) => {
+    expect(roundTrip(md)).toBe(md);
   });
 
-  it("round-trips the tag byte for byte", () => {
-    const md = '<scene-block data-id="7" data-expanded="false"></scene-block>';
+  it("reads two scene fences in one note", () => {
+    const md = [
+      "```scene\n# Boss Battle\nId: 1\n```",
+      "",
+      "Some prose.",
+      "",
+      "```scene\n# Town Market\nId: 2\n```",
+    ].join("\n");
+
+    expect(nodesOfType(read(md), "sceneBlock")).toHaveLength(2);
     expect(roundTrip(md)).toBe(md);
+  });
+
+  // The named cost of deleting the legacy reader (#185). The [[Ledger Format
+  // Version]] stamp is what makes it safe: no file in an up-to-date vault holds a
+  // tag, so the only way to meet one is to paste it in by hand — and Grimoire does
+  // not quietly repair it into a working reference. What must NOT happen is the
+  // tag surviving as a scene: it becomes whatever the reader makes of stray HTML.
+  it("does not read a hand-pasted legacy scene-block tag as a scene", () => {
+    const doc = read('<scene-block data-id="7" data-expanded="false"></scene-block>');
+
+    expect(nodesOfType(doc, "sceneBlock")).toHaveLength(0);
   });
 });
 

@@ -18,6 +18,7 @@ import { CalloutBlock } from "$lib/editor/callout-block";
 import { ImageBlock } from "$lib/editor/image-block";
 import { InfoboxBlock } from "$lib/editor/infobox-block";
 import { SceneBlock } from "$lib/editor/scene-block.svelte";
+import { StatblockBlock } from "$lib/editor/statblock-block";
 import { TimelineBlock } from "$lib/editor/timeline-block";
 import { WikiLink } from "$lib/editor/wiki-link";
 import { SlashCommand } from "$lib/editor/slash-command";
@@ -44,6 +45,7 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
     ImageBlock,
     InfoboxBlock,
     SceneBlock,
+    StatblockBlock,
     TimelineBlock,
     WikiLink.configure({
       onSuggestion: options.onWikiSuggestion ?? (() => {}),

@@ -786,6 +786,26 @@ mod tests {
         assert!(extract_wikilinks(content).is_empty());
     }
 
+    // A Statblock is fence-blind in exactly the same way (#177), and it has one
+    // surface an Infobox does not: an entry's body, which is prose inside a fence.
+    #[test]
+    fn extract_wikilinks_reads_a_statblock_header_row() {
+        let content = "```statblock\n# Goblin Scout\nServes: [[Captain Ash.md]]\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_a_statblock_entry_body() {
+        let content = "```statblock\n## Lore\nBound: Sworn to [[Captain Ash.md]].\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_statblock_unnamed_prose() {
+        let content = "```statblock\n## Description\nIt served [[Captain Ash.md]] once.\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
     #[test]
     fn extract_wikilinks_empty_body() {
         assert!(extract_wikilinks("").is_empty());
@@ -880,6 +900,17 @@ mod tests {
         let content = "```infobox\n# Harbor's End\nRuler: [[old.md]]\n```";
         let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
         assert_eq!(out, "```infobox\n# Harbor's End\nRuler: [[new.md]]\n```");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_wikilink_inside_a_statblock_fence() {
+        let content = "```statblock\n# Goblin Scout\nServes: [[old.md]]\n\n## Lore\nBound: Sworn to [[old.md]].\n```";
+        let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
+        assert_eq!(
+            out,
+            "```statblock\n# Goblin Scout\nServes: [[new.md]]\n\n## Lore\nBound: Sworn to [[new.md]].\n```"
+        );
         assert!(changed);
     }
 

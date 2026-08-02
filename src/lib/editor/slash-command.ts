@@ -5,6 +5,7 @@ import { PluginKey } from "prosemirror-state";
 import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
 import { blankInfobox } from "./infobox-block";
+import { blankStatblock } from "./statblock-block";
 import { createBlankEvent } from "./timeline-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -142,6 +143,19 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .focus()
         .deleteRange(range)
         .insertContent({ type: "infoboxBlock", attrs: blankInfobox() })
+        .run(),
+  },
+  {
+    group: "Insert",
+    label: "Statblock",
+    keywords: ["statblock", "creature", "monster", "npc", "stats", "hp"],
+    icon: "Shield",
+    command: (editor, range) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({ type: "statblockBlock", attrs: blankStatblock() })
         .run(),
   },
   {

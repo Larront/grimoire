@@ -1051,6 +1051,44 @@ mod tests {
     }
 
     #[test]
+    fn body_search_finds_a_note_by_the_name_in_its_scene_fence() {
+        // Half of why the scene's name is written into the note at all (#185). Under
+        // the old `<scene-block data-id="7">` form there was nothing here to find:
+        // `strip_html_tags` above removed the tag, and the id was never a word a GM
+        // would type. A fence body is plain text, so the name is findable for free.
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Session 4", "session-4.md");
+        let content = "# The Ambush\n\n```scene\n# Boss Battle\nId: 7\n```\n";
+        std::fs::write(dir.path().join("session-4.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        for term in ["Boss", "Battle"] {
+            assert_eq!(
+                search_notes_in_index(&index, dir.path(), term, 10).unwrap().len(),
+                1,
+                "'{term}' from a scene fence must find the note that plays it"
+            );
+        }
+    }
+
+    #[test]
+    fn body_search_does_not_find_a_note_by_the_old_scene_tag() {
+        // The other half of the same argument, asserted rather than assumed: the tag
+        // the fence replaced contributed nothing to search. `strip_html_tags` removes
+        // it, so neither its element name nor its id was ever findable.
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "Session 4", "session-4.md");
+        let content = r#"<scene-block data-id="7" data-expanded="false"></scene-block>"#;
+        std::fs::write(dir.path().join("session-4.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        assert!(
+            search_notes_in_index(&index, dir.path(), "scene", 10).unwrap().is_empty(),
+            "the legacy tag was noise the index threw away"
+        );
+    }
+
+    #[test]
     fn body_search_finds_a_wikilinked_infobox_row_value() {
         let dir = TempDir::new().unwrap();
         let note = make_note(1, "The Bay Area", "bay.md");
@@ -1060,6 +1098,25 @@ mod tests {
         let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
         let results = search_notes_in_index(&index, dir.path(), "Captain", 10).unwrap();
         assert_eq!(results.len(), 1, "a linked row value is searchable by its text");
+    }
+
+    #[test]
+    fn body_search_finds_a_statblock_section_heading_and_entry() {
+        // A Statblock's insides are findable for the same reason and to the same
+        // depth — the index reads the raw body, so a GM's own section heading and an
+        // entry's prose are text like any other (#177). And, as with an Infobox,
+        // *nothing* is recorded about them anywhere outside the note.
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "The Ambush", "ambush.md");
+        let content = "```statblock\n# Goblin Scout\nHP: 12\n\n## Actions\nShortbow: 1d6+2 piercing.\n```";
+        std::fs::write(dir.path().join("ambush.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        for term in ["Goblin", "Actions", "Shortbow", "piercing"] {
+            let results = search_notes_in_index(&index, dir.path(), term, 10).unwrap();
+            assert_eq!(results.len(), 1, "'{term}' in a statblock must match");
+            assert_eq!(results[0].id, 1);
+        }
     }
 
     #[test]

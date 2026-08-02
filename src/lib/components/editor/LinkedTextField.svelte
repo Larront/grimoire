@@ -43,6 +43,7 @@
     class: className = "",
     focused = false,
     restrict,
+    multiline = false,
   }: {
     /** The value as the document holds it. The field never mutates it. */
     value: string;
@@ -65,11 +66,18 @@
      * A field with no restriction takes any single line of text.
      */
     restrict?: (raw: string) => string;
+    /**
+     * Whether the value is allowed to hold line breaks — a Statblock entry's body,
+     * which wraps across lines inside its fence (#177). Off by default, because
+     * almost every value a block holds is one line of a line-oriented format, and a
+     * field that took Enter as a newline there would break the line it sits on.
+     */
+    multiline?: boolean;
   } = $props();
 
   let editing = $state(false);
   let draft = $state("");
-  let input = $state<HTMLInputElement>();
+  let input = $state<HTMLInputElement | HTMLTextAreaElement>();
 
   const segments = $derived(splitLinkedText(value));
 
@@ -107,7 +115,14 @@
   function commit() {
     suggestion = null;
     editing = false;
-    if (draft !== value) onCommit(draft);
+    // The restriction is applied again here because a multi-line field cannot apply
+    // it per keystroke: the newline the GM just pressed Enter for is, for the one
+    // keystroke before they type into it, a trailing empty line the restriction would
+    // remove — so the field would silently refuse to break a line at all. A one-line
+    // field has already been restricted as it was typed, and every restriction is
+    // idempotent, so this changes nothing there.
+    const next = restrict ? restrict(draft) : draft;
+    if (next !== value) onCommit(next);
   }
 
   function cancel() {
@@ -116,13 +131,20 @@
     editing = false;
   }
 
+  // A one-line field restricts as the GM types, so the character the format cannot
+  // hold never appears. A multi-line one cannot: the newline just typed is a trailing
+  // blank line until the next character arrives, and a restriction that removed it
+  // would mean the field could not be broken by typing at all. It restricts on commit
+  // instead — later, but still before anything reaches the document.
   function handleInput(raw: string) {
-    draft = restrict ? restrict(raw) : raw;
+    draft = restrict && !multiline ? restrict(raw) : raw;
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (suggestion && handleSuggestionKeydown(e)) return;
-    if (e.key === "Enter") {
+    // In a multi-line field Enter is a line break the value is allowed to hold, so
+    // the only ways out are leaving the field and Escape.
+    if (e.key === "Enter" && !multiline) {
       e.preventDefault();
       commit();
     } else if (e.key === "Escape") {
@@ -149,7 +171,7 @@
 
   let suggestion = $state<FieldSuggestion | null>(null);
 
-  async function offerSuggestions(el: HTMLInputElement) {
+  async function offerSuggestions(el: HTMLInputElement | HTMLTextAreaElement) {
     const caret = el.selectionStart ?? el.value.length;
     const before = el.value.slice(0, caret);
     const open = before.lastIndexOf("[[");
@@ -216,7 +238,22 @@
   }
 </script>
 
-{#if editing}
+{#if editing && multiline}
+  <textarea
+    bind:this={input}
+    value={draft}
+    {placeholder}
+    aria-label={ariaLabel}
+    rows={Math.max(2, draft.split("\n").length)}
+    class="w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
+    oninput={(e) => {
+      handleInput(e.currentTarget.value);
+      void offerSuggestions(e.currentTarget);
+    }}
+    onblur={commit}
+    onkeydown={handleKeydown}
+  ></textarea>
+{:else if editing}
   <input
     bind:this={input}
     type="text"

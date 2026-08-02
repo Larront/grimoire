@@ -5,6 +5,7 @@ import {
   type BlockView,
 } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
+import { jsonListAttr } from "$lib/editor/block-attrs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -206,15 +207,7 @@ export const TimelineBlock = Node.create({
     return {
       events: {
         default: [],
-        parseHTML: (el) => {
-          try {
-            return JSON.parse(
-              decodeURIComponent((el as HTMLElement).dataset.events ?? "[]"),
-            );
-          } catch {
-            return [];
-          }
-        },
+        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.events),
       },
     };
   },
