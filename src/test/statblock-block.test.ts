@@ -5,6 +5,7 @@
 // and no DOM. Text in, records out, text back. Playability is #178's; here a value is
 // structure, and `HP: 12/12` is characters like any other.
 import { describe, it, expect } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
 import { Editor } from "@tiptap/core";
 import {
   parseStatblockBody,
@@ -695,6 +696,66 @@ describe("/statblock", () => {
       ]);
     } finally {
       pasted.destroy();
+    }
+  });
+});
+
+// ─── Play, in a real editor ───────────────────────────────────────────────────
+//
+// The one assertion #153's prototype could not make, because it had no ProseMirror
+// history: **a play commit starts its own undo group.** `prosemirror-history` folds
+// adjacent steps together inside 500 ms, so a Ctrl+Z after typing a sentence must not
+// reach back into the hit and heal the goblin.
+//
+// The mechanism is the shared connector's `closeHistory`, asserted directly in
+// node-view-connector.test.ts. What is asserted here is the *outcome*, through a real
+// gesture in a real editor: the whole path from a click on a pool to what the document
+// says after one undo, which is the only place the two halves are seen together.
+
+describe("a hit is its own undo step", () => {
+  function poolControl(ed: Editor): HTMLElement {
+    const el = ed.view.dom.querySelector<HTMLElement>('[aria-label="Row 1 current value"]');
+    if (!el) throw new Error("the pool's current half is not on screen");
+    return el;
+  }
+
+  function rows(ed: Editor): { label: string; value: string }[] {
+    const block = ed.getJSON().content?.find((n) => n.type === "statblockBlock");
+    return block?.attrs?.rows ?? [];
+  }
+
+  it("undoes the hit rather than the sentence typed just before it", async () => {
+    const ed = new Editor({
+      extensions: noteExtensions(),
+      content: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "The goblin " }] },
+          { type: "statblockBlock", attrs: record({ rows: [{ label: "HP", value: "43/59" }] }) },
+        ],
+      },
+    });
+
+    try {
+      // A prose edit immediately before the hit, at the end of the paragraph the block
+      // sits under: adjacent in *time* and in *position*, which is both halves of what
+      // `prosemirror-history` groups on.
+      ed.commands.insertContentAt(12, "charges.");
+      expect(ed.getText()).toContain("The goblin charges.");
+
+      await fireEvent.click(poolControl(ed));
+      const input = poolControl(ed) as HTMLInputElement;
+      await fireEvent.input(input, { target: { value: "-7" } });
+      await fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(rows(ed)[0].value).toBe("36/59");
+
+      ed.commands.undo();
+
+      expect(rows(ed)[0].value).toBe("43/59");
+      expect(ed.getText()).toContain("The goblin charges.");
+    } finally {
+      ed.destroy();
     }
   });
 });

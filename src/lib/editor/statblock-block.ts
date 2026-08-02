@@ -42,9 +42,12 @@
 // arrives: when a system-specific concept is expressible as characters the GM typed,
 // the model declines to know about it (#150).
 //
-// Nothing here is played. `120/135` is a string, `[x][ ]` is a string; the pool and the
-// mark track — and the mode that guards their definitions — are #178's. What this file
-// owns is the structure, and the guarantee that every byte of it survives an autosave.
+// Nothing here is played. `120/135` is a string and `[x][ ]` is a string: the pool, the
+// mark track and the mode that guards their definitions live in `statblock-play.ts` and
+// the view (#178), and the format neither knows nor writes anything about them. What
+// this file owns is the structure, and the guarantee that every byte of it survives an
+// autosave — which is what makes play-state *be* the serialized value, since a hit is
+// nothing but a row's value taking this same path back to the file.
 //
 // **Two normalisations, decided rather than discovered** (ADR-0007's tradition of
 // stating an asymmetry rather than meeting it later):

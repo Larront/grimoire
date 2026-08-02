@@ -44,11 +44,17 @@
     focused = false,
     restrict,
     multiline = false,
+    readonly = false,
   }: {
     /** The value as the document holds it. The field never mutates it. */
     value: string;
-    /** The edited value, once the GM leaves the field. Only called on a change. */
-    onCommit: (next: string) => void;
+    /**
+     * The edited value, once the GM leaves the field. Only called on a change.
+     *
+     * Omitted only by a `readonly` field, which has no edit to commit. An editable
+     * field without one is a field that silently swallows what the GM typed.
+     */
+    onCommit?: (next: string) => void;
     /** Names the field for a screen reader, drawn and editing alike. */
     ariaLabel: string;
     /** Shown in place of an empty value. Never written to the document. */
@@ -73,6 +79,16 @@
      * field that took Enter as a newline there would break the line it sits on.
      */
     multiline?: boolean;
+    /**
+     * Draws the value and its links, with no way in — a Statblock's labels, headings
+     * and entry prose while it is in view mode (#178), where the whole point is that
+     * a mis-click cannot reach the creature's definition mid-fight.
+     *
+     * It is the *absence* of a control rather than a disabled one: there is no button,
+     * so nothing is focusable and nothing carries a name to click. Links inside the
+     * value stay live, because a link is navigation and never an edit.
+     */
+    readonly?: boolean;
   } = $props();
 
   let editing = $state(false);
@@ -101,7 +117,7 @@
   // `focused` alone drives this — an untracked read keeps a value change from
   // re-opening a field the GM has already left.
   $effect(() => {
-    if (focused) untrack(startEditing);
+    if (focused && !readonly) untrack(startEditing);
   });
 
   // The input exists only while editing, so its arrival is the cue to take focus.
@@ -122,7 +138,7 @@
     // field has already been restricted as it was typed, and every restriction is
     // idempotent, so this changes nothing there.
     const next = restrict ? restrict(draft) : draft;
-    if (next !== value) onCommit(next);
+    if (next !== value) onCommit?.(next);
   }
 
   function cancel() {
@@ -238,7 +254,27 @@
   }
 </script>
 
-{#if editing && multiline}
+<!-- The value as the GM sees it, drawn identically whether it is a button they can
+     click into or a read-only span. One snippet, so the two can never disagree about
+     how a link or an empty value looks. -->
+{#snippet drawn()}
+  {#if value}
+    {#each segments as segment, i (i)}
+      {#if segment.kind === "text"}{segment.text}{:else}<span
+          data-wiki-link
+          data-path={segment.path}
+          data-title={segment.title}
+          data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
+        >{/if}
+    {/each}
+  {:else}
+    <span class="text-muted-foreground/60 italic">{placeholder}</span>
+  {/if}
+{/snippet}
+
+{#if readonly}
+  <span class="block w-full whitespace-pre-wrap break-words {className}">{@render drawn()}</span>
+{:else if editing && multiline}
   <textarea
     bind:this={input}
     value={draft}
@@ -277,18 +313,7 @@
            {className}"
     onclick={handleClick}
   >
-    {#if value}
-      {#each segments as segment, i (i)}
-        {#if segment.kind === "text"}{segment.text}{:else}<span
-            data-wiki-link
-            data-path={segment.path}
-            data-title={segment.title}
-            data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
-          >{/if}
-      {/each}
-    {:else}
-      <span class="text-muted-foreground/60 italic">{placeholder}</span>
-    {/if}
+    {@render drawn()}
   </button>
 {/if}
 
