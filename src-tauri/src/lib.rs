@@ -1,5 +1,6 @@
 ﻿mod commands;
 mod db;
+mod fence_scan;
 mod format_migration;
 mod format_version;
 mod ledger;

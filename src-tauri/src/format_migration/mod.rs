@@ -78,21 +78,16 @@ impl MigrationContext {
         }
     }
 
-    /// A context that knows no scene names. Test-only: in production the context is
-    /// always read from the open database, which answers "no scenes" by coming back
-    /// empty on its own.
-    #[cfg(test)]
-    pub fn empty() -> Self {
-        Self {
-            scene_names: BTreeMap::new(),
-        }
-    }
-
     /// The name a scene id resolves to, or `None` when it resolves to no scene.
     pub fn scene_name(&self, id: i32) -> Option<&str> {
         self.scene_names.get(&id).map(String::as_str)
     }
 
+    /// A context standing for a given set of scenes — `[]` for a vault with none.
+    ///
+    /// Test-only, and the only test constructor: in production the context is always
+    /// read from the open database, which answers "no scenes" by coming back empty on
+    /// its own.
     #[cfg(test)]
     pub fn from_scene_names<'a>(pairs: impl IntoIterator<Item = (i32, &'a str)>) -> Self {
         Self {
@@ -101,6 +96,12 @@ impl MigrationContext {
                 .map(|(id, name)| (id, name.to_string()))
                 .collect(),
         }
+    }
+
+    /// A context that knows no scene names.
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Self::from_scene_names([])
     }
 }
 

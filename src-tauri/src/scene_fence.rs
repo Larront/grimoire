@@ -36,6 +36,7 @@
 
 use crate::db::models::Note;
 use crate::db::schema::notes::dsl as nd;
+use crate::fence_scan::{is_close_fence, open_fence, reattach, strip_prefix};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use std::path::Path;
@@ -58,6 +59,11 @@ pub fn propagate_rename(
     scene_id: i32,
     new_name: &str,
 ) -> Result<usize, String> {
+    // Every note, read from disk. There is no index to narrow this by, and there is
+    // not going to be one: ADR-0016 §8 draws the line at persistence — "nothing
+    // indexes a block's insides", no fifth Derived Index member — so which notes hold
+    // a scene reference is a question only the files can answer. Affordable because a
+    // rename is a rare, deliberate gesture, unlike an autosave.
     let notes: Vec<Note> = nd::notes.load(conn).map_err(|e| e.to_string())?;
 
     let mut rewrites: Vec<(Note, String)> = Vec::new();
@@ -92,7 +98,7 @@ fn rename_in_text(text: &str, scene_id: i32, new_name: &str) -> Option<String> {
 
     let mut i = 0;
     while i < lines.len() {
-        let open = match open_fence(lines[i]) {
+        let open = match open_fence(lines[i], "scene") {
             Some(open) => open,
             None => {
                 out.push(lines[i].to_string());
@@ -133,16 +139,26 @@ fn rename_in_text(text: &str, scene_id: i32, new_name: &str) -> Option<String> {
 /// is not the renamed scene's, or already says the right thing.
 fn rename_in_body(
     raw: &[&str],
-    open: &Open,
+    open: &crate::fence_scan::Open,
     scene_id: i32,
     new_name: &str,
 ) -> Option<Vec<String>> {
     let mut references = false;
     let mut name_at: Option<usize> = None;
+    // The line ending in use, so a rewritten line keeps the file's own. Taken from
+    // the fence's own body rather than assumed: a note written on Windows or by
+    // another tool is CRLF throughout, and a lone LF line spliced into it is a
+    // change to bytes this rename was not asked to touch.
+    let mut newline = "";
     for (at, line) in raw.iter().enumerate() {
-        let body = strip_prefix(line, &open.prefix);
+        let (body, cr) = split_cr(strip_prefix(line, &open.prefix));
+        if !cr.is_empty() {
+            newline = cr;
+        }
         if id_of(body) == Some(scene_id) {
             references = true;
+            // The *first* name line wins, matching `parseSceneBody` — a fence has one
+            // name, so a second `# …` line is not it.
         } else if name_at.is_none() && body.starts_with("# ") {
             name_at = Some(at);
         }
@@ -155,7 +171,8 @@ fn rename_in_body(
     // one, so the copy is flattened — the same normalisation the editor's serializer
     // applies to the same value.
     let one_line = new_name.replace(['\r', '\n'], " ");
-    let desired = (!one_line.is_empty()).then(|| reattach(&open.prefix, &format!("# {one_line}")));
+    let desired =
+        (!one_line.is_empty()).then(|| reattach(&open.prefix, &format!("# {one_line}{newline}")));
 
     let mut body: Vec<String> = raw.iter().map(|line| line.to_string()).collect();
     match (name_at, desired) {
@@ -175,6 +192,17 @@ fn rename_in_body(
     (body != raw.iter().map(|l| l.to_string()).collect::<Vec<_>>()).then_some(body)
 }
 
+/// A line split from the carriage return a CRLF file leaves on it after a split on
+/// `\n`. Every reading below is of the first half, so a CRLF note is read exactly as
+/// an LF one — without this, `Id: 7\r` named no scene and such a note kept a stale
+/// name in silence while the migration had happily rewritten it.
+fn split_cr(line: &str) -> (&str, &str) {
+    match line.strip_suffix('\r') {
+        Some(rest) => (rest, "\r"),
+        None => (line, ""),
+    }
+}
+
 /// `Id: 7` — the scene a body line names, when it names one. The same reading as
 /// the editor's: a bare non-negative integer and nothing else.
 fn id_of(body_line: &str) -> Option<i32> {
@@ -183,60 +211,6 @@ fn id_of(body_line: &str) -> Option<i32> {
         return None;
     }
     rest.parse::<i32>().ok()
-}
-
-// ── Finding the fences ───────────────────────────────────────────────────────
-//
-// Same shape as the Timeline migration's, and the same reason for each part: a
-// fence may be nested inside a Callout (#158), and the info string must be the
-// block's name and nothing else, which is the byte-identity rule the editor's own
-// claim follows (`fence-claim.ts`).
-
-struct Open {
-    prefix: String,
-    fence_char: char,
-    len: usize,
-}
-
-fn nesting_len(line: &str) -> usize {
-    line.len()
-        - line
-            .trim_start_matches([' ', '\t', '>'])
-            .len()
-}
-
-fn open_fence(line: &str) -> Option<Open> {
-    let (prefix, rest) = line.split_at(nesting_len(line));
-    let fence_char = rest.chars().next()?;
-    if fence_char != '`' && fence_char != '~' {
-        return None;
-    }
-    let len = rest.chars().take_while(|c| *c == fence_char).count();
-    if len < 3 || rest[len..].trim() != "scene" {
-        return None;
-    }
-    Some(Open {
-        prefix: prefix.to_string(),
-        fence_char,
-        len,
-    })
-}
-
-fn is_close_fence(line: &str, open: &Open) -> bool {
-    let rest = &line[nesting_len(line)..];
-    let run = rest.chars().take_while(|c| *c == open.fence_char).count();
-    run >= open.len && rest[run..].trim().is_empty()
-}
-
-fn strip_prefix<'a>(line: &'a str, prefix: &str) -> &'a str {
-    match line.strip_prefix(prefix) {
-        Some(rest) => rest,
-        None => &line[nesting_len(line)..],
-    }
-}
-
-fn reattach(prefix: &str, line: &str) -> String {
-    format!("{prefix}{line}")
 }
 
 #[cfg(test)]
@@ -342,6 +316,44 @@ mod tests {
             )
             .unwrap(),
             "```scene\n# Final Stand\nId: 7\nNote to self: check the volumes\n```"
+        );
+    }
+
+    #[test]
+    fn a_note_with_crlf_line_endings_is_read_and_rewritten_in_its_own_endings() {
+        // Found in review: `Id: 7\r` named no scene, so a CRLF note kept a stale name
+        // in silence — and silence is the whole failure mode this rename exists to
+        // prevent. The rewritten line keeps the file's endings rather than splicing a
+        // lone LF into a file that has none.
+        assert_eq!(
+            rename_in_text(
+                "```scene\r\n# Boss Battle\r\nId: 7\r\n```\r\n",
+                7,
+                "Final Stand"
+            )
+            .unwrap(),
+            "```scene\r\n# Final Stand\r\nId: 7\r\n```\r\n"
+        );
+        // And the name it gains when there is none is CRLF too.
+        assert_eq!(
+            rename_in_text("```scene\r\nId: 7\r\n```\r\n", 7, "Final Stand").unwrap(),
+            "```scene\r\n# Final Stand\r\nId: 7\r\n```\r\n"
+        );
+    }
+
+    #[test]
+    fn the_first_name_line_is_the_one_rewritten() {
+        // Which line is "the name" must be the same answer the editor gives
+        // (`parseSceneBody` takes the first too), or a rename would update a line the
+        // editor does not read and leave the one it does.
+        assert_eq!(
+            rename_in_text(
+                "```scene\n# Boss Battle\n# Second\nId: 7\n```",
+                7,
+                "Final Stand"
+            )
+            .unwrap(),
+            "```scene\n# Final Stand\n# Second\nId: 7\n```"
         );
     }
 

@@ -40,6 +40,9 @@
 //! removes.
 
 use super::{MigrationContext, Rewrite};
+// The nesting a legacy tag carries is the nesting its fence inherits — #158 is the
+// standing reminder that a column-zero-only scan misses a block inside a quote.
+use crate::fence_scan::nesting_len;
 
 /// Rewrite every legacy `<scene-block>` tag in a note's text.
 ///
@@ -77,16 +80,6 @@ struct Tag {
     /// The scene the tag referenced, or `None` when it named none — a `/scene`
     /// the GM inserted and never bound.
     scene_id: Option<i32>,
-}
-
-/// The leading run of indentation and blockquote markers on a line. Same shape as
-/// `timeline_v1`'s, and the same reason: #158 is the standing reminder that a
-/// column-zero-only scan misses a block nested inside a quote.
-fn nesting_len(line: &str) -> usize {
-    line.len()
-        - line
-            .trim_start_matches([' ', '\t', '>'])
-            .len()
 }
 
 /// The tag a line *is*, or `None` if the line is anything else.

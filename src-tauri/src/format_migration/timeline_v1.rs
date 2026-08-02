@@ -24,6 +24,9 @@
 //! vault where some files are *already* migrated.
 
 use super::{MigrationContext, Rewrite};
+// Fence mechanics are shared (`crate::fence_scan`); the two *grammars* below are
+// this migration's own frozen copies, which is the duplication that is the point.
+use crate::fence_scan::{is_close_fence, open_fence, reattach, strip_prefix};
 
 /// Rewrite every old-format ` ```timeline ` fence in a note's text.
 ///
@@ -41,7 +44,7 @@ pub fn apply(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
 
     let mut i = 0;
     while i < lines.len() {
-        let open = match open_fence(lines[i]) {
+        let open = match open_fence(lines[i], "timeline") {
             Some(open) => open,
             None => {
                 out.push(lines[i].to_string());
@@ -83,74 +86,6 @@ pub fn apply(text: &str, _ctx: &MigrationContext) -> Option<Rewrite> {
         text: out.join("\n"),
         warnings,
     })
-}
-
-// ── Finding the fences ───────────────────────────────────────────────────────
-
-/// An opening ` ```timeline ` fence: what came before it on the line, and the
-/// run of fence characters, so the matching close can be recognised.
-struct Open {
-    /// Indentation and blockquote markers ahead of the fence — a timeline can be
-    /// nested inside a Callout, and #158 is the standing reminder that a
-    /// column-zero-only scan misses those.
-    prefix: String,
-    fence_char: char,
-    len: usize,
-}
-
-/// The leading run of indentation and blockquote markers on a line.
-fn nesting_len(line: &str) -> usize {
-    line.len()
-        - line
-            .trim_start_matches(|c| c == ' ' || c == '\t' || c == '>')
-            .len()
-}
-
-fn open_fence(line: &str) -> Option<Open> {
-    let (prefix, rest) = line.split_at(nesting_len(line));
-    let fence_char = rest.chars().next()?;
-    if fence_char != '`' && fence_char != '~' {
-        return None;
-    }
-    let len = rest.chars().take_while(|c| *c == fence_char).count();
-    // The info string must be the block's name and nothing else — the same
-    // byte-identity rule the editor's claim follows (`fence-claim.ts`).
-    if len < 3 || rest[len..].trim() != "timeline" {
-        return None;
-    }
-    Some(Open {
-        prefix: prefix.to_string(),
-        fence_char,
-        len,
-    })
-}
-
-fn is_close_fence(line: &str, open: &Open) -> bool {
-    let rest = &line[nesting_len(line)..];
-    let run = rest.chars().take_while(|c| *c == open.fence_char).count();
-    run >= open.len && rest[run..].trim().is_empty()
-}
-
-/// A body line with its nesting removed. Exact when the line carries the opening
-/// fence's prefix; otherwise whatever indentation and quoting it does carry, so
-/// a lazily-continued blockquote still yields its content.
-fn strip_prefix<'a>(line: &'a str, prefix: &str) -> &'a str {
-    match line.strip_prefix(prefix) {
-        Some(rest) => rest,
-        None => &line[nesting_len(line)..],
-    }
-}
-
-/// Put the nesting back on a rewritten body line. A line that is now blank takes
-/// the prefix with its trailing space dropped — `>` rather than `> ` — which is
-/// what a markdown writer emits, so the migrated file is already in the shape the
-/// next save would put it in.
-fn reattach(prefix: &str, line: &str) -> String {
-    if line.is_empty() {
-        prefix.trim_end().to_string()
-    } else {
-        format!("{prefix}{line}")
-    }
 }
 
 // ── The grammars ─────────────────────────────────────────────────────────────

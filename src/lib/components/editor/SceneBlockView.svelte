@@ -23,7 +23,7 @@
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { api } from "$lib/api";
-  import type { SceneSlot } from "$lib/types/ledger";
+  import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
   
@@ -35,7 +35,7 @@
   // would be one a later reader could start reading.
   let {
     sceneId,
-    sceneName: _cachedName,
+    sceneName: _nameInTheFile,
     onUpdate,
   }: {
     sceneId: number | null;
@@ -57,12 +57,6 @@
   // a mixer was an edit that synced to every other machine.
   let expanded = $state(false);
 
-  // The name written back beside the id, so the fence stays legible in Obsidian.
-  // Only ever the *live* name from the store; the copy in the file is never read
-  // back as authority.
-  const cachedName = (id: number) =>
-    scenes.scenes.find((s) => s.id === id)?.name ?? "";
-
   // ── Placeholder search ────────────────────────────────────────────────────
 
   let searchQuery = $state("");
@@ -72,8 +66,10 @@
     ),
   );
 
-  function selectScene(id: number) {
-    onUpdate({ sceneId: id, sceneName: cachedName(id) });
+  // The name written into the fence beside the id comes from the store, never from
+  // the file — a scene the picker just listed is one the store has a live name for.
+  function selectScene(scene: Scene) {
+    onUpdate({ sceneId: scene.id, sceneName: scene.name });
   }
 
   async function createNewScene() {
@@ -321,7 +317,7 @@
             type="button"
             role="option"
             aria-selected="false"
-            onclick={() => selectScene(scene.id)}
+            onclick={() => selectScene(scene)}
             class="group w-full text-left flex items-center gap-2.5 px-2 py-1.5 rounded-md
                    text-muted-foreground cursor-pointer transition-colors
                    hover:bg-primary/10 hover:text-foreground

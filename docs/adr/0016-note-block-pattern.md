@@ -183,7 +183,8 @@ Two things *are* universal, generalised here from the tickets that decided them:
 
 - **Posture never serializes.** Mode, collapse and selection are view state; document state is what
   the GM carries to another device and reads correctly in Obsidian
-  ([#150](https://github.com/Larront/grimoire/issues/150)). Scene's `expanded` is the outlier.
+  ([#150](https://github.com/Larront/grimoire/issues/150)). Scene's `expanded` is the outlier
+  (closed — see *Amendments*).
 - **Every mutation is one undo.** A block that changes the document from its view starts its own
   undo group, because `prosemirror-history` groups adjacent steps inside 500 ms and would otherwise
   fold a play-state change into an unrelated prose edit (#153).
@@ -199,7 +200,8 @@ which is forced by there being no schema in a fence to consult.
 
 A block must not write note bytes by any route but the editor (audit constraints 3 and 4). Scene's
 out-of-band SQLite writes are tolerable only because scene slots are not note content; the same
-route for note content would land writes while a Conflict Banner is up.
+route for note content would land writes while a Conflict Banner is up. (Amended — the rule now
+reads *by any route but the editor or the note-rename rewrite path*; see *Amendments*.)
 
 ### 8. What the pattern does not own
 
@@ -262,7 +264,7 @@ pattern is a contract about how a block behaves in a GM's file, not a code-shari
 
 - **Scene is out of pattern until migrated**, on the serialization rule and on `expanded` being view
   state persisted into the document. It has no tests, making it the riskiest change the map proposes;
-  characterisation tests before migration are #155's call.
+  characterisation tests before migration are #155's call. (Both closed — see *Amendments*.)
 - **Two pieces of machinery must exist before Infobox is built**, or the pattern ships as prose and
   the fourth block copy-pastes the third.
 - **The connector's event-handling hole is a deliberate hole.** A later attempt to close it "for
@@ -276,3 +278,38 @@ pattern is a contract about how a block behaves in a GM's file, not a code-shari
   everything but the flag. Whether the flag can simply be set, or whether `selectNode`/`deselectNode`
   depends on it being unset, is a code question for #155 rather than a guess here.
 - No block may acquire a SQLite entity without redrawing §1.
+
+## Amendments
+
+### 2026-08-03 — Scene's migration shipped ([#185](https://github.com/Larront/grimoire/issues/185))
+
+The decision above is unchanged; three statements in it described a *pending* state that has now
+resolved, and one rule is widened. The reasoning is left as written — it is the record of what was
+argued — so this section says what is no longer true rather than editing the argument.
+
+**Scene is in pattern on §6, and on §1 as far as §1 can reach.** `expanded` is gone from the
+document; mixer collapse is view state, and collapsing writes no bytes. `<scene-block data-id="7">`
+— cited in §1 as the evidence that opaque HTML was avoidable, and still the honest description of
+what Scene wrote when this ADR was accepted — is now a ` ```scene ` fence carrying the id and the
+scene's name. §1's table row stands unchanged and on purpose: a scene is still a SQLite row with no
+ledger path, so it is still **the documented exception**. The fence makes the reference *legible,
+not legal*, and recording this ticket as bringing Scene into conformance would be wrong.
+
+**§7's write rule is widened, narrowly.** A scene rename has to rewrite the name cached in every
+note referencing it — a copy with an owner elsewhere is either synced or lying — so note bytes are
+now written by one more route: `note_mutation::commit_backlink_rewrites`, the batched
+write-and-reconcile a *note* rename's backlink rewrites already used. That path predates this ADR
+and §7 never named it, which is the sense in which this is a clarification as much as a widening:
+the rule's target is a **block writing through a channel of its own**, and adding a caller to the
+one sanctioned non-editor writer is not that. What the rule keeps forbidding is what the audit
+found: writes that bypass the [[Write Chokepoint]], and per-mutation writes from a node view.
+
+**The Conflict Banner cost named in §7 is real and unpaid.** Neither this path nor the note rename
+it borrows checks for a banner, so a bulk rewrite can land under an open note holding unsaved
+changes — whose next autosave writes the old name back. This is the edge the planned
+repair-backlinks tool exists for, and it is now reachable by one more gesture. A future writer
+reading §7 should know the guarantee is echo-suppression, not exclusion.
+
+**Image was left alone.** The `atom` flag question above was answered by not needing an answer: a
+childless node is already an atom, so setting the flag would change no behaviour, and Image's
+on-disk form is unchanged.

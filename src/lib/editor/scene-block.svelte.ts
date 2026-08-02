@@ -100,6 +100,13 @@ function idOf(line: string): number | null {
  * to put a third, unlike an Infobox where an unrecognised line is still a row. That
  * is the one place a hand-edit inside this fence loses characters, and it is the
  * documented cost of the fence holding exactly what it holds.
+ *
+ * Where a hand-edit gives either field twice, the **first** wins: a reference names
+ * one scene, so a second `# …` line is a line the format has no reading for, like
+ * any other. First rather than last because the scene rename that keeps the cached
+ * name true rewrites the first one (`src-tauri/src/scene_fence.rs`) — the two must
+ * agree about which line is the name, or a rename would update a line the editor
+ * does not read.
  */
 export function parseSceneBody(body: string): SceneRef {
   let sceneId: number | null = null;
@@ -109,11 +116,11 @@ export function parseSceneBody(body: string): SceneRef {
     if (line.trim() === "") continue;
     const name = nameOf(line);
     if (name !== null) {
-      sceneName = name;
+      if (!sceneName) sceneName = name;
       continue;
     }
     const id = idOf(line);
-    if (id !== null) sceneId = id;
+    if (id !== null && sceneId === null) sceneId = id;
   }
 
   return { sceneId, sceneName };

@@ -525,6 +525,17 @@ describe("the scene fence", () => {
     });
   });
 
+  it("takes the first of each line a hand-edit gave twice", () => {
+    // A reference names one scene, so the second of either line is a line the format
+    // has no reading for. First rather than last because the scene rename that keeps
+    // the cached name true rewrites the first one (`src-tauri/src/scene_fence.rs`) —
+    // the two must agree, or a rename updates a line the editor does not read.
+    expect(parseSceneBody("# Boss Battle\n# Second\nId: 7\nId: 9")).toEqual({
+      sceneId: 7,
+      sceneName: "Boss Battle",
+    });
+  });
+
   it("reads a hand-edited fence with blank lines in it", () => {
     expect(parseSceneBody("\n# Boss Battle\n\nId: 1\n")).toEqual({
       sceneId: 1,
