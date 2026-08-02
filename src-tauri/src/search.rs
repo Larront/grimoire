@@ -52,7 +52,7 @@ pub struct SearchAllResult {
 
 pub fn extract_plain_text(content: &str) -> String {
     let body = strip_frontmatter(content);
-    let body = strip_images(&body);
+    let body = strip_image_paths(&body);
     let body = strip_wiki_link_braces(&body);
     strip_html_tags(&body)
 }
@@ -63,27 +63,46 @@ fn strip_frontmatter(content: &str) -> String {
         .unwrap_or_else(|| content.to_string())
 }
 
-fn strip_images(text: &str) -> String {
-    // Remove ![alt](path{attrs}) — the image path must not be indexed.
+/// Consumes up to and including the `close` that balances an already-consumed `open`,
+/// returning what lay between. An unterminated run consumes the rest of the input.
+fn take_balanced(
+    chars: &mut std::iter::Peekable<std::str::CharIndices>,
+    open: char,
+    close: char,
+) -> String {
+    let mut inner = String::new();
+    let mut depth = 1usize;
+    for (_, c) in chars.by_ref() {
+        if c == open { depth += 1; }
+        if c == close {
+            depth -= 1;
+            if depth == 0 { break; }
+        }
+        inner.push(c);
+    }
+    inner
+}
+
+fn strip_image_paths(text: &str) -> String {
+    // Reduce ![alt](path{attrs}) to its alt text — the path must not be indexed, but the
+    // alt *is* the visible caption (CONTEXT.md, *Image caption ↔ alt text*), so it is note
+    // content and stays searchable.
     let mut result = String::new();
     let mut chars = text.char_indices().peekable();
     while let Some((_, c)) = chars.next() {
         if c == '!' {
             if chars.peek().map(|(_, c)| *c) == Some('[') {
                 chars.next(); // consume '['
-                let mut depth = 1usize;
-                while let Some((_, c2)) = chars.next() {
-                    if c2 == '[' { depth += 1; }
-                    if c2 == ']' { depth -= 1; if depth == 0 { break; } }
-                }
+                let alt = take_balanced(&mut chars, '[', ']');
                 if chars.peek().map(|(_, c)| *c) == Some('(') {
                     chars.next(); // consume '('
-                    let mut depth = 1usize;
-                    while let Some((_, c2)) = chars.next() {
-                        if c2 == '(' { depth += 1; }
-                        if c2 == ')' { depth -= 1; if depth == 0 { break; } }
-                    }
-                    // Image syntax fully consumed — do not add to result
+                    take_balanced(&mut chars, '(', ')'); // path discarded
+                    // The caption stands in for the image, padded so it cannot fuse to
+                    // the text either side — two adjacent portraits must not tokenize as
+                    // one welded word.
+                    result.push(' ');
+                    result.push_str(&alt);
+                    result.push(' ');
                     continue;
                 }
                 // Not a valid image — we already consumed ![... but can't un-consume.
@@ -926,11 +945,13 @@ mod tests {
     }
 
     #[test]
-    fn extract_strips_image_syntax_including_path() {
+    fn extract_strips_an_image_path_but_keeps_its_caption() {
+        // `alt` is the caption a GM reads on screen (CONTEXT.md, *Image caption ↔ alt
+        // text*), so it is note content and must be findable; the path is plumbing (#165).
         let content = "Some text ![harbor view](harbor.png) more text";
         let result = extract_plain_text(content);
         assert!(!result.contains("harbor.png"), "image path must not appear in plain text");
-        assert!(!result.contains("harbor view"), "alt text must not appear");
+        assert!(result.contains("harbor view"), "the caption must survive as body text");
         assert!(result.contains("Some text"));
         assert!(result.contains("more text"));
     }
@@ -940,8 +961,51 @@ mod tests {
         let content = "Before ![Alt](path/img.png{align=right,width=200}) after";
         let result = extract_plain_text(content);
         assert!(!result.contains("img.png"), "image path including attrs must be stripped");
+        assert!(!result.contains("align=right"), "layout attrs are plumbing, not content");
+        assert!(result.contains("Alt"));
         assert!(result.contains("Before"));
         assert!(result.contains("after"));
+    }
+
+    #[test]
+    fn extract_keeps_a_caption_containing_brackets() {
+        let content = "![A map of [the Reach]](maps/reach.png) follows";
+        let result = extract_plain_text(content);
+        assert!(!result.contains("reach.png"), "image path must not appear in plain text");
+        assert!(result.contains("A map of [the Reach]"), "nested brackets stay in the caption");
+        assert!(result.contains("follows"));
+    }
+
+    #[test]
+    fn extract_does_not_weld_a_caption_onto_its_neighbours() {
+        // Splicing the caption in where the image stood must not fuse it to the text
+        // either side, or the tokenizer sees `VaneReeve` and neither name is findable —
+        // the #165 failure reintroduced at the seam.
+        let content = "![Lord Vane](a.png)![Lady Reeve](b.png)";
+        let result = extract_plain_text(content);
+        assert!(result.contains("Vane"));
+        assert!(result.contains("Lady"));
+        assert!(!result.contains("VaneLady"), "adjacent images must not weld into one word");
+    }
+
+    #[test]
+    fn extract_keeps_a_wiki_link_target_inside_a_caption() {
+        // `strip_wiki_link_braces` runs after the image pass, so a caption's wikilink is
+        // now reachable by it — the display text lands in body text like any other.
+        let content = "![Portrait of [[NPCs/Aldric|Lord Aldric]]](portrait.png)";
+        let result = extract_plain_text(content);
+        assert!(result.contains("Lord Aldric"), "a wikilink in a caption reduces to its text");
+        assert!(!result.contains("[["));
+    }
+
+    #[test]
+    fn extract_drops_a_malformed_image_with_no_path() {
+        // Documented edge case, unchanged by #165: `![...` with no following `(` is not
+        // image syntax we can recognise, and the scan cannot un-consume what it read.
+        let content = "Before ![dangling alt after";
+        let result = extract_plain_text(content);
+        assert!(result.contains("Before"));
+        assert!(!result.contains("dangling"));
     }
 
     #[test]
@@ -974,13 +1038,22 @@ mod tests {
     fn body_search_does_not_match_image_path() {
         let dir = TempDir::new().unwrap();
         let note = make_note(1, "The Bay Area", "bay.md");
-        // "harbor" appears only in the image path
-        let content = "![Harbor view](harbor.png)\n\nThe bay is calm.";
+        // "attachments" appears only in the image path; the caption is separate content.
+        let content = "![Harbor view](attachments/img-0042.png)\n\nThe bay is calm.";
         std::fs::write(dir.path().join("bay.md"), content).unwrap();
 
         let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
-        let results = search_notes_in_index(&index, dir.path(), "harbor", 10).unwrap();
-        assert!(results.is_empty(), "'harbor' in image path must not match");
+        for term in ["attachments", "img-0042"] {
+            assert!(
+                search_notes_in_index(&index, dir.path(), term, 10).unwrap().is_empty(),
+                "'{term}' from an image path must not match"
+            );
+        }
+        assert_eq!(
+            search_notes_in_index(&index, dir.path(), "Harbor", 10).unwrap().len(),
+            1,
+            "the caption beside that path is still findable"
+        );
     }
 
     // ── Body search ────────────────────────────────────────────────────────
@@ -1022,12 +1095,10 @@ mod tests {
     }
 
     #[test]
-    fn body_search_skips_an_infobox_caption_but_keeps_its_rows() {
-        // The Infobox's thumbnail line is `![alt](path)`, and `strip_images` above
-        // removes an image's alt text along with its path — so the one part of a panel
-        // that is *not* searchable is its caption (#176). Pinned here because it is the
-        // single exception to "everything in a fence is findable", and because the row
-        // beside it shows the rule is otherwise intact.
+    fn body_search_finds_an_infobox_caption_and_its_rows() {
+        // The Infobox's thumbnail line is `![alt](path)` (#176), and its alt renders as
+        // the visible caption — so it is one more thing in the fence a GM can search for
+        // (#165). The row beside it shows the rest of the panel is findable too.
         let dir = TempDir::new().unwrap();
         let note = make_note(1, "The Bay Area", "bay.md");
         let content =
@@ -1035,19 +1106,33 @@ mod tests {
         std::fs::write(dir.path().join("bay.md"), content).unwrap();
 
         let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        for term in ["dusk", "monsoon"] {
+            assert_eq!(
+                search_notes_in_index(&index, dir.path(), term, 10).unwrap().len(),
+                1,
+                "'{term}' inside an infobox must find the note that carries it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_caption_match_shows_the_caption_in_the_excerpt() {
+        // #165 named excerpts as the second half of the gap: they are cut from the same
+        // cleaned text, so a hit a GM cannot see in the result row is only half a fix.
+        let dir = TempDir::new().unwrap();
+        let note = make_note(1, "The Bay Area", "bay.md");
+        let content = "![Lord Aldric Vane, Harbourmaster](portraits/aldric.png)\n\nThe bay is calm.";
+        std::fs::write(dir.path().join("bay.md"), content).unwrap();
+
+        let index = rebuild_index(dir.path(), &[note], &[], &[]).unwrap();
+        let results = search_notes_in_index(&index, dir.path(), "Harbourmaster", 10).unwrap();
+        assert_eq!(results.len(), 1);
+        let excerpt = results[0].excerpt.as_ref().expect("a body match must carry an excerpt");
         assert!(
-            search_notes_in_index(&index, dir.path(), "dusk", 10)
-                .unwrap()
-                .is_empty(),
-            "a caption is stripped with the image syntax that carries it"
+            excerpt.contains("Harbourmaster"),
+            "the caption that matched must be visible in the excerpt, got {excerpt:?}"
         );
-        assert_eq!(
-            search_notes_in_index(&index, dir.path(), "monsoon", 10)
-                .unwrap()
-                .len(),
-            1,
-            "a row beside a thumbnail is still searchable"
-        );
+        assert!(!excerpt.contains("aldric.png"), "the excerpt must not leak the image path");
     }
 
     #[test]
