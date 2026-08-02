@@ -26,6 +26,7 @@ use commands::recent_ledgers::*;
 use commands::sample::*;
 use commands::scenes::*;
 use commands::spotify::*;
+use commands::statblock_presets::*;
 use commands::tags::*;
 use commands::templates::*;
 use commands::tree::*;
@@ -78,6 +79,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_pin_category,
             delete_scene,
             delete_scene_slot,
+            delete_statblock_preset,
             delete_template,
             explore_sample_ledger,
             get_accent_preset,
@@ -109,9 +111,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_scene_slots,
             get_scenes,
             get_scenes_with_slot_counts,
+            get_statblock_preset_default,
             get_tag_graph_styles,
             get_tag_usage_counts,
             list_all_tags,
+            list_statblock_presets,
             list_templates,
             migrate_ledger_format,
             open_ledger,
@@ -126,6 +130,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             rename_folder,
             rename_note,
             rename_pdf,
+            rename_statblock_preset,
             retag_tag,
             rename_template,
             reorder_scene_slots,
@@ -137,6 +142,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_image_bytes,
             save_note_as_template,
             save_pdf_bytes,
+            save_statblock_preset,
+            save_statblock_preset_default,
             search_all,
             search_notes,
             set_note_aliases,
@@ -246,6 +253,13 @@ pub fn run() {
             get_accent_preset,
             save_density_level,
             get_density_level,
+            save_statblock_preset_default,
+            get_statblock_preset_default,
+            // Statblock presets (app-wide, not per-ledger)
+            list_statblock_presets,
+            save_statblock_preset,
+            rename_statblock_preset,
+            delete_statblock_preset,
             get_recent_ledgers,
             add_recent_ledger,
             remove_recent_ledger,

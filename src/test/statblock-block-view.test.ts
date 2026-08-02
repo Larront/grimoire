@@ -525,7 +525,9 @@ describe("a pool is played on", () => {
       (b.getAttribute("aria-label") ?? "").toLowerCase(),
     );
 
-    expect(labels.some((l) => /reset|restore|clear|full|heal/.test(l))).toBe(false);
+    // Word-anchored: "Save shape as preset" (#179) contains the letters of "reset"
+    // and is not one.
+    expect(labels.some((l) => /\b(reset|restore|clear|full|heal)/.test(l))).toBe(false);
   });
 });
 
@@ -649,6 +651,9 @@ describe("the mode is scoped to structure", () => {
       [
         "Collapse statblock",
         "Edit statblock structure",
+        // Authoring, but of a *preset* rather than of this creature — it opens a
+        // dialog and cannot change the block (#179).
+        "Save shape as preset",
         "Row 1 current value",
         "Row 2 value",
       ].sort(),

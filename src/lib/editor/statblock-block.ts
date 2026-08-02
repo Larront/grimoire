@@ -65,7 +65,10 @@
 // convention Grimoire has no opinion about.
 import { Node, mergeAttributes } from "@tiptap/core";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
-import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
+import {
+  createBlockNodeView,
+  type BlockView,
+} from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
 import { jsonListAttr } from "$lib/editor/block-attrs";
 import {
@@ -129,10 +132,20 @@ export function blankStatblockSection(): StatblockSection {
   return { heading: "", entries: [blankStatblockEntry()] };
 }
 
-/** Whether a statblock holds nothing a GM typed — a fresh insert, still untouched. */
-function isBlankStatblock(block: Statblock): boolean {
+/**
+ * Whether a statblock has nothing to play on and everything to author — one empty
+ * header row and nothing under it.
+ *
+ * A name does not count against it. `/statblock Bugbear` stamps a title and no shape
+ * (#179), and the GM who typed that name is waiting to type the rows under it, so the
+ * block opens for typing exactly as a bare `/statblock` does. A preset that brought
+ * rows with it does not open, because there is already something to play on.
+ */
+function isUnwrittenStatblock(block: Statblock): boolean {
   return (
-    !block.name && block.rows.every(isBlankLabelledRow) && block.sections.length === 0
+    block.rows.length === 1 &&
+    block.rows.every(isBlankLabelledRow) &&
+    block.sections.length === 0
   );
 }
 
@@ -234,7 +247,8 @@ export function parseStatblockBody(body: string): Statblock {
 
     let paragraph: string[] = [];
     const flush = () => {
-      if (paragraph.length) sections[sections.length - 1].entries.push(entryOf(paragraph));
+      if (paragraph.length)
+        sections[sections.length - 1].entries.push(entryOf(paragraph));
       paragraph = [];
     };
     while (i < lines.length && headingOf(lines[i]) === null) {
@@ -275,7 +289,10 @@ function shieldSection(line: string): string {
 /** An entry as its lines, or no lines at all when the GM typed nothing into it. */
 function serializeEntry(entry: StatblockEntry): string[] {
   const bodyLines = entry.body === "" ? [] : entry.body.split("\n");
-  const first = serializeLabelledRow({ label: entry.name, value: bodyLines[0] ?? "" });
+  const first = serializeLabelledRow({
+    label: entry.name,
+    value: bodyLines[0] ?? "",
+  });
   if (isBlank(first)) return [];
   return [shieldSection(first), ...bodyLines.slice(1)];
 }
@@ -311,7 +328,9 @@ export function serializeStatblock(block: Statblock): string {
     if (lines.length) lines.push("");
     lines.push(section.heading ? `## ${section.heading}` : "##");
 
-    const entries = section.entries.map(serializeEntry).filter((entry) => entry.length > 0);
+    const entries = section.entries
+      .map(serializeEntry)
+      .filter((entry) => entry.length > 0);
     entries.forEach((entryLines, index) => {
       if (index > 0) lines.push("");
       lines.push(...entryLines);
@@ -359,7 +378,9 @@ export const StatblockBlock = Node.create({
         {
           "data-name": node.attrs.name,
           "data-rows": encodeURIComponent(JSON.stringify(node.attrs.rows)),
-          "data-sections": encodeURIComponent(JSON.stringify(node.attrs.sections)),
+          "data-sections": encodeURIComponent(
+            JSON.stringify(node.attrs.sections),
+          ),
         },
         HTMLAttributes,
       ),
@@ -388,7 +409,11 @@ export const StatblockBlock = Node.create({
       defaults: { name: "", rows: [], sections: [] },
       props: ({ updateAttributes }) => ({
         onCommit: (block: Statblock) =>
-          updateAttributes({ name: block.name, rows: block.rows, sections: block.sections }),
+          updateAttributes({
+            name: block.name,
+            rows: block.rows,
+            sections: block.sections,
+          }),
       }),
       mounted: (view, attrs) => {
         // A fresh `/statblock`: one empty header row, opened for typing straight away.
@@ -397,7 +422,7 @@ export const StatblockBlock = Node.create({
           rows: attrs.rows as LabelledRow[],
           sections: attrs.sections as StatblockSection[],
         };
-        if (block.rows.length === 1 && isBlankStatblock(block)) view.focusRow(0);
+        if (isUnwrittenStatblock(block)) view.focusRow(0);
       },
     });
   },

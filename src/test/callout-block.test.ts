@@ -254,7 +254,7 @@ describe("the /callout picker", () => {
     const encounter = filterCommands("encounter")[0];
 
     try {
-      encounter.command(editor, { from: 1, to: 1 });
+      encounter.command(editor, { from: 1, to: 1 }, "");
 
       const quote = editor.getJSON().content?.[0];
       expect(quote?.type).toBe("blockquote");
@@ -272,7 +272,7 @@ describe("the /callout picker", () => {
     const warning = filterCommands("warning")[0];
 
     try {
-      warning.command(editor, { from: 1, to: 1 });
+      warning.command(editor, { from: 1, to: 1 }, "");
 
       expect(editor.getMarkdown().trimEnd()).toBe("> [!warning]");
     } finally {

@@ -34,8 +34,10 @@
   //
   // Nothing here knows what an entry *is*, and nothing knows what a mark *means*. A
   // section heading, an entry name and a condition label are all text the GM typed.
-  import { Check, ChevronDown, Pencil } from "@lucide/svelte";
+  import { Bookmark, Check, ChevronDown, Pencil } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
+  import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
+  import { serializeStatblock } from "$lib/editor/statblock-block";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import type { RowChange } from "$lib/editor/row-list";
   import { blankLabelledRow, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
@@ -242,6 +244,24 @@
       return;
     }
     commit();
+  }
+
+  // ── Saving the shape ────────────────────────────────────────────────────────
+  //
+  // The block is the only place a preset is authored from (#179). What travels is the
+  // fence exactly as this block would write it — captured at the moment the dialog
+  // opens, so what the GM previews is what they saw a keystroke earlier.
+
+  let savingPreset = $state(false);
+  let capturedFence = $state("");
+
+  function saveShapeAsPreset() {
+    capturedFence = serializeStatblock({
+      name: _name,
+      rows: $state.snapshot(_rows) as LabelledRow[],
+      sections: $state.snapshot(_sections) as StatblockSection[],
+    });
+    savingPreset = true;
   }
 
   export function setAttrs(attrs: Statblock) {
@@ -495,6 +515,18 @@
           : ''}"
       />
     </button>
+    <!-- Authoring, and the one gesture that makes a preset. Reachable in both modes:
+         a shape is worth keeping whether the GM has just built it or just recognised
+         it mid-session, and the capture is verbatim either way. -->
+    <button
+      type="button"
+      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
+             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      aria-label="Save shape as preset"
+      onclick={saveShapeAsPreset}
+    >
+      <Bookmark size={13} />
+    </button>
     {#if editing}
       <button
         type="button"
@@ -578,6 +610,8 @@
     {/each}
   {/if}
 </div>
+
+<SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={_name} />
 
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state

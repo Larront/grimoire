@@ -463,7 +463,7 @@ describe("/infobox", () => {
   it("inserts a panel with an empty title and somewhere to type", () => {
     const ed = editor();
     try {
-      filterCommands("infobox")[0].command(ed, { from: 1, to: 1 });
+      filterCommands("infobox")[0].command(ed, { from: 1, to: 1 }, "");
 
       const panel = ed.getJSON().content?.[0];
       expect(panel?.type).toBe("infoboxBlock");

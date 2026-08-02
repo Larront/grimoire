@@ -638,10 +638,12 @@ describe("/statblock", () => {
     return new Editor({ extensions: noteExtensions(), content });
   }
 
-  it("inserts a statblock with somewhere to type", () => {
+  // Insertion resolves a preset first (#179), so the command is async even when — as
+  // here, with no preset store and no vault default — it resolves to nothing.
+  it("inserts a statblock with somewhere to type", async () => {
     const ed = editor();
     try {
-      filterCommands("statblock")[0].command(ed, { from: 1, to: 1 });
+      await filterCommands("statblock")[0].command(ed, { from: 1, to: 1 }, "");
 
       const block = ed.getJSON().content?.[0];
       expect(block?.type).toBe("statblockBlock");

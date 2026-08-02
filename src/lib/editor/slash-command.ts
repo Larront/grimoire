@@ -6,7 +6,8 @@ import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
 import { blankInfobox } from "./infobox-block";
 import { blankSceneRef } from "./scene-block.svelte";
-import { blankStatblock } from "./statblock-block";
+import { statblockFromPreset } from "./statblock-presets";
+import { statblockPresets } from "$lib/stores/statblock-presets.svelte";
 import { createBlankEvent } from "./timeline-block";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -16,9 +17,17 @@ export interface SlashCommandItem {
   label: string;
   keywords: string[]; // extra search terms beyond label
   icon: string; // lucide icon name — resolved to Component in SlashCommandMenu
+  /**
+   * Whether the command reads the words typed after its name. A space used to end
+   * the suggestion session outright; it now survives, so this flag is what keeps
+   * `/quote ` closing mid-sentence while `/statblock goblin` reaches its preset.
+   */
+  acceptsArgument?: boolean;
   command: (
     editor: Editor,
     range: { from: number; to: number },
+    /** Everything typed after the command's name, trimmed. "" for most commands. */
+    argument: string,
   ) => void | boolean | Promise<void>;
 }
 
@@ -151,13 +160,25 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     label: "Statblock",
     keywords: ["statblock", "creature", "monster", "npc", "stats", "hp"],
     icon: "Shield",
-    command: (editor, range) =>
+    // The one command that reads its argument (#179). `/statblock goblin` stamps the
+    // `Goblin` preset if one exists and titles the block `# Goblin`; a name that
+    // matches nothing still becomes the title, over the vault's default shape.
+    // `/statblock` alone stamps that default. Every path is silent — no preset and no
+    // default gives a blank statblock and no toast, because a toast fires mid-fight
+    // where the GM cannot act on it. The diagnosis is in Settings.
+    acceptsArgument: true,
+    command: async (editor, range, argument) => {
+      const preset = await statblockPresets.resolve(argument);
       editor
         .chain()
         .focus()
         .deleteRange(range)
-        .insertContent({ type: "statblockBlock", attrs: blankStatblock() })
-        .run(),
+        .insertContent({
+          type: "statblockBlock",
+          attrs: statblockFromPreset(preset, argument),
+        })
+        .run();
+    },
   },
   {
     group: "Insert",
@@ -228,18 +249,57 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
 
 // ─── Filter ───────────────────────────────────────────────────────────────────
 
+/** Whether a command answers to a word exactly, by label or by keyword. */
+function isNamed(item: SlashCommandItem, word: string): boolean {
+  return (
+    item.label.toLowerCase() === word || item.keywords.some((kw) => kw === word)
+  );
+}
+
 /**
- * Case-insensitive substring match against label and keywords.
- * Empty query returns all commands.
+ * The commands a query offers.
+ *
+ * Two readings, split by whether a space has been typed:
+ *
+ *   * **No space** — case-insensitive substring match against label and keywords,
+ *     and an empty query offers everything. This is the whole menu as it was.
+ *   * **A space** — the words before it must *name* an argument-taking command
+ *     exactly. Everything else offers nothing, which is what closes the menu.
+ *
+ * The second reading exists because the suggestion session no longer ends at a
+ * space (it cannot, or `/statblock Large Orc` could never be typed), so this
+ * function is now what stops a stray `/` mid-sentence from reopening the menu on
+ * the next word. Requiring the *whole* head to match is the load-bearing part:
+ * `and / ordered chaos` has an empty head and offers nothing.
  */
 export function filterCommands(query: string): SlashCommandItem[] {
-  const q = query.toLowerCase().trim();
-  if (!q) return SLASH_COMMANDS;
+  const space = query.search(/\s/);
+  if (space < 0) {
+    const q = query.toLowerCase().trim();
+    if (!q) return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter(
+      (item) =>
+        item.label.toLowerCase().includes(q) ||
+        item.keywords.some((kw) => kw.includes(q)),
+    );
+  }
+
+  const head = query.slice(0, space).toLowerCase();
+  if (!head) return [];
   return SLASH_COMMANDS.filter(
-    (item) =>
-      item.label.toLowerCase().includes(q) ||
-      item.keywords.some((kw) => kw.includes(q)),
+    (item) => item.acceptsArgument && isNamed(item, head),
   );
+}
+
+/**
+ * The argument inside a matched `/…` — everything after the command's name.
+ *
+ * Read back off the document text the suggestion matched rather than tracked in a
+ * closure, so there is one source for it and no state to fall out of step.
+ */
+export function slashArgument(text: string): string {
+  const space = text.search(/\s/);
+  return space < 0 ? "" : text.slice(space + 1).trim();
 }
 
 // ─── Extension ────────────────────────────────────────────────────────────────
@@ -262,7 +322,11 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         editor: this.editor,
         char: "/",
         startOfLine: false, // '/' opens the menu anywhere in a line
-        allowSpaces: false, // session ends on a space keypress
+        // The session survives a space so a command can take an argument with one
+        // in it (`/statblock Large Orc`). What used to be the plugin's job — closing
+        // the menu at the first space — is now `filterCommands`', which closes it for
+        // every command that does not read an argument.
+        allowSpaces: true,
 
         // Synchronous filter — unlike WikiLink which uses async invoke.
         items: ({ query }: { query: string }) => filterCommands(query),
@@ -279,7 +343,11 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           props: SlashCommandItem;
         }) => {
           const ed = editor as Editor;
-          props.command(ed, range);
+          props.command(
+            ed,
+            range,
+            slashArgument(ed.state.doc.textBetween(range.from, range.to)),
+          );
         },
 
         render: () => {
