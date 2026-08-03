@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { convertFileSrc } from "@tauri-apps/api/core";
-  import { api } from "$lib/api";
+  import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
+  import { portal } from "$lib/utils/portal";
   import {
     AlignLeft,
     AlignCenter,
     AlignRight,
     Maximize2,
+    Trash2,
     X,
   } from "@lucide/svelte";
   import { fade } from "svelte/transition";
@@ -19,6 +20,7 @@
     onUpdate,
     onCaptionUpdate,
     onSrcReplace,
+    onRemove,
   }: {
     src: string;
     alt: string;
@@ -28,6 +30,8 @@
     onUpdate: (attrs: { align: string; width: string }) => void;
     onCaptionUpdate: (alt: string) => void;
     onSrcReplace?: (src: string) => void;
+    /** Takes the image out of the note. The file in `ledger/images/` is left alone. */
+    onRemove?: () => void;
   } = $props();
 
   // Internal mutable copies — NodeView calls setAttrs / setSelected to update these
@@ -43,37 +47,26 @@
   let _selected = $state(selected);
   let _lightboxOpen = $state(false);
 
-  let imageUrl = $state<string | null>(null);
-  let loadError = $state(false);
+  // The src's resolution, loading and not-found states included — the same helper the
+  // Infobox's thumbnail uses, which is what keeps one race fixed in one place.
+  const file = ledgerImage(() => _src);
   let containerEl: HTMLDivElement | undefined = $state();
 
-  export function setAttrs(
-    newAlign: string,
-    newWidth: string,
-    newSrc: string,
-    newAlt: string,
-  ) {
-    _align = newAlign;
-    _width = newWidth;
-    _src = newSrc;
-    _alt = newAlt;
+  export function setAttrs(attrs: {
+    align: string;
+    width: string;
+    src: string;
+    alt: string;
+  }) {
+    _align = attrs.align;
+    _width = attrs.width;
+    _src = attrs.src;
+    _alt = attrs.alt;
   }
 
   export function setSelected(val: boolean) {
     _selected = val;
   }
-
-  $effect(() => {
-    imageUrl = null;
-    loadError = false;
-    api.getImageAbsolutePath(_src)
-      .then((abs) => {
-        imageUrl = convertFileSrc(abs);
-      })
-      .catch(() => {
-        loadError = true;
-      });
-  });
 
   const alignMap: Record<string, string> = {
     left: "flex-start",
@@ -81,34 +74,14 @@
     right: "flex-end",
   };
 
-  function portal(node: HTMLElement) {
-    document.body.appendChild(node);
-    return {
-      destroy() {
-        node.remove();
-      },
-    };
-  }
-
   function closeLightbox() {
     _lightboxOpen = false;
   }
 
   async function replaceImage() {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({
-      multiple: false,
-      filters: [
-        { name: "Images", extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
-      ],
-    });
-    if (typeof picked !== "string") return;
-    try {
-      const newSrc = await api.copyImageFile(picked);
-      onSrcReplace?.(newSrc);
-    } catch {
-      // mirror other insertion routes: swallow; no node mutation
-    }
+    // A failed copy leaves the node alone, as every other insertion route does.
+    const newSrc = await pickLedgerImage();
+    if (newSrc) onSrcReplace?.(newSrc);
   }
 
   function onBackdropClick(e: MouseEvent) {
@@ -237,17 +210,33 @@
         >
           <Maximize2 size={14} />
         </button>
+        {#if onRemove}
+          <!-- Backspace already removes a selected image — this toolbar only shows
+               while the node *is* selected — so this button is discoverability rather
+               than capability, and it is here because the other blocks now carry one
+               and a GM should not have to know which blocks answer to the keyboard. -->
+          <button
+            class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-destructive
+                   transition-colors"
+            aria-label="Remove image"
+            onmousedown={(e) => e.preventDefault()}
+            onclick={onRemove}
+          >
+            <Trash2 size={14} />
+          </button>
+        {/if}
       </div>
     {/if}
 
-    {#if imageUrl}
+    {#if file.url}
       <img
-        src={imageUrl}
+        src={file.url}
         alt={_alt}
         class="block w-full rounded"
         draggable="false"
+        onerror={file.markMissing}
       />
-    {:else if loadError}
+    {:else if file.missing}
       <div
         class="flex flex-col items-center justify-center gap-2 w-full min-h-20 py-3 rounded
                border border-border/60 bg-card text-muted-foreground/60 text-xs font-sans"
@@ -314,7 +303,7 @@
   {/if}
 </div>
 
-{#if _lightboxOpen && imageUrl}
+{#if _lightboxOpen && file.url}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -344,7 +333,7 @@
       onclick={onBackdropClick}
     >
       <img
-        src={imageUrl}
+        src={file.url}
         alt={_alt}
         data-lightbox-img
         class="max-w-none block"

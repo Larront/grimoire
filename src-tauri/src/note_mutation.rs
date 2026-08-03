@@ -145,6 +145,13 @@ pub fn commit_many(
 /// collecting itself: `rename` must collect once — before phase A re-keys the
 /// row — and reuse the same plan for its deferred branch, while the command
 /// recomputes the plan fresh at apply time.
+///
+/// A third caller arrived with Scene's format change (#185): a scene rename brings
+/// the copy of its name held in every referencing note along with it
+/// (`crate::scene_fence`). Its rewrites are not wikilinks, but they are the same
+/// thing structurally — a plan of `(note, rewritten content)` pairs — and routing
+/// them here is what keeps "only the editor writes note bytes" true in the shape it
+/// already had, rather than adding a second writer beside this one.
 pub fn commit_backlink_rewrites(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,

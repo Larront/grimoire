@@ -3,6 +3,7 @@ import { api } from "$lib/api";
 import Suggestion from "@tiptap/suggestion";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
+import { parseWikiTarget, wikiStem } from "./wiki-target";
 
 interface WikiBrokenState {
   broken: Set<string>;
@@ -15,30 +16,9 @@ interface WikiBrokenState {
 // needs the reactive notes store and async alias lookups, which a plugin can't reach.
 export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink");
 
-// Strip an Obsidian `#heading` / `#^block` fragment from a raw link target.
-// Resolution ignores fragments; the node's path attribute keeps them so the
-// original [[target#heading]] text round-trips to markdown unchanged.
-export function stripWikiFragment(target: string): string {
-  const hash = target.indexOf("#");
-  return (hash >= 0 ? target.slice(0, hash) : target).trim();
-}
-
-// The display title a path falls back to when no explicit alias is given:
-// the last path segment with any .md extension and #fragment stripped.
-export function wikiStem(path: string): string {
-  const base = stripWikiFragment(path) || path;
-  return base.split("/").pop()?.replace(/\.md$/, "") ?? base;
-}
-
-// Splits the inside of a [[...]] link into its target path and display title.
-// `path|display` uses the explicit alias; otherwise the title is the path stem.
-export function parseWikiTarget(raw: string): { path: string; title: string } {
-  const inner = raw.trim();
-  const pipe = inner.indexOf("|");
-  const path = (pipe >= 0 ? inner.slice(0, pipe) : inner).trim();
-  const title = pipe >= 0 ? inner.slice(pipe + 1).trim() : wikiStem(path);
-  return { path, title };
-}
+// The target text rules live in wiki-target.ts (TipTap-free, so the Link Resolver
+// can share them); re-exported here because this is where callers look for them.
+export { stripWikiFragment, wikiStem, parseWikiTarget } from "./wiki-target";
 
 export interface WikiLinkSuggestionState {
   items: NoteSearchResult[];
@@ -46,6 +26,8 @@ export interface WikiLinkSuggestionState {
   selectedIndex: number; // managed by the suggestion plugin's onKeyDown, not the component
   x: number;
   y: number;
+  /** The caret's top edge, which is what the menu sits above when it flips. */
+  anchorTop: number;
 }
 
 export interface NoteSearchResult {
@@ -54,21 +36,21 @@ export interface NoteSearchResult {
   path: string;
 }
 
-// Converts [[path]] occurrences in a markdown string to <span data-wiki-link>
-// HTML before passing to Tiptap's setContent. Called on initial load and
-// on watcher reloads. Embeds (`![[...]]`) are transclusions, not note links,
-// and pass through untouched.
-export function preprocessWikiLinks(markdown: string): string {
-  return markdown.replace(
-    /(!?)\[\[([^\]]+)\]\]/g,
-    (match, bang: string, rawPath: string) => {
-      if (bang) return match;
-      const { path, title } = parseWikiTarget(rawPath);
-      const escapedPath = path.replace(/"/g, "&quot;");
-      const escapedTitle = title.replace(/"/g, "&quot;");
-      return `<span data-wiki-link data-path="${escapedPath}" data-title="${escapedTitle}">${escapedTitle}</span>`;
-    },
-  );
+// `[[target]]`, anchored: a tokenizer is offered the rest of the line, and a
+// target holds no brackets of its own.
+const WIKI_LINK_RE = /^\[\[([^[\]]+)\]\]/;
+
+/**
+ * True when the `[[` about to be read is the second character of `![[…]]` — an
+ * Obsidian transclusion, which Grimoire renders as the text the GM typed rather
+ * than as a link.
+ *
+ * The `!` is not part of what the tokenizer is offered: the reader hands over the
+ * source from `[[` onwards, having already taken the `!` as text. So the evidence
+ * is the tail of the token in front of us.
+ */
+function followsTransclusionBang(tokens: { raw?: string }[]): boolean {
+  return tokens.at(-1)?.raw?.endsWith("!") ?? false;
 }
 
 interface WikiLinkOptions {
@@ -154,6 +136,26 @@ export const WikiLink = Node.create<WikiLinkOptions>({
       };
     };
   },
+
+  // A wikilink's declaration to the markdown reader, which replaces the raw-text
+  // pass that used to rewrite `[[…]]` into HTML before the reader ever saw the
+  // note. That pass could not tell prose from a fence, so a `[[…]]` a GM typed
+  // inside a code fence came back as a span; the reader knows the difference,
+  // because it only offers a tokenizer the text it is already treating as inline.
+  markdownTokenizer: {
+    name: "wikiLink",
+    level: "inline",
+    start: (src: string) => src.indexOf("[["),
+    tokenize: (src: string, tokens: { raw?: string }[]) => {
+      const match = WIKI_LINK_RE.exec(src);
+      if (!match) return undefined;
+      if (followsTransclusionBang(tokens)) return undefined;
+      return { type: "wikiLink", raw: match[0], text: match[1] };
+    },
+  },
+
+  parseMarkdown: (token, helpers) =>
+    helpers.createNode("wikiLink", parseWikiTarget(token.text ?? "")),
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: { attrs: { path: string; title: string } }) {
@@ -268,6 +270,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               selectedIndex: si,
               x: rect?.left ?? 0,
               y: (rect?.bottom ?? 0) + 4,
+              anchorTop: rect?.top ?? 0,
             };
           }
 

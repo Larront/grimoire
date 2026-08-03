@@ -10,4 +10,10 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/.grimoire/
 
+# Research assets that quote third-party licensed material. See the
+# public-repo rule recorded in CONTEXT.md: our words about a system may be
+# public; the system's own words (field-label inventories, rules text,
+# creature content) stay on local checkouts only.
+docs/research/*.local.md
+
 

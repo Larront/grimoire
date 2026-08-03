@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { ImageBlock, isImageFile, preprocessImageAttrs, serializeImageNode } from "$lib/editor/image-block";
+import { describe, it, expect, afterEach } from "vitest";
+import { ImageBlock, isImageFile, serializeImageNode } from "$lib/editor/image-block";
 
 function makeFile(name: string, type: string): File {
   return new File([], name, { type });
@@ -24,76 +24,6 @@ describe("isImageFile", () => {
     ["", "noext"],
   ])("rejects %s", (type, name) => {
     expect(isImageFile(makeFile(name, type))).toBe(false);
-  });
-});
-
-// ─── preprocessImageAttrs ────────────────────────────────────────────────────
-
-describe("preprocessImageAttrs", () => {
-  it("no attrs block — returns string unchanged", () => {
-    const md = "![hello](images/portrait.png)";
-    expect(preprocessImageAttrs(md)).toBe(md);
-  });
-
-  it("caption only — no attrs block, returns unchanged", () => {
-    const md = "![portrait of the villain](images/villain.png)";
-    expect(preprocessImageAttrs(md)).toBe(md);
-  });
-
-  it("align only", () => {
-    expect(preprocessImageAttrs("![](images/a.png){align=left}")).toBe(
-      `<img src="images/a.png" alt="" data-align="left" data-width="100%">`,
-    );
-  });
-
-  it("width only", () => {
-    expect(preprocessImageAttrs("![](images/a.png){width=60%}")).toBe(
-      `<img src="images/a.png" alt="" data-align="center" data-width="60%">`,
-    );
-  });
-
-  it("caption + align", () => {
-    expect(preprocessImageAttrs("![portrait](images/a.png){align=right}")).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="right" data-width="100%">`,
-    );
-  });
-
-  it("caption + width", () => {
-    expect(preprocessImageAttrs("![portrait](images/a.png){width=50%}")).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="center" data-width="50%">`,
-    );
-  });
-
-  it("caption + align + width", () => {
-    expect(
-      preprocessImageAttrs("![portrait](images/a.png){align=left width=75%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="portrait" data-align="left" data-width="75%">`,
-    );
-  });
-
-  it("caption with double-quotes is HTML-escaped", () => {
-    expect(
-      preprocessImageAttrs(`!["ancient" ruin](images/a.png){align=left}`),
-    ).toBe(
-      `<img src="images/a.png" alt="&quot;ancient&quot; ruin" data-align="left" data-width="100%">`,
-    );
-  });
-
-  it("caption with unicode survives", () => {
-    expect(
-      preprocessImageAttrs("![人物の肖像](images/a.png){width=80%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="人物の肖像" data-align="center" data-width="80%">`,
-    );
-  });
-
-  it("caption with parens in alt text survives", () => {
-    expect(
-      preprocessImageAttrs("![café (portrait)](images/a.png){width=80%}"),
-    ).toBe(
-      `<img src="images/a.png" alt="café (portrait)" data-align="center" data-width="80%">`,
-    );
   });
 });
 
@@ -174,40 +104,75 @@ describe("ImageBlock renderMarkdown", () => {
   });
 });
 
-// ─── markdown round-trip ──────────────────────────────────────────────────────
+// ─── Node view: ProseMirror event handling ────────────────────────────────────
+//
+// Image's use of the shared connector's event hole (ADR-0016 §4). A mousedown
+// must reach ProseMirror or the image cannot be selected at all, which is the
+// divergence the connector must not paper over; a resize drag must not.
 
-describe("markdown round-trip (serialize → preprocess)", () => {
-  function roundTrip(attrs: { src: string; alt: string | null; align: string; width: string }): string {
-    return preprocessImageAttrs(serializeImageNode({ attrs }));
+interface TestNodeView {
+  dom: HTMLElement;
+  stopEvent: (event: Event) => boolean;
+  destroy: () => void;
+}
+
+describe("ImageBlock node view — event handling", () => {
+  let mounted: TestNodeView | null = null;
+  let outsideEl: HTMLElement | null = null;
+
+  afterEach(() => {
+    mounted?.destroy();
+    mounted?.dom.remove();
+    mounted = null;
+    outsideEl?.remove();
+    outsideEl = null;
+  });
+
+  // Node views are mounted imperatively against a fake editor: nothing here
+  // writes an attribute, so the editor only has to exist.
+  function mountNodeView(): TestNodeView {
+    const addNodeView = (
+      ImageBlock.config as unknown as {
+        addNodeView: () => (props: {
+          node: unknown;
+          getPos: () => number;
+          editor: unknown;
+        }) => TestNodeView;
+      }
+    ).addNodeView;
+
+    const view = addNodeView()({
+      node: {
+        type: { name: "image" },
+        attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" },
+      },
+      getPos: () => 1,
+      editor: { commands: { command: () => true } },
+    });
+    document.body.appendChild(view.dom);
+    mounted = view;
+    return view;
   }
 
-  it("caption + align + width", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "portrait", align: "left", width: "75%" })).toBe(
-      '<img src="images/a.png" alt="portrait" data-align="left" data-width="75%">',
-    );
+  function eventOn(target: globalThis.Node, type: string): Event {
+    return { type, target } as unknown as Event;
+  }
+
+  it("lets a mousedown through so ProseMirror can select the image", () => {
+    const view = mountNodeView();
+    const inside = view.dom.firstElementChild ?? view.dom;
+
+    expect(view.stopEvent(eventOn(inside, "mousedown"))).toBe(false);
   });
 
-  it("align only", () => {
-    expect(roundTrip({ src: "images/a.png", alt: null, align: "right", width: "100%" })).toBe(
-      '<img src="images/a.png" alt="" data-align="right" data-width="100%">',
-    );
-  });
+  it("keeps everything while a resize drag is underway, wherever the pointer is", () => {
+    const view = mountNodeView();
+    outsideEl = document.body.appendChild(document.createElement("div"));
 
-  it("caption only — preprocessor is a no-op (no attrs block)", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "portrait", align: "center", width: "100%" })).toBe(
-      "![portrait](images/a.png)",
-    );
-  });
+    expect(view.stopEvent(eventOn(outsideEl, "mousemove"))).toBe(false);
 
-  it("no attrs, no caption — preprocessor is a no-op", () => {
-    expect(roundTrip({ src: "images/a.png", alt: null, align: "center", width: "100%" })).toBe(
-      "![](images/a.png)",
-    );
-  });
-
-  it("unicode caption + align", () => {
-    expect(roundTrip({ src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" })).toBe(
-      '<img src="images/a.png" alt="人物の肖像" data-align="left" data-width="60%">',
-    );
+    view.dom.setAttribute("data-resizing", "");
+    expect(view.stopEvent(eventOn(outsideEl, "mousemove"))).toBe(true);
+    expect(view.stopEvent(eventOn(outsideEl, "mousedown"))).toBe(true);
   });
 });

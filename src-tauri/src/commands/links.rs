@@ -748,6 +748,64 @@ mod tests {
         assert_eq!(extract_wikilinks(content), vec!["a.md"]);
     }
 
+    // A wikilink inside a fenced Note Block is a real link, because this scan is
+    // fence-blind — which is what puts an Infobox row's `[[…]]` in the Link Index,
+    // Backlinks and the graph for free (ADR-0016 §2, #175). Asserted rather than
+    // assumed: the whole no-opt-in rule for Linked Text Fields rests on it.
+    #[test]
+    fn extract_wikilinks_reads_inside_an_infobox_fence() {
+        let content = "```infobox\n# Harbor's End\nRuler: [[Captain Ash.md]]\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_an_infobox_row_label() {
+        // A link typed into a *label* is filed too — an opt-out field would be
+        // drawing flat text over a link Grimoire has already recorded.
+        let content = "```infobox\n[[Captain Ash.md]]: the ruler\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_an_infobox_caption() {
+        // The thumbnail's alt text doubles as its caption (#176), and it is free text
+        // in a fence like any other — so a link typed into it is filed too, and the
+        // caption is a Linked Text Field for the same reason a label is.
+        let content = "```infobox\n![the docks of [[Captain Ash.md]]](images/ash.png)\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_skips_a_caption_that_opens_with_a_link() {
+        // The one place the caption is not equal to a row, documented rather than
+        // fixed: `![[` is Obsidian's transclusion syntax, so a link at the very start
+        // of a caption is skipped by the embed rule above. Teaching this scan the
+        // difference would mean teaching it the image grammar, which is exactly the
+        // fence-blindness #160 keeps — so a caption may lead with prose instead.
+        let content = "```infobox\n![[[Captain Ash.md]] at the docks](images/ash.png)\n```";
+        assert!(extract_wikilinks(content).is_empty());
+    }
+
+    // A Statblock is fence-blind in exactly the same way (#177), and it has one
+    // surface an Infobox does not: an entry's body, which is prose inside a fence.
+    #[test]
+    fn extract_wikilinks_reads_a_statblock_header_row() {
+        let content = "```statblock\n# Goblin Scout\nServes: [[Captain Ash.md]]\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_a_statblock_entry_body() {
+        let content = "```statblock\n## Lore\nBound: Sworn to [[Captain Ash.md]].\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
+    #[test]
+    fn extract_wikilinks_reads_statblock_unnamed_prose() {
+        let content = "```statblock\n## Description\nIt served [[Captain Ash.md]] once.\n```";
+        assert_eq!(extract_wikilinks(content), vec!["Captain Ash.md"]);
+    }
+
     #[test]
     fn extract_wikilinks_empty_body() {
         assert!(extract_wikilinks("").is_empty());
@@ -831,6 +889,28 @@ mod tests {
         let content = "[[old.md]] and also [[old.md|alias]] and [[other.md]].";
         let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
         assert_eq!(out, "[[new.md]] and also [[new.md|alias]] and [[other.md]].");
+        assert!(changed);
+    }
+
+    // Rename-rewrite edits raw note bytes, so it reaches inside a fence as readily as
+    // into prose — the other half of why a fenced block writes its wikilinks
+    // literally, never quoted or encoded (#175).
+    #[test]
+    fn rewrite_wikilink_inside_an_infobox_fence() {
+        let content = "```infobox\n# Harbor's End\nRuler: [[old.md]]\n```";
+        let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
+        assert_eq!(out, "```infobox\n# Harbor's End\nRuler: [[new.md]]\n```");
+        assert!(changed);
+    }
+
+    #[test]
+    fn rewrite_wikilink_inside_a_statblock_fence() {
+        let content = "```statblock\n# Goblin Scout\nServes: [[old.md]]\n\n## Lore\nBound: Sworn to [[old.md]].\n```";
+        let (out, changed) = rewrite_wikilinks_in_content(content, "old.md", "new.md");
+        assert_eq!(
+            out,
+            "```statblock\n# Goblin Scout\nServes: [[new.md]]\n\n## Lore\nBound: Sworn to [[new.md]].\n```"
+        );
         assert!(changed);
     }
 

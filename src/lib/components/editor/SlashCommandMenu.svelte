@@ -1,35 +1,7 @@
 <script lang="ts">
-  import {
-    Pilcrow,
-    Heading1,
-    Heading2,
-    Heading3,
-    Quote,
-    Code,
-    List,
-    ListOrdered,
-    Minus,
-    Image,
-    Music2,
-    CalendarDays,
-  } from "@lucide/svelte";
+  import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
+  import { placeMenu } from "$lib/utils/anchored-menu";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ICON_MAP: Record<string, any> = {
-    Pilcrow,
-    Heading1,
-    Heading2,
-    Heading3,
-    Quote,
-    Code,
-    List,
-    ListOrdered,
-    Minus,
-    Image,
-    Music2,
-    CalendarDays,
-  };
 
   interface Props {
     state: SlashCommandSuggestionState;
@@ -38,21 +10,36 @@
   let { state }: Props = $props();
 
   let itemRefs: (HTMLButtonElement | null)[] = [];
+  // Plain `let`, not `$state`: the prop beside it is called `state`, which makes `$state`
+  // read as a store subscription on it. Nothing needs it reactive — `bind:this` has run
+  // by the time an effect does, and the effect below re-runs on the item list anyway.
+  let menuEl: HTMLDivElement | undefined;
 
   $effect(() => {
     itemRefs[state.selectedIndex]?.scrollIntoView({ block: "nearest" });
   });
+
+  // Placed after the items are drawn rather than from the caret alone: the menu's
+  // height is its filtered list's, so `/` at the foot of a long note flips above the
+  // caret while `/statb` a line higher does not. Reads `items` to re-place whenever
+  // the list — and so the height — changes.
+  $effect(() => {
+    state.items;
+    if (menuEl) placeMenu(menuEl, state);
+  });
 </script>
 
 <div
+  bind:this={menuEl}
   class="fixed z-50 min-w-[200px] max-h-[300px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
          shadow-xl shadow-black/30"
-  style="left: {state.x}px; top: {state.y}px;"
   role="listbox"
   aria-label="Slash commands"
 >
-  {#each state.items as item, i (item.label)}
+  <!-- Keyed by group and label: "Quote" names both a plain blockquote under Text
+       and a quote callout under Callout, and a label alone would collide. -->
+  {#each state.items as item, i (`${item.group}/${item.label}`)}
     {#if i === 0 || item.group !== state.items[i - 1].group}
       <div
         class="px-3 pt-2.5 pb-0.5 font-heading text-[0.6rem] uppercase tracking-widest
@@ -62,7 +49,7 @@
         {item.group}
       </div>
     {/if}
-    {@const Icon = ICON_MAP[item.icon]}
+    {@const Icon = BLOCK_ICONS[item.icon]}
     <button
       bind:this={itemRefs[i]}
       class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors

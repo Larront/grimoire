@@ -11,9 +11,28 @@ The party enters the lower halls and realises they are not alone. The thing move
 
 ## Monsters
 
-**The Lurker** — a former archivist of [[The Order of Embers]], transformed by the library's containment seals failing slowly over three hundred years. It cannot speak but recognises [[Mira]]'s family name and will hesitate when it hears it.
+```statblock
+# The Lurker
+HP: 68/68
+Armor Class: 15
+Speed: 40 ft.
+Conditions: [ ] Hesitating [ ] Cornered
 
-*Suggested traits:* Darkness sense, Silent movement, Seal-bound (cannot leave the lower halls).
+## Traits
+Darkness sense: It sees without light, and moves faster where there is none.
+
+Silent movement: It makes no sound at all until it chooses to.
+
+Seal-bound: It cannot leave the lower halls.
+
+## Actions
+Raking claws: +6 to hit, 2d6+3 slashing.
+
+Smothering dark: Every creature within 10 ft. is blinded until the end of its next turn.
+
+## Lore
+A former archivist of [[The Order of Embers]], transformed by the library's containment seals failing slowly over three hundred years. It cannot speak but recognises [[Mira]]'s family name and will hesitate when it hears it.
+```
 
 ## Loot
 
