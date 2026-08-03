@@ -39,6 +39,7 @@
     readDragItem,
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
+  import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -125,6 +126,7 @@
     if (!ledger.isOpen) {
       tree = null;
       noteMap.clear();
+      treeExpansion.clear();
     }
   });
 
@@ -201,6 +203,10 @@
         `${parentNode ? parentNode.path + "/Untitled.md" : "Untitled.md"}`,
         parentNode ? parentNode.path : null,
       );
+      // Open the folder it went into, or the new note is created somewhere the
+      // GM cannot see (#164). Done before the refresh so the rebuilt tree comes
+      // back already open rather than opening a beat later.
+      if (parentNode) treeExpansion.reveal(parentNode.path);
       await notes.load();
       refresh();
       tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
@@ -214,6 +220,7 @@
       await api.createFolder(
         `${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`,
       );
+      if (parentNode) treeExpansion.reveal(parentNode.path);
       refresh();
     } catch (e) {
       console.error("create folder failed:", e);

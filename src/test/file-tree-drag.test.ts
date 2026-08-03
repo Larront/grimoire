@@ -22,6 +22,7 @@ vi.mock("$lib/stores/tree-move.svelte", async (importOriginal) => {
 });
 
 import { TREE_DRAG_MIME, treeDrag } from "$lib/stores/tree-move.svelte";
+import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
 import FileTree from "../lib/components/sidebar/FileTree.svelte";
 
 const noteMap = new Map<number, Note>();
@@ -75,6 +76,9 @@ const folderNode: FileNode = {
 afterEach(() => {
   cleanup();
   treeDrag.end();
+  // Open folders are keyed by path and outlive a row (#164), so a folder torn
+  // open by one test is still open for the next one rendering the same path.
+  treeExpansion.clear();
   vi.clearAllMocks();
   dropIntoFolder.mockResolvedValue(true);
 });

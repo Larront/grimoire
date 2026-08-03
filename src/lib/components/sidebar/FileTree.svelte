@@ -30,6 +30,7 @@
     readDragItem,
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
+  import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { readFile } from "@tauri-apps/plugin-fs";
   import { onDestroy } from "svelte";
@@ -113,8 +114,12 @@
   // fifty notes says nothing about where the thing is going, and the row is the
   // folder.
   let isDropTarget = $state(false);
-  let expanded = $state(false);
   let hoverExpandTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Open/closed is kept by path in treeExpansion, not here (#164): this row is
+  // torn down and rebuilt on every tree refresh, and a folder should not close
+  // itself because something elsewhere in the ledger changed.
+  const expanded = $derived(treeExpansion.isExpanded(node.path));
 
   // Long enough that dragging *across* a folder on the way somewhere else does
   // not tear the tree open under the cursor.
@@ -123,7 +128,7 @@
   function scheduleHoverExpand() {
     if (expanded || hoverExpandTimer) return;
     hoverExpandTimer = setTimeout(() => {
-      expanded = true;
+      treeExpansion.set(node.path, true);
       hoverExpandTimer = null;
     }, HOVER_EXPAND_MS);
   }
@@ -240,6 +245,7 @@
       const name = p.replace(/\\/g, "/").split("/").pop() ?? "document.pdf";
       await api.savePdfBytes(bytes, name, target.path);
     }
+    treeExpansion.reveal(target.path);
     await refresh();
   }
 
@@ -348,7 +354,10 @@
     {:else}
       <Sidebar.MenuItem>
         <Collapsible.Root
-          bind:open={expanded}
+          bind:open={
+            () => expanded,
+            (val) => treeExpansion.set(node.path, val)
+          }
           class="group/collapsible [&[data-state=open]>div>button>svg:first-child]:rotate-90"
         >
           <!-- The folder's whole region is the drop target (see handleDragOver);
