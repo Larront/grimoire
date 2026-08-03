@@ -34,9 +34,10 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   // refuse to open, so this copy is the whole GM-facing story for each.
   ERR_FORMAT_AHEAD:
     "This ledger's notes were written by a newer Grimoire — update Grimoire to open it.",
-  // The prompt, not this toast, is where a behind ledger is resolved — but the
-  // open genuinely failed, so it still reports, and this line has to make sense
-  // beside the dialog rather than duplicating it.
+  // Reached only when the prompt could not be composed: the store suppresses this
+  // toast whenever the dialog opens, because a dialog already forcing a decision
+  // does not need a line of its own beside it. What survives here is the dead-end
+  // case — the refusal stands and nothing else would say so.
   ERR_FORMAT_MIGRATION_REQUIRED:
     "This ledger's notes need updating before it can be opened.",
   // The backup is the one all-or-nothing step: it failed, so nothing was
@@ -54,7 +55,15 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
 // save is what failed.
 const GENERIC_MESSAGE = "Something went wrong — please try again.";
 
-function friendlyMessage(error: unknown): string {
+/**
+ * The line a GM would be shown for a failure, resolved without showing it.
+ *
+ * Exported for the one caller that has to decide *whether* to report at all: a
+ * ledger refused for being behind is resolved by the [[Format Migration]] prompt,
+ * so the toast is redundant when that prompt opens and the whole story when it
+ * cannot. That caller takes the quiet surface and reports through this.
+ */
+export function friendlyMessage(error: unknown): string {
   const raw = String(error);
   const match = raw.match(/^([A-Z][A-Z0-9_]+):/);
   if (match && FRIENDLY_BY_CODE[match[1]]) return FRIENDLY_BY_CODE[match[1]];

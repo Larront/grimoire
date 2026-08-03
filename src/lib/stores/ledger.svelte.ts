@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
-import { api } from "$lib/api";
-import { toastImportFailures, toastMigrationReport } from "$lib/toast";
+import { api, friendlyMessage } from "$lib/api";
+import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import type { MigrationPlan } from "$lib/bindings.gen";
 
@@ -94,11 +94,15 @@ function createLedgerStore() {
     // a debounced edit is never dropped or written into the wrong ledger.
     await pendingSaves.flushAll();
     try {
-      const result = await api.openLedger(ledgerPath);
+      // The quiet surface, so a refusal that becomes a dialog is not also toasted:
+      // reporting is this function's own job below, once the routing has decided
+      // whether anything else is going to speak.
+      const result = await api.silent.openLedger(ledgerPath);
       applyOpenResult(result);
       return result;
     } catch (e) {
-      await routeOpenRefusal(ledgerPath, e);
+      const routed = await routeOpenRefusal(ledgerPath, e);
+      if (!routed) toastError(friendlyMessage(e));
       throw e;
     }
   }
@@ -106,11 +110,18 @@ function createLedgerStore() {
   /** Turn a refusal from an open into the dialog that resolves it, if there is
    *  one. Shared by both ways in — a plain open and a post-rebuild open — because
    *  a ledger can be damaged *and* behind, and the rebuild path reaching the
-   *  format refusal with no prompt would be a dead end. */
+   *  format refusal with no prompt would be a dead end.
+   *
+   *  Returns whether a prompt took the refusal over, which is what decides if it
+   *  is also toasted. Only the [[Format Migration]] prompt answers yes: it states
+   *  the whole refusal — the count, what changes, and both ways out — so a toast
+   *  beside it would say less than the dialog behind it. The rebuild prompt is
+   *  left reporting, because a damaged database is a fault the GM should be told
+   *  about whether or not they take the offer to repair it. */
   async function routeOpenRefusal(
     ledgerPath: string,
     e: unknown,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const raw = String(e);
     if (raw.includes("ERR_DB_CORRUPT")) {
       corruptLedgerPath = ledgerPath;
@@ -128,8 +139,10 @@ function createLedgerStore() {
         // The database side is settled by the time this refusal is reached, so
         // the rebuild dialog must step aside rather than stack behind it.
         corruptLedgerPath = null;
+        return true;
       }
     }
+    return false;
   }
 
   async function openLedger(selectedPath?: string): Promise<boolean> {

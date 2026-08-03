@@ -371,3 +371,47 @@ describe("saying no", () => {
     expect(calls).not.toContain("add_recent_ledger");
   });
 });
+
+describe("what the GM is told, and when", () => {
+  it("says nothing beside the prompt: the dialog is the whole refusal", async () => {
+    // The toast used to fire from the command wrapper before the prompt had even been
+    // composed, so the GM got a line telling them their notes needed updating and then a
+    // dialog telling them the same thing with the count, the changes and both answers
+    // (#175 review). A dialog already forcing a decision does not need a toast.
+    render(FormatMigrationDialog);
+    await refuseOpen();
+
+    expect(ledger.formatMigration).not.toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("still reports when no prompt can be composed", async () => {
+    // The dead end: the scan itself failed, so there is nothing to consent to and the
+    // refusal stands. Suppressing the toast here would leave the GM at the welcome
+    // screen with a ledger that silently refused to open.
+    render(FormatMigrationDialog);
+    await refuseOpen(null);
+
+    expect(ledger.formatMigration).toBeNull();
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast.error).mock.calls[0][0]).toContain("need updating");
+  });
+
+  it("reports the work afterwards, which is the toast that is worth having", async () => {
+    render(FormatMigrationDialog);
+    await refuseOpen();
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "migrate_ledger_format") return migrateResult();
+      return null;
+    });
+
+    await fireEvent.click(document.querySelector("[data-testid=format-migration-confirm]") as HTMLElement);
+    await flush();
+    await flush();
+
+    expect(ledger.isOpen).toBe(true);
+    const [message] = vi.mocked(toast).mock.calls.at(-1) ?? [];
+    expect(message).toMatch(/notes? updated/);
+  });
+});
