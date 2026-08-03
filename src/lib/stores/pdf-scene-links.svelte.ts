@@ -67,9 +67,14 @@ function createPdfSceneLinksStore() {
     );
   }
 
+  // Emptied when the ledger closes *and* when it changes: the cache is keyed by a
+  // ledger-relative PDF path, so entries carried across a switch would answer for
+  // the wrong vault's file of the same name.
   $effect.root(() => {
     $effect(() => {
-      if (!ledger.isOpen) byPath.clear();
+      ledger.path;
+      ledger.isOpen;
+      byPath.clear();
     });
   });
 

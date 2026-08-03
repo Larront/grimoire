@@ -20,23 +20,39 @@ export function createLedgerCollection<T>({ fetch, onClose }: LedgerCollectionOp
   let isLoading = $state(false);
   let error = $state<string | null>(null);
 
+  /**
+   * Which fetch is the current one. Switching ledgers starts a second read while
+   * the first is still in flight, and without this the slower one wins and fills
+   * the list with the ledger the GM just left.
+   */
+  let generation = 0;
+
   async function load() {
+    const mine = ++generation;
     isLoading = true;
     error = null;
     try {
-      items = await fetch();
+      const fetched = await fetch();
+      if (mine !== generation) return;
+      items = fetched;
     } catch (e) {
+      if (mine !== generation) return;
       error = String(e);
     } finally {
-      isLoading = false;
+      if (mine === generation) isLoading = false;
     }
   }
 
   $effect.root(() => {
     $effect(() => {
-      if (ledger.isOpen) {
+      // Keyed on the *path*, not on `isOpen`: opening a second ledger from inside
+      // the first never lowers that flag, so a collection watching it would keep
+      // serving the ledger the GM left — a whole sidebar of the wrong vault's
+      // notes. The tabs store already keys on the path; this is the same rule.
+      if (ledger.isOpen && ledger.path) {
         load();
       } else {
+        generation++;
         items = [];
         error = null;
         onClose?.();
