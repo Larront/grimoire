@@ -180,7 +180,7 @@ export const commands = {
 	rebuildSearchIndex: () => __TAURI_INVOKE<null>("rebuild_search_index"),
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
-	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
+	renameFolder: (oldPath: string, newName: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newName }),
 	/**
 	 *  Rename a note (change its filename/path). Always re-keys the moved note's own
 	 *  row and derived indexes; when `rewrite_backlinks` is true it also rewrites

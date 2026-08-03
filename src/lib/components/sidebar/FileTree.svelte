@@ -157,6 +157,9 @@
     }
     try {
       if (target.is_dir) {
+        // `newName` is the bare folder name, like the PDF branch below: the
+        // backend keeps the folder in its current parent (#162 — composing the
+        // path here is what once moved every renamed subfolder to the root).
         const updatedCount = await api.renameFolder(target.path, newName.trim());
         if (updatedCount > 0) {
           toastSuccess(

@@ -23,6 +23,7 @@ import { logError } from "$lib/log";
 const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_NAME_TAKEN: "That name is already taken.",
   ERR_EMPTY_NAME: "That needs a name.",
+  ERR_BAD_NAME: "That name can't contain / or \\.",
   ERR_UNSUPPORTED_IMAGE:
     "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
