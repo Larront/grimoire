@@ -83,6 +83,7 @@ class RenameInputState {
 
     // function bindings
     this.onInputKeydown = this.onInputKeydown.bind(this);
+    this.onInputClick = this.onInputClick.bind(this);
     this.onInputBlur = this.onInputBlur.bind(this);
     this.onTextClick = this.onTextClick.bind(this);
     this.save = this.save.bind(this);
@@ -161,6 +162,13 @@ class RenameInputState {
   }
 
   async onInputKeydown(e: KeyboardEvent) {
+    // A key pressed while renaming belongs to the name being typed, not to
+    // whatever the field happens to sit inside. Rename fields are nested in
+    // rows that treat Space and Enter as "activate me" — a collapsible folder
+    // in the file tree, a scene card on the dashboard — and those ancestors
+    // would otherwise swallow the space and expand the row instead.
+    e.stopPropagation();
+
     if (e.key === "Enter") {
       await this.save();
     }
@@ -168,6 +176,12 @@ class RenameInputState {
     if (e.key === "Escape") {
       this.cancel();
     }
+  }
+
+  onInputClick(e: MouseEvent) {
+    // Same reasoning as the keydown: a click placing the caret is aimed at the
+    // field, not at the row it sits in.
+    e.stopPropagation();
   }
 
   onInputBlur() {
