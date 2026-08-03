@@ -201,13 +201,72 @@ pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<()
 
 // ── rename_folder ──────────────────────────────────────────────────────────
 
+/// Where a folder rename lands: `old_path`'s own parent, with `new_name` as the
+/// leaf. Same contract as `rename_pdf_inner` (`media.rs`) — the caller sends the
+/// bare name the tree shows, and the parent is derived here rather than composed
+/// by the frontend, so no call site can turn a rename into a move (#162).
+///
+/// The refusals are what keep it a rename: a name carrying a separator (or `.` /
+/// `..`) could redirect it anywhere in the ledger, and a name a sibling already
+/// holds would replace that sibling — which `fs::rename` will do silently on
+/// Windows when the sibling folder is empty. A case-only rename is *not* a
+/// collision: on a case-insensitive filesystem the destination resolves to the
+/// source folder itself.
+fn resolve_renamed_folder_path(
+    ledger_path: &Path,
+    old_path: &str,
+    new_name: &str,
+) -> Result<String, String> {
+    let trimmed = new_name.trim();
+    if trimmed.is_empty() {
+        return Err("ERR_EMPTY_NAME: A folder needs a name".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("ERR_BAD_NAME: A folder name cannot contain a path separator".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err(format!("ERR_BAD_NAME: '{}' is not a folder name", trimmed));
+    }
+
+    let new_path = match old_path.rsplit_once('/') {
+        Some((parent, _)) => format!("{}/{}", parent, trimmed),
+        None => trimmed.to_string(),
+    };
+
+    let src = ledger_path.join(old_path);
+    let dest = ledger_path.join(&new_path);
+    if dest.exists() {
+        let same_folder = match (src.canonicalize(), dest.canonicalize()) {
+            (Ok(s), Ok(d)) => s == d,
+            _ => false,
+        };
+        if !same_folder {
+            return Err(format!(
+                "ERR_NAME_TAKEN: A folder named {} already exists here",
+                trimmed
+            ));
+        }
+    }
+
+    Ok(new_path)
+}
+
+/// Rename a folder, keeping it where it is. `old_path` is ledger-relative;
+/// `new_name` is the bare folder name (see [`resolve_renamed_folder_path`]).
+/// Returns the number of notes whose links were rewritten.
 pub fn rename_folder_inner(
     ledger_path: &Path,
     old_path: &str,
-    new_path: &str,
+    new_name: &str,
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
 ) -> Result<usize, String> {
+    // Resolved (and refused) before step 2 writes anything: the backlink rewrite
+    // below points links at the new path, so a rename that then fails at step 3
+    // would leave every link aimed at a folder that never appeared.
+    let new_path = resolve_renamed_folder_path(ledger_path, old_path, new_name)?;
+    let new_path = new_path.as_str();
+
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
     let like_pattern = format!("{}%", old_prefix);
@@ -321,7 +380,7 @@ pub fn rename_folder_inner(
 #[specta::specta]
 pub fn rename_folder(
     old_path: String,
-    new_path: String,
+    new_name: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
@@ -331,7 +390,7 @@ pub fn rename_folder(
     let index = state_ref.search_index.as_ref();
     // Cast the internal usize count to i32 at the command seam: specta forbids
     // BigInt-style types in exported bindings, and link counts are always small.
-    rename_folder_inner(&ledger_path, &old_path, &new_path, conn, index).map(|n| n as i32)
+    rename_folder_inner(&ledger_path, &old_path, &new_name, conn, index).map(|n| n as i32)
 }
 
 #[cfg(test)]
@@ -801,6 +860,92 @@ mod tests {
 
         let updated: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
         assert_eq!(updated[0].image_path.as_deref(), Some("territories/northlands.jpg"));
+    }
+
+    // ── rename_folder name contract tests ────────────────────────────────────
+
+    #[test]
+    fn rename_folder_keeps_a_subfolder_under_its_parent() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("creatures/dragons/wyvern.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
+
+        rename_folder_inner(dir.path(), "creatures/dragons", "wyrms", &mut conn, None).unwrap();
+
+        assert!(
+            dir.path().join("creatures/wyrms").is_dir(),
+            "a renamed subfolder stays beside its siblings",
+        );
+        assert!(!dir.path().join("wyrms").exists(), "and does not land at the ledger root");
+        let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(updated[0].path, "creatures/wyrms/wyvern.md");
+        assert_eq!(updated[0].parent_path.as_deref(), Some("creatures/wyrms"));
+    }
+
+    #[test]
+    fn rename_folder_rejects_a_name_holding_a_path_separator() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures")).unwrap();
+        let mut conn = test_conn();
+
+        for name in ["regions/coast", "regions\\coast", "..", "."] {
+            let err = rename_folder_inner(dir.path(), "creatures", name, &mut conn, None)
+                .expect_err("a name that could redirect the rename is refused");
+            assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
+        }
+        assert!(dir.path().join("creatures").is_dir(), "the folder is left where it was");
+    }
+
+    #[test]
+    fn rename_folder_rejects_an_empty_name() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        let mut conn = test_conn();
+
+        let err = rename_folder_inner(dir.path(), "creatures", "   ", &mut conn, None)
+            .expect_err("a blank name is refused");
+        assert!(err.starts_with("ERR_EMPTY_NAME"), "got: {err}");
+        assert!(dir.path().join("creatures").is_dir());
+    }
+
+    #[test]
+    fn rename_folder_allows_a_case_only_rename() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("Creatures")).unwrap();
+        let mut conn = test_conn();
+
+        rename_folder_inner(dir.path(), "Creatures", "creatures", &mut conn, None)
+            .expect("a folder may be renamed to a different casing of its own name");
+    }
+
+    #[test]
+    fn rename_folder_rejects_a_name_a_sibling_already_holds_before_writing_anything() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::create_dir(dir.path().join("beasts")).unwrap();
+        fs::write(dir.path().join("creatures/dragon.md"), "").unwrap();
+        fs::write(dir.path().join("index.md"), "See [[creatures/dragon.md]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "creatures/dragon.md");
+
+        let err = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None)
+            .expect_err("renaming onto a taken name is refused");
+        assert!(err.starts_with("ERR_NAME_TAKEN"), "got: {err}");
+
+        // The refusal lands before the backlink rewrite, so the links still point
+        // at the folder that is still there.
+        assert_eq!(
+            fs::read_to_string(dir.path().join("index.md")).unwrap(),
+            "See [[creatures/dragon.md]].",
+            "a refused rename rewrites nothing",
+        );
+        assert!(dir.path().join("creatures/dragon.md").is_file());
     }
 
     // ── rename_folder link rewrite tests ─────────────────────────────────────

@@ -135,7 +135,7 @@ _Avoid_: "service layer," "client" — it is a thin posture-and-carve-out adapte
 
 ### Error Code
 
-A stable `ERR_CODE:` prefix a Rust command puts on its error string for the small set of failures that are genuinely actionable by the GM (the catalog in `$lib/api` is the list; `ERR_NAME_TAKEN`, `ERR_UNSUPPORTED_IMAGE`, `ERR_UNSUPPORTED_PDF`, `ERR_SPOTIFY_AUTH`, `ERR_DB_LOCKED`, `ERR_DB_CORRUPT`, and the [[Ledger Format Version]] refusals `ERR_FORMAT_AHEAD`, `ERR_FORMAT_MIGRATION_REQUIRED`, `ERR_FORMAT_STAMP_UNREADABLE`). The [[command-wrapper]] matches the prefix to friendly copy; everything else gets one generic line. A convention, not a typed enum (see ADR-0010). The raw detail is always logged, never shown to the GM.
+A stable `ERR_CODE:` prefix a Rust command puts on its error string for the small set of failures that are genuinely actionable by the GM (the catalog in `$lib/api` is the list; `ERR_NAME_TAKEN`, `ERR_EMPTY_NAME`, `ERR_BAD_NAME`, `ERR_UNSUPPORTED_IMAGE`, `ERR_UNSUPPORTED_PDF`, `ERR_SPOTIFY_AUTH`, `ERR_DB_LOCKED`, `ERR_DB_CORRUPT`, and the [[Ledger Format Version]] refusals `ERR_FORMAT_AHEAD`, `ERR_FORMAT_MIGRATION_REQUIRED`, `ERR_FORMAT_STAMP_UNREADABLE`). The [[command-wrapper]] matches the prefix to friendly copy; everything else gets one generic line. A convention, not a typed enum (see ADR-0010). The raw detail is always logged, never shown to the GM.
 _Avoid_: "error enum" (it is a string convention), "error type."
 
 ### Details Source
