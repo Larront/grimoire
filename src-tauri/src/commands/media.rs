@@ -226,6 +226,110 @@ pub fn rename_pdf(
     Ok(new_path)
 }
 
+/// Resolve `dest_folder` (`""` = the ledger root) to a directory inside the
+/// ledger. Shared by the [[Tree Move]] commands, which take a destination folder
+/// from a drop target rather than a path the GM typed — the folder is expected to
+/// already exist, so a missing one is a bug worth surfacing rather than a
+/// directory to create.
+pub(crate) fn validate_dest_folder(
+    ledger_root: &Path,
+    dest_folder: &str,
+) -> Result<PathBuf, String> {
+    let dir = if dest_folder.is_empty() {
+        ledger_root
+            .canonicalize()
+            .map_err(|e| format!("Invalid ledger root: {e}"))?
+    } else {
+        validate_path(ledger_root, dest_folder)?
+    };
+    if !dir.is_dir() {
+        return Err(format!("'{}' is not a folder", dest_folder));
+    }
+    Ok(dir)
+}
+
+/// The last segment of a ledger-relative path — the file's own name, extension
+/// included.
+pub(crate) fn file_name_of(relative_path: &str) -> &str {
+    match relative_path.rsplit_once('/') {
+        Some((_, name)) => name,
+        None => relative_path,
+    }
+}
+
+/// Compose a ledger-relative path for `name` inside `parent` — `""` parent means
+/// the ledger root, which must not grow a leading slash.
+pub(crate) fn join_in_folder(parent: &str, name: &str) -> String {
+    if parent.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}/{}", parent, name)
+    }
+}
+
+/// Move a PDF into `dest_folder` (`""` = the ledger root), keeping its filename —
+/// the PDF half of a [[Tree Move]]. Returns the new ledger-relative path so the
+/// caller can re-key the open tab and the Scene-links.
+///
+/// The mirror of [`rename_pdf_inner`]: that one changes the name and keeps the
+/// folder, this one changes the folder and keeps the name. PDFs are
+/// path-addressed (ADR-0011), so both are filesystem renames, and the one piece
+/// of canonical PDF state — `pdf_scene_links` keyed by path — is re-keyed by the
+/// command wrapper.
+pub fn move_pdf_inner(
+    ledger_path: &Path,
+    old_path: &str,
+    dest_folder: &str,
+) -> Result<String, String> {
+    let src = validate_path(ledger_path, old_path)?;
+    let dest_dir = validate_dest_folder(ledger_path, dest_folder)?;
+    let new_rel = join_in_folder(dest_folder, file_name_of(old_path));
+
+    // A drop onto the folder the PDF already sits in is nothing at all, not a
+    // collision with itself.
+    if new_rel == old_path {
+        return Ok(new_rel);
+    }
+
+    let dest = dest_dir.join(file_name_of(old_path));
+    // Unlike a drag-and-drop *import* (which auto-suffixes `Manual (2).pdf`), a
+    // move onto a taken name is refused: the GM is reorganising files they can
+    // see, and silently duplicating a name is not what they aimed at.
+    if dest.exists() && dest.canonicalize().map(|d| d != src).unwrap_or(true) {
+        return Err(format!(
+            "ERR_NAME_TAKEN: A file named {} already exists there",
+            file_name_of(old_path)
+        ));
+    }
+
+    std::fs::rename(&src, &dest).map_err(|e| format!("move pdf: {}", e))?;
+    Ok(new_rel)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn move_pdf(
+    old_path: String,
+    dest_folder: String,
+    ledger: State<AppLedger>,
+) -> Result<String, String> {
+    let state = ledger.lock().map_err(|e| e.to_string())?;
+    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    drop(state); // release lock before filesystem op
+
+    let new_path = move_pdf_inner(&ledger_path, &old_path, &dest_folder)?;
+    if new_path == old_path {
+        return Ok(new_path);
+    }
+
+    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    crate::commands::pdf_scene_links::rewrite_pdf_path(conn, &old_path, &new_path)
+        .map_err(|e| e.to_string())?;
+
+    Ok(new_path)
+}
+
 /// Resolve a non-colliding filename in `dir` for a dropped PDF. An exact name is
 /// used as-is; a collision auto-suffixes `Manual.pdf` → `Manual (2).pdf` →
 /// `Manual (3).pdf` (the convention from #98/#102). The parenthesised form is
@@ -617,6 +721,102 @@ mod tests {
         fs::write(outer.path().join("secret.pdf"), b"%PDF-1.4").unwrap();
 
         let result = rename_pdf_inner(&ledger, "../secret.pdf", "stolen");
+        assert!(result.is_err(), "expected traversal old_path to be rejected");
+        assert!(outer.path().join("secret.pdf").exists());
+    }
+
+    // ── move_pdf tests (#163) ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_move_pdf_carries_the_file_into_the_destination_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("DMG.pdf"), b"%PDF-1.4").unwrap();
+        std::fs::create_dir(dir.path().join("rulebooks")).unwrap();
+
+        let new_rel = move_pdf_inner(dir.path(), "DMG.pdf", "rulebooks").unwrap();
+
+        assert_eq!(new_rel, "rulebooks/DMG.pdf");
+        assert!(!dir.path().join("DMG.pdf").exists());
+        assert!(dir.path().join("rulebooks/DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_move_pdf_to_the_ledger_root_takes_an_empty_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("rulebooks")).unwrap();
+        fs::write(dir.path().join("rulebooks/DMG.pdf"), b"%PDF-1.4").unwrap();
+
+        let new_rel = move_pdf_inner(dir.path(), "rulebooks/DMG.pdf", "").unwrap();
+
+        assert_eq!(new_rel, "DMG.pdf");
+        assert!(dir.path().join("DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_move_pdf_keeps_its_name_including_a_dotted_stem() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Vol.2 Errata.pdf"), b"%PDF-1.4").unwrap();
+        std::fs::create_dir(dir.path().join("rulebooks")).unwrap();
+
+        let new_rel = move_pdf_inner(dir.path(), "Vol.2 Errata.pdf", "rulebooks").unwrap();
+
+        assert_eq!(new_rel, "rulebooks/Vol.2 Errata.pdf");
+        assert!(dir.path().join("rulebooks/Vol.2 Errata.pdf").exists());
+    }
+
+    #[test]
+    fn test_move_pdf_onto_its_current_folder_is_a_no_op() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("rulebooks")).unwrap();
+        fs::write(dir.path().join("rulebooks/DMG.pdf"), b"%PDF-1.4").unwrap();
+
+        let new_rel = move_pdf_inner(dir.path(), "rulebooks/DMG.pdf", "rulebooks")
+            .expect("a drop onto the folder it already sits in is not a collision");
+
+        assert_eq!(new_rel, "rulebooks/DMG.pdf");
+        assert!(dir.path().join("rulebooks/DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_move_pdf_refuses_a_destination_holding_that_name() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("DMG.pdf"), b"%PDF-1.4").unwrap();
+        std::fs::create_dir(dir.path().join("rulebooks")).unwrap();
+        fs::write(dir.path().join("rulebooks/DMG.pdf"), b"%PDF-other").unwrap();
+
+        let err = move_pdf_inner(dir.path(), "DMG.pdf", "rulebooks")
+            .expect_err("a move never silently replaces or duplicates a file");
+        assert!(err.starts_with("ERR_NAME_TAKEN"), "got: {err}");
+        assert!(dir.path().join("DMG.pdf").exists(), "the source is left alone");
+        assert_eq!(
+            fs::read(dir.path().join("rulebooks/DMG.pdf")).unwrap(),
+            b"%PDF-other",
+            "and the file already there is untouched",
+        );
+    }
+
+    #[test]
+    fn test_move_pdf_rejects_a_destination_outside_the_ledger() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        std::fs::create_dir(outer.path().join("elsewhere")).unwrap();
+        fs::write(ledger.join("DMG.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = move_pdf_inner(&ledger, "DMG.pdf", "../elsewhere");
+        assert!(result.is_err(), "expected a traversal destination to be rejected");
+        assert!(ledger.join("DMG.pdf").exists());
+        assert!(!outer.path().join("elsewhere/DMG.pdf").exists());
+    }
+
+    #[test]
+    fn test_move_pdf_rejects_traversal_old_path() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        std::fs::create_dir(&ledger).unwrap();
+        fs::write(outer.path().join("secret.pdf"), b"%PDF-1.4").unwrap();
+
+        let result = move_pdf_inner(&ledger, "../secret.pdf", "");
         assert!(result.is_err(), "expected traversal old_path to be rejected");
         assert!(outer.path().join("secret.pdf").exists());
     }

@@ -10,6 +10,7 @@
   import { templates } from '$lib/stores/templates.svelte';
   import { toastSuccess, toastError } from '$lib/toast';
   import { searchPalette } from '$lib/stores/search.svelte';
+  import StatblockPresetsSettings from '$lib/components/StatblockPresetsSettings.svelte';
   import {
     getSpotifyStatus,
     connectSpotify,
@@ -120,6 +121,7 @@
   const SECTIONS: { value: string; label: string }[] = [
     { value: 'appearance',   label: 'Appearance'   },
     { value: 'content',      label: 'Content'      },
+    { value: 'statblocks',   label: 'Statblocks'   },
     { value: 'integrations', label: 'Integrations' },
     { value: 'about',        label: 'About'        },
   ];
@@ -294,6 +296,11 @@
           </div>
         </Tabs.Content>
 
+        <!-- Statblocks — the app-wide preset store and this vault's default (#179) -->
+        <Tabs.Content value="statblocks" class="outline-none" data-testid="statblocks-section">
+          <StatblockPresetsSettings {open} />
+        </Tabs.Content>
+
         <!-- Integrations -->
         <Tabs.Content value="integrations" class="outline-none">
           <div class="flex flex-col divide-y divide-border">
@@ -352,6 +359,23 @@
             </span>
             <span class="text-(--font-ui) text-foreground-muted">
               Sample audio by Kevin MacLeod (incompetech.com, CC-BY 4.0) and CC0 contributors.
+            </span>
+            <!-- SRD 5.1 attribution for the `5E SRD` statblock preset (#179). Wizards
+                 supply this wording and forbid adding any other credit to them, so it
+                 is reproduced verbatim and stands alone; the modification notice below
+                 it is separately required by CC-BY-4.0 §3(a)(1)(B). Placed here rather
+                 than behind a link because a desktop app that needs the network to be
+                 licence-compliant is a bad trade. -->
+            <span class="text-(--font-ui) text-foreground-muted" data-testid="srd-attribution">
+              This work includes material taken from the System Reference Document 5.1
+              (“SRD 5.1”) by Wizards of the Coast LLC and available at
+              https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1
+              is licensed under the Creative Commons Attribution 4.0 International
+              License available at https://creativecommons.org/licenses/by/4.0/legalcode.
+            </span>
+            <span class="text-(--font-ui) text-foreground-muted">
+              The SRD 5.1 material has been modified: it was reshaped into structured
+              field labels for a statblock preset.
             </span>
           </div>
         </Tabs.Content>

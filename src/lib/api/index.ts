@@ -22,19 +22,50 @@ import { logError } from "$lib/log";
 // calm generic line — the technical detail goes to the log, not the GM.
 const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_NAME_TAKEN: "That name is already taken.",
-  ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
+  ERR_EMPTY_NAME: "That needs a name.",
+  ERR_BAD_NAME: "That name can't contain / or \\.",
+  ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
+  ERR_UNSUPPORTED_IMAGE:
+    "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
   ERR_DB_LOCKED:
     "Another program is using this ledger's database — close it and try again.",
   ERR_DB_CORRUPT: "This ledger's database is damaged.",
+  // [[Ledger Format Version]] refusals (ADR-0017). Both directions of mismatch
+  // refuse to open, so this copy is the whole GM-facing story for each.
+  ERR_FORMAT_AHEAD:
+    "This ledger's notes were written by a newer Grimoire — update Grimoire to open it.",
+  // Reached only when the prompt could not be composed: the store suppresses this
+  // toast whenever the dialog opens, because a dialog already forcing a decision
+  // does not need a line of its own beside it. What survives here is the dead-end
+  // case — the refusal stands and nothing else would say so.
+  ERR_FORMAT_MIGRATION_REQUIRED:
+    "This ledger's notes need updating before it can be opened.",
+  // The backup is the one all-or-nothing step: it failed, so nothing was
+  // rewritten, and the ledger is exactly as it was.
+  ERR_FORMAT_BACKUP_FAILED:
+    "Grimoire couldn't copy your notes before updating them, so nothing was changed.",
+  // Coded rather than generic because there is a next step and it is a file the
+  // GM owns: the generic "please try again" would be a lie, since a re-open
+  // reads the same damaged stamp.
+  ERR_FORMAT_STAMP_UNREADABLE:
+    "Grimoire couldn't tell what format this ledger's notes are in — check .grimoire/format-version.",
 };
 
 // Honest for both reads and writes — "your work is safe" would mislead when a
 // save is what failed.
 const GENERIC_MESSAGE = "Something went wrong — please try again.";
 
-function friendlyMessage(error: unknown): string {
+/**
+ * The line a GM would be shown for a failure, resolved without showing it.
+ *
+ * Exported for the one caller that has to decide *whether* to report at all: a
+ * ledger refused for being behind is resolved by the [[Format Migration]] prompt,
+ * so the toast is redundant when that prompt opens and the whole story when it
+ * cannot. That caller takes the quiet surface and reports through this.
+ */
+export function friendlyMessage(error: unknown): string {
   const raw = String(error);
   const match = raw.match(/^([A-Z][A-Z0-9_]+):/);
   if (match && FRIENDLY_BY_CODE[match[1]]) return FRIENDLY_BY_CODE[match[1]];

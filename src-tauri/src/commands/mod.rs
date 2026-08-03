@@ -15,6 +15,7 @@ pub mod recent_ledgers;
 pub mod sample;
 pub mod scenes;
 pub mod spotify;
+pub mod statblock_presets;
 pub mod tags;
 pub mod templates;
 pub mod tree;

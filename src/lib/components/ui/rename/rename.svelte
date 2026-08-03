@@ -95,6 +95,7 @@
 		),
 		'aria-invalid': rootState.invalid,
 		onkeydown: rootState.onInputKeydown,
+		onclick: rootState.onInputClick,
 		onblur: rootState.onInputBlur
 	});
 </script>

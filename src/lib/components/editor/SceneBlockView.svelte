@@ -20,33 +20,46 @@
     ChevronLeft,
     Plus,
     ExternalLink,
+    Trash2,
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { api } from "$lib/api";
-  import type { SceneSlot } from "$lib/types/ledger";
+  import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
   
+  // `sceneName` is accepted and never read, and that is the decision rather than an
+  // oversight (#185): the name in the file is a copy the database owns, and a stale
+  // copy *lies*. Every name on screen below comes from the store, so the cached one
+  // has no path to being believed — it is declared here only because the node view
+  // hands a block all of its attributes, and a prop this view silently swallowed
+  // would be one a later reader could start reading.
   let {
     sceneId,
-    expanded,
+    sceneName: _nameInTheFile,
     onUpdate,
+    onRemove,
   }: {
     sceneId: number | null;
-    expanded: boolean;
-    onUpdate: (attrs: { sceneId: number | null; expanded: boolean }) => void;
+    sceneName?: string;
+    onUpdate: (attrs: { sceneId: number | null; sceneName: string }) => void;
+    /** Takes the reference out of the note. The scene itself is untouched. */
+    onRemove?: () => void;
   } = $props();
 
-  // Internal copies updated by setAttrs() on undo/redo
+  // Internal copy updated by setAttrs() on undo/redo
   // svelte-ignore state_referenced_locally
   let _sceneId = $state(sceneId);
-  // svelte-ignore state_referenced_locally
-  let _expanded = $state(expanded);
 
-  export function setAttrs(newSceneId: number | null, newExpanded: boolean) {
-    _sceneId = newSceneId;
-    _expanded = newExpanded;
+  export function setAttrs(attrs: { sceneId: number | null }) {
+    _sceneId = attrs.sceneId;
   }
+
+  // Whether the mixer panel is open. View state, and it stays that way (#185):
+  // it used to be an `expanded` attribute written into the note, which is UI state
+  // persisted into the GM's file — ADR-0016 §6 forbids it, and it meant collapsing
+  // a mixer was an edit that synced to every other machine.
+  let expanded = $state(false);
 
   // ── Placeholder search ────────────────────────────────────────────────────
 
@@ -57,8 +70,10 @@
     ),
   );
 
-  function selectScene(id: number) {
-    onUpdate({ sceneId: id, expanded: false });
+  // The name written into the fence beside the id comes from the store, never from
+  // the file — a scene the picker just listed is one the store has a live name for.
+  function selectScene(scene: Scene) {
+    onUpdate({ sceneId: scene.id, sceneName: scene.name });
   }
 
   async function createNewScene() {
@@ -66,7 +81,7 @@
       const trimmed = searchQuery.trim();
       const name = trimmed || "New Scene";
       const scene = await scenes.createScene(name);
-      onUpdate({ sceneId: scene.id, expanded: false });
+      onUpdate({ sceneId: scene.id, sceneName: scene.name });
       searchQuery = "";
     } catch (e) {
       console.error("create scene failed:", e);
@@ -149,11 +164,11 @@
   }
 
   function unbindScene() {
-    onUpdate({ sceneId: null, expanded: false });
+    onUpdate({ sceneId: null, sceneName: "" });
   }
 
   function toggleExpanded() {
-    onUpdate({ sceneId: _sceneId, expanded: !_expanded });
+    expanded = !expanded;
   }
 
   // ── Master volume ─────────────────────────────────────────────────────────
@@ -270,17 +285,32 @@
 {#if _sceneId === null}
   <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
   <div class="my-1 rounded-md border border-border/60 bg-card px-3 py-2.5 select-none">
-    <!-- Search -->
-    <div class="relative mb-1.5">
-      <Search class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none" />
-      <input
-        type="text"
-        placeholder="Search scenes…"
-        bind:value={searchQuery}
-        class="w-full pl-6 pr-2 py-1 font-sans text-xs bg-background border border-border/50
-               rounded-md text-foreground placeholder:text-muted-foreground/40
-               focus:outline-none focus:border-primary/60 transition-colors"
-      />
+    <!-- Search, and the way out of a block bound to nothing. A `/scene` inserted by
+         accident used to strand the picker in the note with no gesture that removed it:
+         every control here binds a scene. -->
+    <div class="mb-1.5 flex items-center gap-1">
+      <div class="relative flex-1">
+        <Search class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search scenes…"
+          bind:value={searchQuery}
+          class="w-full pl-6 pr-2 py-1 font-sans text-xs bg-background border border-border/50
+                 rounded-md text-foreground placeholder:text-muted-foreground/40
+                 focus:outline-none focus:border-primary/60 transition-colors"
+        />
+      </div>
+      {#if onRemove}
+        <button
+          onclick={onRemove}
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm
+                 hover:bg-muted transition-colors"
+          aria-label="Remove scene block"
+          title="Remove scene block"
+        >
+          <Trash2 class="size-3.5 text-muted-foreground hover:text-destructive" />
+        </button>
+      {/if}
     </div>
 
     <!-- Scene list -->
@@ -306,7 +336,7 @@
             type="button"
             role="option"
             aria-selected="false"
-            onclick={() => selectScene(scene.id)}
+            onclick={() => selectScene(scene)}
             class="group w-full text-left flex items-center gap-2.5 px-2 py-1.5 rounded-md
                    text-muted-foreground cursor-pointer transition-colors
                    hover:bg-primary/10 hover:text-foreground
@@ -466,6 +496,22 @@
         />
       </div>
 
+      <!-- Remove the reference. Distinct from "Change scene" next to it, and the
+           distinction is worth the two buttons: unbinding leaves the block waiting for
+           a scene, and there was no gesture at all that took the block out of the note
+           (#175 review). Neither one touches the scene in the Scenes pane. -->
+      {#if onRemove}
+        <button
+          onclick={onRemove}
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm
+                 hover:bg-muted transition-colors"
+          aria-label="Remove scene block"
+          title="Remove scene block"
+        >
+          <Trash2 class="size-3.5 text-muted-foreground hover:text-destructive" />
+        </button>
+      {/if}
+
       <!-- Change scene (return to picker) -->
       <button
         onclick={unbindScene}
@@ -482,10 +528,10 @@
         onclick={toggleExpanded}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
                hover:bg-muted transition-colors"
-        aria-label={_expanded ? "Collapse mixer" : "Expand mixer"}
-        aria-expanded={_expanded}
+        aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
+        aria-expanded={expanded}
       >
-        {#if _expanded}
+        {#if expanded}
           <ChevronUp class="size-3.5 text-muted-foreground" />
         {:else}
           <ChevronDown class="size-3.5 text-muted-foreground" />
@@ -496,7 +542,7 @@
     <!-- Expandable mixer panel — grid-rows slide (snaps under reduced-motion) -->
     <div
       class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
-      style="grid-template-rows: {_expanded ? '1fr' : '0fr'}"
+      style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
     >
       <div class="min-h-0">
         <div class="border-t border-border/50 px-1 py-1">

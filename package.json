@@ -1,6 +1,6 @@
 {
   "name": "grimoire",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes.",
   "type": "module",
   "scripts": {
@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@tiptap/core": "^3.22.3",
+    "@tiptap/extension-blockquote": "^3.22.3",
     "@tiptap/extension-image": "^3.22.3",
     "@tiptap/markdown": "^3.22.3",
     "@tiptap/pm": "^3.22.3",

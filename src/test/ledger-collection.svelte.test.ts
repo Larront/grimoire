@@ -5,11 +5,18 @@ import { flushSync } from "svelte";
 // ledger opens and clears itself when it closes. Drive the lifecycle by toggling a
 // $state-backed `isOpen` on the mocked ledger, then flushSync() the effect.
 let mockLedgerOpen = $state(false);
+// Which ledger is open. It is the *path* the collection watches, not the flag: opening
+// a second ledger from inside the first never lowers `isOpen`, so a collection keyed on
+// the flag alone would keep serving the ledger the GM left.
+let mockLedgerPath = $state("/ledgers/one");
 
 vi.mock("$lib/stores/ledger.svelte", () => ({
   ledger: {
     get isOpen() {
       return mockLedgerOpen;
+    },
+    get path() {
+      return mockLedgerOpen ? mockLedgerPath : null;
     },
   },
 }));
@@ -36,6 +43,7 @@ function mount<T>(opts: { fetch: () => Promise<T[]>; onClose?: () => void }) {
 
 beforeEach(() => {
   mockLedgerOpen = false;
+  mockLedgerPath = "/ledgers/one";
 });
 
 afterEach(() => {
@@ -57,6 +65,54 @@ describe("createLedgerCollection", () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(collection.items).toEqual(["a", "b", "c"]);
+  });
+
+  it("refetches when a second ledger is opened without closing the first", async () => {
+    // The sidebar bug this file's lifecycle owns: `isOpen` stays true across a switch,
+    // so a collection watching the flag serves the previous ledger's notes for as long
+    // as the window is open.
+    const byLedger: Record<string, string[]> = {
+      "/ledgers/one": ["one's note"],
+      "/ledgers/two": ["two's note"],
+    };
+    const fetch = vi.fn(async () => byLedger[mockLedgerPath]);
+    const collection = mount({ fetch });
+
+    mockLedgerOpen = true;
+    flushSync();
+    await flush();
+    expect(collection.items).toEqual(["one's note"]);
+
+    mockLedgerPath = "/ledgers/two";
+    flushSync();
+    await flush();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(collection.items).toEqual(["two's note"]);
+  });
+
+  it("ignores a slower fetch from the ledger that was left", async () => {
+    // Two reads in flight at once is what a switch causes, and the outgoing ledger's is
+    // the one likelier to be slow — it was asked first, and it can be answered last.
+    const resolvers: ((v: string[]) => void)[] = [];
+    const fetch = vi.fn(
+      () => new Promise<string[]>((resolve) => resolvers.push(resolve)),
+    );
+    const collection = mount({ fetch });
+
+    mockLedgerOpen = true;
+    flushSync();
+    mockLedgerPath = "/ledgers/two";
+    flushSync();
+    expect(resolvers).toHaveLength(2);
+
+    // The new ledger answers first, the old one afterwards.
+    resolvers[1](["two's note"]);
+    await flush();
+    resolvers[0](["one's note"]);
+    await flush();
+
+    expect(collection.items).toEqual(["two's note"]);
   });
 
   it("empties the list when the ledger closes", async () => {

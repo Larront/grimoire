@@ -22,7 +22,7 @@ The party arrived in Thornhaven at dusk, soaked from three days of marsh roads. 
 - [[Characters/Mira Ashvale.md]] — sold the party three herb-packets for a silver they barely had
 - [[Characters/Aldric Vane.md]] — watching; did not approach
 
-## Loot & Rewards
+## Loot and Rewards
 
 - Three herb-packets (remedies for marsh fever, marsh itch, and something the label does not name)
 - Stone fragment from the temple (puzzle-lock piece — not yet identified)
@@ -30,3 +30,6 @@ The party arrived in Thornhaven at dusk, soaked from three days of marsh roads. 
 ## Notes
 
 The carved fragment matches the description [[Mira]] gave of the puzzle-lock markers. She has not said so out loud. She is waiting to see what the party does with it first.
+
+> [!note] What she recognised, and did not say
+> The script on the fragment is her own family's. If a player offers it to her unprompted she will trade the first turn of the puzzle-lock for it; if they hide it, she will be on the eastern road ahead of them.

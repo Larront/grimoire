@@ -1,6 +1,7 @@
 use crate::commands::import::{reconcile_notes_with_disk, FailedImport};
 use crate::commands::templates::inject_builtin_templates;
 use crate::db;
+use crate::format_migration::{MigrationPlan, MigrationReport};
 use crate::db::models::{Map, NewPinCategory, Scene};
 use diesel::SqliteConnection;
 use crate::db::schema::{maps, notes, pin_categories, scenes};
@@ -73,7 +74,7 @@ pub fn open_ledger(
     // the last known-good snapshot when one exists (the damaged file is kept
     // aside), otherwise ERR_DB_CORRUPT sends the frontend to the rebuild
     // dialog — real scene/pin loss is never silently accepted.
-    let (conn, recovered) = match db::open_validated_connection(&ledger_path) {
+    let (mut conn, recovered) = match db::open_validated_connection(&ledger_path) {
         Ok(conn) => (conn, None),
         Err(db::DbOpenError::Corrupt(detail)) => {
             log::warn!("[open_ledger] database failed validation: {detail}");
@@ -90,7 +91,89 @@ pub fn open_ledger(
         Err(e) => return Err(e.message()),
     };
 
-    finish_open(path, ledger_path, conn, recovered, &app, &ledger)
+    // The [[Ledger Format Version]] gate (ADR-0017). Placed here rather than
+    // deeper because it must see the GM's *notes* untouched — but after the
+    // database opened above, which is Grimoire's own store migrating on its own
+    // silent terms. On a behind vault this refuses with
+    // ERR_FORMAT_MIGRATION_REQUIRED and the frontend takes over: it asks
+    // `plan_format_migration` what would change, and a yes comes back through
+    // `migrate_ledger_format`. A decline leaves this refusal standing.
+    //
+    // The scan's context is read from the database opened above — Scene's rewrite
+    // needs scene names, which no amount of reading a note can supply.
+    let cleared = crate::format_version::enforce_at_open(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )?;
+
+    finish_open(path, ledger_path, conn, recovered, &app, &ledger, cleared)
+}
+
+/// What the consent prompt is built from, or `None` when no pending migration
+/// finds work — in which case there is no prompt at all and `open_ledger` will
+/// have stamped the vault forward in silence.
+///
+/// This is [`crate::format_migration::run`] with the write left off, so the
+/// numbers and sentences shown to the GM are the ones the rewrite will use.
+#[tauri::command]
+#[specta::specta]
+pub fn plan_format_migration(path: String) -> Result<Option<MigrationPlan>, String> {
+    let ledger_path = PathBuf::from(path);
+    // Its own connection, because this command is reached from a *refused* open and
+    // therefore holds nothing: the ledger state has no database on it. `open_ledger`
+    // got this far, so the database opens.
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    crate::format_migration::plan(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )
+}
+
+/// The GM said yes: back the affected notes up, rewrite them, write the report,
+/// and open the ledger.
+///
+/// The plan is **recomputed here** rather than taken from what the prompt showed
+/// — the vault may have changed while the dialog sat on screen, so a stale list
+/// can never decide which files are edited (the same rule as
+/// `apply_backlink_rewrite`).
+///
+/// The vault opens even when some notes could not be rewritten: consent was
+/// given and the casualties are named in the returned report. What a partial
+/// failure withholds is the *stamp*, so the next open finds the remainder.
+#[tauri::command]
+#[specta::specta]
+pub fn migrate_ledger_format(
+    path: String,
+    app: AppHandle,
+    ledger: State<AppLedger>,
+) -> Result<MigrateFormatResult, String> {
+    let ledger_path = PathBuf::from(&path);
+
+    // The database first, as on every other open: Grimoire's own store migrates
+    // on its own silent terms, and the notes pass must not be the thing that
+    // discovers the database is unopenable. Then the notes — before the reconcile
+    // and the index walk inside `finish_open` see them, and before the watcher it
+    // starts can read Grimoire's own rewrites back as external edits.
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    let ctx = crate::format_migration::MigrationContext::load(&mut conn);
+    let (_, report) = crate::format_migration::run(&ledger_path, &ctx, true)?;
+    let report = report.ok_or("The migration reported nothing")?;
+
+    // The notes pass has finished, so this open may proceed past the gate even
+    // though a partial failure will have left the stamp behind.
+    let cleared = crate::format_version::cleared_by_consented_migration();
+    let ledger_result = finish_open(path, ledger_path, conn, None, &app, &ledger, cleared)?;
+
+    Ok(MigrateFormatResult {
+        report,
+        ledger: ledger_result,
+    })
+}
+
+#[derive(serde::Serialize, specta::Type)]
+pub struct MigrateFormatResult {
+    pub report: MigrationReport,
+    pub ledger: OpenLedgerResult,
 }
 
 /// Recreate the ledger database from scratch after the GM confirmed the
@@ -107,8 +190,12 @@ pub fn rebuild_ledger_db(
 ) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
     db::move_corrupt_db_aside(&ledger_path)?;
-    let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-    finish_open(path, ledger_path, conn, None, &app, &ledger)
+    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    let cleared = crate::format_version::enforce_at_open(
+        &ledger_path,
+        &crate::format_migration::MigrationContext::load(&mut conn),
+    )?;
+    finish_open(path, ledger_path, conn, None, &app, &ledger, cleared)
 }
 
 fn finish_open(
@@ -118,6 +205,13 @@ fn finish_open(
     recovered_from_backup: Option<String>,
     app: &AppHandle,
     ledger: &State<AppLedger>,
+    // The [[Ledger Format Version]] gate (ADR-0017), as a value rather than a
+    // call: every caller has to have satisfied it to reach here, so a future code
+    // path that opens a ledger without asking does not compile. The notes pass it
+    // stands for therefore runs after the database opened, before the reconcile
+    // and index walk below, and before the watcher starts at the end — or
+    // Grimoire's own migration writes would arrive back as external edits.
+    _format_cleared: crate::format_version::FormatCleared,
 ) -> Result<OpenLedgerResult, String> {
     inject_builtin_templates(&ledger_path)?;
     seed_default_categories(&mut conn)?;

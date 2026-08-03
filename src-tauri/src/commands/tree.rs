@@ -199,15 +199,169 @@ pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<()
     delete_folder_inner(&ledger_path, &folder_path, conn)
 }
 
-// ── rename_folder ──────────────────────────────────────────────────────────
+// ── rename_folder / move_folder ─────────────────────────────────────────────
 
+/// The parent folder holding `folder_path`, and the folder's own name. The parent
+/// is `""` for a folder sitting at the ledger root.
+fn split_folder_path(folder_path: &str) -> (&str, &str) {
+    match folder_path.rsplit_once('/') {
+        Some((parent, name)) => (parent, name),
+        None => ("", folder_path),
+    }
+}
+
+/// Compose a ledger-relative path for `name` inside `parent` — the one place the
+/// root's empty parent is special-cased, so no caller grows a leading slash.
+fn join_in_folder(parent: &str, name: &str) -> String {
+    if parent.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}/{}", parent, name)
+    }
+}
+
+/// Where a folder rename lands: `old_path`'s own parent, with `new_name` as the
+/// leaf. Same contract as `rename_pdf_inner` (`media.rs`) — the caller sends the
+/// bare name the tree shows, and the parent is derived here rather than composed
+/// by the frontend, so no call site can turn a rename into a move (#162).
+///
+/// The refusals are what keep it a rename: a name carrying a separator (or `.` /
+/// `..`) could redirect it anywhere in the ledger, and a name a sibling already
+/// holds would replace that sibling — which `fs::rename` will do silently on
+/// Windows when the sibling folder is empty. A case-only rename is *not* a
+/// collision: on a case-insensitive filesystem the destination resolves to the
+/// source folder itself.
+fn resolve_renamed_folder_path(
+    ledger_path: &Path,
+    old_path: &str,
+    new_name: &str,
+) -> Result<String, String> {
+    let trimmed = new_name.trim();
+    if trimmed.is_empty() {
+        return Err("ERR_EMPTY_NAME: A folder needs a name".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("ERR_BAD_NAME: A folder name cannot contain a path separator".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err(format!("ERR_BAD_NAME: '{}' is not a folder name", trimmed));
+    }
+
+    let (parent, _) = split_folder_path(old_path);
+    let new_path = join_in_folder(parent, trimmed);
+    refuse_taken_folder_path(ledger_path, old_path, &new_path)?;
+    Ok(new_path)
+}
+
+/// Refuse a destination another entry already holds. A case-only rename is *not*
+/// a collision: on a case-insensitive filesystem the destination resolves to the
+/// source folder itself.
+fn refuse_taken_folder_path(
+    ledger_path: &Path,
+    old_path: &str,
+    new_path: &str,
+) -> Result<(), String> {
+    let src = ledger_path.join(old_path);
+    let dest = ledger_path.join(new_path);
+    if dest.exists() {
+        let same_folder = match (src.canonicalize(), dest.canonicalize()) {
+            (Ok(s), Ok(d)) => s == d,
+            _ => false,
+        };
+        if !same_folder {
+            let (_, name) = split_folder_path(new_path);
+            return Err(format!(
+                "ERR_NAME_TAKEN: A folder named {} already exists here",
+                name
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Where a folder move lands: `dest_folder` (`""` = the ledger root), keeping the
+/// folder's own name. The mirror of [`resolve_renamed_folder_path`] — a rename
+/// changes the leaf and keeps the parent, a move changes the parent and keeps the
+/// leaf — so between them the GM can reach any path without either verb being
+/// able to do the other's job by accident.
+///
+/// The refusals here are the ones a move can hit and a rename cannot: a folder
+/// cannot be dropped into itself or into its own descendant (the filesystem would
+/// be asked to swallow a directory whole), and a drop onto the parent it already
+/// sits in is not an error but nothing at all — [`relocate_folder_inner`] returns
+/// early for it.
+fn resolve_moved_folder_path(
+    ledger_path: &Path,
+    old_path: &str,
+    dest_folder: &str,
+) -> Result<String, String> {
+    if dest_folder == old_path {
+        return Err("ERR_MOVE_INTO_SELF: A folder cannot be moved into itself".to_string());
+    }
+    if dest_folder.starts_with(&format!("{}/", old_path)) {
+        return Err(
+            "ERR_MOVE_INTO_SELF: A folder cannot be moved into a folder it contains".to_string(),
+        );
+    }
+    let (_, name) = split_folder_path(old_path);
+    let new_path = join_in_folder(dest_folder, name);
+    refuse_taken_folder_path(ledger_path, old_path, &new_path)?;
+    Ok(new_path)
+}
+
+/// Rename a folder, keeping it where it is. `old_path` is ledger-relative;
+/// `new_name` is the bare folder name (see [`resolve_renamed_folder_path`]).
+/// Returns the number of notes whose links were rewritten.
 pub fn rename_folder_inner(
+    ledger_path: &Path,
+    old_path: &str,
+    new_name: &str,
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+) -> Result<usize, String> {
+    let new_path = resolve_renamed_folder_path(ledger_path, old_path, new_name)?;
+    relocate_folder_inner(ledger_path, old_path, &new_path, conn, index)
+}
+
+/// Move a folder into `dest_folder` (`""` = the ledger root), keeping its name —
+/// the folder half of a [[Tree Move]]. Returns the number of notes whose links
+/// were rewritten.
+pub fn move_folder_inner(
+    ledger_path: &Path,
+    old_path: &str,
+    dest_folder: &str,
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+) -> Result<usize, String> {
+    let new_path = resolve_moved_folder_path(ledger_path, old_path, dest_folder)?;
+    relocate_folder_inner(ledger_path, old_path, &new_path, conn, index)
+}
+
+/// Carry a folder from `old_path` to `new_path` along with everything keyed by a
+/// path underneath it: descendant note `path`/`parent_path`, map `image_path`,
+/// PDF Scene-links, note_tags, the search index, and the full-path wikilinks
+/// pointing into it. Returns the number of notes whose links were rewritten, for
+/// the "N notes updated" toast.
+///
+/// A rename and a move both land here — they differ only in which half of the
+/// destination path their caller changed — so the re-keying story is written
+/// once. Callers resolve *and refuse* their destination before calling: step 2
+/// below points links at the new path, so a relocation that failed at step 3
+/// would leave every link aimed at a folder that never appeared.
+pub fn relocate_folder_inner(
     ledger_path: &Path,
     old_path: &str,
     new_path: &str,
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
 ) -> Result<usize, String> {
+    // Nothing was asked for: a rename to the name it already has, or a move into
+    // the folder it already sits in. Leaving the filesystem alone is the whole
+    // job — `fs::rename` of a directory onto itself is not portable.
+    if old_path == new_path {
+        return Ok(0);
+    }
+
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
     let like_pattern = format!("{}%", old_prefix);
@@ -321,7 +475,7 @@ pub fn rename_folder_inner(
 #[specta::specta]
 pub fn rename_folder(
     old_path: String,
-    new_path: String,
+    new_name: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
     let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
@@ -331,7 +485,22 @@ pub fn rename_folder(
     let index = state_ref.search_index.as_ref();
     // Cast the internal usize count to i32 at the command seam: specta forbids
     // BigInt-style types in exported bindings, and link counts are always small.
-    rename_folder_inner(&ledger_path, &old_path, &new_path, conn, index).map(|n| n as i32)
+    rename_folder_inner(&ledger_path, &old_path, &new_name, conn, index).map(|n| n as i32)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn move_folder(
+    old_path: String,
+    dest_folder: String,
+    ledger: State<AppLedger>,
+) -> Result<i32, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let state_ref = &mut *state;
+    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
+    let index = state_ref.search_index.as_ref();
+    move_folder_inner(&ledger_path, &old_path, &dest_folder, conn, index).map(|n| n as i32)
 }
 
 #[cfg(test)]
@@ -801,6 +970,222 @@ mod tests {
 
         let updated: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
         assert_eq!(updated[0].image_path.as_deref(), Some("territories/northlands.jpg"));
+    }
+
+    // ── rename_folder name contract tests ────────────────────────────────────
+
+    #[test]
+    fn rename_folder_keeps_a_subfolder_under_its_parent() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("creatures/dragons/wyvern.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragons/wyvern.md", Some("creatures/dragons"));
+
+        rename_folder_inner(dir.path(), "creatures/dragons", "wyrms", &mut conn, None).unwrap();
+
+        assert!(
+            dir.path().join("creatures/wyrms").is_dir(),
+            "a renamed subfolder stays beside its siblings",
+        );
+        assert!(!dir.path().join("wyrms").exists(), "and does not land at the ledger root");
+        let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(updated[0].path, "creatures/wyrms/wyvern.md");
+        assert_eq!(updated[0].parent_path.as_deref(), Some("creatures/wyrms"));
+    }
+
+    #[test]
+    fn rename_folder_rejects_a_name_holding_a_path_separator() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures")).unwrap();
+        let mut conn = test_conn();
+
+        for name in ["regions/coast", "regions\\coast", "..", "."] {
+            let err = rename_folder_inner(dir.path(), "creatures", name, &mut conn, None)
+                .expect_err("a name that could redirect the rename is refused");
+            assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
+        }
+        assert!(dir.path().join("creatures").is_dir(), "the folder is left where it was");
+    }
+
+    #[test]
+    fn rename_folder_rejects_an_empty_name() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        let mut conn = test_conn();
+
+        let err = rename_folder_inner(dir.path(), "creatures", "   ", &mut conn, None)
+            .expect_err("a blank name is refused");
+        assert!(err.starts_with("ERR_EMPTY_NAME"), "got: {err}");
+        assert!(dir.path().join("creatures").is_dir());
+    }
+
+    #[test]
+    fn rename_folder_allows_a_case_only_rename() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("Creatures")).unwrap();
+        let mut conn = test_conn();
+
+        rename_folder_inner(dir.path(), "Creatures", "creatures", &mut conn, None)
+            .expect("a folder may be renamed to a different casing of its own name");
+    }
+
+    #[test]
+    fn rename_folder_rejects_a_name_a_sibling_already_holds_before_writing_anything() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::create_dir(dir.path().join("beasts")).unwrap();
+        fs::write(dir.path().join("creatures/dragon.md"), "").unwrap();
+        fs::write(dir.path().join("index.md"), "See [[creatures/dragon.md]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "creatures/dragon.md");
+
+        let err = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None)
+            .expect_err("renaming onto a taken name is refused");
+        assert!(err.starts_with("ERR_NAME_TAKEN"), "got: {err}");
+
+        // The refusal lands before the backlink rewrite, so the links still point
+        // at the folder that is still there.
+        assert_eq!(
+            fs::read_to_string(dir.path().join("index.md")).unwrap(),
+            "See [[creatures/dragon.md]].",
+            "a refused rename rewrites nothing",
+        );
+        assert!(dir.path().join("creatures/dragon.md").is_file());
+    }
+
+    // ── move_folder tests (#163) ─────────────────────────────────────────────
+
+    #[test]
+    fn move_folder_carries_the_folder_and_its_notes_to_the_destination() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("dragons")).unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("dragons/wyvern.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "dragons/wyvern.md", Some("dragons"));
+
+        move_folder_inner(dir.path(), "dragons", "creatures", &mut conn, None).unwrap();
+
+        assert!(dir.path().join("creatures/dragons/wyvern.md").is_file());
+        assert!(!dir.path().join("dragons").exists());
+        let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(updated[0].path, "creatures/dragons/wyvern.md");
+        assert_eq!(
+            updated[0].parent_path.as_deref(),
+            Some("creatures/dragons"),
+            "a moved folder's notes are re-parented to where it landed",
+        );
+    }
+
+    #[test]
+    fn move_folder_to_the_ledger_root_takes_an_empty_destination() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("creatures/dragons/wyvern.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(
+            &mut conn,
+            1,
+            "creatures/dragons/wyvern.md",
+            Some("creatures/dragons"),
+        );
+
+        move_folder_inner(dir.path(), "creatures/dragons", "", &mut conn, None).unwrap();
+
+        assert!(dir.path().join("dragons/wyvern.md").is_file());
+        let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(updated[0].path, "dragons/wyvern.md");
+        assert_eq!(updated[0].parent_path.as_deref(), Some("dragons"));
+    }
+
+    #[test]
+    fn move_folder_rewrites_full_path_wikilinks_to_the_new_location() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("dragons")).unwrap();
+        fs::create_dir(dir.path().join("creatures")).unwrap();
+        fs::write(dir.path().join("dragons/wyvern.md"), "").unwrap();
+        fs::write(dir.path().join("index.md"), "See [[dragons/wyvern.md]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "dragons/wyvern.md", Some("dragons"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "dragons/wyvern.md");
+
+        let count = move_folder_inner(dir.path(), "dragons", "creatures", &mut conn, None).unwrap();
+
+        assert_eq!(count, 1, "the one note holding a full-path link is counted");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("index.md")).unwrap(),
+            "See [[creatures/dragons/wyvern.md]].",
+        );
+    }
+
+    #[test]
+    fn move_folder_refuses_to_swallow_itself() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        let mut conn = test_conn();
+
+        for dest in ["creatures", "creatures/dragons"] {
+            let err = move_folder_inner(dir.path(), "creatures", dest, &mut conn, None)
+                .expect_err("a folder cannot be moved into itself or its own descendant");
+            assert!(err.starts_with("ERR_MOVE_INTO_SELF"), "got: {err}");
+        }
+        assert!(dir.path().join("creatures/dragons").is_dir(), "nothing moved");
+    }
+
+    #[test]
+    fn move_folder_onto_the_parent_it_already_sits_in_does_nothing() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("creatures/dragons/wyvern.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(
+            &mut conn,
+            1,
+            "creatures/dragons/wyvern.md",
+            Some("creatures/dragons"),
+        );
+
+        let count =
+            move_folder_inner(dir.path(), "creatures/dragons", "creatures", &mut conn, None)
+                .expect("a drop onto the current parent is a no-op, not a failure");
+
+        assert_eq!(count, 0);
+        assert!(dir.path().join("creatures/dragons/wyvern.md").is_file());
+        let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(updated[0].path, "creatures/dragons/wyvern.md");
+    }
+
+    #[test]
+    fn move_folder_refuses_a_destination_holding_that_name_before_writing_anything() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("dragons")).unwrap();
+        fs::create_dir_all(dir.path().join("creatures/dragons")).unwrap();
+        fs::write(dir.path().join("dragons/wyvern.md"), "").unwrap();
+        fs::write(dir.path().join("index.md"), "See [[dragons/wyvern.md]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "dragons/wyvern.md", Some("dragons"));
+        insert_note(&mut conn, 2, "index.md", None);
+        insert_note_link(&mut conn, 2, "dragons/wyvern.md");
+
+        let err = move_folder_inner(dir.path(), "dragons", "creatures", &mut conn, None)
+            .expect_err("the destination already holds a folder of that name");
+        assert!(err.starts_with("ERR_NAME_TAKEN"), "got: {err}");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("index.md")).unwrap(),
+            "See [[dragons/wyvern.md]].",
+            "a refused move rewrites nothing",
+        );
     }
 
     // ── rename_folder link rewrite tests ─────────────────────────────────────

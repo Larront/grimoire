@@ -1,5 +1,6 @@
 <script lang="ts">
   import { FileText } from "@lucide/svelte";
+  import { placeMenu } from "$lib/utils/anchored-menu";
   import type { NoteSearchResult } from "$lib/editor/wiki-link";
 
   interface Props {
@@ -7,23 +8,33 @@
     selectedIndex: number;
     x: number;
     y: number;
+    /** The caret's top, so a flipped menu clears the line rather than covering it. */
+    anchorTop?: number;
     onSelect: (item: NoteSearchResult) => void;
   }
 
-  let { items, selectedIndex, x, y, onSelect }: Props = $props();
+  let { items, selectedIndex, x, y, anchorTop, onSelect }: Props = $props();
 
   let itemRefs: (HTMLButtonElement | null)[] = [];
+  let menuEl: HTMLDivElement | undefined = $state();
 
   $effect(() => {
     itemRefs[selectedIndex]?.scrollIntoView({ block: "nearest" });
   });
+
+  // Measured, then placed — a two-result list and a ten-result one flip at different
+  // points, and only the drawn element knows which this is.
+  $effect(() => {
+    items;
+    if (menuEl) placeMenu(menuEl, { x, y, anchorTop });
+  });
 </script>
 
 <div
+  bind:this={menuEl}
   class="fixed z-50 min-w-[240px] max-h-[240px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
          shadow-xl shadow-black/30"
-  style="left: {x}px; top: {y}px;"
   role="listbox"
   aria-label="Link to note"
 >

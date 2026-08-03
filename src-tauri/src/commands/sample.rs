@@ -515,32 +515,49 @@ mod tests {
             "Session 1 must not contain a timeline fence"
         );
 
-        // ── Start Here scene-blocks reference real seeded scenes ─────────────
-        // The embedded <scene-block data-id="N"> tags are hand-authored against the
+        // ── Start Here scene fences reference real seeded scenes ─────────────
+        // The `Id:` lines inside its ```scene fences are hand-authored against the
         // seed's autoincrement order; this guards against the page and seed drifting.
+        // The name each fence carries is a copy the database owns (#185), so it is
+        // checked against the seeded row rather than merely being present.
         let start_here = fs::read_to_string(tmp.path().join("Start Here.md")).unwrap();
-        let referenced_ids: Vec<i32> = start_here
-            .match_indices("data-id=\"")
-            .filter_map(|(i, m)| {
-                let rest = &start_here[i + m.len()..];
-                let end = rest.find('"')?;
-                rest[..end].parse::<i32>().ok()
+        let references: Vec<(i32, Option<String>)> = start_here
+            .split("```scene\n")
+            .skip(1)
+            .filter_map(|fence| {
+                let body = fence.split("```").next()?;
+                let mut id = None;
+                let mut name = None;
+                for line in body.lines() {
+                    if let Some(rest) = line.strip_prefix("Id: ") {
+                        id = rest.trim().parse::<i32>().ok();
+                    } else if let Some(rest) = line.strip_prefix("# ") {
+                        name = Some(rest.to_string());
+                    }
+                }
+                id.map(|id| (id, name))
             })
             .collect();
         assert!(
-            referenced_ids.len() >= 2,
-            "Start Here must embed ≥2 scene-blocks, found {}",
-            referenced_ids.len()
+            references.len() >= 2,
+            "Start Here must embed ≥2 scene fences, found {}",
+            references.len()
         );
-        for id in referenced_ids {
-            let exists: i64 = scenes::table
+        for (id, name) in references {
+            let seeded: Vec<String> = scenes::table
                 .filter(scenes::id.eq(id))
-                .count()
-                .get_result(&mut conn)
+                .select(scenes::name)
+                .load(&mut conn)
                 .unwrap();
             assert_eq!(
-                exists, 1,
-                "Start Here scene-block references scene id {id}, which is not seeded"
+                seeded.len(),
+                1,
+                "Start Here scene fence references scene id {id}, which is not seeded"
+            );
+            assert_eq!(
+                name.as_deref(),
+                Some(seeded[0].as_str()),
+                "the name cached in Start Here's fence for scene {id} has gone stale"
             );
         }
 

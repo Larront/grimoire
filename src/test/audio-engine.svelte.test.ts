@@ -43,10 +43,16 @@ vi.mock("../lib/stores/scenes.svelte", () => ({
 
 // The $effect.root cleanup in the engine reads ledger.isOpen; keep it open so the
 // cleanup effect stays inert during tests.
+// One ledger, open for the whole file. The path matters as well as the flag: the
+// engine tears down on a *change* of path, so a mock without one reads as a switch on
+// the first effect run and stops the players these tests just started.
 vi.mock("../lib/stores/ledger.svelte", () => ({
   ledger: {
     get isOpen() {
       return true;
+    },
+    get path() {
+      return "/ledgers/one";
     },
   },
 }));

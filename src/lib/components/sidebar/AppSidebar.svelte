@@ -32,6 +32,14 @@
   import { toastUndo, toastExternalMoveLinks, toastSuccess } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import {
+    canDrop,
+    dropIntoFolder,
+    isTreeDrag,
+    readDragItem,
+    treeDrag,
+  } from "$lib/stores/tree-move.svelte";
+  import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -118,6 +126,7 @@
     if (!ledger.isOpen) {
       tree = null;
       noteMap.clear();
+      treeExpansion.clear();
     }
   });
 
@@ -133,13 +142,23 @@
     }
   });
 
-  // ── PDF drag-and-drop import into the ledger root (#102) ───────────────────
-  // The Files tree area is a drop target for the ledger root. Drops onto a
-  // folder row are handled (and stop-propagated) by FileTree, so anything that
-  // bubbles up to here — empty tree space, a note/PDF row — lands in the root.
+  // ── Drops onto the ledger root: reorganise (#163) and PDF import (#102) ────
+  // The Files tree area is the ledger root's drop target. Every folder region
+  // claims its own drops and stop-propagates them, so what reaches here is a
+  // drop aimed at the root: empty tree space, or a top-level row.
   let isRootDropTarget = $state(false);
 
   function handleRootDragOver(e: DragEvent) {
+    if (isTreeDrag(e)) {
+      if (!canDrop(treeDrag.item, "")) {
+        isRootDropTarget = false;
+        return;
+      }
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      isRootDropTarget = true;
+      return;
+    }
     if (!e.dataTransfer?.types.includes("Files")) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -148,6 +167,17 @@
 
   async function handleRootDrop(e: DragEvent) {
     isRootDropTarget = false;
+
+    if (isTreeDrag(e)) {
+      e.preventDefault();
+      const item = readDragItem(e) ?? treeDrag.item;
+      treeDrag.end();
+      if (item && (await dropIntoFolder(item, "", noteMap))) {
+        await refresh();
+      }
+      return;
+    }
+
     const pdfs = Array.from(e.dataTransfer?.files ?? []).filter(isPdfFile);
     if (!pdfs.length) return;
     e.preventDefault();
@@ -173,6 +203,10 @@
         `${parentNode ? parentNode.path + "/Untitled.md" : "Untitled.md"}`,
         parentNode ? parentNode.path : null,
       );
+      // Open the folder it went into, or the new note is created somewhere the
+      // GM cannot see (#164). Done before the refresh so the rebuilt tree comes
+      // back already open rather than opening a beat later.
+      if (parentNode) treeExpansion.reveal(parentNode.path);
       await notes.load();
       refresh();
       tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
@@ -186,6 +220,7 @@
       await api.createFolder(
         `${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`,
       );
+      if (parentNode) treeExpansion.reveal(parentNode.path);
       refresh();
     } catch (e) {
       console.error("create folder failed:", e);

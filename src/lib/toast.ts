@@ -5,10 +5,13 @@ import { toast } from "svelte-sonner";
 // disappears"). Longer than success — error copy is denser and higher-stakes —
 // but still finite.
 //
-// The one sanctioned exception is `toastExternalMoveLinks` below: a
-// Conflict-Banner-class response to an unresolved *external* change, which stays
-// until the GM acts (ADR-0014). That narrowing does not license permanent
-// tool-generated toasts — everything the app itself does still auto-expires.
+// Two sanctioned exceptions, both Conflict-Banner-class: a state that outlives
+// the session, that the GM has to act on, and that is non-destructive to ignore.
+// `toastExternalMoveLinks` is an unresolved *external* change (ADR-0014);
+// `toastMigrationReport`'s failure branch is notes a [[Format Migration]] left on
+// a format nothing reads (#184). Neither licenses permanent toasts for work the
+// app has finished — that still auto-expires, including a migration that swept
+// the whole vault cleanly.
 const ERROR_DURATION = 8000;
 // A partial-import failure carries a required "Show details" follow-up, so it
 // lingers longer than a plain error to give the action time to be used.
@@ -71,6 +74,54 @@ export function toastExternalMoveLinks(
       cancel: { label: "Leave as-is", onClick: () => {} },
     },
   );
+}
+
+/**
+ * What a completed [[Format Migration]] leaves on screen (#184).
+ *
+ * The report is the record — a markdown file beside the backup, which outlives
+ * the session — so this only **points at it**. A clean sweep is news rather than
+ * an unresolved state, so it fades like everything else.
+ *
+ * **A partial failure is the second sanctioned permanent toast**, alongside
+ * `toastExternalMoveLinks` above. ADR-0014's rule was "a persistent toast is for
+ * an unresolved *external* change", and this one is Grimoire's own doing, so the
+ * rule as written does not cover it — #184 widens it on the property that
+ * actually earned the exception: notes are left on a format nothing reads, the
+ * state outlives the session, and ignoring it is non-destructive. It is not
+ * corner-noise about something the app already finished.
+ *
+ * Nothing at all when nothing was rewritten: the plan is recomputed at migrate
+ * time, so a vault whose work vanished in between just opens.
+ */
+export function toastMigrationReport(report: {
+  migrated: string[];
+  failed: { path: string; reason: string }[];
+  report_path: string;
+}) {
+  const done = report.migrated.length;
+  const failed = report.failed.length;
+  if (done === 0 && failed === 0) return;
+
+  if (failed > 0) {
+    toast.error(
+      `${failed} note${failed === 1 ? "" : "s"} couldn't be updated`,
+      {
+        id: "format-migration",
+        duration: Infinity,
+        closeButton: true,
+        description: `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them: ${report.report_path}`,
+      },
+    );
+    return;
+  }
+
+  toast(`${done} note${done === 1 ? "" : "s"} updated`, {
+    id: "format-migration",
+    duration: ERROR_DURATION,
+    closeButton: true,
+    description: `Copies of them from before the change, and a report of what changed, are here: ${report.report_path}`,
+  });
 }
 
 /** Show an undo toast. `onConfirm` is called after the toast duration if the user does not click Undo. */

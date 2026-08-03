@@ -1,45 +1,54 @@
 import Image from "@tiptap/extension-image";
 import { api } from "$lib/api";
-import { mount, unmount } from "svelte";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
+import {
+  createBlockNodeView,
+  type BlockView,
+} from "$lib/editor/node-view-connector";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ImageBlockViewExports {
-  setAttrs: (align: string, width: string, src: string, alt: string) => void;
+/** Image draws its own selected state, so its view must accept one. */
+interface ImageBlockViewExports extends BlockView {
   setSelected: (selected: boolean) => void;
 }
 
-// ─── Markdown preprocessor ────────────────────────────────────────────────────
-// Converts  ![alt](src){align=left width=60%}
-// to        <img src="src" alt="alt" data-align="left" data-width="60%">
-// so TipTap's HTML parser can read the custom attributes.
+// ─── Markdown declaration ─────────────────────────────────────────────────────
+//
+// Image is the one block whose syntax is not a fence, so it declares a tokenizer
+// rather than making a fence claim: `![alt](src){align=left width=60%}` has to
+// arrive as *one* token, and the reader's own image rule stops at the closing
+// paren, leaving the suffix behind as loose text.
+//
+// The token it produces is an ordinary `image` token with two extra fields, so
+// one parse handler below covers both a plain image and an aligned one.
 
-const ATTR_RE = /!\[([^\]]*)\]\(([^)]+)\)\{([^}]+)\}/g;
+/**
+ * `![alt](src){align=… width=…}`, anchored: a tokenizer is offered the rest of the
+ * line. The src is read up to the closing paren and may hold spaces — Grimoire
+ * keeps a copied image's original filename, so `.grimoire/images/my map.png` is an
+ * ordinary path rather than an edge case.
+ */
+const IMAGE_WITH_ATTRS_RE = /^!\[([^\]]*)\]\(([^)]+)\)\{([^}]+)\}/;
 
-export function preprocessImageAttrs(markdown: string): string {
-  return markdown.replace(ATTR_RE, (_, alt, src, attrsStr) => {
-    const attrs: Record<string, string> = {};
-    for (const pair of attrsStr.trim().split(/\s+/)) {
-      const eq = pair.indexOf("=");
-      if (eq < 0) continue;
-      attrs[pair.slice(0, eq)] = pair.slice(eq + 1);
-    }
-    const align = attrs.align ?? "center";
-    const width = attrs.width ?? "100%";
-    const safeAlt = alt.replace(/"/g, "&quot;");
-    const safeSrc = src.replace(/"/g, "&quot;");
-    return `<img src="${safeSrc}" alt="${safeAlt}" data-align="${align}" data-width="${width}">`;
-  });
+/** `align=left width=60%` → `{ align: "left", width: "60%" }`. */
+function parseImageAttrs(attrsStr: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  for (const pair of attrsStr.trim().split(/\s+/)) {
+    const eq = pair.indexOf("=");
+    if (eq < 0) continue;
+    attrs[pair.slice(0, eq)] = pair.slice(eq + 1);
+  }
+  return attrs;
 }
 
 // ─── Markdown serializer ─────────────────────────────────────────────────────
 
 /**
  * Serializes an image node to markdown, encoding non-default align/width as a
- * trailing `{align=… width=…}` attr block that preprocessImageAttrs() reverses
- * on load. Returns the string directly so it can be wired into the extension's
+ * trailing `{align=… width=…}` attr block that the tokenizer above reads back on
+ * load. Returns the string directly so it can be wired into the extension's
  * `renderMarkdown` field — the hook @tiptap/markdown actually reads.
  */
 export function serializeImageNode(node: {
@@ -83,6 +92,39 @@ export const ImageBlock = Image.extend({
     };
   },
 
+  markdownTokenizer: {
+    name: "imageWithAttrs",
+    level: "inline",
+    // Where a match could begin, so the reader stops its plain-text run there
+    // rather than swallowing the image into a paragraph's prose.
+    start: (src: string) => src.indexOf("!["),
+    tokenize: (src: string) => {
+      const match = IMAGE_WITH_ATTRS_RE.exec(src);
+      if (!match) return undefined;
+      const [raw, alt, href, attrsStr] = match;
+      const attrs = parseImageAttrs(attrsStr);
+      return {
+        type: "image",
+        raw,
+        href,
+        text: alt,
+        align: attrs.align,
+        width: attrs.width,
+      };
+    },
+  },
+
+  // Both shapes of image token land here: the tokenizer's, carrying the suffix's
+  // align and width, and the reader's own for a plain `![alt](src)`.
+  parseMarkdown: (token, helpers) =>
+    helpers.createNode("image", {
+      src: token.href ?? "",
+      alt: token.text ?? "",
+      title: token.title ?? null,
+      align: token.align ?? "center",
+      width: token.width ?? "100%",
+    }),
+
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: {
     attrs: { src: string; alt: string | null; align: string; width: string };
@@ -91,65 +133,26 @@ export const ImageBlock = Image.extend({
   },
 
   addNodeView() {
-    return ({ node, editor, getPos }) => {
-      const dom = document.createElement("div");
-      dom.setAttribute("contenteditable", "false");
-      dom.setAttribute("data-image-block", "");
+    return createBlockNodeView<ImageBlockViewExports>({
+      component: ImageBlockView,
+      domAttrs: { "data-image-block": "", "data-note-block": "image" },
+      defaults: { src: "", alt: "", align: "center", width: "100%" },
+      drawsOwnSelection: true,
+      props: ({ updateAttributes, deleteNode }) => ({
+        onUpdate: updateAttributes,
+        onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
+        onSrcReplace: (src: string) => updateAttributes({ src }),
+        onRemove: deleteNode,
+      }),
 
-      function updateNodeAttrs(partial: Record<string, unknown>) {
-        const pos = (getPos as () => number | undefined)();
-        if (pos === undefined) return;
-        editor.commands.command(({ tr }) => {
-          const currentNode = tr.doc.nodeAt(pos);
-          if (!currentNode) return false;
-          tr.setNodeMarkup(pos, undefined, { ...currentNode.attrs, ...partial });
-          return true;
-        });
-      }
-
-      const raw = mount(ImageBlockView, {
-        target: dom,
-        props: {
-          src: node.attrs.src ?? "",
-          alt: node.attrs.alt ?? "",
-          align: node.attrs.align ?? "center",
-          width: node.attrs.width ?? "100%",
-          onUpdate: updateNodeAttrs,
-          onCaptionUpdate: (alt) => updateNodeAttrs({ alt }),
-          onSrcReplace: (src) => updateNodeAttrs({ src }),
-        },
-      });
-      const component = raw as unknown as ImageBlockViewExports;
-
-      return {
-        dom,
-        stopEvent(event: Event) {
-          if (dom.hasAttribute("data-resizing")) return true;
-          // Let mousedown reach ProseMirror so it can select this node
-          if (event.type === "mousedown") return false;
-          return dom.contains(event.target as globalThis.Node);
-        },
-        update(updatedNode) {
-          if (updatedNode.type !== node.type) return false;
-          component.setAttrs(
-            updatedNode.attrs.align ?? "center",
-            updatedNode.attrs.width ?? "100%",
-            updatedNode.attrs.src ?? "",
-            updatedNode.attrs.alt ?? "",
-          );
-          return true;
-        },
-        selectNode() {
-          component.setSelected(true);
-        },
-        deselectNode() {
-          component.setSelected(false);
-        },
-        destroy() {
-          unmount(raw);
-        },
-      };
-    };
+      // Image's use of the connector's event hole: a mousedown must reach
+      // ProseMirror so it can select this node, and a resize drag must not.
+      stopEvent: ({ dom }) => (event) => {
+        if (dom.hasAttribute("data-resizing")) return true;
+        if (event.type === "mousedown") return false;
+        return undefined;
+      },
+    });
   },
 });
 

@@ -1,40 +1,46 @@
 import { describe, it, expect } from "vitest";
+// Event order is no longer this block's business — it moved to the Row List
+// (#173), and its arithmetic is tested in row-list.test.ts with Timeline's use of
+// it in timeline-row-list.test.ts. What is left here is the fence format.
 import {
   parseTimelineBody,
   serializeTimelineEvents,
-  preprocessTimelineBlocks,
   createBlankEvent,
-  insertEventAt,
-  moveEventUp,
-  moveEventDown,
   renderTimelineText,
   TimelineBlock,
   type TimelineEvent,
 } from "$lib/editor/timeline-block";
 
 // ─── parseTimelineBody ────────────────────────────────────────────────────────
+//
+// The grammar these exercise is the migrated one (#184): an event begins at a
+// column-zero `#` heading carrying its title, then an optional `Date:` line,
+// then free description prose in which blank lines are legal. The old grammar's
+// `Title:` line and blank-line record boundary are gone — a blank line inside a
+// description used to start a second, untitled event on the next autosave, which
+// is the corruption this format change exists to fix.
 
 describe("parseTimelineBody", () => {
   it("title only — minimal valid record", () => {
-    expect(parseTimelineBody("Title: The Shattering")).toEqual([
+    expect(parseTimelineBody("# The Shattering")).toEqual([
       { date: "", title: "The Shattering", description: "" },
     ]);
   });
 
-  it("date + title", () => {
-    expect(parseTimelineBody("Date: 3rd of Frostfall\nTitle: The Shattering")).toEqual([
+  it("title + date", () => {
+    expect(parseTimelineBody("# The Shattering\nDate: 3rd of Frostfall")).toEqual([
       { date: "3rd of Frostfall", title: "The Shattering", description: "" },
     ]);
   });
 
   it("title + single description line", () => {
-    expect(parseTimelineBody("Title: The Shattering\nThe council voted.")).toEqual([
+    expect(parseTimelineBody("# The Shattering\n\nThe council voted.")).toEqual([
       { date: "", title: "The Shattering", description: "The council voted." },
     ]);
   });
 
-  it("all fields — date, title, multi-line description", () => {
-    const body = "Date: 3rd of Frostfall\nTitle: The Shattering\nThe council voted.\nIt began the war.";
+  it("all fields — title, date, multi-line description", () => {
+    const body = "# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\nIt began the war.";
     expect(parseTimelineBody(body)).toEqual([
       {
         date: "3rd of Frostfall",
@@ -44,8 +50,20 @@ describe("parseTimelineBody", () => {
     ]);
   });
 
-  it("two events separated by blank line", () => {
-    const body = "Date: 3rd of Frostfall\nTitle: The Shattering\n\nDate: Midwinter\nTitle: Siege of Highvale";
+  it("a blank line inside a description is description, not a record boundary", () => {
+    // The bug the grammar change fixes, at the parser: two paragraphs, one event.
+    const body = "# The Shattering\n\nThe council voted.\n\nThe war began that winter.";
+    expect(parseTimelineBody(body)).toEqual([
+      {
+        date: "",
+        title: "The Shattering",
+        description: "The council voted.\n\nThe war began that winter.",
+      },
+    ]);
+  });
+
+  it("two events — the next heading ends the previous event", () => {
+    const body = "# The Shattering\nDate: 3rd of Frostfall\n\n# Siege of Highvale\nDate: Midwinter";
     expect(parseTimelineBody(body)).toEqual([
       { date: "3rd of Frostfall", title: "The Shattering", description: "" },
       { date: "Midwinter", title: "Siege of Highvale", description: "" },
@@ -54,11 +72,16 @@ describe("parseTimelineBody", () => {
 
   it("three events, mixed optional fields", () => {
     const body = [
-      "Title: Alpha",
+      "# Alpha",
       "",
-      "Date: Year 2\nTitle: Beta\nSome notes.",
+      "# Beta",
+      "Date: Year 2",
       "",
-      "Title: Gamma\nFinal event.",
+      "Some notes.",
+      "",
+      "# Gamma",
+      "",
+      "Final event.",
     ].join("\n");
     expect(parseTimelineBody(body)).toEqual([
       { date: "", title: "Alpha", description: "" },
@@ -68,20 +91,20 @@ describe("parseTimelineBody", () => {
   });
 
   it("colons in date value — only the first colon delimits the label", () => {
-    expect(parseTimelineBody("Date: Year 812: dawn\nTitle: The Pact")).toEqual([
+    expect(parseTimelineBody("# The Pact\nDate: Year 812: dawn")).toEqual([
       { date: "Year 812: dawn", title: "The Pact", description: "" },
     ]);
   });
 
   it("pipes in title are preserved verbatim", () => {
-    expect(parseTimelineBody("Title: [[path|display]] text")).toEqual([
+    expect(parseTimelineBody("# [[path|display]] text")).toEqual([
       { date: "", title: "[[path|display]] text", description: "" },
     ]);
   });
 
-  it("wikilinks in date and title survive", () => {
+  it("wikilinks in title and date survive", () => {
     expect(
-      parseTimelineBody("Date: [[Calendar#Frostfall]]\nTitle: [[The Shattering]]"),
+      parseTimelineBody("# [[The Shattering]]\nDate: [[Calendar#Frostfall]]"),
     ).toEqual([
       { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "" },
     ]);
@@ -92,33 +115,53 @@ describe("parseTimelineBody", () => {
     expect(parseTimelineBody("   ")).toEqual([]);
   });
 
-  it("skips blank records (consecutive blank lines)", () => {
-    const body = "Title: Alpha\n\n\n\nTitle: Beta";
-    const result = parseTimelineBody(body);
-    expect(result).toHaveLength(2);
-    expect(result[0].title).toBe("Alpha");
-    expect(result[1].title).toBe("Beta");
+  it("an empty heading is an untitled event, not a dropped one", () => {
+    // What a freshly inserted, still-blank event serializes to.
+    expect(parseTimelineBody("# ")).toEqual([{ date: "", title: "", description: "" }]);
+    expect(parseTimelineBody("#")).toEqual([{ date: "", title: "", description: "" }]);
   });
 
-  it("Date:/Title: lines after the title are description, not fields", () => {
-    const body = "Title: Alpha\nDate: not a date field\nTitle: also description";
-    // The Title: line ends the header; everything after it is description, even
-    // when it starts with a Date:/Title: label. This protects description content.
-    const result = parseTimelineBody(body);
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("Alpha");
-    expect(result[0].date).toBe("");
-    expect(result[0].description).toBe("Date: not a date field\nTitle: also description");
+  it("`#hashtag` at column zero is not a heading", () => {
+    // No space after the `#`, so it is not a markdown heading either. Without a
+    // heading above it there is no event for it to belong to.
+    expect(parseTimelineBody("#hashtag")).toEqual([]);
   });
 
-  it("description whose first line looks like a label is not clobbered", () => {
-    // Event has no date, so the serializer emits only "Title: " then the description.
-    const body = "Title: \nDate: only a description line";
-    const result = parseTimelineBody(body);
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe("");
-    expect(result[0].date).toBe("");
-    expect(result[0].description).toBe("Date: only a description line");
+  it("a Date: line that is not the first line after the heading is description", () => {
+    const body = "# Alpha\n\nDate: not a date field\n # also description";
+    expect(parseTimelineBody(body)).toEqual([
+      {
+        date: "",
+        title: "Alpha",
+        description: "Date: not a date field\n # also description",
+      },
+    ]);
+  });
+
+  it("a description beginning with a Date: line is not read as the date", () => {
+    // The serializer's blank line between header and description is what makes
+    // this unambiguous: `Date:` counts only immediately under the heading.
+    const result = parseTimelineBody("# Alpha\n\nDate: only a description line");
+    expect(result).toEqual([
+      { date: "", title: "Alpha", description: "Date: only a description line" },
+    ]);
+  });
+
+  it("prose before the first heading belongs to no event", () => {
+    expect(parseTimelineBody("stray text\n\n# Alpha")).toEqual([
+      { date: "", title: "Alpha", description: "" },
+    ]);
+  });
+
+  it("a description with no blank line under the heading is still read", () => {
+    // Hand-authored in Obsidian without the separating blank line. Read
+    // forgivingly; the next save writes it back in the canonical shape.
+    expect(parseTimelineBody("# Alpha\nThe council voted.")).toEqual([
+      { date: "", title: "Alpha", description: "The council voted." },
+    ]);
+    expect(parseTimelineBody("# Alpha\nDate: Year 1\nThe council voted.")).toEqual([
+      { date: "Year 1", title: "Alpha", description: "The council voted." },
+    ]);
   });
 });
 
@@ -127,26 +170,24 @@ describe("parseTimelineBody", () => {
 describe("serializeTimelineEvents", () => {
   it("single event — title only", () => {
     const events: TimelineEvent[] = [{ date: "", title: "The Shattering", description: "" }];
-    expect(serializeTimelineEvents(events)).toBe(
-      "```timeline\nTitle: The Shattering\n```",
-    );
+    expect(serializeTimelineEvents(events)).toBe("```timeline\n# The Shattering\n```");
   });
 
-  it("single event — date + title", () => {
+  it("single event — title + date", () => {
     const events: TimelineEvent[] = [
       { date: "3rd of Frostfall", title: "The Shattering", description: "" },
     ];
     expect(serializeTimelineEvents(events)).toBe(
-      "```timeline\nDate: 3rd of Frostfall\nTitle: The Shattering\n```",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
     );
   });
 
-  it("single event — title + description", () => {
+  it("single event — title + description, separated by a blank line", () => {
     const events: TimelineEvent[] = [
       { date: "", title: "The Shattering", description: "The council voted." },
     ];
     expect(serializeTimelineEvents(events)).toBe(
-      "```timeline\nTitle: The Shattering\nThe council voted.\n```",
+      "```timeline\n# The Shattering\n\nThe council voted.\n```",
     );
   });
 
@@ -159,7 +200,16 @@ describe("serializeTimelineEvents", () => {
       },
     ];
     expect(serializeTimelineEvents(events)).toBe(
-      "```timeline\nDate: 3rd of Frostfall\nTitle: The Shattering\nThe council voted.\nIt began the war.\n```",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\nIt began the war.\n```",
+    );
+  });
+
+  it("a multi-paragraph description is written as written", () => {
+    const events: TimelineEvent[] = [
+      { date: "", title: "The Shattering", description: "One.\n\nTwo." },
+    ];
+    expect(serializeTimelineEvents(events)).toBe(
+      "```timeline\n# The Shattering\n\nOne.\n\nTwo.\n```",
     );
   });
 
@@ -169,14 +219,13 @@ describe("serializeTimelineEvents", () => {
       { date: "Midwinter", title: "Siege of Highvale", description: "" },
     ];
     expect(serializeTimelineEvents(events)).toBe(
-      "```timeline\nDate: 3rd of Frostfall\nTitle: The Shattering\n\nDate: Midwinter\nTitle: Siege of Highvale\n```",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n\n# Siege of Highvale\nDate: Midwinter\n```",
     );
   });
 
   it("date omitted when empty string", () => {
     const events: TimelineEvent[] = [{ date: "", title: "Alpha", description: "" }];
-    const output = serializeTimelineEvents(events);
-    expect(output).not.toContain("Date:");
+    expect(serializeTimelineEvents(events)).not.toContain("Date:");
   });
 
   it("description omitted when empty string", () => {
@@ -191,70 +240,46 @@ describe("serializeTimelineEvents", () => {
       { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "" },
     ];
     const output = serializeTimelineEvents(events);
+    expect(output).toContain("# [[The Shattering]]");
     expect(output).toContain("Date: [[Calendar#Frostfall]]");
-    expect(output).toContain("Title: [[The Shattering]]");
-  });
-});
-
-// ─── preprocessTimelineBlocks ─────────────────────────────────────────────────
-
-describe("preprocessTimelineBlocks", () => {
-  it("converts a fenced timeline block to a timeline-block element", () => {
-    const md = "```timeline\nTitle: The Shattering\n```";
-    const result = preprocessTimelineBlocks(md);
-    expect(result).toContain("<timeline-block");
-    expect(result).toContain("data-events=");
-    expect(result).not.toContain("```timeline");
   });
 
-  it("leaves non-timeline fences unchanged", () => {
-    const md = "```javascript\nconsole.log('hi');\n```";
-    expect(preprocessTimelineBlocks(md)).toBe(md);
-  });
-
-  it("leaves plain text unchanged", () => {
-    const md = "# Hello\n\nSome paragraph.";
-    expect(preprocessTimelineBlocks(md)).toBe(md);
-  });
-
-  it("the encoded events survive decode and parse correctly", () => {
+  it("a description line that is itself a heading is space-prefixed", () => {
+    // The one place the serializer edits what the GM typed, and it has to: left
+    // alone, that line would read back as the start of a new event. The [[Format
+    // Migration]] applies the same rule (and warns about it) because migrating
+    // *is* parsing the old grammar and serializing the new one.
     const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "" },
+      { date: "", title: "Alpha", description: "# Not a new event\nordinary line" },
     ];
-    const md = serializeTimelineEvents(events);
-    const html = preprocessTimelineBlocks(md);
-
-    // Extract data-events value
-    const match = html.match(/data-events="([^"]+)"/);
-    expect(match).not.toBeNull();
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual(events);
+    expect(serializeTimelineEvents(events)).toBe(
+      "```timeline\n# Alpha\n\n # Not a new event\nordinary line\n```",
+    );
   });
 
-  it("handles multiple timeline blocks in one document", () => {
-    const md = [
-      "Some prose.",
-      "",
-      "```timeline\nTitle: Alpha\n```",
-      "",
-      "More prose.",
-      "",
-      "```timeline\nTitle: Beta\n```",
-    ].join("\n");
-    const result = preprocessTimelineBlocks(md);
-    expect(result.match(/<timeline-block/g)).toHaveLength(2);
+  it("`#hashtag` in a description is left alone", () => {
+    const events: TimelineEvent[] = [
+      { date: "", title: "Alpha", description: "#lore and #ashfen" },
+    ];
+    expect(serializeTimelineEvents(events)).toContain("\n#lore and #ashfen\n");
   });
 });
 
-// ─── Round-trip (serialize → preprocess → parse) ─────────────────────────────
+// ─── Round-trip (serialize → parse) ──────────────────────────────────────────
+//
+// Timeline's parser is handed a fence body, because stripping the fence is the
+// markdown reader's job and not this block's (ADR-0016 §3). The helper below
+// stands in for that step; block-markdown.test.ts covers the real reader,
+// including a fence nested inside a blockquote.
+
+/** The body of a one-fence markdown string, as the reader would hand it over. */
+function fenceBody(md: string): string {
+  return md.replace(/^```timeline\n/, "").replace(/\n```$/, "");
+}
 
 describe("round-trip", () => {
   function roundTrip(events: TimelineEvent[]): TimelineEvent[] {
-    const md = serializeTimelineEvents(events);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    if (!match) throw new Error("no data-events in html");
-    return JSON.parse(decodeURIComponent(match[1]));
+    return parseTimelineBody(fenceBody(serializeTimelineEvents(events)));
   }
 
   it("title only", () => {
@@ -300,16 +325,61 @@ describe("round-trip", () => {
     expect(roundTrip(events)).toEqual(events);
   });
 
+  it("multi-paragraph descriptions survive — the bug this format change fixes", () => {
+    // Asserted directly, and at the outermost seam that a load-and-save cycle
+    // uses: two paragraphs go in, one event with two paragraphs comes back.
+    const events: TimelineEvent[] = [
+      {
+        date: "Year 0",
+        title: "The Order Takes the Keep",
+        description: "They finished the walls before the first frost.\n\nThe library came later.",
+      },
+      { date: "Year 7", title: "The War Begins", description: "Three city-states." },
+    ];
+    const result = roundTrip(events);
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(events);
+  });
+
+  it("a description of three paragraphs stays one event", () => {
+    const events: TimelineEvent[] = [
+      { date: "", title: "Alpha", description: "One.\n\nTwo.\n\nThree." },
+    ];
+    expect(roundTrip(events)).toEqual(events);
+  });
+
+  it("byte-for-byte over the whole battery: parse(serialize(x)) === x", () => {
+    const battery: TimelineEvent[][] = [
+      [],
+      [{ date: "", title: "", description: "" }],
+      [{ date: "", title: "Alpha", description: "" }],
+      [{ date: "Year 1", title: "Alpha", description: "" }],
+      [{ date: "", title: "Alpha", description: "One line." }],
+      [{ date: "Year 1", title: "Alpha", description: "One.\n\nTwo.\n\nThree." }],
+      [{ date: "Year 1: dawn", title: "[[A|B]]", description: "Title: x\nDate: y" }],
+      [{ date: "", title: "  padded  ", description: "  indented line" }],
+      [{ date: "", title: "Alpha", description: "#hashtag not a heading" }],
+      [
+        { date: "Year 1", title: "Alpha", description: "One.\n\nTwo." },
+        { date: "", title: "Beta", description: "" },
+        { date: "Year 3", title: "", description: "Only prose." },
+      ],
+    ];
+    for (const events of battery) {
+      expect(roundTrip(events), JSON.stringify(events)).toEqual(events);
+    }
+  });
+
   it("serialize → parse → serialize is stable (idempotent)", () => {
     const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted." },
+      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted.\n\nTwice." },
       { date: "", title: "Midwinter March", description: "" },
+      // The one value the serializer normalises — so stability has to be shown
+      // *through* that normalisation, not around it.
+      { date: "", title: "Heading trouble", description: "# looks like an event" },
     ];
     const md1 = serializeTimelineEvents(events);
-    const parsed = parseTimelineBody(
-      md1.replace(/^```timeline\n/, "").replace(/\n```$/, ""),
-    );
-    const md2 = serializeTimelineEvents(parsed);
+    const md2 = serializeTimelineEvents(parseTimelineBody(fenceBody(md1)));
     expect(md2).toBe(md1);
   });
 
@@ -385,138 +455,6 @@ describe("createBlankEvent", () => {
   });
 });
 
-// ─── insertEventAt ────────────────────────────────────────────────────────────
-
-describe("insertEventAt", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-  const blank = createBlankEvent();
-
-  it("inserts at index 0 (before all events)", () => {
-    const result = insertEventAt([alpha, beta], 0, blank);
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual(blank);
-    expect(result[1]).toEqual(alpha);
-    expect(result[2]).toEqual(beta);
-  });
-
-  it("inserts in the middle", () => {
-    const result = insertEventAt([alpha, gamma], 1, beta);
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual(alpha);
-    expect(result[1]).toEqual(beta);
-    expect(result[2]).toEqual(gamma);
-  });
-
-  it("inserts at the end (index === length)", () => {
-    const result = insertEventAt([alpha, beta], 2, gamma);
-    expect(result).toHaveLength(3);
-    expect(result[2]).toEqual(gamma);
-  });
-
-  it("inserts into empty array", () => {
-    const result = insertEventAt([], 0, alpha);
-    expect(result).toEqual([alpha]);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    insertEventAt(original, 1, gamma);
-    expect(original).toHaveLength(2);
-  });
-
-  it("insert-at-index round-trips through serialize → preprocess correctly", () => {
-    const events = [alpha, gamma];
-    const result = insertEventAt(events, 1, beta);
-    const md = serializeTimelineEvents(result);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual([alpha, beta, gamma]);
-  });
-});
-
-// ─── moveEventUp ─────────────────────────────────────────────────────────────
-
-describe("moveEventUp", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-
-  it("swaps event at index 1 with event at index 0", () => {
-    const result = moveEventUp([alpha, beta], 1);
-    expect(result[0]).toEqual(beta);
-    expect(result[1]).toEqual(alpha);
-  });
-
-  it("moves last event up one position", () => {
-    const result = moveEventUp([alpha, beta, gamma], 2);
-    expect(result).toEqual([alpha, gamma, beta]);
-  });
-
-  it("is a no-op at index 0", () => {
-    const original = [alpha, beta];
-    const result = moveEventUp(original, 0);
-    expect(result).toEqual(original);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    moveEventUp(original, 1);
-    expect(original[0]).toEqual(alpha);
-    expect(original[1]).toEqual(beta);
-  });
-
-  it("adjacent swap round-trips through serialize → preprocess correctly", () => {
-    const events = [alpha, beta, gamma];
-    const result = moveEventUp(events, 1);
-    const md = serializeTimelineEvents(result);
-    const html = preprocessTimelineBlocks(md);
-    const match = html.match(/data-events="([^"]+)"/);
-    const decoded: TimelineEvent[] = JSON.parse(decodeURIComponent(match![1]));
-    expect(decoded).toEqual([beta, alpha, gamma]);
-  });
-});
-
-// ─── moveEventDown ────────────────────────────────────────────────────────────
-
-describe("moveEventDown", () => {
-  const alpha: TimelineEvent = { date: "Day 1", title: "Alpha", description: "" };
-  const beta: TimelineEvent = { date: "Day 2", title: "Beta", description: "" };
-  const gamma: TimelineEvent = { date: "Day 3", title: "Gamma", description: "" };
-
-  it("swaps event at index 0 with event at index 1", () => {
-    const result = moveEventDown([alpha, beta], 0);
-    expect(result[0]).toEqual(beta);
-    expect(result[1]).toEqual(alpha);
-  });
-
-  it("moves middle event down one position", () => {
-    const result = moveEventDown([alpha, beta, gamma], 1);
-    expect(result).toEqual([alpha, gamma, beta]);
-  });
-
-  it("is a no-op at last index", () => {
-    const original = [alpha, beta];
-    const result = moveEventDown(original, 1);
-    expect(result).toEqual(original);
-  });
-
-  it("does not mutate the original array", () => {
-    const original = [alpha, beta];
-    moveEventDown(original, 0);
-    expect(original[0]).toEqual(alpha);
-    expect(original[1]).toEqual(beta);
-  });
-
-  it("moveDown is symmetric inverse of moveUp for middle elements", () => {
-    const events = [alpha, beta, gamma];
-    const up = moveEventUp(events, 2);
-    const down = moveEventDown(up, 1);
-    expect(down).toEqual(events);
-  });
-});
 
 // ─── renderTimelineText ───────────────────────────────────────────────────────
 

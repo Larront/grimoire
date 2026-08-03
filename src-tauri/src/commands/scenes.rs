@@ -54,19 +54,51 @@ pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, Str
     Ok(created)
 }
 
+/// Rename a scene, and bring the copy of its name that every note referencing it
+/// holds along with it.
+///
+/// A ` ```scene ` fence caches the scene's name beside its id so the note reads as a
+/// scene reference in Obsidian and the name is full-text searchable (#185). A cache
+/// with its owner elsewhere is either synced or lying, so this is the other half of
+/// that decision — and it is a second *caller* of the note-rename rewrite path
+/// (`scene_fence`), never a second writer of note bytes.
+///
+/// The propagation is best-effort **after** the rename has landed: the scene is
+/// renamed either way, and failing the command over a note that could not be written
+/// would leave the GM's gesture looking rejected when the database took it. What is
+/// left behind in that case is a stale name in a note, which is what the planned
+/// repair-backlinks tool is for.
 #[tauri::command]
 #[specta::specta]
 pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let crate::ledger::LedgerState {
+        connection,
+        search_index,
+        ..
+    } = &mut *state;
+    let conn = connection.as_mut().ok_or("No ledger open")?;
     let updated: Scene = diesel::update(scenes::table.find(id))
         .set(UpdateScene { name })
         .returning(Scene::as_returning())
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
+    if let Some(index) = search_index.as_ref() {
         let _ = crate::search::index_scene(index, &updated);
+    }
+
+    match crate::scene_fence::propagate_rename(
+        conn,
+        search_index.as_ref(),
+        &ledger_path,
+        updated.id,
+        &updated.name,
+    ) {
+        Ok(0) => {}
+        Ok(n) => log::info!("[update_scene] renamed scene {id} in {n} note(s)"),
+        Err(e) => log::warn!("[update_scene] could not update the scene name in notes: {e}"),
     }
 
     Ok(updated)

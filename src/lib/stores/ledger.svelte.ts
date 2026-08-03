@@ -1,8 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
-import { api } from "$lib/api";
-import { toastImportFailures } from "$lib/toast";
+import { api, friendlyMessage } from "$lib/api";
+import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
+import type { MigrationPlan } from "$lib/bindings.gen";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -56,6 +57,13 @@ function createLedgerStore() {
   // Set when open_ledger reported ERR_DB_CORRUPT with no usable snapshot —
   // DbRecoveryDialog (mounted in the root layout) offers Rebuild/Cancel.
   let corruptLedgerPath = $state<string | null>(null);
+  // Set when open_ledger refused because the vault's notes are on an older
+  // format (ADR-0017) — FormatMigrationDialog (also in the root layout) composes
+  // its copy from this plan and offers Update/Cancel. Declining leaves it null
+  // and the ledger closed: the refusal that put it here simply stands.
+  let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(
+    null,
+  );
 
   /** Applies a successful open_ledger result to store state and surfaces
    *  failed imports and snapshot recovery. */
@@ -86,15 +94,55 @@ function createLedgerStore() {
     // a debounced edit is never dropped or written into the wrong ledger.
     await pendingSaves.flushAll();
     try {
-      const result = await api.openLedger(ledgerPath);
+      // The quiet surface, so a refusal that becomes a dialog is not also toasted:
+      // reporting is this function's own job below, once the routing has decided
+      // whether anything else is going to speak.
+      const result = await api.silent.openLedger(ledgerPath);
       applyOpenResult(result);
       return result;
     } catch (e) {
-      if (String(e).includes("ERR_DB_CORRUPT")) {
-        corruptLedgerPath = ledgerPath;
-      }
+      const routed = await routeOpenRefusal(ledgerPath, e);
+      if (!routed) toastError(friendlyMessage(e));
       throw e;
     }
+  }
+
+  /** Turn a refusal from an open into the dialog that resolves it, if there is
+   *  one. Shared by both ways in — a plain open and a post-rebuild open — because
+   *  a ledger can be damaged *and* behind, and the rebuild path reaching the
+   *  format refusal with no prompt would be a dead end.
+   *
+   *  Returns whether a prompt took the refusal over, which is what decides if it
+   *  is also toasted. Only the [[Format Migration]] prompt answers yes: it states
+   *  the whole refusal — the count, what changes, and both ways out — so a toast
+   *  beside it would say less than the dialog behind it. The rebuild prompt is
+   *  left reporting, because a damaged database is a fault the GM should be told
+   *  about whether or not they take the offer to repair it. */
+  async function routeOpenRefusal(
+    ledgerPath: string,
+    e: unknown,
+  ): Promise<boolean> {
+    const raw = String(e);
+    if (raw.includes("ERR_DB_CORRUPT")) {
+      corruptLedgerPath = ledgerPath;
+    }
+    if (raw.includes("ERR_FORMAT_MIGRATION_REQUIRED")) {
+      // Ask the scan what would change, so the prompt is composed from the
+      // migrations that actually found work rather than written in advance.
+      // A plan we cannot obtain means no prompt: the refusal stands, which is
+      // the same place a decline leaves the GM.
+      const plan = await api.silent
+        .planFormatMigration(ledgerPath)
+        .catch(() => null);
+      if (plan) {
+        formatMigration = { path: ledgerPath, plan };
+        // The database side is settled by the time this refusal is reached, so
+        // the rebuild dialog must step aside rather than stack behind it.
+        corruptLedgerPath = null;
+        return true;
+      }
+    }
+    return false;
   }
 
   async function openLedger(selectedPath?: string): Promise<boolean> {
@@ -131,15 +179,17 @@ function createLedgerStore() {
   // and maps.mapCount — these update immediately after store.load() calls in the sidebar.
   function recordRecent(result: OpenLedgerResult): void {
     const name = result.path.split(/[\\/]/).pop() ?? "Untitled";
-    api.silent.addRecentLedger({
-      path: result.path,
-      name,
-      note_count: result.note_count,
-      scene_count: result.scene_count,
-      map_count: result.map_count,
-      last_opened: new Date().toISOString(),
-      missing: false,
-    }).catch(() => {});
+    api.silent
+      .addRecentLedger({
+        path: result.path,
+        name,
+        note_count: result.note_count,
+        scene_count: result.scene_count,
+        map_count: result.map_count,
+        last_opened: new Date().toISOString(),
+        missing: false,
+      })
+      .catch(() => {});
   }
 
   /** Confirmed rebuild after ERR_DB_CORRUPT with no snapshot: the backend
@@ -158,6 +208,10 @@ function createLedgerStore() {
       corruptLedgerPath = null;
       return true;
     } catch (e) {
+      // A rebuilt database can still be a vault whose *notes* are behind: the
+      // rebuild ran, the format gate refused, and without this the GM would be
+      // left holding a generic toast and no way through.
+      await routeOpenRefusal(target, e);
       error = String(e);
       throw e;
     } finally {
@@ -167,6 +221,38 @@ function createLedgerStore() {
 
   function dismissCorruptLedger(): void {
     corruptLedgerPath = null;
+  }
+
+  /** The GM said yes to the [[Format Migration]] prompt: the backend backs the
+   *  affected notes up, rewrites them, writes its report, and opens the ledger.
+   *  It opens even when some notes could not be rewritten — consent was given and
+   *  the casualties are named — so the report is toasted either way, persistently
+   *  when something failed. */
+  async function migrateLedgerFormat(): Promise<boolean> {
+    const target = formatMigration;
+    if (!target) return false;
+    isLoading = true;
+    error = null;
+    try {
+      const result = await api.migrateLedgerFormat(target.path);
+      applyOpenResult(result.ledger);
+      recordRecent(result.ledger);
+      formatMigration = null;
+      toastMigrationReport(result.report);
+      return true;
+    } catch (e) {
+      error = String(e);
+      throw e;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  /** Declining opens nothing: there is no compatibility mode, because with no
+   *  reader for the old format an un-migrated vault would not expose the GM to a
+   *  risk they accepted — it would destroy content they never see leave. */
+  function dismissFormatMigration(): void {
+    formatMigration = null;
   }
 
   async function adopt(parent: string, name: string): Promise<boolean> {
@@ -254,13 +340,9 @@ function createLedgerStore() {
         path = existingPath;
         isOpen = true;
       }
-      const savedAccent = await api
-        .getAccentPreset()
-        .catch(() => null);
+      const savedAccent = await api.getAccentPreset().catch(() => null);
       if (savedAccent) accent = savedAccent as AccentPreset;
-      const savedDensity = await api
-        .getDensityLevel()
-        .catch(() => null);
+      const savedDensity = await api.getDensityLevel().catch(() => null);
       if (savedDensity) density = savedDensity as DensityLevel;
     } catch {
       // No ledger open — normal on first launch
@@ -295,11 +377,16 @@ function createLedgerStore() {
     get corruptLedgerPath() {
       return corruptLedgerPath;
     },
+    get formatMigration() {
+      return formatMigration;
+    },
     clearPendingStartHere() {
       pendingStartHere = false;
     },
     rebuildCorruptLedger,
     dismissCorruptLedger,
+    migrateLedgerFormat,
+    dismissFormatMigration,
     openLedger,
     adopt,
     exploreSample,

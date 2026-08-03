@@ -325,6 +325,13 @@
 .tiptap {
   line-height: 1.75;
   font-kerning: normal;
+  /* The prose column is a query container, which is what lets a block respond to the
+     width it actually has rather than to the window's (see the Infobox below). It is
+     `.tiptap` and not the pane, because the column is what the GM reads across: the
+     pane's own container query sizes this element, so a threshold read off the pane
+     would jump by ~340px at the point the column stops being pane-width. */
+  container-type: inline-size;
+  container-name: note-column;
 }
 
 /* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
@@ -381,6 +388,11 @@
   color: var(--foreground);
   line-height: 1.25;
   font-weight: 400;
+  /* A heading following a floated Infobox starts below it rather than beside it. The
+     built-in Location template is consecutive `##` headings, so a heading wrapping
+     raggedly into the gutter beside a panel is the common case, not an edge one — a
+     paragraph wrapping around the panel is the whole point and is left alone. */
+  clear: both;
 }
 
 .tiptap h1 {
@@ -444,10 +456,201 @@
   font-style: italic;
 }
 
+/* ── Callouts ──────────────────────────────────────────────────── */
+/*
+  A callout is the ordinary blockquote carrying a type (#180), so it starts by
+  undoing the quote's italic and then paints everything from one accent variable.
+
+  A per-type hue was considered and refused: ten colours is a second palette, and
+  DESIGN.md's One Accent Rule and No Decorative Color Rule both forbid one —
+  "differentiate with shape, icon, or text". So a *recognised* type takes the
+  user's accent and an unrecognised one stays neutral, which is the whole of the
+  distinction Grimoire draws in the file. What tells `warning` from `encounter` is
+  the title word, and — once #181 brings the node view — the per-type icon that
+  `CALLOUT_TYPES` already names. #180's own case for shipping `encounter` was an
+  icon, not a colour.
+
+  Recognition arrives as `data-callout-known`, decided in callout-block.ts against
+  `CALLOUT_TYPES`: one rule here rather than ten selectors restating a vocabulary
+  that lives in TypeScript.
+
+  The header is drawn by the node view (#181) — a per-type icon, the live title
+  field, and the collapse chevron — so there is no `::before` label here. The
+  element these rules match is the `<blockquote>` that view renders, which is why
+  #180's selectors are unchanged: a callout is still the ordinary quote wearing a
+  type, and a quote with no type is still styled as the quote it is.
+*/
+.tiptap blockquote[data-callout] {
+  --callout-accent: var(--foreground-muted);
+  border-left: 3px solid var(--callout-accent);
+  border-radius: var(--radius-structural);
+  background: color-mix(in oklab, var(--callout-accent) 8%, transparent);
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0;
+  color: var(--foreground);
+  font-style: normal;
+}
+
+.tiptap blockquote[data-callout-known] {
+  --callout-accent: var(--primary);
+}
+
+/* A note opening with a quote: the node view's wrapper element is the editor's first
+   child now, so the reset above it does not reach the quote inside. */
+.tiptap > :first-child > .callout-block {
+  margin-top: 0;
+}
+
+/*
+  The header row: icon, title field, chevron. Metamorphous and the accent are #180's
+  label styling, moved onto the element the node view draws — the title is the GM's
+  name for the aside, so it carries the world's voice (DESIGN.md's two-voice rule).
+*/
+.tiptap .callout-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+  color: var(--callout-accent);
+}
+
+.tiptap .callout-header .callout-icon {
+  margin-top: 0.1875rem;
+}
+
+.tiptap .callout-title {
+  font-family: "Metamorphous", serif;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--callout-accent);
+}
+
+/* Recessive but not faint: DESIGN.md's Sub-AA Exception reserves below-AA contrast
+   for decorative labels and placeholders and prohibits it for interactive elements,
+   and this chevron is the callout's one control. */
+.tiptap .callout-toggle {
+  color: var(--callout-accent);
+  opacity: 0.7;
+}
+
+.tiptap .callout-toggle:hover {
+  opacity: 1;
+}
+
+/* The body's own last block, one level down: `.callout-body` holds ProseMirror's
+   content element, and the paragraph whose trailing margin needs removing is inside
+   that rather than a child of the quote. */
+.tiptap .callout-body > * > :last-child {
+  margin-bottom: 0;
+}
+
+/* A callout's body is a query container too, under the same name as the prose column.
+   A panel inside a callout is inside a narrower column than the note's — the box has
+   its own padding and border — and the float's threshold is a statement about the
+   column a panel actually sits in (see the derivation below). Without this the nearest
+   named container is `.tiptap`, so a panel in a body of ~400px would float at 300px
+   and leave the body's prose four words wide, spilling past the callout's own edge.
+
+   The name is reused rather than added to, so the float's one query keeps reading as
+   "the column this block is in" and the nearest container wins — no second query, and
+   no second threshold to keep in step with the derivation. */
+.tiptap .callout-body {
+  container-type: inline-size;
+  container-name: note-column;
+}
+
+/* ── Infobox presentation ──────────────────────────────────────── */
+/*
+  The wiki posture (#176): the panel floats beside the prose where there is room for
+  prose worth reading next to it, and is a full-width stacked panel where there is
+  not. **None of this is in the note.** There is no float, width or alignment
+  attribute anywhere in the fence (#148) — layout is CSS, and floatability belongs to
+  the block type rather than to the instance — so the same panel reads both ways
+  depending only on the space available.
+
+  THE THRESHOLD IS A DERIVATION, NOT A NUMBER. The float earns its place only while
+  *readable* prose fits beside the panel: ~45 characters, which is ~320px at the body
+  size. So 300 (panel) + 24 (gap) + 320 (prose) = 640px. If the body font changes,
+  re-derive it from those three parts rather than nudging the total.
+
+  MEASURED ON THE BLOCK'S OWN COLUMN, NOT THE WINDOW. The container is `.tiptap`, the
+  prose column itself. A note in a half-width pane on an ultrawide has a narrow column
+  inside a huge window, so a media query would float the panel into ~270px of prose —
+  four or five words a line, the panel squashed and the paragraph unreadable at the
+  same time. Accepted consequence, signed off: at the default window size, splitting
+  the view stops every Infobox floating. Ultrawide splits still float. Panels visibly
+  jumping from beside-the-text to full-width on split is this rule working.
+*/
+.tiptap [data-infobox-block] {
+  /* The derivation's two sizes, named once so the thumbnail's cap below cannot drift
+     away from the panel it is a cap on. */
+  --infobox-float-width: 300px;
+  --infobox-float-gap: 24px;
+}
+
+@container note-column (min-width: 640px) {
+  .tiptap [data-infobox-block] {
+    float: right;
+    width: var(--infobox-float-width);
+    margin-left: var(--infobox-float-gap);
+    /* A panel clears any panel already floating. A Location note carries one per
+       district, and two floats side by side would squeeze the prose to a third of the
+       column — the very thing the threshold above exists to prevent. */
+    clear: right;
+  }
+}
+
+/* Stacked, the thumbnail holds its floated size rather than growing with the panel:
+   the panel's floated width less its `px-3` padding either side. These are files a GM
+   dropped in, not hero art — upscaling past the source's pixels goes visibly soft, and
+   a column-wide portrait makes an inline summary the dominant thing on the page. A
+   stacked panel therefore has empty space to its right, which is accepted and rare:
+   unsplit is precisely when it floats. */
+.tiptap .infobox-thumb {
+  max-width: calc(var(--infobox-float-width) - 2 * 0.75rem);
+}
+
+/* NOTHING OVERLAPS A PANEL. Everything in a note that draws its own box starts below a
+   floated Infobox rather than beside it (#175 review).
+
+   The rule is stated as *drawing a box* rather than as a list of blocks, because that is
+   the property that decides it. Text beside a float does not overlap it — the line boxes
+   shrink, which is the whole point of floating the panel — but a box with a background,
+   a border or padding of its own keeps its full width, slides under the float, and is
+   drawn over. So the members are: every Note Block except the panel itself, and the code
+   block, whose content does not wrap either.
+
+   The two headings-and-`hr` rules elsewhere in this file are the same decision reached
+   twice before this one; they use `clear: both` because a heading or a section rule
+   should also clear a left float if one is ever added.
+
+   For a Note Block the overlap was worse than cosmetic: the panel landed over the
+   block's right-hand gutter, which is exactly where every hover-revealed control sits,
+   so it took the controls away.
+
+   `clear: right` rather than a shrunken width: a squeezed statblock is the other way
+   this goes wrong and it is the worse one, because the block stays reachable and becomes
+   unreadable.
+
+   Nothing else in the schema needs a member here, and that is checked rather than
+   assumed: this editor has no table and no task list (`note-extensions.ts` runs
+   StarterKit with its blockquote off and adds no others), and a blockquote — the one
+   remaining bordered box — is always inside a `[data-note-block="callout"]` wrapper,
+   because the callout's node view is mounted for every quote. A schema addition that
+   draws a box belongs in this selector. */
+.tiptap [data-note-block]:not([data-infobox-block]),
+.tiptap pre {
+  clear: right;
+}
+
 .tiptap hr {
   border: none;
   border-top: 1px solid var(--border);
   margin: 2rem 0;
+  /* Clears a floated Infobox for the headings' reason above: a rule drawn across the
+     prose gutter alone reads as a broken line rather than as a section break. */
+  clear: both;
 }
 
 .tiptap pre {

@@ -7,7 +7,14 @@ A crumbling fortress on the eastern edge of the [[Lore/The Ashfen Marshes.md]], 
 
 ## Description
 
+![The outer wall from the causeway, warnings and all](.grimoire/images/the-ember-keep.png){align=right width=40%}
+
 The upper towers collapsed in the siege. The lower halls remain intact, though something that dislikes light has claimed them. The outer walls carry carved warnings in a language no one in Thornhaven reads. Whether they are protective wards or deterrents, scholars have not agreed.
+
+> [!read-aloud] The party reaches the gate
+> The causeway ends where the gate used to be. Two towers lean into each other above you, and the marsh has come up through the flagstones to meet them. The carvings on the wall are cut deep enough that three centuries of rain have not softened them, and whoever cut them meant the marks to be read at this distance, from this side, by someone standing exactly where you are standing.
+>
+> Nothing moves. The lower halls are somewhere below, and the light stops at the doorway.
 
 ## Notable Features
 

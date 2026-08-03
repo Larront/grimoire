@@ -603,16 +603,31 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     }
   }
 
-  // Ledger close cleanup
+  // Ledger teardown — on a close, and on a switch to another ledger.
+  //
+  // Keyed on the path rather than on `isOpen`, which never lowers when a second
+  // ledger is opened from inside the first: watching the flag alone leaves the
+  // previous campaign's scene playing under the new one's notes, with no scene in
+  // the open ledger that the mini player's stop button belongs to. The contexts
+  // are built lazily on the next play, so tearing them down costs nothing.
+  //
+  // `undefined` until the first ledger is observed, which is not the same as `null`: the
+  // first run has nothing bound and so nothing to tear down. Treating it as a change
+  // would fire a teardown during start-up, whose only reachable effect is to stop audio
+  // something else had already begun.
+  let boundLedgerPath: string | null | undefined;
   $effect.root(() => {
     $effect(() => {
-      if (!ledger.isOpen) {
-        stopAll();
-        localCtx?.close();
-        localCtx = null;
-        spotifyCtx?.disconnect();
-        spotifyCtx = null;
-      }
+      const path = ledger.isOpen ? ledger.path : null;
+      if (path === boundLedgerPath) return;
+      const firstBinding = boundLedgerPath === undefined;
+      boundLedgerPath = path;
+      if (firstBinding) return;
+      stopAll();
+      localCtx?.close();
+      localCtx = null;
+      spotifyCtx?.disconnect();
+      spotifyCtx = null;
     });
   });
 

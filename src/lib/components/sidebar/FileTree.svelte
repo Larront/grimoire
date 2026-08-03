@@ -21,8 +21,19 @@
   import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import {
+    TREE_DRAG_MIME,
+    canDrop,
+    dragItemFor,
+    dropIntoFolder,
+    isTreeDrag,
+    readDragItem,
+    treeDrag,
+  } from "$lib/stores/tree-move.svelte";
+  import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { readFile } from "@tauri-apps/plugin-fs";
+  import { onDestroy } from "svelte";
 
   const sidebar = useSidebar();
 
@@ -92,29 +103,128 @@
     });
   }
 
-  // ── PDF drag-and-drop import (#102) ──────────────────────────────────────
-  // A folder row is a drop target: dropping PDFs onto it imports them into that
-  // folder. The handler stops propagation so the event never reaches the root
-  // drop zone (which would otherwise import into the ledger root instead).
+  // ── Drops onto a folder: reorganise (#163) and PDF import (#102) ──────────
+  // A folder's drop target is its whole region — its own row *and* everything
+  // nested under it — so aiming at a file inside a folder means that folder, the
+  // way it does in any file manager. The innermost region stops propagation, so a
+  // nested folder wins over the one containing it and neither the folders above
+  // nor the ledger-root zone also claim the drop.
+  //
+  // Only the row lights up, not the region: a ring drawn around a folder holding
+  // fifty notes says nothing about where the thing is going, and the row is the
+  // folder.
   let isDropTarget = $state(false);
+  let hoverExpandTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Open/closed is kept by path in treeExpansion, not here (#164): this row is
+  // torn down and rebuilt on every tree refresh, and a folder should not close
+  // itself because something elsewhere in the ledger changed.
+  const expanded = $derived(treeExpansion.isExpanded(node.path));
+
+  // Long enough that dragging *across* a folder on the way somewhere else does
+  // not tear the tree open under the cursor.
+  const HOVER_EXPAND_MS = 600;
+
+  function scheduleHoverExpand() {
+    if (expanded || hoverExpandTimer) return;
+    hoverExpandTimer = setTimeout(() => {
+      treeExpansion.set(node.path, true);
+      hoverExpandTimer = null;
+    }, HOVER_EXPAND_MS);
+  }
+
+  function cancelHoverExpand() {
+    if (hoverExpandTimer) {
+      clearTimeout(hoverExpandTimer);
+      hoverExpandTimer = null;
+    }
+  }
+
+  // A drop refreshes the tree, which tears down the rows it was dragged over —
+  // any timer still counting down belongs to a folder that no longer exists.
+  onDestroy(cancelHoverExpand);
 
   function handleDragOver(e: DragEvent) {
     if (!node.is_dir) return;
+
+    if (isTreeDrag(e)) {
+      // Claimed either way: an illegal drop here must not fall through to an
+      // ancestor folder, which would move the node somewhere the cursor is not.
+      e.stopPropagation();
+      if (!canDrop(treeDrag.item, node.path)) {
+        isDropTarget = false;
+        cancelHoverExpand();
+        return;
+      }
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      isDropTarget = true;
+      scheduleHoverExpand();
+      return;
+    }
+
     if (!e.dataTransfer?.types.includes("Files")) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
     isDropTarget = true;
+    scheduleHoverExpand();
+  }
+
+  // dragleave also fires when the cursor crosses between rows *inside* the
+  // region, so the highlight only clears when it has genuinely left.
+  function handleDragLeave(e: DragEvent) {
+    const region = e.currentTarget as HTMLElement;
+    const to = e.relatedTarget as Node | null;
+    if (to && region.contains(to)) return;
+    isDropTarget = false;
+    cancelHoverExpand();
   }
 
   async function handleDrop(e: DragEvent) {
     if (!node.is_dir) return;
     isDropTarget = false;
+    cancelHoverExpand();
+
+    if (isTreeDrag(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      // The event's payload is the truth; the in-flight record is the fallback
+      // for a browser that hands over an empty DataTransfer.
+      const item = readDragItem(e) ?? treeDrag.item;
+      treeDrag.end();
+      if (item && (await dropIntoFolder(item, node.path, noteMap))) {
+        await refresh();
+      }
+      return;
+    }
+
     const pdfs = Array.from(e.dataTransfer?.files ?? []).filter(isPdfFile);
     if (!pdfs.length) return;
     e.preventDefault();
     e.stopPropagation();
     for (const f of pdfs) await importPdfFromHandle(f, node.path);
     await refresh();
+  }
+
+  // ── Dragging a row (#163) ─────────────────────────────────────────────────
+  function handleDragStart(e: DragEvent) {
+    // An inline rename owns the row while it is open: dragging text out from
+    // under the cursor would make the field impossible to use.
+    if (renamingPath === node.path) {
+      e.preventDefault();
+      return;
+    }
+    const item = dragItemFor(node);
+    treeDrag.start(item);
+    e.dataTransfer?.setData(TREE_DRAG_MIME, JSON.stringify(item));
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragEnd() {
+    treeDrag.end();
+    isDropTarget = false;
+    cancelHoverExpand();
   }
 
   // The explicit affordance for PDF import (drag-and-drop is the implicit one):
@@ -135,6 +245,7 @@
       const name = p.replace(/\\/g, "/").split("/").pop() ?? "document.pdf";
       await api.savePdfBytes(bytes, name, target.path);
     }
+    treeExpansion.reveal(target.path);
     await refresh();
   }
 
@@ -157,6 +268,9 @@
     }
     try {
       if (target.is_dir) {
+        // `newName` is the bare folder name, like the PDF branch below: the
+        // backend keeps the folder in its current parent (#162 — composing the
+        // path here is what once moved every renamed subfolder to the root).
         const updatedCount = await api.renameFolder(target.path, newName.trim());
         if (updatedCount > 0) {
           toastSuccess(
@@ -187,6 +301,9 @@
       <Sidebar.MenuButton
         {isActive}
         title={node.name}
+        draggable={renamingPath !== node.path}
+        ondragstart={handleDragStart}
+        ondragend={handleDragEnd}
         onclick={() => {
           if (renamingPath === node.path) return;
           if (node.note_id !== null) {
@@ -237,16 +354,28 @@
     {:else}
       <Sidebar.MenuItem>
         <Collapsible.Root
-          class="group/collapsible [&[data-state=open]>button>svg:first-child]:rotate-90"
+          bind:open={
+            () => expanded,
+            (val) => treeExpansion.set(node.path, val)
+          }
+          class="group/collapsible [&[data-state=open]>div>button>svg:first-child]:rotate-90"
         >
+          <!-- The folder's whole region is the drop target (see handleDragOver);
+               only the row below shows it. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            ondragover={handleDragOver}
+            ondragleave={handleDragLeave}
+            ondrop={handleDrop}
+          >
           <Collapsible.Trigger>
             {#snippet child({ props })}
               <Sidebar.MenuButton
                 {...props}
                 title={node.name}
-                ondragover={handleDragOver}
-                ondragleave={() => (isDropTarget = false)}
-                ondrop={handleDrop}
+                draggable={renamingPath !== node.path}
+                ondragstart={handleDragStart}
+                ondragend={handleDragEnd}
                 class={isDropTarget ? "ring-1 ring-primary/50" : undefined}
               >
                 <ChevronRight class="transition-transform" />
@@ -294,6 +423,7 @@
               {/if}
             {/snippet}
           </Collapsible.Content>
+          </div>
         </Collapsible.Root>
       </Sidebar.MenuItem>
     {/if}

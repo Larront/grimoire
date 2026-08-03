@@ -68,6 +68,11 @@ export const commands = {
 	deletePinCategory: (categoryId: number) => __TAURI_INVOKE<number>("delete_pin_category", { categoryId }),
 	deleteScene: (id: number) => __TAURI_INVOKE<null>("delete_scene", { id }),
 	deleteSceneSlot: (id: number) => __TAURI_INVOKE<null>("delete_scene_slot", { id }),
+	/**
+	 *  Delete a shape. No note can be affected: a stamped block holds a copy and no
+	 *  reference, so this reaches nothing but the convenience itself.
+	 */
+	deleteStatblockPreset: (name: string) => __TAURI_INVOKE<null>("delete_statblock_preset", { name }),
 	deleteTemplate: (path: string) => __TAURI_INVOKE<null>("delete_template", { path }),
 	/**
 	 *  Copies the bundled sample-world resource tree to a writable sandbox at
@@ -116,11 +121,54 @@ export const commands = {
 	getSceneSlots: (sceneId: number) => __TAURI_INVOKE<SceneSlot[]>("get_scene_slots", { sceneId }),
 	getScenes: () => __TAURI_INVOKE<Scene[]>("get_scenes"),
 	getScenesWithSlotCounts: () => __TAURI_INVOKE<SceneWithCount[]>("get_scenes_with_slot_counts"),
+	getStatblockPresetDefault: () => __TAURI_INVOKE<string | null>("get_statblock_preset_default"),
 	getTagGraphStyles: () => __TAURI_INVOKE<{ [key in string]: TagGraphStyleResponse }>("get_tag_graph_styles"),
 	getTagUsageCounts: () => __TAURI_INVOKE<TagUsageEntry[]>("get_tag_usage_counts"),
 	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
+	listStatblockPresets: () => __TAURI_INVOKE<StatblockPreset[]>("list_statblock_presets"),
 	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
+	/**
+	 *  The GM said yes: back the affected notes up, rewrite them, write the report,
+	 *  and open the ledger.
+	 * 
+	 *  The plan is **recomputed here** rather than taken from what the prompt showed
+	 *  — the vault may have changed while the dialog sat on screen, so a stale list
+	 *  can never decide which files are edited (the same rule as
+	 *  `apply_backlink_rewrite`).
+	 * 
+	 *  The vault opens even when some notes could not be rewritten: consent was
+	 *  given and the casualties are named in the returned report. What a partial
+	 *  failure withholds is the *stamp*, so the next open finds the remainder.
+	 */
+	migrateLedgerFormat: (path: string) => __TAURI_INVOKE<MigrateFormatResult>("migrate_ledger_format", { path }),
+	moveFolder: (oldPath: string, destFolder: string) => __TAURI_INVOKE<number>("move_folder", { oldPath, destFolder }),
+	moveMap: (mapId: number, destFolder: string) => __TAURI_INVOKE<Map>("move_map", { mapId, destFolder }),
+	movePdf: (oldPath: string, destFolder: string) => __TAURI_INVOKE<string>("move_pdf", { oldPath, destFolder }),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
+	/**
+	 *  What the consent prompt is built from, or `None` when no pending migration
+	 *  finds work — in which case there is no prompt at all and `open_ledger` will
+	 *  have stamped the vault forward in silence.
+	 * 
+	 *  This is [`crate::format_migration::run`] with the write left off, so the
+	 *  numbers and sentences shown to the GM are the ones the rewrite will use.
+	 */
+	planFormatMigration: (path: string) => __TAURI_INVOKE<{
+	from: number,
+	to: number,
+	/**
+	 *  One sentence per pending migration **that found work**. A migration
+	 *  finding nothing contributes nothing.
+	 */
+	sentences: string[],
+	/**
+	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
+	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
+	 */
+	file_count: number,
+	/**  Warnings the scan produced, each prefixed with the file it came from. */
+	warnings: string[],
+} | null>("plan_format_migration", { path }),
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
 	readTemplate: (path: string) => __TAURI_INVOKE<string>("read_template", { path }),
@@ -135,7 +183,7 @@ export const commands = {
 	rebuildSearchIndex: () => __TAURI_INVOKE<null>("rebuild_search_index"),
 	recordRecent: (kind: string, id: number, title: string) => __TAURI_INVOKE<null>("record_recent", { kind, id, title }),
 	removeRecentLedger: (path: string) => __TAURI_INVOKE<null>("remove_recent_ledger", { path }),
-	renameFolder: (oldPath: string, newPath: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newPath }),
+	renameFolder: (oldPath: string, newName: string) => __TAURI_INVOKE<number>("rename_folder", { oldPath, newName }),
 	/**
 	 *  Rename a note (change its filename/path). Always re-keys the moved note's own
 	 *  row and derived indexes; when `rewrite_backlinks` is true it also rewrites
@@ -150,6 +198,7 @@ export const commands = {
 	 */
 	renameNote: (note: Note, rewriteBacklinks: boolean) => __TAURI_INVOKE<RenameNoteResult>("rename_note", { note, rewriteBacklinks }),
 	renamePdf: (oldPath: string, newStem: string) => __TAURI_INVOKE<string>("rename_pdf", { oldPath, newStem }),
+	renameStatblockPreset: (from: string, to: string) => __TAURI_INVOKE<null>("rename_statblock_preset", { from, to }),
 	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
@@ -165,6 +214,16 @@ export const commands = {
 	saveImageBytes: (bytes: number[], filename: string) => __TAURI_INVOKE<string>("save_image_bytes", { bytes, filename }),
 	saveNoteAsTemplate: (notePath: string) => __TAURI_INVOKE<TemplateEntry>("save_note_as_template", { notePath }),
 	savePdfBytes: (bytes: number[], filename: string, targetFolder: string) => __TAURI_INVOKE<string>("save_pdf_bytes", { bytes, filename, targetFolder }),
+	/**
+	 *  Save a shape under a name, overwriting any shape already saved under it. The fence
+	 *  is stored exactly as given — this is the whole of "save shape as preset".
+	 */
+	saveStatblockPreset: (name: string, fence: string) => __TAURI_INVOKE<null>("save_statblock_preset", { name, fence }),
+	/**
+	 *  `None` clears the pointer, which is how "Blank" is chosen — blank is not a preset
+	 *  but the absence of one, so there is no name to store for it.
+	 */
+	saveStatblockPresetDefault: (preset: string | null) => __TAURI_INVOKE<void>("save_statblock_preset_default", { preset }),
 	searchAll: (query: string) => __TAURI_INVOKE<SearchAllResult>("search_all", { query }),
 	searchNotes: (query: string) => __TAURI_INVOKE<NoteSearchResult[]>("search_notes", { query }),
 	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
@@ -188,6 +247,22 @@ export const commands = {
 	updateMap: (map: Map) => __TAURI_INVOKE<Map>("update_map", { map }),
 	updatePin: (pin: Pin) => __TAURI_INVOKE<Pin>("update_pin", { pin }),
 	updatePinCategory: (category: PinCategory) => __TAURI_INVOKE<PinCategory>("update_pin_category", { category }),
+	/**
+	 *  Rename a scene, and bring the copy of its name that every note referencing it
+	 *  holds along with it.
+	 * 
+	 *  A ` ```scene ` fence caches the scene's name beside its id so the note reads as a
+	 *  scene reference in Obsidian and the name is full-text searchable (#185). A cache
+	 *  with its owner elsewhere is either synced or lying, so this is the other half of
+	 *  that decision — and it is a second *caller* of the note-rename rewrite path
+	 *  (`scene_fence`), never a second writer of note bytes.
+	 * 
+	 *  The propagation is best-effort **after** the rename has landed: the scene is
+	 *  renamed either way, and failing the command over a note that could not be written
+	 *  would leave the GM's gesture looking rejected when the database took it. What is
+	 *  left behind in that case is a stale name in a note, which is what the planned
+	 *  repair-backlinks tool is for.
+	 */
 	updateScene: (id: number, name: string) => __TAURI_INVOKE<Scene>("update_scene", { id, name }),
 	updateSceneSlot: (id: number, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("update_scene_slot", { id, label, volume, loop, slotOrder, shuffle }),
 	updateSceneThumbnail: (id: number, thumbnailPath: string | null, thumbnailColor: string | null, thumbnailIcon: string | null) => __TAURI_INVOKE<Scene>("update_scene_thumbnail", { id, thumbnailPath, thumbnailColor, thumbnailIcon }),
@@ -217,6 +292,11 @@ export type BacklinkNote = {
 	id: number,
 	path: string,
 	title: string,
+};
+
+export type FailedFile = {
+	path: string,
+	reason: string,
 };
 
 export type FailedImport = {
@@ -312,6 +392,55 @@ export type MapAnnotation = {
 export type MapSearchResult = {
 	id: number,
 	title: string,
+};
+
+export type MigrateFormatResult = {
+	report: MigrationReport,
+	ledger: OpenLedgerResult,
+};
+
+/**
+ *  What the GM is asked to consent to: assembled from the migrations that found
+ *  work, never written by hand.
+ */
+export type MigrationPlan = {
+	from: number,
+	to: number,
+	/**
+	 *  One sentence per pending migration **that found work**. A migration
+	 *  finding nothing contributes nothing.
+	 */
+	sentences: string[],
+	/**
+	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
+	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
+	 */
+	file_count: number,
+	/**  Warnings the scan produced, each prefixed with the file it came from. */
+	warnings: string[],
+};
+
+/**  What happened, once the GM said yes. */
+export type MigrationReport = {
+	from: number,
+	to: number,
+	/**  Vault-relative paths of the files actually rewritten. */
+	migrated: string[],
+	/**
+	 *  Files that could not be written, with the reason — the casualties the
+	 *  partial-failure path is required to name.
+	 */
+	failed: FailedFile[],
+	warnings: string[],
+	/**  Absolute path of the folder holding the copies made before the rewrite. */
+	backup_dir: string,
+	/**  Absolute path of the markdown report inside it. */
+	report_path: string,
+	/**
+	 *  Whether the vault's format stamp was advanced — false after any failure,
+	 *  which is what makes re-opening find the remainder.
+	 */
+	stamped: boolean,
 };
 
 export type Note = {
@@ -481,6 +610,12 @@ export type SearchAllResult = {
 export type SpotifyAuthStatus = {
 	is_connected: boolean,
 	expires_at: string,
+};
+
+/**  One saved shape: the name a GM stamps it by, and the fence text verbatim. */
+export type StatblockPreset = {
+	name: string,
+	fence: string,
 };
 
 export type TagFacet = {
