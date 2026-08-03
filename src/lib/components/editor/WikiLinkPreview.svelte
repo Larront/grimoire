@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { noteExcerpt } from "$lib/editor/note-excerpt";
+  import { wikiFragment } from "$lib/editor/wiki-target";
+
   interface Props {
     path: string;
     title: string;
@@ -9,9 +12,14 @@
 
   let { path, title, content, x, y }: Props = $props();
 
-  const preview = $derived(
-    content.trim().slice(0, 280) + (content.trim().length > 280 ? "…" : ""),
-  );
+  // An excerpt rather than the raw body (#168): a note that opens with a fence used
+  // to preview as a box of backticks. `path` keeps its `#heading`, so a link into a
+  // section previews that section. Deliberately still *text* — the tooltip is
+  // pointer-events-none, and anything rendered here would show live-looking
+  // wikilinks that do nothing (#156).
+  const excerpt = $derived(noteExcerpt(content, wikiFragment(path)));
+
+  const preview = $derived(excerpt.slice(0, 280) + (excerpt.length > 280 ? "…" : ""));
 </script>
 
 <div
