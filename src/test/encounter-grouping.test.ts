@@ -19,10 +19,9 @@
 // statblock-block-view.test.ts. What only this file can show is those parts at depth.
 import { fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import type { Editor } from "@tiptap/core";
-import { parseFrontmatter } from "$lib/utils";
 import { closeNote, dom, note, saved } from "./fixtures/note-editor";
+import { shipped } from "./fixtures/sample-world";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
   linkResolver: { isKnown: () => true, prime: vi.fn(), resolve: vi.fn() },
@@ -472,15 +471,8 @@ describe("Grimoire acquires no concept of a fight", () => {
 
 describe("the sample world's fight carries a real statblock fence", () => {
   // Read from the bundled ledger itself rather than a copy of it, so a later edit to
-  // that note cannot pass this test while shipping a fence Grimoire mis-reads. The path
-  // is relative to the runner's working directory, which is the project root.
-  const raw = readFileSync(
-    "src-tauri/sample-world/Encounters/The Shadow in the Hall.md",
-    "utf8",
-  );
-  // Frontmatter is split off before the editor sees a byte of a note, so the test opens
-  // what the app opens.
-  const { body } = parseFrontmatter(raw);
+  // that note cannot pass this test while shipping a fence Grimoire mis-reads.
+  const { raw, body } = shipped("Encounters/The Shadow in the Hall.md");
 
   it("holds a statblock fence under its Monsters heading", () => {
     expect(raw).toContain("## Monsters");

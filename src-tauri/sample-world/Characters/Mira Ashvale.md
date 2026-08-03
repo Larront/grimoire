@@ -4,6 +4,15 @@ aliases: [Mira, the Herbalist]
 ---
 # Mira Ashvale
 
+```infobox
+![Mira, drawn from the one time she sat still for it](.grimoire/images/mira-ashvale.png)
+Trade: Remedies, and the rumours that come with them
+Born: [[Locations/Thornhaven Village.md]]
+In the Ashfen: Twenty years
+Camp: Western approach to [[Locations/The Ember Keep.md]], unmoved for three
+Will not: Warn the same person twice
+```
+
 A weathered herbalist who trades in remedies and quiet information. She has mapped every road through the [[Lore/The Ashfen Marshes.md]] and trusts no one who has not bled for their knowledge.
 
 ## Description

@@ -3,6 +3,15 @@ tags: [location]
 ---
 # Thornhaven Village
 
+```infobox
+Region: [[Lore/The Ashfen Marshes.md]]
+Trades in: Marsh herbs, dried provisions, information
+Buildings: Fifty, around a market square
+Inn: The Muddy Boot
+Innkeeper: Osric Thrane, who remembers every face
+Road east: Three hours to [[Locations/The Ember Keep.md]] on foot
+```
+
 A small market settlement on the northern edge of the [[Lore/The Ashfen Marshes.md]]. It survives where other villages failed because it trades in marsh herbs, dried provisions, and information.
 
 ## Description
