@@ -24,6 +24,87 @@ fn resolve_map_filename(base_name: &str, ext: &str, parent_dir: &Path) -> (Strin
     }
 }
 
+/// Move a map's image file into `dest_folder` (`""` = the ledger root), keeping
+/// its filename — the map half of a [[Tree Move]]. Returns the new
+/// ledger-relative image path.
+///
+/// A map is addressed in the Files tree by its image file, so moving the node
+/// means moving that file. Unlike a [[PDF]] move, a name already taken in the
+/// destination is **deduplicated rather than refused** (`Coast.png` → `Coast
+/// 2.png`, the convention `resolve_map_filename` already uses): the tree shows a
+/// map's *title*, never its filename, so a collision here is bookkeeping the GM
+/// cannot see and could not act on.
+///
+/// `image_path` comes from the map's own row rather than the frontend, so it
+/// needs no traversal guard; `dest_folder` arrives from a drop target and does.
+pub fn move_map_image_inner(
+    ledger_path: &Path,
+    image_path: &str,
+    dest_folder: &str,
+) -> Result<String, String> {
+    use crate::commands::media::{file_name_of, join_in_folder, validate_dest_folder};
+
+    let dest_dir = validate_dest_folder(ledger_path, dest_folder)?;
+    let file_name = file_name_of(image_path);
+
+    // A drop onto the folder the image already sits in is nothing at all — and
+    // must not fall through to the dedup below, which would rename it to
+    // `Coast 2.png` for no reason.
+    if join_in_folder(dest_folder, file_name) == image_path {
+        return Ok(image_path.to_string());
+    }
+
+    let as_path = Path::new(file_name);
+    let stem = as_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("Map image has no filename")?;
+    let ext = as_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .ok_or("Map image has no extension")?;
+
+    let (resolved_stem, dest_full) = resolve_map_filename(stem, ext, &dest_dir);
+    fs::rename(ledger_path.join(image_path), &dest_full)
+        .map_err(|e| format!("move map image: {}", e))?;
+
+    Ok(join_in_folder(
+        dest_folder,
+        &format!("{}.{}", resolved_stem, ext),
+    ))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn move_map(map_id: i32, dest_folder: String, ledger: State<AppLedger>) -> Result<Map, String> {
+    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+    let ledger_path = state.path.clone().ok_or("No ledger open")?;
+    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+
+    let m: Map = maps::table
+        .find(map_id)
+        .first(conn)
+        .map_err(|e| e.to_string())?;
+    // A map with no image has no row in the Files tree to drag, so this is
+    // unreachable from the tree — it is still worth refusing plainly.
+    let image_path = m.image_path.ok_or("This map has no image to move")?;
+
+    let new_image_path = move_map_image_inner(&ledger_path, &image_path, &dest_folder)?;
+    if new_image_path == image_path {
+        return maps::table.find(map_id).first(conn).map_err(|e| e.to_string());
+    }
+
+    let modified_at = Utc::now().to_rfc3339();
+    diesel::update(maps::table.find(map_id))
+        .set((
+            maps::image_path.eq(&new_image_path),
+            maps::modified_at.eq(&modified_at),
+        ))
+        .returning(Map::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
 // ── Map commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -483,7 +564,7 @@ pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result
 
 #[cfg(test)]
 mod tests {
-    use super::{get_pin_categories_for_map_from_conn, resolve_map_filename};
+    use super::{get_pin_categories_for_map_from_conn, move_map_image_inner, resolve_map_filename};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
     use std::fs;
@@ -568,5 +649,92 @@ mod tests {
         fs::write(dir.path().join("World Map 2.jpg"), "").unwrap();
         let (name, _) = resolve_map_filename("World Map", "jpg", dir.path());
         assert_eq!(name, "World Map 3");
+    }
+
+    // ── move_map tests (#163) ─────────────────────────────────────────────────
+
+    #[test]
+    fn move_map_image_carries_the_file_into_the_destination_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("World Map.jpg"), "").unwrap();
+        fs::create_dir(dir.path().join("territories")).unwrap();
+
+        let new_path =
+            move_map_image_inner(dir.path(), "World Map.jpg", "territories").unwrap();
+
+        assert_eq!(new_path, "territories/World Map.jpg");
+        assert!(!dir.path().join("World Map.jpg").exists());
+        assert!(dir.path().join("territories/World Map.jpg").exists());
+    }
+
+    #[test]
+    fn move_map_image_to_the_ledger_root_takes_an_empty_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("territories")).unwrap();
+        fs::write(dir.path().join("territories/World Map.jpg"), "").unwrap();
+
+        let new_path =
+            move_map_image_inner(dir.path(), "territories/World Map.jpg", "").unwrap();
+
+        assert_eq!(new_path, "World Map.jpg");
+        assert!(dir.path().join("World Map.jpg").exists());
+    }
+
+    #[test]
+    fn move_map_image_deduplicates_a_name_the_destination_already_holds() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("World Map.jpg"), "moved").unwrap();
+        fs::create_dir(dir.path().join("territories")).unwrap();
+        fs::write(dir.path().join("territories/World Map.jpg"), "sitting there").unwrap();
+
+        let new_path =
+            move_map_image_inner(dir.path(), "World Map.jpg", "territories").unwrap();
+
+        assert_eq!(
+            new_path, "territories/World Map 2.jpg",
+            "a filename the GM never sees is deduplicated, not refused",
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("territories/World Map.jpg")).unwrap(),
+            "sitting there",
+            "the map already there keeps its image",
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("territories/World Map 2.jpg")).unwrap(),
+            "moved",
+        );
+    }
+
+    #[test]
+    fn move_map_image_onto_its_current_folder_leaves_the_name_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("territories")).unwrap();
+        fs::write(dir.path().join("territories/World Map.jpg"), "").unwrap();
+
+        let new_path =
+            move_map_image_inner(dir.path(), "territories/World Map.jpg", "territories")
+                .expect("a drop onto the folder it already sits in is a no-op");
+
+        assert_eq!(
+            new_path, "territories/World Map.jpg",
+            "and must not dedup itself to 'World Map 2.jpg'",
+        );
+        assert!(dir.path().join("territories/World Map.jpg").exists());
+        assert!(!dir.path().join("territories/World Map 2.jpg").exists());
+    }
+
+    #[test]
+    fn move_map_image_rejects_a_destination_outside_the_ledger() {
+        let outer = tempfile::tempdir().unwrap();
+        let ledger = outer.path().join("ledger");
+        fs::create_dir(&ledger).unwrap();
+        fs::create_dir(outer.path().join("elsewhere")).unwrap();
+        fs::write(ledger.join("World Map.jpg"), "").unwrap();
+
+        let result = move_map_image_inner(&ledger, "World Map.jpg", "../elsewhere");
+
+        assert!(result.is_err(), "expected a traversal destination to be rejected");
+        assert!(ledger.join("World Map.jpg").exists());
+        assert!(!outer.path().join("elsewhere/World Map.jpg").exists());
     }
 }

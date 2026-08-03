@@ -141,6 +141,9 @@ export const commands = {
 	 *  failure withholds is the *stamp*, so the next open finds the remainder.
 	 */
 	migrateLedgerFormat: (path: string) => __TAURI_INVOKE<MigrateFormatResult>("migrate_ledger_format", { path }),
+	moveFolder: (oldPath: string, destFolder: string) => __TAURI_INVOKE<number>("move_folder", { oldPath, destFolder }),
+	moveMap: (mapId: number, destFolder: string) => __TAURI_INVOKE<Map>("move_map", { mapId, destFolder }),
+	movePdf: (oldPath: string, destFolder: string) => __TAURI_INVOKE<string>("move_pdf", { oldPath, destFolder }),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
 	/**
 	 *  What the consent prompt is built from, or `None` when no pending migration
