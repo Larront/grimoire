@@ -41,18 +41,20 @@ function statblock(
   props: { name?: string; rows?: LabelledRow[]; sections?: StatblockSection[] } = {},
 ) {
   const onCommit = vi.fn();
+  const onRemove = vi.fn();
   const rendered = render(StatblockBlockView, {
     props: {
       name: "Goblin Scout",
       rows: HEADER,
       sections: ACTIONS,
       onCommit,
+      onRemove,
       ...props,
     },
   });
   /** Opens the structure, the way the GM does: the pencil in the block's chrome. */
   const edit = () => fireEvent.click(rendered.getByLabelText("Edit statblock structure"));
-  return { ...rendered, onCommit, edit };
+  return { ...rendered, onCommit, onRemove, edit };
 }
 
 /** The statblock as the block last handed it to the document. */
@@ -658,6 +660,20 @@ describe("the mode is scoped to structure", () => {
         "Row 2 value",
       ].sort(),
     );
+  });
+
+  it("keeps removal behind the pencil, out of reach of a mis-click mid-fight", async () => {
+    // The largest version of the slip the mode exists to prevent: in view mode there is
+    // no trash to hit at all, so deleting the creature takes the same deliberate gesture
+    // as editing its maximum (#175 review).
+    const { queryByLabelText, getByLabelText, onRemove, edit } = statblock(creature);
+
+    expect(queryByLabelText("Remove statblock")).toBeNull();
+
+    await edit();
+    await fireEvent.click(getByLabelText("Remove statblock"));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
   it("opens labels, maximums, headings and entry prose behind the pencil", async () => {

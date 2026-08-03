@@ -38,6 +38,8 @@ export interface SlashCommandSuggestionState {
   selectedIndex: number; // flat index over all items; group headers not counted
   x: number;
   y: number;
+  /** The caret's top edge, which is what the menu sits above when it flips. */
+  anchorTop: number;
   command: (item: SlashCommandItem) => void; // calls suggestion plugin's command prop
 }
 
@@ -375,6 +377,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               selectedIndex: si,
               x: rect?.left ?? 0,
               y: (rect?.bottom ?? 0) + 4,
+              anchorTop: rect?.top ?? 0,
             };
           }
 

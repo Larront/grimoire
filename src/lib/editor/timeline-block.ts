@@ -249,9 +249,11 @@ export const TimelineBlock = Node.create({
   addNodeView() {
     return createBlockNodeView<TimelineBlockViewExports>({
       component: TimelineBlockView,
+      domAttrs: { "data-note-block": "timeline" },
       defaults: { events: [] },
-      props: ({ updateAttributes }) => ({
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
+        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // Fresh /timeline insert: one blank event → open it in edit mode immediately

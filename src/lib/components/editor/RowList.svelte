@@ -60,13 +60,40 @@
   } = $props();
 
   let hoveredIndex = $state<number | null>(null);
+  /**
+   * The gap the pointer is over, tracked separately from the rows.
+   *
+   * Without it a gap vanishes as the pointer arrives: leaving the row that
+   * revealed it fires `mouseleave` before the gap's own `mouseenter`, so the
+   * control the GM was reaching for is gone by the time they get there.
+   */
+  let hoveredGap = $state<number | null>(null);
+  /** Whether the pointer is anywhere in the list, which is what reveals `Add …`. */
+  let hoveredList = $state(false);
 
   const groupNoun = $derived(noun.charAt(0).toUpperCase() + noun.slice(1));
 
-  /** A gap is revealed by hovering either of the rows it sits between. */
+  /** A gap is revealed by hovering either of the rows it sits between, or itself. */
   function gapVisible(gap: number): boolean {
-    return hoveredIndex === gap - 1 || hoveredIndex === gap;
+    return (
+      hoveredGap === gap || hoveredIndex === gap - 1 || hoveredIndex === gap
+    );
   }
+
+  /**
+   * The trailing gap is the one that adds a row rather than splicing one in, so it
+   * is revealed by hovering the *list* rather than a neighbouring boundary — and an
+   * empty list keeps it drawn, because there is no row left to hover for it.
+   *
+   * It used to be permanent, which put a dashed line and a plus under every panel a
+   * GM was only reading (#175 review).
+   */
+  const trailingVisible = $derived(
+    rows.length === 0 ||
+      hoveredList ||
+      hoveredGap === rows.length ||
+      hoveredIndex === rows.length - 1,
+  );
 
   function move(from: number, to: number) {
     const next = moveRow(rows, from, to);
@@ -83,23 +110,39 @@
   }
 </script>
 
+<!-- A boundary between two rows: a hit target the height of the gap it sits in, so
+     nothing is reserved for a control that is usually invisible.
+
+     `h-2` rather than the `h-5` this shipped with. At `h-5` every boundary spent 20px
+     on emptiness, which read as a loosely-spaced list rather than as rows with room to
+     grow between them — five rows carried 100px of gap they never used (#175 review).
+     The plus is drawn over the gap's own centre line, which is what keeps a target
+     that small findable. -->
 {#snippet insertionPoint(index: number, label: string, visible: boolean)}
   <button
     type="button"
-    class="insertion-point w-full flex items-center gap-1 h-5 rounded transition-opacity duration-150 motion-reduce:transition-none
+    class="insertion-point w-full flex items-center gap-1 h-2 rounded transition-opacity duration-150 motion-reduce:transition-none
            focus-visible:opacity-100 focus-visible:pointer-events-auto
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
     class:opacity-0={!visible}
     class:pointer-events-none={!visible}
     onclick={() => insert(index)}
+    onmouseenter={() => (hoveredGap = index)}
+    onmouseleave={() => (hoveredGap = null)}
     aria-label={label}
   >
     <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    <Plus size={11} class="text-muted-foreground/60 shrink-0" aria-hidden="true" />
+    <Plus size={10} class="text-muted-foreground/60 shrink-0" aria-hidden="true" />
     <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
   </button>
 {/snippet}
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="row-list"
+  onmouseenter={() => (hoveredList = true)}
+  onmouseleave={() => (hoveredList = false)}
+>
 {#each rows as item, i (i)}
   <!-- Gap before row i (hover-revealed, focus-visible) -->
   <div class={insertionPointClass}>
@@ -168,7 +211,8 @@
   </div>
 {/each}
 
-<!-- Trailing gap: always visible -->
+<!-- Trailing gap: revealed with the list, and permanent while the list is empty -->
 <div class={insertionPointClass}>
-  {@render insertionPoint(rows.length, `Add ${noun}`, true)}
+  {@render insertionPoint(rows.length, `Add ${noun}`, trailingVisible)}
+</div>
 </div>

@@ -113,9 +113,11 @@ function makeSlot(overrides: Partial<SceneSlot> = {}): SceneSlot {
 }
 
 function renderView(props: { sceneId: number | null }) {
-  return render(SceneBlockView, {
-    props: { ...props, onUpdate: vi.fn() },
+  const onRemove = vi.fn();
+  const rendered = render(SceneBlockView, {
+    props: { ...props, onUpdate: vi.fn(), onRemove },
   });
+  return { ...rendered, onRemove };
 }
 
 // A node view mounted by mountNodeView(), torn down after each test. Node views
@@ -213,6 +215,34 @@ describe("scene reference resolution", () => {
 
     expect(getByPlaceholderText("Search scenes…")).toBeTruthy();
     expect(container.textContent).not.toContain("Unknown scene");
+  });
+
+  it("offers a way out of the block whether or not a scene is bound", async () => {
+    // A sealed block holds every click, so ProseMirror never selects the node and
+    // Backspace has nothing to take (#175 review). The picker needs it as much as the
+    // mixer does: every other control in the picker *binds* a scene, so a `/scene`
+    // inserted by accident was stranded in the note.
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+
+    const unbound = renderView({ sceneId: null });
+    await fireEvent.click(unbound.getByLabelText("Remove scene block"));
+    expect(unbound.onRemove).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    const bound = renderView({ sceneId: 4 });
+    await fireEvent.click(bound.getByLabelText("Remove scene block"));
+    expect(bound.onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells removing the block apart from unbinding the scene", () => {
+    // Two controls beside each other, and the difference is worth them: unbinding
+    // leaves the block waiting for a scene, removal takes the block out. Neither
+    // touches the scene in the Scenes pane.
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+    const { getByLabelText } = renderView({ sceneId: 4 });
+
+    expect(getByLabelText("Change scene")).toBeTruthy();
+    expect(getByLabelText("Remove scene block")).toBeTruthy();
   });
 });
 

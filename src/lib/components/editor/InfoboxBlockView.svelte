@@ -16,7 +16,7 @@
   // once. What is *not* here is the float: nothing in this component knows whether the
   // panel is beside the prose or stacked above it, because that is a container query on
   // the block's own column in `app.css` and never an attribute (#148).
-  import { ImagePlus, RefreshCw, X } from "@lucide/svelte";
+  import { ImagePlus, RefreshCw, Trash2, X } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
@@ -35,12 +35,15 @@
     imageAlt,
     rows,
     onCommit,
+    onRemove,
   }: {
     title: string;
     image: string;
     imageAlt: string;
     rows: LabelledRow[];
     onCommit: (infobox: Infobox) => void;
+    /** Takes the whole panel out of the note. Undo brings it back in one step. */
+    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -135,10 +138,15 @@
 <!-- One row: its label and its value, both Linked Text Fields, because a `[[…]]` in
      either is already a real link whether the field draws it or not. The Row List
      draws the move / delete controls over this and the insert-between gaps around it;
-     `pr-14` reserves the gutter they sit in. -->
+     `pr-14` reserves the gutter they sit in.
+
+     Deliberately tight — a summary panel is read as a table, and a label sitting a
+     third of a column away from the value it names has to be traced across (#175
+     review). The label column is a minimum plus a percentage rather than a fixed
+     width, so `Population` and `Ruler` still line up. -->
 {#snippet infoboxRow(row: LabelledRow, i: number)}
   <div
-    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(4rem,34%)_1fr] items-start gap-x-3 py-px"
+    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2"
   >
     <LinkedTextField
       value={row.label}
@@ -247,36 +255,62 @@
 >
   {#if _image}
     {@render thumbnail()}
-  {:else}
-    <!-- Nothing to draw, so nothing is drawn until the GM goes looking for it. -->
-    <button
-      type="button"
-      class="mb-1 flex w-full items-center justify-center gap-1.5 rounded border border-dashed
-             border-muted-foreground/30 py-1 font-sans text-[0.7rem] text-muted-foreground/60
-             opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-             cursor-pointer hover:text-foreground group-hover/panel:opacity-100
-             focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2
-             focus-visible:ring-primary"
-      aria-label="Add image"
-      onclick={chooseImage}
-    >
-      <ImagePlus size={12} aria-hidden="true" />
-      Add image
-    </button>
   {/if}
 
-  <!-- The title is the GM's name for the panel, so it carries the world's voice
+  <!-- The title row, and the panel's own two controls beside it.
+       The title is the GM's name for the panel, so it carries the world's voice
        (DESIGN.md's two-voice rule); the rows around it are structure and stay in the
        tool's. Empty by default — a panel sitting under a note's own heading should not
-       have to say the same thing twice. -->
-  <LinkedTextField
-    value={_title}
-    onCommit={setTitle}
-    restrict={oneLine}
-    ariaLabel="Infobox title"
-    placeholder="Untitled panel"
-    class="font-heading text-sm leading-snug text-foreground mb-1"
-  />
+       have to say the same thing twice.
+
+       Both controls sit *in* this row rather than above the title, which is where the
+       "Add image" offer used to be: a full-width dashed button reserved a strip of
+       vertical space in every panel that had no image, so the emptiest panels looked
+       the most cluttered (#175 review). Here they cost 3rem of a line that was going
+       to be drawn anyway, and nothing when they are not being reached for. -->
+  <div class="mb-1 flex items-start gap-1">
+    <LinkedTextField
+      value={_title}
+      onCommit={setTitle}
+      restrict={oneLine}
+      ariaLabel="Infobox title"
+      placeholder="Untitled panel"
+      class="min-w-0 flex-1 font-heading text-sm leading-snug text-foreground"
+    />
+    <div
+      class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150
+             motion-reduce:transition-none group-hover/panel:opacity-100
+             group-focus-within/panel:opacity-100"
+    >
+      {#if !_image}
+        <button
+          type="button"
+          class="rounded p-0.5 cursor-pointer text-muted-foreground hover:text-foreground
+                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1
+                 focus-visible:ring-primary"
+          aria-label="Add image"
+          onclick={chooseImage}
+        >
+          <ImagePlus size={13} aria-hidden="true" />
+        </button>
+      {/if}
+      {#if onRemove}
+        <!-- The only way out of a sealed block: nothing here is selectable, so
+             Backspace has no node to take (#175 review). Undoable in one step, so it
+             asks nothing before doing it. -->
+        <button
+          type="button"
+          class="rounded p-0.5 cursor-pointer text-muted-foreground hover:text-destructive
+                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1
+                 focus-visible:ring-primary"
+          aria-label="Remove infobox"
+          onclick={onRemove}
+        >
+          <Trash2 size={13} aria-hidden="true" />
+        </button>
+      {/if}
+    </div>
+  </div>
 
   {#if _rows.length === 0}
     <div class="font-sans text-xs italic text-muted-foreground mb-1">No rows yet</div>

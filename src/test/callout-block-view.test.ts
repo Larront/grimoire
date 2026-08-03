@@ -497,3 +497,69 @@ describe("a callout follows the document", () => {
     expect(saved(editor)).toBe("Before the box.\n\n> [!warning] The bridge is out");
   });
 });
+
+// ─── Removing the box ─────────────────────────────────────────────────────────
+
+describe("removing a callout keeps what was inside it", () => {
+  function removeButton(editor: Editor): HTMLElement {
+    return dom(editor).querySelector<HTMLElement>(
+      '[aria-label="Remove callout box, keep its contents"]',
+    )!;
+  }
+
+  it("unwraps the body into the note rather than deleting it", async () => {
+    // The container block's answer to the sealed blocks' *remove*, and deliberately a
+    // different gesture (#175 review): a callout is a wrapper the GM put around their
+    // own writing, so the control that takes the box away must not take the writing.
+    const editor = note(
+      "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.",
+    );
+
+    await fireEvent.click(removeButton(editor));
+
+    expect(saved(editor)).toBe("The eastern crossing collapsed last winter.");
+  });
+
+  it("keeps every block the body held, in order", async () => {
+    const editor = note(
+      "> [!encounter] The Ambush\n> Two kobolds.\n>\n> - a rusted blade\n> - a lantern",
+    );
+
+    await fireEvent.click(removeButton(editor));
+
+    const out = saved(editor);
+    expect(out).not.toContain(">");
+    expect(out).toContain("Two kobolds.");
+    expect(out).toContain("- a rusted blade");
+    expect(out).toContain("- a lantern");
+  });
+
+  it("is one undo step, which puts the box back", async () => {
+    const editor = note("> [!tip] Ask the ferryman\n> He knows the crossing.");
+
+    await fireEvent.click(removeButton(editor));
+    editor.commands.undo();
+
+    expect(saved(editor)).toBe("> [!tip] Ask the ferryman\n> He knows the crossing.");
+  });
+
+  it("leaves the prose around it alone", async () => {
+    const editor = note(
+      "Before the box.\n\n> [!note] Aside\n> Inside the box.\n\nAfter the box.",
+    );
+
+    await fireEvent.click(removeButton(editor));
+
+    expect(saved(editor)).toBe(
+      "Before the box.\n\nInside the box.\n\nAfter the box.",
+    );
+  });
+
+  it("is offered only by a callout, not by an ordinary quote", () => {
+    // A quote with no type draws no header, so there is no chrome to put it in — and
+    // nothing to remove either: unwrapping it is `>` characters, which the GM deletes.
+    const editor = note("> Just a quotation.");
+
+    expect(removeButton(editor)).toBeNull();
+  });
+});

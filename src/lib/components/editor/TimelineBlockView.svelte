@@ -8,7 +8,8 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { portal } from "$lib/utils/portal";
-  import { FileText, ChevronDown } from "@lucide/svelte";
+  import { placeMenu } from "$lib/utils/anchored-menu";
+  import { FileText, ChevronDown, Trash2 } from "@lucide/svelte";
 
   // Wikilink stub-vs-resolved styling, answered by the Link Resolver — drawing, so
   // the cached read (a target that hasn't resolved yet stays full accent rather than
@@ -32,9 +33,12 @@
   let {
     events,
     onCommit,
+    onRemove,
   }: {
     events: TimelineEvent[];
     onCommit: (events: TimelineEvent[]) => void;
+    /** Takes the whole timeline out of the note. Undo brings it back in one step. */
+    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -52,11 +56,21 @@
     selectedIndex: number;
     x: number;
     y: number;
+    /** The field's top, so a menu with no room below it flips clear of the row. */
+    anchorTop: number;
     triggerStart: number;
     eventIndex: number;
     field: "title" | "description";
   }
   let suggestion = $state<SuggestionState | null>(null);
+  let suggestionEl = $state<HTMLDivElement | undefined>();
+
+  // Placed from its measured height, like the two components that draw the same list
+  // elsewhere: an event edited near the foot of the window flips its menu above the
+  // field instead of opening it off screen.
+  $effect(() => {
+    if (suggestion && suggestionEl) placeMenu(suggestionEl, suggestion);
+  });
 
   $effect(() => {
     const idx = editingIndex;
@@ -145,6 +159,7 @@
       selectedIndex: 0,
       x: rect.left,
       y: rect.bottom + 4,
+      anchorTop: rect.top,
       triggerStart: lastOpen,
       eventIndex,
       field,
@@ -321,7 +336,27 @@
   </div>
 {/snippet}
 
-<div class="timeline-block my-2 select-none" contenteditable="false">
+<div
+  class="timeline-block group/block relative my-2 select-none"
+  contenteditable="false"
+>
+  <!-- The block's only chrome, and the only way out of it: a sealed block holds every
+       click, so ProseMirror never selects the node and Backspace has nothing to take
+       (#175 review). Hover-revealed, in the corner the other blocks put theirs. -->
+  {#if onRemove}
+    <button
+      type="button"
+      class="absolute top-0 right-0 z-10 rounded p-0.5 cursor-pointer text-muted-foreground
+             opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+             hover:text-destructive group-hover/block:opacity-100 focus-visible:opacity-100
+             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      aria-label="Remove timeline"
+      onclick={onRemove}
+    >
+      <Trash2 size={13} />
+    </button>
+  {/if}
+
   {#if _events.length === 0}
     <div class="ml-6 text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>
   {/if}
@@ -344,9 +379,9 @@
        a query container, whose layout containment would otherwise make it the
        containing block for this `fixed` dropdown. -->
   <div
+    bind:this={suggestionEl}
     use:portal
     class="fixed z-50 min-w-[240px] max-h-[240px] overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-xl shadow-black/30"
-    style="left: {suggestion.x}px; top: {suggestion.y}px;"
     role="listbox"
     tabindex={-1}
     aria-label="Link to note"

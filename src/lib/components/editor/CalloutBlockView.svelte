@@ -17,7 +17,7 @@
   // before typing into an aside would be absurd. The one piece of chrome that is not a
   // field is the collapse chevron, and collapse is **view state** — it never reaches the
   // file, in either direction. Obsidian's fold marker seeds it and is otherwise a no-op.
-  import { ChevronDown } from "@lucide/svelte";
+  import { ChevronDown, Trash2 } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { oneLine } from "$lib/editor/labelled-row";
@@ -34,6 +34,7 @@
     foldMarker = null,
     onTitleCommit,
     onCollapse,
+    onUnwrap,
   }: {
     calloutType?: string | null;
     calloutTitle?: string | null;
@@ -45,6 +46,11 @@
      * the document changes — this is view state asking the editor to look away.
      */
     onCollapse?: () => void;
+    /**
+     * Unwrap: the box goes, the children stay where they were in the document. Never a
+     * delete — see the control's own note below.
+     */
+    onUnwrap?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -102,7 +108,7 @@
      wrapper, so #180's stylesheet keeps matching: `[data-callout]` paints the callout
      and a quote with no type is styled as the ordinary quote it is. -->
 <blockquote
-  class="callout-block"
+  class="callout-block group/callout"
   data-callout={_type ?? undefined}
   data-callout-known={known ? "" : undefined}
 >
@@ -125,6 +131,24 @@
         placeholder={fallback}
         class="callout-title"
       />
+
+      {#if onUnwrap}
+        <!-- Takes the box away and leaves the prose. Not a delete, and the label says so:
+             a callout is a wrapper the GM put around their own writing, so the control
+             that removes it must not remove what it wrapped. Deleting the contents is
+             still a selection and a Backspace, which is the gesture a container block
+             gets for free and a sealed one cannot. -->
+        <button
+          type="button"
+          class="callout-toggle shrink-0 rounded p-0.5 opacity-0 transition-opacity motion-reduce:transition-none
+                 group-hover/callout:opacity-100 focus-visible:opacity-100
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-label="Remove callout box, keep its contents"
+          onclick={onUnwrap}
+        >
+          <Trash2 size={14} />
+        </button>
+      {/if}
 
       <button
         type="button"

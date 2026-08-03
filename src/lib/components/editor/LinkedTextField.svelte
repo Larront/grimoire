@@ -181,6 +181,8 @@
     selectedIndex: number;
     x: number;
     y: number;
+    /** The field's top, so a menu with no room below it flips clear of the field. */
+    anchorTop: number;
     /** Where the `[[` sits in the draft, so accepting replaces from there. */
     triggerStart: number;
   }
@@ -199,7 +201,14 @@
 
     const items = await api.searchNotes(before.slice(open + 2)).catch(() => []);
     const rect = el.getBoundingClientRect();
-    suggestion = { items, selectedIndex: 0, x: rect.left, y: rect.bottom + 4, triggerStart: open };
+    suggestion = {
+      items,
+      selectedIndex: 0,
+      x: rect.left,
+      y: rect.bottom + 4,
+      anchorTop: rect.top,
+      triggerStart: open,
+    };
   }
 
   /** Whether the key belonged to the dropdown. */
@@ -333,6 +342,7 @@
       selectedIndex={suggestion.selectedIndex}
       x={suggestion.x}
       y={suggestion.y}
+      anchorTop={suggestion.anchorTop}
       onSelect={accept}
     />
   </div>

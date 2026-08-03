@@ -26,6 +26,8 @@ export interface WikiLinkSuggestionState {
   selectedIndex: number; // managed by the suggestion plugin's onKeyDown, not the component
   x: number;
   y: number;
+  /** The caret's top edge, which is what the menu sits above when it flips. */
+  anchorTop: number;
 }
 
 export interface NoteSearchResult {
@@ -268,6 +270,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               selectedIndex: si,
               x: rect?.left ?? 0,
               y: (rect?.bottom ?? 0) + 4,
+              anchorTop: rect?.top ?? 0,
             };
           }
 

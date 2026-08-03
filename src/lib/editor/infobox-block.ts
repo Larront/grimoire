@@ -282,9 +282,9 @@ export const InfoboxBlock = Node.create({
       // the document's flow — the element paragraphs wrap around — and it is an
       // attribute rather than a class so nothing in the note or the view can look
       // like it decides the layout (#148).
-      domAttrs: { "data-infobox-block": "" },
+      domAttrs: { "data-infobox-block": "", "data-note-block": "infobox" },
       defaults: { title: "", image: "", imageAlt: "", rows: [] },
-      props: ({ updateAttributes }) => ({
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (infobox: Infobox) =>
           updateAttributes({
             title: infobox.title,
@@ -292,6 +292,7 @@ export const InfoboxBlock = Node.create({
             imageAlt: infobox.imageAlt,
             rows: infobox.rows,
           }),
+        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // A fresh `/infobox`: one empty row, opened for typing straight away.

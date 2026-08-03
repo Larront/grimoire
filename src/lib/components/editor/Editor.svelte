@@ -344,6 +344,7 @@
     selectedIndex={wikiState.selectedIndex}
     x={wikiState.x}
     y={wikiState.y}
+    anchorTop={wikiState.anchorTop}
     onSelect={wikiState.command}
   />
 {/if}

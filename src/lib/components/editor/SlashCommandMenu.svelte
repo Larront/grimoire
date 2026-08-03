@@ -1,5 +1,6 @@
 <script lang="ts">
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
+  import { placeMenu } from "$lib/utils/anchored-menu";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 
   interface Props {
@@ -9,17 +10,30 @@
   let { state }: Props = $props();
 
   let itemRefs: (HTMLButtonElement | null)[] = [];
+  // Plain `let`, not `$state`: the prop beside it is called `state`, which makes `$state`
+  // read as a store subscription on it. Nothing needs it reactive — `bind:this` has run
+  // by the time an effect does, and the effect below re-runs on the item list anyway.
+  let menuEl: HTMLDivElement | undefined;
 
   $effect(() => {
     itemRefs[state.selectedIndex]?.scrollIntoView({ block: "nearest" });
   });
+
+  // Placed after the items are drawn rather than from the caret alone: the menu's
+  // height is its filtered list's, so `/` at the foot of a long note flips above the
+  // caret while `/statb` a line higher does not. Reads `items` to re-place whenever
+  // the list — and so the height — changes.
+  $effect(() => {
+    state.items;
+    if (menuEl) placeMenu(menuEl, state);
+  });
 </script>
 
 <div
+  bind:this={menuEl}
   class="fixed z-50 min-w-[200px] max-h-[300px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
          shadow-xl shadow-black/30"
-  style="left: {state.x}px; top: {state.y}px;"
   role="listbox"
   aria-label="Slash commands"
 >

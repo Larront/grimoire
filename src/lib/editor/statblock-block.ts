@@ -406,14 +406,16 @@ export const StatblockBlock = Node.create({
   addNodeView() {
     return createBlockNodeView<StatblockBlockViewExports>({
       component: StatblockBlockView,
+      domAttrs: { "data-note-block": "statblock" },
       defaults: { name: "", rows: [], sections: [] },
-      props: ({ updateAttributes }) => ({
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (block: Statblock) =>
           updateAttributes({
             name: block.name,
             rows: block.rows,
             sections: block.sections,
           }),
+        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // A fresh `/statblock`: one empty header row, opened for typing straight away.

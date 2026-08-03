@@ -125,3 +125,36 @@ describe("Timeline rows", () => {
     expect(getByLabelText("Add event")).toBeTruthy();
   });
 });
+
+// ─── Removing the block ───────────────────────────────────────────────────────
+
+describe("removing a Timeline", () => {
+  it("offers a way out of the block, which the Row List cannot give it", async () => {
+    // Deleting every event leaves an empty timeline, not an absent one — and a sealed
+    // block holds every click, so ProseMirror never selects the node and Backspace has
+    // nothing to take (#175 review).
+    const onRemove = vi.fn();
+    const { getByLabelText } = render(TimelineBlockView, {
+      props: {
+        events: [{ date: "Day 1", title: "Alpha", description: "" }],
+        onCommit: vi.fn(),
+        onRemove,
+      },
+    });
+
+    await fireEvent.click(getByLabelText("Remove timeline"));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it("is reachable on an empty timeline too", async () => {
+    const onRemove = vi.fn();
+    const { getByLabelText } = render(TimelineBlockView, {
+      props: { events: [], onCommit: vi.fn(), onRemove },
+    });
+
+    await fireEvent.click(getByLabelText("Remove timeline"));
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+});

@@ -215,8 +215,12 @@ export const SceneBlock = Node.create({
     return createBlockNodeView({
       component: SceneBlockView,
       class: "scene-block-wrapper",
+      domAttrs: { "data-note-block": "scene" },
       defaults: { sceneId: null, sceneName: "" },
-      props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
+      props: ({ updateAttributes, deleteNode }) => ({
+        onUpdate: updateAttributes,
+        onRemove: deleteNode,
+      }),
 
       // Scene's use of the connector's event hole: hold a slider drag that
       // leaves the node view. The connector's default — anything raised inside

@@ -30,6 +30,14 @@ interface RecordedMeta {
 /** The document position the harness reports the node sits at. */
 const NODE_POS = 3;
 
+/** One `tr.delete` the node view asked for. */
+interface RecordedDelete {
+  from: number;
+  to: number;
+  /** Whether a meta (the history close) preceded it, as it must. */
+  afterMeta: boolean;
+}
+
 interface MountedNodeView {
   view: {
     dom: HTMLElement;
@@ -43,6 +51,9 @@ interface MountedNodeView {
   };
   writes: RecordedAttrWrite[];
   metas: RecordedMeta[];
+  deletes: RecordedDelete[];
+  /** How many times the node view asked the editor for focus. */
+  focuses: () => number;
   nodeType: { name: string };
 }
 
@@ -79,13 +90,20 @@ function mountNodeView(
   attrs: Record<string, unknown> = {},
   getPos: () => number | undefined = () => NODE_POS,
   nodeAtPos?: (ownType: NodeAtPos["type"]) => NodeAtPos | null,
+  /** The node's size, which only the delete path reads. */
+  nodeSize = 4,
 ): MountedNodeView {
   const writes: RecordedAttrWrite[] = [];
   const metas: RecordedMeta[] = [];
+  const deletes: RecordedDelete[] = [];
+  let focusCount = 0;
   const nodeType = { name: "fixtureBlock" };
-  const node = { type: nodeType, attrs };
+  const node = { type: nodeType, attrs, nodeSize };
   const editor = {
     commands: {
+      focus() {
+        focusCount++;
+      },
       command(fn: (props: { tr: unknown }) => boolean) {
         const tr = {
           doc: nodeAtPos ? { nodeAt: () => nodeAtPos(nodeType) } : undefined,
@@ -105,6 +123,10 @@ function mountNodeView(
             writes.push({ pos, attrs: newAttrs });
             return tr;
           },
+          delete(from: number, to: number) {
+            deletes.push({ from, to, afterMeta: metas.length > 0 });
+            return tr;
+          },
         };
         return fn({ tr });
       },
@@ -113,8 +135,20 @@ function mountNodeView(
 
   const view = (render as TestRenderer)({ node, getPos, editor });
   document.body.appendChild(view.dom);
-  mounted = { view, writes, metas, nodeType };
+  mounted = {
+    view,
+    writes,
+    metas,
+    deletes,
+    focuses: () => focusCount,
+    nodeType,
+  };
   return mounted;
+}
+
+/** The fixture's remove control, which calls the connector's `deleteNode`. */
+function removeButton(view: MountedNodeView["view"]): HTMLElement {
+  return view.dom.querySelector("[data-fixture-remove]") as HTMLElement;
 }
 
 function addOutsideElement(): HTMLElement {
@@ -289,6 +323,94 @@ describe("node-view connector — attribute write-back", () => {
     await fireEvent.click(view.dom.querySelector("button") as HTMLElement);
 
     expect(writes).toHaveLength(0);
+  });
+});
+
+// ─── deleteNode() ─────────────────────────────────────────────────────────────
+//
+// The one gesture a sealed block cannot get from ProseMirror. Its `stopEvent` holds
+// every click, so the node is never selected and Backspace has nothing to take — a
+// block could be emptied but never removed (#175 review).
+
+describe("node-view connector — deleteNode", () => {
+  it("deletes the node's whole range at its position", async () => {
+    const { view, deletes } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ deleteNode }) => ({ onRemove: deleteNode }),
+      }),
+      { label: "Ambush", count: 2 },
+      undefined,
+      undefined,
+      7,
+    );
+
+    await fireEvent.click(removeButton(view));
+
+    expect(deletes).toEqual([{ from: NODE_POS, to: NODE_POS + 7, afterMeta: true }]);
+  });
+
+  it("closes the history group first, so the removal is its own undo step", async () => {
+    // Same rule as a write (ADR-0016 §6), and the one where it matters most: a removal
+    // folded into the sentence typed a moment earlier would take the sentence with it.
+    const { view, deletes } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ deleteNode }) => ({ onRemove: deleteNode }),
+      }),
+      { label: "Ambush" },
+    );
+
+    await fireEvent.click(removeButton(view));
+
+    expect(deletes[0].afterMeta).toBe(true);
+  });
+
+  it("focuses the editor, so the GM's next Ctrl+Z reaches the removal", async () => {
+    const { view, focuses } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ deleteNode }) => ({ onRemove: deleteNode }),
+      }),
+      { label: "Ambush" },
+    );
+
+    await fireEvent.click(removeButton(view));
+
+    expect(focuses()).toBe(1);
+  });
+
+  it("does nothing when the node's position is gone", async () => {
+    const { view, deletes } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ deleteNode }) => ({ onRemove: deleteNode }),
+      }),
+      { label: "Ambush" },
+      () => undefined,
+    );
+
+    await fireEvent.click(removeButton(view));
+
+    expect(deletes).toHaveLength(0);
+  });
+
+  it("refuses when the position holds a different node", async () => {
+    // The guard that matters more here than on a write: a stale position landing a
+    // delete on whatever replaced this block would remove the wrong thing.
+    const { view, deletes } = mountNodeView(
+      createBlockNodeView({
+        component: SealedBlockFixture,
+        props: ({ deleteNode }) => ({ onRemove: deleteNode }),
+      }),
+      { label: "Ambush" },
+      undefined,
+      () => ({ type: { name: "paragraph" }, attrs: {} }),
+    );
+
+    await fireEvent.click(removeButton(view));
+
+    expect(deletes).toHaveLength(0);
   });
 });
 

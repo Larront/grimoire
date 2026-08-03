@@ -235,9 +235,44 @@ describe("RowList controls", () => {
     expect(gap.classList.contains("opacity-0")).toBe(true);
   });
 
-  it("the trailing insertion point is always visible", () => {
-    const { getByLabelText } = render(RowListFixture, { rows: ["alpha"] });
+  it("the trailing insertion point is revealed with the list, not permanent", async () => {
+    // It used to be always drawn, which put a dashed line and a plus under every panel
+    // a GM was only reading (#175 review). Hovering the last row reveals it, as
+    // hovering a row reveals the gaps beside it.
+    const { getAllByRole, getByLabelText } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+    });
+    const add = getByLabelText("Add thing");
+    expect(add.classList.contains("opacity-0")).toBe(true);
+
+    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
+    await fireEvent.mouseEnter(rows[1]);
+    expect(add.classList.contains("opacity-0")).toBe(false);
+  });
+
+  it("the trailing insertion point stays drawn while the list is empty", () => {
+    // Nothing to hover for it: an empty list whose only control were hover-revealed
+    // would be a list with no way to gain a first row.
+    const { getByLabelText } = render(RowListFixture, { rows: [] });
     expect(getByLabelText("Add thing").classList.contains("opacity-0")).toBe(false);
+  });
+
+  it("a gap stays revealed once the pointer is on it", async () => {
+    // Leaving the row that revealed a gap fires `mouseleave` before the gap's own
+    // `mouseenter`, so without the gap tracking its own hover the control vanishes as
+    // the GM arrives at it.
+    const { getAllByRole, getByLabelText } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+    });
+    const gap = getByLabelText("Insert thing after position 1");
+    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
+
+    await fireEvent.mouseEnter(rows[0]);
+    await fireEvent.mouseEnter(gap);
+    await fireEvent.mouseLeave(rows[0]);
+
+    expect(gap.classList.contains("opacity-0")).toBe(false);
+    expect(gap.classList.contains("pointer-events-none")).toBe(false);
   });
 
   it("an empty list still offers a way to add the first row", () => {

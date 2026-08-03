@@ -17,9 +17,16 @@ import { readFileSync } from "node:fs";
 // runner's working directory, which is the project root.
 const css = readFileSync("src/app.css", "utf8");
 
-/** The body of the one `@container` block that carries the float. */
+/**
+ * The body of the one `@container` block that carries the float.
+ *
+ * Matched as a *rule* — name followed by a condition — rather than as a mention of the
+ * name, so a comment discussing the query cannot shadow the rule this reads.
+ */
+const FLOAT_QUERY = /@container note-column\s*\(/g;
+
 function floatBlock(): string {
-  const at = css.indexOf("@container note-column");
+  const at = css.search(FLOAT_QUERY);
   expect(at, "the float lives in a @container query on the note column").toBeGreaterThan(-1);
   const open = css.indexOf("{", at);
   // Nested rules, so the block ends at the brace that balances the first one.
@@ -86,6 +93,55 @@ describe("what the float does to the prose around it", () => {
     }
   });
 
+  describe("nothing overlaps the panel", () => {
+    /** The one rule that keeps boxed content clear of a floated panel. */
+    const clearingRule = () => {
+      const rule = css.match(/\.tiptap \[data-note-block\][^{]*\{[^}]*\}/)?.[0];
+      expect(rule, "a rule addresses Note Blocks as a family").toBeTruthy();
+      return rule!;
+    };
+
+    it("keeps every other Note Block clear of it", () => {
+      // A block flowing under the float put the panel across its right-hand gutter,
+      // which is where each block's hover-revealed controls sit — so the overlap hid
+      // controls rather than merely looking wrong (#175 review). The panel itself is
+      // excluded: its own `clear: right` inside the query is what stops two panels
+      // pairing up.
+      expect(clearingRule()).toMatch(/:not\(\[data-infobox-block\]\)/);
+      expect(clearingRule()).toMatch(/clear:\s*right/);
+    });
+
+    it("keeps the code block clear of it too", () => {
+      // The one boxed thing in the schema that is not a Note Block. Its content does not
+      // wrap, so beside a panel it is drawn *under* it rather than reflowed.
+      expect(clearingRule()).toMatch(/\.tiptap pre/);
+    });
+
+    it("measures a nested panel against the callout body it sits in", () => {
+      // A panel inside a callout is in a narrower column than the note's, so the same
+      // threshold has to be read off the body. Sharing the container's *name* is what
+      // makes the nearest one win, rather than adding a second query with its own number.
+      expect(css).toMatch(
+        /\.tiptap \.callout-body\s*\{[^}]*container-type:\s*inline-size/,
+      );
+      expect(css).toMatch(
+        /\.tiptap \.callout-body\s*\{[^}]*container-name:\s*note-column/,
+      );
+    });
+
+    it("has a member for every boxed block the schema can produce", () => {
+      // The claim the rule above rests on, checked rather than assumed: a table or a
+      // task list would draw a box and would need adding. If this fails, the editor
+      // gained a node and the clearing rule has a hole.
+      const extensions = readFileSync("src/lib/editor/note-extensions.ts", "utf8");
+      expect(extensions).not.toMatch(/\bTable\b|\bTaskList\b|\bTaskItem\b/);
+      // And a blockquote — the remaining bordered box — is only ever drawn inside the
+      // callout's node view, whose wrapper is a `[data-note-block]` and so already
+      // clears. StarterKit's own blockquote is off for that reason (#180).
+      expect(extensions).toMatch(/StarterKit\.configure\(\{\s*blockquote:\s*false/);
+    });
+  });
+
   it("caps the thumbnail at its floated size, so a stacked panel does not grow it", () => {
     // The panel's own floated width less its padding, off the same variable the float
     // uses, so the cap cannot drift away from what it is a cap on. Upscaling a file the
@@ -100,6 +156,6 @@ describe("what the float does to the prose around it", () => {
     // The rejected second layout for one block: same content, two arrangements, and
     // every future row feature having to work in both.
     expect(floatBlock()).not.toMatch(/columns|grid-template-columns|column-count/);
-    expect(css.match(/@container note-column/g)).toHaveLength(1);
+    expect(css.match(FLOAT_QUERY)).toHaveLength(1);
   });
 });

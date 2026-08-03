@@ -34,7 +34,7 @@
   //
   // Nothing here knows what an entry *is*, and nothing knows what a mark *means*. A
   // section heading, an entry name and a condition label are all text the GM typed.
-  import { Bookmark, Check, ChevronDown, Pencil } from "@lucide/svelte";
+  import { Bookmark, Check, ChevronDown, Pencil, Trash2 } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
@@ -64,11 +64,14 @@
     rows,
     sections,
     onCommit,
+    onRemove,
   }: {
     name: string;
     rows: LabelledRow[];
     sections: StatblockSection[];
     onCommit: (block: Statblock) => void;
+    /** Takes the whole block out of the note. Offered in edit mode only — see below. */
+    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -528,6 +531,22 @@
       <Bookmark size={13} />
     </button>
     {#if editing}
+      <!-- Removal lives *behind the pencil*, and that is this block's own rule rather
+           than an accident of where there was room: the mode exists because a slipped
+           click mid-fight must not reach the creature's definition (ADR-0016 §6), and
+           deleting the creature is the largest version of that slip. In view mode there
+           is no trash to hit. -->
+      {#if onRemove}
+        <button
+          type="button"
+          class="rounded p-0.5 text-muted-foreground hover:text-destructive cursor-pointer
+                 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          aria-label="Remove statblock"
+          onclick={onRemove}
+        >
+          <Trash2 size={13} />
+        </button>
+      {/if}
       <button
         type="button"
         class="rounded p-0.5 text-primary hover:text-foreground cursor-pointer

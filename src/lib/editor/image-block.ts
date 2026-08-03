@@ -135,13 +135,14 @@ export const ImageBlock = Image.extend({
   addNodeView() {
     return createBlockNodeView<ImageBlockViewExports>({
       component: ImageBlockView,
-      domAttrs: { "data-image-block": "" },
+      domAttrs: { "data-image-block": "", "data-note-block": "image" },
       defaults: { src: "", alt: "", align: "center", width: "100%" },
       drawsOwnSelection: true,
-      props: ({ updateAttributes }) => ({
+      props: ({ updateAttributes, deleteNode }) => ({
         onUpdate: updateAttributes,
         onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
         onSrcReplace: (src: string) => updateAttributes({ src }),
+        onRemove: deleteNode,
       }),
 
       // Image's use of the connector's event hole: a mousedown must reach

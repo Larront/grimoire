@@ -20,6 +20,7 @@
     ChevronLeft,
     Plus,
     ExternalLink,
+    Trash2,
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { api } from "$lib/api";
@@ -37,10 +38,13 @@
     sceneId,
     sceneName: _nameInTheFile,
     onUpdate,
+    onRemove,
   }: {
     sceneId: number | null;
     sceneName?: string;
     onUpdate: (attrs: { sceneId: number | null; sceneName: string }) => void;
+    /** Takes the reference out of the note. The scene itself is untouched. */
+    onRemove?: () => void;
   } = $props();
 
   // Internal copy updated by setAttrs() on undo/redo
@@ -281,17 +285,32 @@
 {#if _sceneId === null}
   <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
   <div class="my-1 rounded-md border border-border/60 bg-card px-3 py-2.5 select-none">
-    <!-- Search -->
-    <div class="relative mb-1.5">
-      <Search class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none" />
-      <input
-        type="text"
-        placeholder="Search scenes…"
-        bind:value={searchQuery}
-        class="w-full pl-6 pr-2 py-1 font-sans text-xs bg-background border border-border/50
-               rounded-md text-foreground placeholder:text-muted-foreground/40
-               focus:outline-none focus:border-primary/60 transition-colors"
-      />
+    <!-- Search, and the way out of a block bound to nothing. A `/scene` inserted by
+         accident used to strand the picker in the note with no gesture that removed it:
+         every control here binds a scene. -->
+    <div class="mb-1.5 flex items-center gap-1">
+      <div class="relative flex-1">
+        <Search class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Search scenes…"
+          bind:value={searchQuery}
+          class="w-full pl-6 pr-2 py-1 font-sans text-xs bg-background border border-border/50
+                 rounded-md text-foreground placeholder:text-muted-foreground/40
+                 focus:outline-none focus:border-primary/60 transition-colors"
+        />
+      </div>
+      {#if onRemove}
+        <button
+          onclick={onRemove}
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm
+                 hover:bg-muted transition-colors"
+          aria-label="Remove scene block"
+          title="Remove scene block"
+        >
+          <Trash2 class="size-3.5 text-muted-foreground hover:text-destructive" />
+        </button>
+      {/if}
     </div>
 
     <!-- Scene list -->
@@ -476,6 +495,22 @@
           oninput={handleMasterVolumeInput}
         />
       </div>
+
+      <!-- Remove the reference. Distinct from "Change scene" next to it, and the
+           distinction is worth the two buttons: unbinding leaves the block waiting for
+           a scene, and there was no gesture at all that took the block out of the note
+           (#175 review). Neither one touches the scene in the Scenes pane. -->
+      {#if onRemove}
+        <button
+          onclick={onRemove}
+          class="shrink-0 flex items-center justify-center size-6 rounded-sm
+                 hover:bg-muted transition-colors"
+          aria-label="Remove scene block"
+          title="Remove scene block"
+        >
+          <Trash2 class="size-3.5 text-muted-foreground hover:text-destructive" />
+        </button>
+      {/if}
 
       <!-- Change scene (return to picker) -->
       <button

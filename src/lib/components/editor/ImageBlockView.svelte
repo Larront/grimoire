@@ -6,6 +6,7 @@
     AlignCenter,
     AlignRight,
     Maximize2,
+    Trash2,
     X,
   } from "@lucide/svelte";
   import { fade } from "svelte/transition";
@@ -19,6 +20,7 @@
     onUpdate,
     onCaptionUpdate,
     onSrcReplace,
+    onRemove,
   }: {
     src: string;
     alt: string;
@@ -28,6 +30,8 @@
     onUpdate: (attrs: { align: string; width: string }) => void;
     onCaptionUpdate: (alt: string) => void;
     onSrcReplace?: (src: string) => void;
+    /** Takes the image out of the note. The file in `ledger/images/` is left alone. */
+    onRemove?: () => void;
   } = $props();
 
   // Internal mutable copies — NodeView calls setAttrs / setSelected to update these
@@ -206,6 +210,21 @@
         >
           <Maximize2 size={14} />
         </button>
+        {#if onRemove}
+          <!-- Backspace already removes a selected image — this toolbar only shows
+               while the node *is* selected — so this button is discoverability rather
+               than capability, and it is here because the other blocks now carry one
+               and a GM should not have to know which blocks answer to the keyboard. -->
+          <button
+            class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-destructive
+                   transition-colors"
+            aria-label="Remove image"
+            onmousedown={(e) => e.preventDefault()}
+            onclick={onRemove}
+          >
+            <Trash2 size={14} />
+          </button>
+        {/if}
       </div>
     {/if}
 

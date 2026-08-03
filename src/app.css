@@ -545,6 +545,21 @@
   margin-bottom: 0;
 }
 
+/* A callout's body is a query container too, under the same name as the prose column.
+   A panel inside a callout is inside a narrower column than the note's — the box has
+   its own padding and border — and the float's threshold is a statement about the
+   column a panel actually sits in (see the derivation below). Without this the nearest
+   named container is `.tiptap`, so a panel in a body of ~400px would float at 300px
+   and leave the body's prose four words wide, spilling past the callout's own edge.
+
+   The name is reused rather than added to, so the float's one query keeps reading as
+   "the column this block is in" and the nearest container wins — no second query, and
+   no second threshold to keep in step with the derivation. */
+.tiptap .callout-body {
+  container-type: inline-size;
+  container-name: note-column;
+}
+
 /* ── Infobox presentation ──────────────────────────────────────── */
 /*
   The wiki posture (#176): the panel floats beside the prose where there is room for
@@ -594,6 +609,39 @@
    unsplit is precisely when it floats. */
 .tiptap .infobox-thumb {
   max-width: calc(var(--infobox-float-width) - 2 * 0.75rem);
+}
+
+/* NOTHING OVERLAPS A PANEL. Everything in a note that draws its own box starts below a
+   floated Infobox rather than beside it (#175 review).
+
+   The rule is stated as *drawing a box* rather than as a list of blocks, because that is
+   the property that decides it. Text beside a float does not overlap it — the line boxes
+   shrink, which is the whole point of floating the panel — but a box with a background,
+   a border or padding of its own keeps its full width, slides under the float, and is
+   drawn over. So the members are: every Note Block except the panel itself, and the code
+   block, whose content does not wrap either.
+
+   The two headings-and-`hr` rules elsewhere in this file are the same decision reached
+   twice before this one; they use `clear: both` because a heading or a section rule
+   should also clear a left float if one is ever added.
+
+   For a Note Block the overlap was worse than cosmetic: the panel landed over the
+   block's right-hand gutter, which is exactly where every hover-revealed control sits,
+   so it took the controls away.
+
+   `clear: right` rather than a shrunken width: a squeezed statblock is the other way
+   this goes wrong and it is the worse one, because the block stays reachable and becomes
+   unreadable.
+
+   Nothing else in the schema needs a member here, and that is checked rather than
+   assumed: this editor has no table and no task list (`note-extensions.ts` runs
+   StarterKit with its blockquote off and adds no others), and a blockquote — the one
+   remaining bordered box — is always inside a `[data-note-block="callout"]` wrapper,
+   because the callout's node view is mounted for every quote. A schema addition that
+   draws a box belongs in this selector. */
+.tiptap [data-note-block]:not([data-infobox-block]),
+.tiptap pre {
+  clear: right;
 }
 
 .tiptap hr {

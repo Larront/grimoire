@@ -5,10 +5,12 @@
     label = "",
     count = 0,
     onUpdate,
+    onRemove,
   }: {
     label?: string;
     count?: number;
     onUpdate?: (partial: Record<string, unknown>) => void;
+    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -29,3 +31,5 @@
 
 <p data-fixture-label data-selected={_selected}>{_label}/{_count}</p>
 <button type="button" onclick={() => onUpdate?.({ count: _count + 1 })}>bump</button>
+<!-- Last, so a test reaching for "the fixture's button" still finds `bump`. -->
+<button type="button" data-fixture-remove onclick={() => onRemove?.()}>remove</button>

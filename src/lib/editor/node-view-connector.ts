@@ -44,6 +44,17 @@ export interface BlockNodeViewContext {
   /** Merges `partial` into the node's current attributes and writes it back. */
   updateAttributes: (partial: BlockAttrs) => void;
   /**
+   * Removes the node from the document — the one gesture a sealed block cannot get
+   * from ProseMirror.
+   *
+   * A sealed block's `stopEvent` holds every click, which is what lets its fields
+   * work at all and also means the node is never *selected*: there is nothing for
+   * Backspace to delete, so a block with no control of its own could be emptied but
+   * never removed (#175 review). Undo takes it back in one step, like every other
+   * mutation through this connector, so no block needs to confirm.
+   */
+  deleteNode: () => void;
+  /**
    * Where this node currently sits, or undefined once it is gone — ProseMirror's own
    * `getPos`, handed on unchanged.
    *
@@ -184,6 +195,23 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
           tr.setNodeMarkup(pos, undefined, { ...attrs, ...partial });
           return true;
         });
+      },
+      deleteNode() {
+        const pos = getPos();
+        if (pos == null) return;
+        editor.commands.command(({ tr }) => {
+          // The same guard `updateAttributes` uses, for the same reason and with more
+          // at stake: a stale position holding some other node would delete it.
+          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          if (atPos && atPos.type !== current.type) return false;
+          closeHistory(tr);
+          tr.delete(pos, pos + (atPos ?? current).nodeSize);
+          return true;
+        });
+        // The caret has nowhere to be once the block is gone, and an unfocused editor
+        // sends Ctrl+Z somewhere else — so the GM's first instinct after a mis-click
+        // would do nothing.
+        editor.commands.focus();
       },
     };
 
