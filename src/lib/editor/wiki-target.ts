@@ -12,6 +12,15 @@ export function stripWikiFragment(target: string): string {
   return (hash >= 0 ? target.slice(0, hash) : target).trim();
 }
 
+// The `#heading` / `#^block` fragment on a raw link target, without its `#`, or
+// "" when the target carries none. The inverse of `stripWikiFragment`, for the
+// one caller that wants the part resolution throws away: a hover preview showing
+// the section a link points at rather than the top of the note (#168).
+export function wikiFragment(target: string): string {
+  const hash = target.indexOf("#");
+  return hash >= 0 ? target.slice(hash + 1).trim() : "";
+}
+
 // The display title a path falls back to when no explicit alias is given:
 // the last path segment with any .md extension and #fragment stripped.
 export function wikiStem(path: string): string {
