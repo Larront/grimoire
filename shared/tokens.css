@@ -1,0 +1,140 @@
+/* ── Grimoire Design Tokens ───────────────────────────────────────────────
+   THE SINGLE SOURCE OF TRUTH FOR COLOUR, TYPE, AND RADIUS.
+
+   Imported by both products: the desktop app (src/app.css) and the website
+   (site/src/styles/global.css). The app's vocabulary is canonical — the site
+   conforms to it rather than the other way round, because the app is the
+   thing the site is advertising and a website that drifts from the product
+   it depicts is worse than one that never matched.
+
+   Only what BOTH products need lives here. Anything app-only — shadcn
+   aliases, the density scale, accent presets, editor prose — stays in
+   src/app.css. Anything site-only — scroll reveals, the CTA ember — stays in
+   site/src/styles/global.css. If you are tempted to add something here for
+   one consumer, it belongs in that consumer's file.
+
+   Token families:
+     background  — surface hierarchy
+     foreground  — text hierarchy
+     primary     — accent / interactive states
+     error       — destructive feedback
+     success     — confirmatory feedback
+
+   The fonts are imported HERE, not by each consumer, and that is deliberate.
+   These @fontsource packages register the families as "Nunito Variable" /
+   "JetBrains Mono Variable" — the *Variable* suffix is part of the family
+   name, so a consumer that installs the non-variable `@fontsource/nunito`
+   instead declares a family nothing has registered and silently falls back
+   to a system font. Binding the @import and the --font-* token in one file
+   makes that class of mismatch impossible. (The site did exactly this before
+   it moved into the monorepo.)
+
+   The app additionally imports the italic subsets it needs; the site does
+   not use them and should not pay for them.
+*/
+
+@import "@fontsource-variable/nunito/index.css";
+@import "@fontsource/metamorphous/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+:root {
+  /* Background family */
+  --background: #1f1f1f;
+  --background-subtle: #181818;
+  --background-elevated: #262626;
+  --background-border: rgba(255, 255, 255, 0.08);
+
+  /* Foreground family */
+  --foreground: #f0ece8;
+  --foreground-muted: #a39e99;
+  --foreground-faint: #6b6460;
+
+  /* Primary family — default: Crimson preset */
+  --primary: #c2483d;
+  --primary-foreground: #f9f1f0;
+  --primary-subtle: rgba(194, 72, 61, 0.12);
+  --primary-muted: rgba(194, 72, 61, 0.24);
+
+  /* Semantic feedback */
+  --error: #d4645a;
+  --success: #6ab187;
+
+  /* Hover overlays */
+  --hover-overlay: rgba(255, 255, 255, 0.04);
+
+  /* Border radius scale */
+  --radius-structural: 6px;
+  --radius-elevated: 8px;
+  --radius-pill: 100px;
+}
+
+/* Light mode values. In the app these are applied by mode-watcher via the
+   .light class; the site is dark-only today and simply never sets it. They
+   live here anyway so the token set stays complete — a site light mode
+   should be a class toggle, not a second palette. */
+.light {
+  --background: #faf8f5;
+  --background-subtle: #f2ede8;
+  --background-elevated: #ffffff;
+  --background-border: rgba(31, 26, 29, 0.1);
+
+  --foreground: #1a1614;
+  --foreground-muted: #6b6460;
+  --foreground-faint: #a39e99;
+
+  --primary: #a83228;
+  --primary-foreground: #ffffff;
+  --primary-subtle: rgba(168, 50, 40, 0.1);
+  --primary-muted: rgba(168, 50, 40, 0.2);
+
+  --error: #a02020;
+  --success: #2e6e4a;
+
+  --hover-overlay: rgba(31, 26, 29, 0.05);
+}
+
+/* ── Tailwind theme bridge ────────────────────────────────────────────────
+   Exposes the tokens above as utility classes (bg-background, text-primary,
+   font-heading, rounded-sm …). `inline` so the utilities resolve to the
+   var() and therefore re-resolve under .light rather than baking the dark
+   value in at build time. */
+
+@theme inline {
+  --font-sans: "Nunito Variable", sans-serif;
+  --font-heading: "Metamorphous", serif;
+  --font-mono: "JetBrains Mono Variable", monospace;
+
+  /* Surface */
+  --color-background: var(--background);
+  --color-background-subtle: var(--background-subtle);
+  --color-background-elevated: var(--background-elevated);
+  --color-background-border: var(--background-border);
+
+  /* Text */
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-faint: var(--foreground-faint);
+
+  /* Accent */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-muted: var(--primary-muted);
+
+  /* Feedback */
+  --color-error: var(--error);
+  --color-success: var(--success);
+
+  /* Interaction. The app reaches for var(--hover-overlay) directly in
+     component CSS; the site needs it as a `hover:bg-hover-overlay` utility,
+     which is why it is bridged here and was not before. */
+  --color-hover-overlay: var(--hover-overlay);
+
+  /* Radius */
+  --radius-sm: var(--radius-structural);
+  --radius-md: var(--radius-elevated);
+  --radius-lg: var(--radius-elevated);
+  --radius-xl: var(--radius-elevated);
+  --radius-2xl: var(--radius-pill);
+  --radius-full: var(--radius-pill);
+}

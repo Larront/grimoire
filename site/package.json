@@ -1,0 +1,32 @@
+{
+  "name": "grimoire-site",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Product website for Grimoire — a local-first desktop app for tabletop RPG worldbuilders.",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/nunito": "^5.3.0",
+    "@fontsource/metamorphous": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "astro": "^7.1.6",
+    "cookie": "^2.0.1",
+    "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/node": "^22.10.2",
+    "typescript": "~5.6.2"
+  }
+}

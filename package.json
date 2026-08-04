@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "description": "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes.",
   "type": "module",
+  "workspaces": [
+    "site"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -12,7 +15,10 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
-    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml"
+    "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml",
+    "site:dev": "bun run --cwd site dev",
+    "site:build": "bun run --cwd site build",
+    "site:check": "bun run --cwd site check"
   },
   "license": "GPL-3.0-or-later",
   "dependencies": {
@@ -56,6 +62,7 @@
     "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
+    "@types/node": "^22.10.2",
     "@types/cytoscape": "^3.31.0",
     "@types/leaflet": "^1.9.21",
     "jsdom": "^29.1.1",

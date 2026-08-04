@@ -2,7 +2,10 @@ import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 
-// @ts-expect-error process is a nodejs global
+// `process` is typed via @types/node, a root devDependency. It is declared
+// there rather than relied on incidentally: the site workspace also pulls it
+// in, and an app typecheck that passes only because of a *sibling package's*
+// devDependency is one `bun remove` in site/ away from breaking here.
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/

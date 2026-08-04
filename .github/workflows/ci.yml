@@ -1,9 +1,23 @@
 name: ci
 
+# The desktop app. The website lives in site/ and is built and deployed by
+# pages.yml — it shares no toolchain with this job, so a change to the landing
+# page copy has no business installing webkit2gtk and compiling Rust. The
+# exception is shared/, which both products consume: a token change must be
+# checked here too.
+#
+# (The two path lists below are duplicated rather than shared with a YAML
+# anchor because the GitHub Actions workflow parser does not support anchors.)
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "site/**"
+      - ".github/workflows/pages.yml"
   pull_request:
+    paths-ignore:
+      - "site/**"
+      - ".github/workflows/pages.yml"
 
 jobs:
   check:
