@@ -1,64 +1,35 @@
-/* Self-hosted fonts (bundled by Vite, served from 'self'). The app is
-   local-first and the packaged CSP blocks fonts.googleapis.com/gstatic.com,
-   so a Google Fonts @import silently fails on a fresh install (#141). These
-   @fontsource packages register the families as "Nunito Variable" /
-   "JetBrains Mono Variable" — referenced under those names below. */
-@import "@fontsource-variable/nunito/index.css";
-@import "@fontsource-variable/nunito/wght-italic.css";
-@import "@fontsource/metamorphous/index.css";
-@import "@fontsource-variable/jetbrains-mono/index.css";
-@import "@fontsource-variable/jetbrains-mono/wght-italic.css";
-
 @import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
 
+/* The design tokens — colour, type, radius — shared with the website in
+   site/. Also imports the roman font faces, self-hosted and bundled by Vite
+   so they are served from 'self': the app is local-first and the packaged
+   CSP blocks fonts.googleapis.com/gstatic.com, so a Google Fonts @import
+   silently fails on a fresh install (#141). See shared/tokens.css for why
+   the @import and the --font-* token are deliberately bound together. */
+@import "../shared/tokens.css";
+
+/* Italic subsets, app-only: the editor sets italics (blockquotes, emphasis)
+   and the website has no prose that needs them. */
+@import "@fontsource-variable/nunito/wght-italic.css";
+@import "@fontsource-variable/jetbrains-mono/wght-italic.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ── Grimoire Design Tokens ──────────────────────────────────── */
 /*
-  Default is dark. Light mode is opt-in via the .light class
-  applied by mode-watcher when the user selects light theme.
+  The token values themselves live in shared/tokens.css, imported above and
+  shared with the website. Default is dark; light mode is opt-in via the
+  .light class applied by mode-watcher when the user selects light theme.
 
-  Token families:
-    background  — surface hierarchy
-    foreground  — text hierarchy
-    primary     — accent / interactive states  (set per accent preset)
-    error       — destructive feedback
-    success     — confirmatory feedback
+  What remains below is app-only: the shadcn compatibility aliases, the
+  accent presets, and the density scale. The website has no shadcn
+  components, no accent picker, and no density setting.
 */
 
 :root {
-  /* Background family */
-  --background: #1f1f1f;
-  --background-subtle: #181818;
-  --background-elevated: #262626;
-  --background-border: rgba(255, 255, 255, 0.08);
-
-  /* Foreground family */
-  --foreground: #f0ece8;
-  --foreground-muted: #a39e99;
-  --foreground-faint: #6b6460;
-
-  /* Primary family — default: Crimson preset */
-  --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
-  --primary-subtle: rgba(194, 72, 61, 0.12);
-  --primary-muted: rgba(194, 72, 61, 0.24);
-
-  /* Semantic feedback */
-  --error: #d4645a;
-  --success: #6ab187;
-
-  /* Hover overlays */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
-
-  /* Border radius scale */
-  --radius-structural: 6px;
-  --radius-elevated: 8px;
-  --radius-pill: 100px;
-
   /* Shadcn compatibility aliases */
   --background-card: var(--background-elevated);
   --foreground-card: var(--foreground);
@@ -85,29 +56,9 @@
   --sidebar-ring: var(--primary);
 }
 
-/* Light mode values applied by mode-watcher via .light class */
-.light {
-  --background: #faf8f5;
-  --background-subtle: #f2ede8;
-  --background-elevated: #ffffff;
-  --background-border: rgba(31, 26, 29, 0.1);
-
-  --foreground: #1a1614;
-  --foreground-muted: #6b6460;
-  --foreground-faint: #a39e99;
-
-  --primary: #a83228;
-  --primary-foreground: #ffffff;
-  --primary-subtle: rgba(168, 50, 40, 0.1);
-  --primary-muted: rgba(168, 50, 40, 0.2);
-
-  --error: #a02020;
-  --success: #2e6e4a;
-
-  --hover-overlay: rgba(31, 26, 29, 0.05);
-
-  /* Shadcn aliases inherit from updated custom props */
-}
+/* Light mode values live in shared/tokens.css under the same .light class.
+   The shadcn aliases above are defined in terms of those custom properties,
+   so they re-resolve on theme change without being restated here. */
 
 /* ── Accent Presets ───────────────────────────────────────────── */
 /* Applied as a class on <html>; dark mode overrides via inline style */
@@ -218,34 +169,12 @@
   --tab-bar-h: 32px;
 }
 
-/* ── Tailwind theme bridge ────────────────────────────────────── */
+/* ── Tailwind theme bridge ──────────────────────────────────────
+   The colour, font and radius utilities are bridged in shared/tokens.css.
+   This block adds only the shadcn aliases, which exist to satisfy the
+   vendored component library and are not part of Grimoire's vocabulary. */
 
 @theme inline {
-  --font-sans: "Nunito Variable", sans-serif;
-  --font-heading: "Metamorphous", serif;
-  --font-mono: "JetBrains Mono Variable", monospace;
-
-  /* Surface */
-  --color-background: var(--background);
-  --color-background-subtle: var(--background-subtle);
-  --color-background-elevated: var(--background-elevated);
-  --color-background-border: var(--background-border);
-
-  /* Text */
-  --color-foreground: var(--foreground);
-  --color-foreground-muted: var(--foreground-muted);
-  --color-foreground-faint: var(--foreground-faint);
-
-  /* Accent */
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary-subtle: var(--primary-subtle);
-  --color-primary-muted: var(--primary-muted);
-
-  /* Feedback */
-  --color-error: var(--error);
-  --color-success: var(--success);
-
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);

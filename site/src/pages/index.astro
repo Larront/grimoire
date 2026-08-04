@@ -1,0 +1,387 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { withBase } from "../lib/base";
+import { getLatestRelease } from "../lib/releases";
+
+const GITHUB = "https://github.com/larront/grimoire";
+const RELEASES = `${GITHUB}/releases/latest`;
+
+const { version, publishedAt, platforms, resolved } = await getLatestRelease();
+
+const releaseDate = publishedAt
+  ? new Date(publishedAt).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  : null;
+
+// Shared focus-visible treatment: an accent ring offset against the dark
+// ground, per DESIGN.md's requirement for a visible keyboard focus state.
+const focusRing =
+  "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background-subtle focus-visible:outline-none";
+
+// Marquee features (Maps, Audio) get bespoke showcase blocks in the markup.
+// Notes and the Ledger are the foundation underneath — a compact supporting pair.
+const pillars = [
+  {
+    num: "03",
+    label: "NOTES",
+    title: "Plain Markdown, never locked in",
+    body: "A distraction-free editor for lore, NPCs, and session logs. Every note is a plain .md file in a folder you own — wiki-links resolve by name, backlinks track who mentions whom, and unwritten pages appear as stubs waiting to be filled.",
+  },
+  {
+    num: "04",
+    label: "LEDGER",
+    title: "Local-first, portable, yours",
+    body: "A campaign is a Ledger: one portable folder on your disk. Move it, sync it, back it up — nothing breaks. Full-text search across everything, no account, no cloud, no subscription.",
+  },
+];
+---
+
+<Layout
+  title="Grimoire — a spellbook of record for tabletop RPG worldbuilders"
+  description="Grimoire is a local-first desktop app for Game Masters: Markdown lore notes, interactive maps, and ambient audio scenes in one portable ledger. Free and open source."
+  ogDescription="A spellbook of record for tabletop RPG worldbuilders. Notes, maps, and audio scenes in one local-first desktop app."
+>
+  <div class="min-h-screen bg-background-subtle text-foreground">
+    <!-- Nav -->
+    <header
+      class="sticky top-0 z-10 border-b border-background-border bg-background-subtle/95 backdrop-blur-sm"
+    >
+      <nav class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <a href={withBase("/")} class={`rounded-sm font-heading text-xl text-primary ${focusRing}`}
+          >Grimoire</a
+        >
+        <div class="flex items-center gap-1 text-sm font-medium">
+          <a
+            href="#features"
+            class={`hidden rounded-sm px-3 py-1.5 text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground sm:block ${focusRing}`}
+            >Features</a
+          >
+          <a
+            href={GITHUB}
+            rel="noopener"
+            class={`rounded-sm px-3 py-1.5 text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground ${focusRing}`}
+            >GitHub</a
+          >
+          <a
+            href="#download"
+            class={`ml-2 rounded-sm bg-primary px-4 py-1.5 text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 ${focusRing}`}
+            >Download</a
+          >
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Hero -->
+      <section class="mx-auto max-w-6xl px-6 pt-20 pb-16 sm:pt-28">
+        <p
+          class="reveal-hero font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase"
+          style="--i: 0"
+        >
+          Local-first · Open source · Windows / macOS / Linux
+        </p>
+        <h1
+          class="reveal-hero mt-6 max-w-3xl font-heading text-[clamp(2.25rem,5vw,3rem)] leading-[1.15] text-balance"
+          style="--i: 1"
+        >
+          A spellbook of record for the world you're building.
+        </h1>
+        <p
+          class="reveal-hero mt-6 max-w-xl text-lg leading-relaxed text-foreground-muted"
+          style="--i: 2"
+        >
+          Grimoire unifies lore notes, interactive maps, and ambient audio scenes into one local
+          ledger — a focused instrument for Game Masters, from session prep to the live table.
+        </p>
+        <div class="reveal-hero mt-10 flex flex-wrap items-center gap-3" style="--i: 3">
+          <a
+            href="#download"
+            class={`ember-cta rounded-sm bg-primary px-6 py-3 font-semibold text-primary-foreground ease-out hover:bg-primary/80 ${focusRing}`}
+            >Download Grimoire</a
+          >
+          <a
+            href={GITHUB}
+            rel="noopener"
+            class={`rounded-sm px-6 py-3 font-semibold text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground ${focusRing}`}
+            >View on GitHub</a
+          >
+        </div>
+        <p
+          class="reveal-hero mt-6 max-w-xl font-mono text-xs leading-relaxed text-foreground-muted"
+          style="--i: 4"
+        >
+          Free and GPL-3.0 —
+          <a
+            href={GITHUB}
+            rel="noopener"
+            class={`rounded-sm text-foreground underline decoration-background-border underline-offset-2 transition-colors duration-150 ease-out hover:decoration-primary ${focusRing}`}
+            >read every line on GitHub</a
+          >. No account, no cloud, no subscription; your notes stay plain Markdown in a folder you
+          own.
+        </p>
+      </section>
+
+      <!-- Screenshot -->
+      <section class="mx-auto max-w-6xl px-6 pb-24">
+        <figure class="reveal-scale" data-reveal>
+          <div
+            class="overflow-hidden rounded-md border border-background-border bg-background-elevated"
+          >
+            <img
+              src={withBase("/screenshot.png")}
+              alt="Grimoire showing a sample world: a lore note open in the editor beside a sidebar of characters, locations, sessions, and scenes"
+              class="block w-full"
+              width="3835"
+              height="2277"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+          <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
+            Your notes, your maps, your world — every byte a plain file in a folder you chose.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- Features -->
+      <section id="features" class="border-t border-background-border bg-background">
+        <div class="mx-auto max-w-6xl px-6 py-24">
+          <p class="font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase">
+            The instrument
+          </p>
+          <h2
+            class="mt-4 max-w-2xl font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug text-balance"
+          >
+            The tool disappears. The world remains.
+          </h2>
+          <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
+            During a live session the interface competes with your imagination — the moment it
+            demands attention, it has already lost. Everything in Grimoire is built to stay out of
+            the way.
+          </p>
+
+          <!-- 01 · Maps — the world you can read -->
+          <div
+            class="reveal mt-20 grid items-center gap-10 lg:mt-28 lg:grid-cols-2 lg:gap-16"
+            data-reveal
+          >
+            <div>
+              <p class="font-mono text-xs tracking-[0.15em] text-primary">01 · MAPS</p>
+              <h3
+                class="mt-3 max-w-md font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
+              >
+                The map isn't a picture of your world — it's another way to read it.
+              </h3>
+              <p class="mt-4 max-w-md leading-relaxed text-foreground-muted">
+                Drop pins for settlements, dungeons, and quests — each one bound to the location
+                note it marks, so a click on the map opens the lore behind it. Nest maps inside maps
+                and move from continent to crypt; the world stays coherent at every scale.
+              </p>
+              <ul
+                class="mt-6 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-foreground-muted"
+              >
+                <li>Pins linked to notes</li>
+                <li>Nested, continent to crypt</li>
+                <li>Categories &amp; journeys</li>
+              </ul>
+            </div>
+            <figure>
+              <div
+                class="aspect-[16/10] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+              >
+                <img
+                  src={withBase("/maps.png")}
+                  alt="A Grimoire world map with category pins for settlements, dungeons, and quests; one pin is selected, linked to its location note"
+                  class="block h-full w-full object-cover object-center"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
+                A pin selected on the Reach — linked straight to its location note.
+              </figcaption>
+            </figure>
+          </div>
+
+          <!-- 02 · Scenes — sound where the story is -->
+          <div class="reveal mt-20 lg:mt-28" data-reveal>
+            <div class="max-w-2xl">
+              <p class="font-mono text-xs tracking-[0.15em] text-primary">02 · SCENES</p>
+              <h3
+                class="mt-3 max-w-xl font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
+              >
+                Sound that lives where the story does.
+              </h3>
+              <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
+                Layer local files and Spotify into named scenes — a storm over the keep, a crowded
+                tavern, the last stand. Then place the sound where the moment lives: embedded in a
+                note, or pinned to a highlighted passage in a PDF. Start the soundtrack without
+                breaking the fiction or leaving the page.
+              </p>
+            </div>
+            <div class="mt-10 grid gap-8 sm:grid-cols-2">
+              <figure>
+                <div
+                  class="aspect-[4/3] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+                >
+                  <img
+                    src={withBase("/audio-note.png")}
+                    alt="A Grimoire note open in the editor with an ambient audio scene embedded inline in the Markdown"
+                    class="block h-full w-full object-cover object-top"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
+                  In a note — a scene sits inline with your prep.
+                </figcaption>
+              </figure>
+              <figure>
+                <div
+                  class="aspect-[4/3] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+                >
+                  <img
+                    src={withBase("/audio-pdf.png")}
+                    alt="A PDF open in Grimoire with a highlighted passage that has an ambient audio scene pinned to it"
+                    class="block h-full w-full object-cover object-top"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
+                  Over a PDF — pin a scene to any highlighted passage.
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <!-- Foundation: Notes + Ledger -->
+          <div class="mt-20 border-t border-background-border pt-14 lg:mt-28">
+            <div class="grid gap-x-16 gap-y-10 sm:grid-cols-2">
+              {
+                pillars.map((pillar, i) => (
+                  <article class="reveal" style={`--i: ${i}`} data-reveal>
+                    <p class="font-mono text-xs tracking-[0.15em] text-primary">
+                      {pillar.num} · {pillar.label}
+                    </p>
+                    <h3 class="mt-3 text-lg font-semibold">{pillar.title}</h3>
+                    <p class="mt-2 leading-relaxed text-foreground-muted">{pillar.body}</p>
+                  </article>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download -->
+      <section id="download" class="border-t border-background-border">
+        <div class="mx-auto max-w-6xl px-6 py-24">
+          <p class="font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase">
+            Free · GPL-3.0
+          </p>
+          <h2 class="mt-4 font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug">
+            Take up the ledger.
+          </h2>
+          <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
+            Download the latest build for your platform. On first launch, pick any folder to become
+            your Ledger — Grimoire keeps everything there, and only there. Uninstalling leaves your
+            files exactly where they are.
+          </p>
+          {
+            version && releaseDate && (
+              <p class="mt-3 font-mono text-xs text-foreground-muted">
+                Latest release {version} · {releaseDate}
+              </p>
+            )
+          }
+
+          <ul
+            class="mt-10 max-w-2xl divide-y divide-background-border border-y border-background-border"
+          >
+            {
+              platforms.map((platform, i) => (
+                <li
+                  class="reveal flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between"
+                  style={`--i: ${i}`}
+                  data-reveal
+                >
+                  <div class="flex flex-col gap-1">
+                    <span class="font-semibold">{platform.os}</span>
+                    <span class="font-mono text-xs text-foreground-muted">{platform.note}</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    {platform.assets.map((asset, j) => (
+                      <a
+                        href={asset.url}
+                        rel="noopener"
+                        aria-label={`Download Grimoire for ${platform.os} — ${asset.label} (${asset.detail})`}
+                        class={`group inline-flex items-center gap-2 rounded-sm px-3 py-2 text-sm font-semibold transition-colors duration-150 ease-out ${focusRing} ${
+                          j === 0
+                            ? "border border-background-border bg-background-elevated text-foreground hover:bg-hover-overlay"
+                            : "text-foreground-muted hover:bg-hover-overlay hover:text-foreground"
+                        }`}
+                      >
+                        <span>{asset.label}</span>
+                        <span class="font-mono text-xs text-foreground-muted">{asset.detail}</span>
+                        <span
+                          class="text-foreground-muted transition duration-150 ease-out group-hover:translate-y-0.5 group-hover:text-primary"
+                          aria-hidden="true"
+                        >
+                          {resolved ? "↓" : "↗"}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </li>
+              ))
+            }
+          </ul>
+
+          <p class="mt-6 max-w-2xl text-sm leading-relaxed text-foreground-muted">
+            Builds aren't code-signed yet, so on first launch your OS may warn about an unidentified
+            developer. It's safe to continue: on <span class="text-foreground">macOS</span>,
+            right-click the app and choose <span class="text-foreground">Open</span>; on
+            <span class="text-foreground">Windows</span>, choose
+            <span class="text-foreground">More info → Run anyway</span>. Prefer to verify first?
+            Every line is open source — read it on GitHub before you run it.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-background-border">
+      <div
+        class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-10 text-sm text-foreground-muted"
+      >
+        <p>
+          <span class="font-heading text-primary">Grimoire</span>
+          <span class="ml-3">© Aaron Lamont · GPL-3.0</span>
+        </p>
+        <div class="flex gap-6">
+          <a
+            href={GITHUB}
+            rel="noopener"
+            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
+            >GitHub</a
+          >
+          <a
+            href={`${GITHUB}/issues`}
+            rel="noopener"
+            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
+            >Report a bug</a
+          >
+          <a
+            href={RELEASES}
+            rel="noopener"
+            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
+            >Releases</a
+          >
+        </div>
+      </div>
+    </footer>
+  </div>
+</Layout>

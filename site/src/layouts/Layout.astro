@@ -1,0 +1,106 @@
+---
+import "../styles/global.css";
+import { withBase } from "../lib/base";
+
+interface Props {
+  title: string;
+  description: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+}
+
+const {
+  title,
+  description,
+  ogTitle = "Grimoire",
+  ogDescription = description,
+  ogImage = "/screenshot.png",
+} = Astro.props;
+
+// Astro.site is set in astro.config.mjs, so og:image can be the absolute URL
+// that scrapers require — a root-relative path is not resolvable by Facebook
+// or Discord fetching the page out of band.
+const ogImageUrl = new URL(withBase(ogImage), Astro.site).href;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+
+    {/*
+      The app's own icon, copied from src-tauri/icons/ — the site and the
+      product it advertises should not wear different faces. Three sizes
+      because browsers pick badly when given one: 32 for the tab strip, 128
+      for the bookmark bar, 512 for an iOS home-screen tile, which would
+      otherwise upscale the 128 and look soft.
+
+      These are copies rather than shared imports because public/ needs real
+      files on disk. If the app icon is ever redrawn, re-copy all three.
+    */}
+    <link rel="icon" type="image/png" sizes="32x32" href={withBase("/favicon-32.png")} />
+    <link rel="icon" type="image/png" sizes="128x128" href={withBase("/favicon.png")} />
+    <link rel="apple-touch-icon" sizes="512x512" href={withBase("/icon-512.png")} />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#181818" />
+    <link rel="canonical" href={canonical} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDescription} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script is:inline>
+      // Enable motion only when JS runs AND the user hasn't asked to reduce it.
+      // Set before first paint so reveal start-states apply without a flash.
+      // Without this class, all content renders fully visible (no-JS and
+      // reduced-motion safe) — see the motion section of global.css.
+      try {
+        if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          document.documentElement.classList.add("js-motion");
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <slot />
+
+    <script>
+      // Reveal-on-scroll: adds `.is-visible` once, when the element enters view.
+      // Only arms when motion is enabled; otherwise the content is already
+      // visible and this is a no-op, so nothing can ship blank.
+      //
+      // This was a Svelte `use:` action before the port. It is a plain module
+      // script now because that is all it ever needed to be — there is no
+      // component state involved, so making the page an interactive island to
+      // carry it would ship a framework runtime to run six lines of DOM API.
+      if (document.documentElement.classList.contains("js-motion")) {
+        const targets = document.querySelectorAll<HTMLElement>("[data-reveal]");
+
+        if (typeof IntersectionObserver === "undefined") {
+          targets.forEach((el) => el.classList.add("is-visible"));
+        } else {
+          const io = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (entry.isIntersecting) {
+                  entry.target.classList.add("is-visible");
+                  io.unobserve(entry.target);
+                }
+              }
+            },
+            { threshold: 0.15, rootMargin: "0px 0px -10% 0px" },
+          );
+          targets.forEach((el) => io.observe(el));
+        }
+      }
+    </script>
+  </body>
+</html>
