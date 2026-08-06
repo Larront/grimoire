@@ -69,7 +69,7 @@ import {
   createBlockNodeView,
   type BlockView,
 } from "$lib/editor/node-view-connector";
-import { fenceInfo } from "$lib/editor/fence-claim";
+import { fenceInfoFor, fenceParams } from "$lib/editor/fence-claim";
 import { jsonListAttr } from "$lib/editor/block-attrs";
 import {
   blankLabelledRow,
@@ -100,6 +100,27 @@ export interface StatblockSection {
   entries: StatblockEntry[];
 }
 
+/**
+ * How wide the card is drawn. The one piece of a statblock that is presentation rather
+ * than content, and it serializes anyway: a GM who narrows the three creatures in an
+ * encounter so they sit side by side has arranged their prep, and prep that resets when
+ * the note is reopened was not arranged. Collapse and the structure mode stay view-only
+ * for the opposite reason — they are how this pane happens to be showing the block right
+ * now, not a decision about it.
+ */
+export type StatblockWidth = "narrow" | "comfortable";
+
+export const DEFAULT_STATBLOCK_WIDTH: StatblockWidth = "comfortable";
+
+const STATBLOCK_WIDTHS: readonly string[] = ["narrow", "comfortable"];
+
+/** A width off the fence or off the DOM, or the default for anything unrecognised. */
+export function asStatblockWidth(raw: unknown): StatblockWidth {
+  return STATBLOCK_WIDTHS.includes(raw as string)
+    ? (raw as StatblockWidth)
+    : DEFAULT_STATBLOCK_WIDTH;
+}
+
 export interface Statblock {
   /** The creature's name, "" when the GM wrote none. */
   name: string;
@@ -107,6 +128,8 @@ export interface Statblock {
   rows: LabelledRow[];
   /** The sections below the header, in the GM's order. */
   sections: StatblockSection[];
+  /** How wide the card is drawn. Carried on the fence, not in the body. */
+  width: StatblockWidth;
 }
 
 /** A freshly inserted statblock opens its one blank row, so its view must let it. */
@@ -119,7 +142,12 @@ interface StatblockBlockViewExports extends BlockView {
  * is somewhere to type. The empty row is not content — it serializes to nothing.
  */
 export function blankStatblock(): Statblock {
-  return { name: "", rows: [blankLabelledRow()], sections: [] };
+  return {
+    name: "",
+    rows: [blankLabelledRow()],
+    sections: [],
+    width: DEFAULT_STATBLOCK_WIDTH,
+  };
 }
 
 /** An entry an insert-between control adds to a section. */
@@ -259,7 +287,12 @@ export function parseStatblockBody(body: string): Statblock {
     flush();
   }
 
-  return { name: name ?? "", rows, sections };
+  return {
+    name: name ?? "",
+    rows,
+    sections,
+    width: DEFAULT_STATBLOCK_WIDTH,
+  };
 }
 
 /**
@@ -337,7 +370,20 @@ export function serializeStatblock(block: Statblock): string {
     });
   }
 
-  return ["```statblock", ...lines, "```"].join("\n");
+  // The width rides on the info string rather than in the body, because the body is the
+  // GM's own line-oriented text and a `width:` line in it would be indistinguishable
+  // from a header row a GM typed about a creature's width. Written only when it is not
+  // the default, so every fence already on disk re-emits byte-identically.
+  // Normalised, not read raw: a caller holding a block from before width existed passes
+  // `undefined`, and comparing that against the default would write `width=undefined`
+  // into the GM's file. Anything unrecognised is the default, and the default is omitted.
+  const width = asStatblockWidth(block.width);
+  const info = fenceInfoFor(
+    "statblock",
+    width === DEFAULT_STATBLOCK_WIDTH ? {} : { width },
+  );
+
+  return ["```" + info, ...lines, "```"].join("\n");
 }
 
 // ─── Extension ────────────────────────────────────────────────────────────────
@@ -364,6 +410,10 @@ export const StatblockBlock = Node.create({
         default: [],
         parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.sections),
       },
+      width: {
+        default: DEFAULT_STATBLOCK_WIDTH,
+        parseHTML: (el) => asStatblockWidth((el as HTMLElement).dataset.width),
+      },
     };
   },
 
@@ -381,6 +431,7 @@ export const StatblockBlock = Node.create({
           "data-sections": encodeURIComponent(
             JSON.stringify(node.attrs.sections),
           ),
+          "data-width": node.attrs.width,
         },
         HTMLAttributes,
       ),
@@ -390,13 +441,21 @@ export const StatblockBlock = Node.create({
   // Statblock's declaration to the markdown reader (ADR-0016 §3): a fenced code token
   // whose language is `statblock` is one of these, at any nesting depth — inside the
   // `> [!encounter] The Ambush` a GM groups a fight with as readily as at column zero.
-  // Anything else is declined with `[]` and stays whatever the reader makes of it.
+  // Anything else is declined with `[]` and stays whatever the reader makes of it,
+  // including a `statblock` fence carrying a parameter this version cannot write back.
   markdownTokenName: "code",
 
-  parseMarkdown: (token) =>
-    fenceInfo(token) === "statblock"
-      ? { type: "statblockBlock", attrs: parseStatblockBody(token.text ?? "") }
-      : [],
+  parseMarkdown: (token) => {
+    const params = fenceParams(token, "statblock", ["width"]);
+    if (!params) return [];
+    return {
+      type: "statblockBlock",
+      attrs: {
+        ...parseStatblockBody(token.text ?? ""),
+        width: asStatblockWidth(params.width),
+      },
+    };
+  },
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: { attrs: Statblock }) {
@@ -407,13 +466,19 @@ export const StatblockBlock = Node.create({
     return createBlockNodeView<StatblockBlockViewExports>({
       component: StatblockBlockView,
       domAttrs: { "data-note-block": "statblock" },
-      defaults: { name: "", rows: [], sections: [] },
+      defaults: {
+        name: "",
+        rows: [],
+        sections: [],
+        width: DEFAULT_STATBLOCK_WIDTH,
+      },
       props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (block: Statblock) =>
           updateAttributes({
             name: block.name,
             rows: block.rows,
             sections: block.sections,
+            width: block.width,
           }),
         onRemove: deleteNode,
       }),
@@ -423,6 +488,7 @@ export const StatblockBlock = Node.create({
           name: attrs.name as string,
           rows: attrs.rows as LabelledRow[],
           sections: attrs.sections as StatblockSection[],
+          width: asStatblockWidth(attrs.width),
         };
         if (isUnwrittenStatblock(block)) view.focusRow(0);
       },

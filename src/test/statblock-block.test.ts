@@ -12,10 +12,12 @@ import {
   serializeStatblock,
   blankStatblock,
   entryBodyText,
+  DEFAULT_STATBLOCK_WIDTH,
   type Statblock,
 } from "$lib/editor/statblock-block";
 import { noteExtensions } from "$lib/editor/note-extensions";
 import { filterCommands } from "$lib/editor/slash-command";
+import { note, saved } from "./fixtures/note-editor";
 
 /** The body of a fence, as the markdown reader hands it over. */
 function body(...lines: string[]): string {
@@ -24,7 +26,13 @@ function body(...lines: string[]): string {
 
 /** A statblock record, with the parts a case is not about left at their empty values. */
 function record(partial: Partial<Statblock>): Statblock {
-  return { name: "", rows: [], sections: [], ...partial };
+  return {
+    name: "",
+    rows: [],
+    sections: [],
+    width: DEFAULT_STATBLOCK_WIDTH,
+    ...partial,
+  };
 }
 
 /** The body inside a serialized fence — what the markdown reader hands back. */
@@ -352,6 +360,75 @@ describe("serializeStatblock", () => {
         }),
       ),
     ).toBe(body("```statblock", "HP: 120/135", "Conditions: [x] Prone [ ] Charmed", "```"));
+  });
+});
+
+// ─── Width ────────────────────────────────────────────────────────────────────
+//
+// The one part of a statblock that is presentation and serializes anyway, because it is
+// how the GM arranged an encounter. It rides on the info string, and the info string is
+// where ADR-0016's byte-identity rule is strictest: a fence this version cannot write
+// back is declined rather than claimed and quietly rewritten.
+
+describe("width on the fence", () => {
+  it("writes nothing for the default, so every fence already on disk is untouched", () => {
+    expect(serializeStatblock(record({ width: "comfortable" }))).toBe("```statblock\n```");
+  });
+
+  it("writes the width when it is not the default", () => {
+    expect(serializeStatblock(record({ width: "narrow" }))).toBe(
+      "```statblock width=narrow\n```",
+    );
+  });
+
+  it("writes the default for a block from before width existed", () => {
+    // A caller holding an old record passes `undefined`. Comparing that against the
+    // default rather than normalising it wrote `width=undefined` into the GM's file.
+    const legacy = { name: "", rows: [], sections: [] } as unknown as Statblock;
+    expect(serializeStatblock(legacy)).toBe("```statblock\n```");
+  });
+
+  it("round-trips a narrowed block through the editor byte for byte", () => {
+    const fence = body("```statblock width=narrow", "# The Lurker", "HP: 68/68", "```");
+    expect(saved(note(fence))).toBe(fence);
+  });
+
+  it("reads a narrowed fence as a narrow block", () => {
+    const editor = note(body("```statblock width=narrow", "HP: 5/5", "```"));
+    expect(editor.state.doc.firstChild!.attrs.width).toBe("narrow");
+  });
+
+  it("reads a fence with no width as the default", () => {
+    const editor = note(body("```statblock", "HP: 5/5", "```"));
+    expect(editor.state.doc.firstChild!.attrs.width).toBe("comfortable");
+  });
+
+  it("reads an unknown width as the default rather than refusing the block", () => {
+    // The value is ours to interpret; only the *grammar* decides the claim. A hand-typed
+    // `width=huge` is a statblock whose width we do not know, not a code block.
+    const editor = note(body("```statblock width=huge", "HP: 5/5", "```"));
+    expect(editor.state.doc.firstChild!.type.name).toBe("statblockBlock");
+    expect(editor.state.doc.firstChild!.attrs.width).toBe("comfortable");
+  });
+
+  it("declines a fence carrying a parameter it could not write back", () => {
+    // Unchanged behaviour, and the reason `fenceInfo` was strict to begin with: nothing
+    // here can re-emit `{foo}`, so claiming it would delete it on the next autosave.
+    const fence = body("```statblock {foo}", "HP: 5/5", "```");
+    expect(note(fence).state.doc.firstChild!.type.name).not.toBe("statblockBlock");
+    expect(saved(note(fence))).toBe(fence);
+  });
+
+  it("declines a fence carrying an unknown key, and keeps its bytes", () => {
+    const fence = body("```statblock colour=red", "HP: 5/5", "```");
+    expect(note(fence).state.doc.firstChild!.type.name).not.toBe("statblockBlock");
+    expect(saved(note(fence))).toBe(fence);
+  });
+
+  it("declines the same key twice, since one of the two would be lost", () => {
+    const fence = body("```statblock width=narrow width=comfortable", "HP: 5/5", "```");
+    expect(note(fence).state.doc.firstChild!.type.name).not.toBe("statblockBlock");
+    expect(saved(note(fence))).toBe(fence);
   });
 });
 

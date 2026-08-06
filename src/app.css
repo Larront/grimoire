@@ -139,6 +139,29 @@
   scroll-behavior: auto !important;
 }
 
+/* ── Statblock widths ─────────────────────────────────────────── */
+/*
+  The two widths a GM can put a statblock at. They live here rather than in the block
+  because two different files need the same number: the card caps itself at its width,
+  and the callout that tiles a fight sizes each column to it. If those two ever disagree
+  the tiling silently mis-sizes, so there is one of each number.
+
+  Narrow is the TILING width, and the number is a derivation rather than a taste. Two of
+  them plus the gap between have to fit the body of a callout in a note pane — a pane that
+  has already given up the icon rail, the sidebar and its own padding — so the ceiling is
+  about (53rem - 1rem) / 2. 24rem sits under that with room for a narrower pane, and it is
+  comfortably below the 34rem at which the card folds its own two columns, which is the
+  other thing a tiled creature must do: read as one column, so it can sit beside another.
+
+  Sizing narrow to the fold threshold instead (34rem) is the mistake this replaces. It
+  folded correctly and never once tiled: two of them are 68rem, wider than any pane this
+  app has, so every fight wrapped to one creature per row.
+*/
+:root {
+  --statblock-narrow: 24rem;
+  --statblock-comfortable: 46rem;
+}
+
 /* ── Density System ───────────────────────────────────────────── */
 
 :root,
@@ -487,6 +510,77 @@
 .tiptap .callout-body {
   container-type: inline-size;
   container-name: note-column;
+}
+
+/* Tiling, and it is the encounter's whole argument for existing. A fight is several
+   creatures the GM reads *at once* — initiative goes around the table, not down a page —
+   so narrowed statblocks inside a callout sit side by side and wrap when the row runs
+   out. Nothing declares it: a statblock the GM narrowed is narrow, and two narrow ones
+   in a wide box already fit beside each other.
+
+   Three things about the selector, each of them load bearing:
+
+   `> *` because the body is ProseMirror's content hole and the blocks are its
+   grandchildren — one wrapper element sits between, the same one the trailing-margin
+   rule above reaches through. Flexing the body itself does nothing at all: it has
+   exactly one child.
+
+   `:has(… ~ …)` so this engages only where a *second* statblock exists. A flex container
+   stops its children's margins collapsing, so applying it unconditionally would retune
+   the vertical rhythm of every callout in every note already written, to tile a row of
+   one. Two blocks are the first point at which there is anything to tile.
+
+   A flex row rather than a grid, because the blocks are not a matrix: they are as many as
+   the GM put in the box, at whatever widths they chose, and a wrapping row is the one of
+   the two that does not invent a column count on their behalf. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 1rem;
+}
+
+/* Only the cards tile. Everything else the GM put in the box — the prose above a fight,
+   a scene link under it — takes the whole row and breaks the line, so tiling never turns
+   a sentence into a column beside a creature. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > :not([data-note-block="statblock"]) {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+/* A DEFINITE basis, and this is the whole correctness of the row.
+
+   `flex-basis: auto` sizes the item from its content, and this content cannot be measured
+   that way: every field inside a statblock is `width: 100%`, which has nothing to resolve
+   against inside a content-sized parent, so the item falls back to its min-content width
+   — and because the fields also wrap on word boundaries, min-content is ONE CHARACTER.
+   Two creatures rendered as two vertical ribbons of single letters. `min-width: 0` made it
+   worse by removing the automatic minimum that would otherwise have caught it.
+
+   So each column is sized from the card's own width instead, which also keeps the feature
+   honest: the tiling is the GM's width choice doing something, not a number this
+   stylesheet invented. Wrapping happens at the basis, before any shrinking, so three
+   narrow creatures in a two-wide box give a row of two and a row of one rather than three
+   squeezed columns. They may then shrink to share a line, which is why the shrink factor
+   is 1 and not 0: a row that slightly overflows is worse than one slightly under width. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > [data-note-block="statblock"] {
+  flex: 1 1 var(--statblock-narrow);
+  min-width: 0;
+}
+
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > [data-note-block="statblock"]:has([data-width="comfortable"]) {
+  flex-basis: var(--statblock-comfortable);
 }
 
 /* ── Infobox presentation ──────────────────────────────────────── */

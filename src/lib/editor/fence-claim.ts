@@ -36,3 +36,57 @@ import type { MarkdownToken } from "@tiptap/core";
 export function fenceInfo(token: MarkdownToken): string {
   return typeof token.lang === "string" ? token.lang.trim() : "";
 }
+
+/** One `key=value` on an info string. Values stay strings; the block reads its own. */
+const FENCE_PARAM = /^([a-z][a-z-]*)=([A-Za-z0-9_-]+)$/;
+
+/**
+ * A fence's info string as a block name plus `key=value` parameters — `null` when this
+ * fence is not the block's, exactly as an empty array declines in `parseMarkdown`.
+ *
+ * This is the byte-identity rule extended rather than relaxed. A parameter is claimable
+ * only because the block can re-emit it: `width=narrow` survives the round trip because
+ * the serializer writes that same token back. Anything the serializer could not
+ * reproduce is still declined, so the reasons above hold unchanged:
+ *
+ *   * a parameter the block does not list in `allowed` — it would be dropped,
+ *   * a token that is not `key=value` (` ```statblock {foo} `) — nothing to write back,
+ *   * the same key twice — one of the two would be lost.
+ *
+ * The one byte this does not preserve is whitespace *between* recognised tokens, which
+ * is canonicalised to single spaces on the way out. That is the same normalisation
+ * `fenceInfo` already performs by trimming, and it cannot lose a GM's content: every
+ * token it consumed is written back, and a fence holding anything else never gets here.
+ */
+export function fenceParams(
+  token: MarkdownToken,
+  name: string,
+  allowed: readonly string[],
+): Record<string, string> | null {
+  const info = fenceInfo(token);
+  if (!info) return null;
+
+  const [blockName, ...rest] = info.split(/\s+/);
+  if (blockName !== name) return null;
+
+  const params: Record<string, string> = {};
+  for (const token of rest) {
+    const match = FENCE_PARAM.exec(token);
+    if (!match) return null;
+    const [, key, value] = match;
+    if (!allowed.includes(key) || key in params) return null;
+    params[key] = value;
+  }
+  return params;
+}
+
+/**
+ * The info string a block writes for those of its parameters that are not at their
+ * default — `statblock`, or `statblock width=narrow`. Defaults are omitted rather than
+ * spelled out so that a note whose blocks are all default round-trips byte-identically,
+ * which is what keeps this change invisible to every file already on disk.
+ */
+export function fenceInfoFor(name: string, params: Record<string, string>): string {
+  const tokens = Object.entries(params).map(([key, value]) => `${key}=${value}`);
+  return [name, ...tokens].join(" ");
+}

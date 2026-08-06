@@ -7,7 +7,10 @@ import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
-import type { StatblockSection } from "$lib/editor/statblock-block";
+import {
+  DEFAULT_STATBLOCK_WIDTH,
+  type StatblockSection,
+} from "$lib/editor/statblock-block";
 import type { LabelledRow } from "$lib/editor/labelled-row";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
@@ -41,7 +44,13 @@ afterEach(() => {
 
 async function openDialog(name = "Goblin Scout") {
   const view = render(StatblockBlockView, {
-    props: { name, rows: ROWS, sections: SECTIONS, onCommit: vi.fn() },
+    props: {
+      name,
+      rows: ROWS,
+      sections: SECTIONS,
+      width: DEFAULT_STATBLOCK_WIDTH,
+      onCommit: vi.fn(),
+    },
   });
   await fireEvent.click(view.getByLabelText("Save shape as preset"));
   await view.findByTestId("save-preset-dialog");
@@ -55,6 +64,7 @@ describe("save shape as preset", () => {
         name: "Goblin",
         rows: ROWS,
         sections: SECTIONS,
+        width: DEFAULT_STATBLOCK_WIDTH,
         onCommit: vi.fn(),
       },
     });

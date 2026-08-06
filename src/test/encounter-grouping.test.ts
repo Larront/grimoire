@@ -449,8 +449,10 @@ describe("Grimoire acquires no concept of a fight", () => {
     // `Count` means, and would break the moment one of them took damage.
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
 
+    // `width` is here and is not a counterexample: it says how wide to draw one card,
+    // and knows nothing about how many cards there are or that they belong to a fight.
     expect(Object.keys(editor.schema.nodes.statblockBlock.spec.attrs ?? {}).sort()).toEqual(
-      ["name", "rows", "sections"],
+      ["name", "rows", "sections", "width"],
     );
   });
 
@@ -500,5 +502,55 @@ describe("the sample world's fight carries a real statblock fence", () => {
     // text file ends with and the serializer emits none, which is true of every note in
     // the vault and not this fence's business.
     expect(saved(note(body))).toBe(body.trimEnd());
+  });
+});
+
+// ─── Tiling ───────────────────────────────────────────────────────────────────
+//
+// A fight is several creatures read at once, so narrowed statblocks in one callout sit
+// side by side. The layout is CSS and there is no attribute for it anywhere — what these
+// cases guard is the one thing the stylesheet cannot assert about itself: that its
+// selector still points at the element ProseMirror actually builds.
+
+describe("statblocks in one callout tile", () => {
+  /** Mirrors the tiling selector in app.css. Kept in step by these cases. */
+  const TILED =
+    ".callout-body > *:has(" +
+    '> [data-note-block="statblock"] ~ [data-note-block="statblock"])';
+
+  /**
+   * The body is ProseMirror's content hole, and it holds ONE wrapper element with the
+   * blocks inside it — not the blocks themselves. A stylesheet that flexed the body
+   * would be styling a single child and would tile nothing, silently.
+   */
+  it("keeps the blocks one level below the body, where the selector reaches", () => {
+    const editor = note(ambush(2));
+    const body = dom(editor).querySelector(".callout-body")!;
+
+    expect(body.children).toHaveLength(1);
+    expect([...body.children[0].children].map((el) => el.getAttribute("data-note-block")))
+      .toEqual(["statblock", "statblock"]);
+  });
+
+  it("tiles two creatures in a box", () => {
+    const editor = note(ambush(2));
+    expect(dom(editor).querySelector(TILED)).toBeTruthy();
+  });
+
+  it("tiles a whole fight", () => {
+    const editor = note(ambush(6));
+    expect(dom(editor).querySelector(TILED)).toBeTruthy();
+  });
+
+  // A flex container stops its children's margins collapsing, so the rule stays away
+  // from every box that has nothing to tile — which is most boxes in most notes.
+  it("leaves a box holding one creature in ordinary block flow", () => {
+    const editor = note(ambush(1));
+    expect(dom(editor).querySelector(TILED)).toBeNull();
+  });
+
+  it("leaves a box holding no creature at all alone", () => {
+    const editor = note("> [!note] The Lower Halls\n> Something waits down here.");
+    expect(dom(editor).querySelector(TILED)).toBeNull();
   });
 });
