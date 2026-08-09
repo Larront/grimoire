@@ -215,6 +215,9 @@ export const InfoboxBlock = Node.create({
   name: "infoboxBlock",
   group: "block",
   atom: true,
+  // Draggable so a grip can carry it. ProseMirror will not drag a node whose spec does
+  // not allow it, however the selection was made.
+  draggable: true,
 
   addAttributes() {
     return {
@@ -284,7 +287,8 @@ export const InfoboxBlock = Node.create({
       // like it decides the layout (#148).
       domAttrs: { "data-infobox-block": "", "data-note-block": "infobox" },
       defaults: { title: "", image: "", imageAlt: "", rows: [] },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes, deleteNode, selectNode }) => ({
+        onGrab: selectNode,
         onCommit: (infobox: Infobox) =>
           updateAttributes({
             title: infobox.title,

@@ -5,6 +5,7 @@
     AlignLeft,
     AlignCenter,
     AlignRight,
+    GripVertical,
     Maximize2,
     Trash2,
     X,
@@ -21,6 +22,7 @@
     onCaptionUpdate,
     onSrcReplace,
     onRemove,
+    onGrab,
   }: {
     src: string;
     alt: string;
@@ -30,6 +32,12 @@
     onUpdate: (attrs: { align: string; width: string }) => void;
     onCaptionUpdate: (alt: string) => void;
     onSrcReplace?: (src: string) => void;
+    /**
+     * Selects the whole image as one thing. Image is the block that could already be
+     * selected by clicking it — the connector lets its mousedown through on purpose — so
+     * this is the same gesture the other blocks now have, in the same place.
+     */
+    onGrab?: () => void;
     /** Takes the image out of the note. The file in `ledger/images/` is left alone. */
     onRemove?: () => void;
   } = $props();
@@ -158,6 +166,16 @@
                rounded border border-border bg-card/90 backdrop-blur-sm shadow-md px-1 py-0.5"
         transition:fade={{ duration: 120 }}
       >
+        <button
+          draggable="true"
+          data-block-grip
+          class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
+                 transition-colors cursor-grab active:cursor-grabbing"
+          aria-label="Select image"
+          onmousedown={onGrab}
+        >
+          <GripVertical class="size-3.5" />
+        </button>
         <button
           class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
                  transition-colors {_align === 'left' ? 'text-primary' : ''}"

@@ -403,6 +403,11 @@ function unwrapCallout(editor: Editor, getPos: () => number | undefined): void {
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const CalloutBlock = Blockquote.extend({
+  // Draggable so the header's grip can carry the whole box, contents included. A callout
+  // is the one member whose children are real text, so a caret can already be dragged
+  // *within* it; what it could not do is move as one thing.
+  draggable: true,
+
   addAttributes() {
     return {
       calloutType: {
@@ -562,7 +567,8 @@ export const CalloutBlock = Blockquote.extend({
       component: CalloutBlockView,
       domAttrs: { "data-note-block": "callout" },
       mode: "container",
-      props: ({ getPos, updateAttributes }) => ({
+      props: ({ getPos, updateAttributes, selectNode }) => ({
+        onGrab: selectNode,
         // A merge, so the type and the fold marker the GM never touched survive an edit
         // to the title. The connector's write-back is what makes that true.
         onTitleCommit: (calloutTitle: string | null) => updateAttributes({ calloutTitle }),

@@ -16,7 +16,7 @@
   // once. What is *not* here is the float: nothing in this component knows whether the
   // panel is beside the prose or stacked above it, because that is a container query on
   // the block's own column in `app.css` and never an attribute (#148).
-  import { ImagePlus, RefreshCw, Trash2, X } from "@lucide/svelte";
+  import { GripVertical, ImagePlus, RefreshCw, Trash2, X } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
@@ -36,6 +36,7 @@
     rows,
     onCommit,
     onRemove,
+    onGrab,
   }: {
     title: string;
     image: string;
@@ -44,6 +45,8 @@
     onCommit: (infobox: Infobox) => void;
     /** Takes the whole panel out of the note. Undo brings it back in one step. */
     onRemove?: () => void;
+    /** Selects the whole panel, so it can be copied, cut or dragged somewhere else. */
+    onGrab?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -282,6 +285,21 @@
              motion-reduce:transition-none group-hover/panel:opacity-100
              group-focus-within/panel:opacity-100"
     >
+      <!-- The grip: the whole block as one thing, so it can be copied, cut or dragged.
+           `data-block-grip` is the connector's seam — a sealed block holds every other
+           event, and these two are the exception that lets ProseMirror select and carry it. -->
+      <button
+        type="button"
+        draggable="true"
+        data-block-grip
+        class="rounded p-0.5 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground
+               focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1
+               focus-visible:ring-primary"
+        aria-label="Select infobox"
+        onmousedown={onGrab}
+      >
+        <GripVertical size={13} aria-hidden="true" />
+      </button>
       {#if !_image}
         <button
           type="button"

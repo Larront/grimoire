@@ -16,9 +16,22 @@
 // it most sharply, and Callout's title field (#181) needs it already.
 import { mount, unmount } from "svelte";
 import { closeHistory } from "@tiptap/pm/history";
+import { NodeSelection } from "@tiptap/pm/state";
 import type { Component } from "svelte";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+
+/**
+ * Marks the element a block offers as ProseMirror's handle on it — its grip.
+ *
+ * The attribute is the seam, and it is deliberately only that. §8 keeps *how a block
+ * looks* out of this file, so the connector never draws a grip: a block renders its own,
+ * in its own chrome, with its own design-system idiom, and marks it with this. What the
+ * connector then owns is the routing, which is plumbing every block would otherwise
+ * re-derive: events on a grip are not held back, so ProseMirror can select the node and
+ * start a drag.
+ */
+export const BLOCK_GRIP_ATTR = "data-block-grip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +78,19 @@ export interface BlockNodeViewContext {
    * for.
    */
   getPos: () => number | undefined;
+  /**
+   * Selects the whole block as one thing, which is what a grip's `mousedown` does.
+   *
+   * A sealed block holds no text position, so nothing about it is reachable by dragging a
+   * caret across it — there is no caret to drag. Copying one, cutting one, or dragging one
+   * somewhere else all need the node itself to be the selection, and `stopEvent` holding
+   * every click is exactly what stops ProseMirror ever making that selection on its own
+   * (the same reason `deleteNode` above has to exist at all).
+   *
+   * The editor is focused afterwards, because an unfocused editor's selection is not the
+   * one the operating system copies: Ctrl+C would reach whatever else holds focus.
+   */
+  selectNode: () => void;
 }
 
 /**
@@ -213,6 +239,21 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         // would do nothing.
         editor.commands.focus();
       },
+      selectNode() {
+        const pos = getPos();
+        if (pos == null) return;
+        editor.commands.command(({ tr, dispatch }) => {
+          // The same stale-position guard the two writes above use: selecting whatever
+          // has taken this position would put the grip's drag on the wrong block.
+          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          if (atPos && atPos.type !== current.type) return false;
+          if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, pos));
+          return true;
+        });
+        // `view.focus()` rather than the focus command: the selection was just set and
+        // must survive being focused, not be replaced by wherever the caret last was.
+        editor.view.focus();
+      },
     };
 
     const initialAttrs = withDefaults(node.attrs, spec.defaults);
@@ -253,6 +294,12 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         if (decided !== undefined) return decided;
         const target = event.target as globalThis.Node | null;
         if (!target || !dom.contains(target)) return false;
+        // A grip is the block handing ProseMirror a hold on itself, so its events are the
+        // one thing here that must NOT be held: the mousedown selects the node and the
+        // dragstart carries it. Checked before the hole below because a container's grip
+        // sits outside its content, and a sealed block holds everything.
+        const el = target instanceof Element ? target : target.parentElement;
+        if (el?.closest(`[${BLOCK_GRIP_ATTR}]`)) return false;
         // Content inside the hole is ProseMirror's: typing in it is its business.
         return contentDOM ? !contentDOM.contains(target) : true;
       },

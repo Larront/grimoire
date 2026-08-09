@@ -9,7 +9,7 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { portal } from "$lib/utils/portal";
   import { placeMenu } from "$lib/utils/anchored-menu";
-  import { FileText, ChevronDown, Trash2 } from "@lucide/svelte";
+  import { FileText, ChevronDown, GripVertical, Trash2 } from "@lucide/svelte";
 
   // Wikilink stub-vs-resolved styling, answered by the Link Resolver — drawing, so
   // the cached read (a target that hasn't resolved yet stays full accent rather than
@@ -34,11 +34,14 @@
     events,
     onCommit,
     onRemove,
+    onGrab,
   }: {
     events: TimelineEvent[];
     onCommit: (events: TimelineEvent[]) => void;
     /** Takes the whole timeline out of the note. Undo brings it back in one step. */
     onRemove?: () => void;
+    /** Selects the whole timeline, so it can be copied, cut or dragged somewhere else. */
+    onGrab?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -340,22 +343,42 @@
   class="timeline-block group/block relative my-2 select-none"
   contenteditable="false"
 >
-  <!-- The block's only chrome, and the only way out of it: a sealed block holds every
-       click, so ProseMirror never selects the node and Backspace has nothing to take
-       (#175 review). Hover-revealed, in the corner the other blocks put theirs. -->
-  {#if onRemove}
+  <!-- The block's chrome: a grip and the way out. A sealed block holds every click, so
+       ProseMirror never selects the node on its own and Backspace has nothing to take
+       (#175 review) — the grip is what hands it a hold, and the trash is still the only
+       delete. Hover-revealed, in the corner the other blocks put theirs. -->
+  <div
+    class="absolute top-0 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity
+           duration-150 motion-reduce:transition-none group-hover/block:opacity-100
+           focus-within:opacity-100"
+  >
+    <!-- `data-block-grip` is the connector's seam: these are the only events a sealed
+         block lets through, so the mousedown selects the node and the drag carries it. -->
     <button
       type="button"
-      class="absolute top-0 right-0 z-10 rounded p-0.5 cursor-pointer text-muted-foreground
-             opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-             hover:text-destructive group-hover/block:opacity-100 focus-visible:opacity-100
+      draggable="true"
+      data-block-grip
+      class="rounded p-0.5 cursor-grab active:cursor-grabbing text-muted-foreground
+             hover:text-foreground
              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      aria-label="Remove timeline"
-      onclick={onRemove}
+      aria-label="Select timeline"
+      onmousedown={onGrab}
     >
-      <Trash2 size={13} />
+      <GripVertical size={13} />
     </button>
-  {/if}
+    {#if onRemove}
+      <button
+        type="button"
+        class="rounded p-0.5 cursor-pointer text-muted-foreground
+               hover:text-destructive
+               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+        aria-label="Remove timeline"
+        onclick={onRemove}
+      >
+        <Trash2 size={13} />
+      </button>
+    {/if}
+  </div>
 
   {#if _events.length === 0}
     <div class="ml-6 text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>

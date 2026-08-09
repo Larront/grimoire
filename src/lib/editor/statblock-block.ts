@@ -392,6 +392,9 @@ export const StatblockBlock = Node.create({
   name: "statblockBlock",
   group: "block",
   atom: true,
+  // Draggable so a grip can carry it. ProseMirror will not drag a node whose spec does
+  // not allow it, however the selection was made.
+  draggable: true,
 
   addAttributes() {
     return {
@@ -472,7 +475,8 @@ export const StatblockBlock = Node.create({
         sections: [],
         width: DEFAULT_STATBLOCK_WIDTH,
       },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes, deleteNode, selectNode }) => ({
+        onGrab: selectNode,
         onCommit: (block: Statblock) =>
           updateAttributes({
             name: block.name,

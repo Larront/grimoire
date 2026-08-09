@@ -671,6 +671,9 @@ describe("the mode is scoped to structure", () => {
         // collapse, but it is still not a label, heading, entry or row: there is nothing
         // here for a mis-click to damage, which is the rule this case guards.
         "Narrow statblock",
+        // The grip mutates nothing: it selects the card so it can be copied, cut or
+        // dragged. Same reasoning — no definition is in reach of a slip.
+        "Select statblock",
         "Row 1 current value",
         "Row 2 value",
       ].sort(),
