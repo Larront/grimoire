@@ -197,6 +197,246 @@ export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boo
   }
 }
 
+/**
+ * Moves the block one place among its siblings, and answers where it landed.
+ *
+ * This is the drag, for a GM who is not holding a mouse. A drag is a pointer gesture and
+ * has no keyboard equivalent anywhere in a browser, so a grip that can be focused and not
+ * used is a control that only looks reachable — and reordering is the whole point of the
+ * grip, not a flourish on it.
+ *
+ * One place at a time, among *siblings only*: a creature moves up the initiative order
+ * inside its encounter and never falls out of the box on the way past the first one. That
+ * is the same containment a drag has when it is dropped inside the callout, and the
+ * alternative — walking out of the parent at the ends — moves a block somewhere the GM
+ * was not looking.
+ *
+ * The returned position is the block's new one, because the caller is drawing a handle
+ * beside it and the old position now holds a neighbour.
+ */
+export function moveBlockAt(editor: Editor, pos: number, direction: -1 | 1): number | null {
+  const node = nodeAt(editor, pos);
+  if (!node) return null;
+
+  const { state } = editor;
+  const neighbour =
+    direction === -1
+      ? state.doc.resolve(pos).nodeBefore
+      : state.doc.resolve(pos + node.nodeSize).nodeAfter;
+  if (!neighbour) return null;
+
+  // Dispatched directly rather than through `editor.chain()`, unlike its neighbours
+  // above: the caller needs the landing position back, and a chain answers only whether
+  // it ran.
+  //
+  // Delete first, then insert, so the two ends of the move cannot both be described
+  // against a document only one of them has seen. After the delete the anchor is the
+  // neighbour's own start (up) or its new end (down), which is what these two read as.
+  const landing = direction === -1 ? pos - neighbour.nodeSize : pos + neighbour.nodeSize;
+  const tr = state.tr;
+  closeHistory(tr);
+  tr.delete(pos, pos + node.nodeSize);
+  tr.insert(landing, node);
+  tr.setSelection(NodeSelection.create(tr.doc, landing));
+  editor.view.dispatch(tr);
+  return landing;
+}
+
+/**
+ * Hands a drag to ProseMirror, which is what makes the drop land as a *move*.
+ *
+ * The grip is editor chrome and sits outside the prose, so the browser's own drag starts
+ * on an element ProseMirror has never heard of. Left alone the drop would be treated as
+ * foreign content — parsed back out of the clipboard HTML and *copied* — so the block
+ * would end up in two places. Setting `view.dragging` is how the view is told this drag is
+ * its own: it then moves the slice and deletes the source in one step.
+ *
+ * The clipboard payload is still set, and set the way the editor itself would serialize
+ * it, because a drag out of the window (into Obsidian, into a mail) has nothing but that.
+ */
+export function startBlockDrag(
+  editor: Editor,
+  pos: number,
+  dataTransfer: DataTransfer | null,
+  dragImage?: Element,
+): boolean {
+  if (!nodeAt(editor, pos)) return false;
+  const { view } = editor;
+
+  const selection = NodeSelection.create(view.state.doc, pos);
+  view.dispatch(view.state.tr.setSelection(selection));
+
+  const slice = selection.content();
+  const { dom, text } = view.serializeForClipboard(slice);
+  if (dataTransfer) {
+    dataTransfer.clearData();
+    dataTransfer.setData("text/html", dom.innerHTML);
+    // Markdown rather than ProseMirror's plain text, for the reason the copy action gives
+    // (ADR-0016 §1): a creature dropped into Obsidian should be the fence it is on disk.
+    dataTransfer.setData("text/plain", blockMarkdownAt(editor, pos) ?? text);
+    dataTransfer.effectAllowed = "copyMove";
+    // The block itself, not the grip. Without this the GM drags a 16px icon and has no
+    // ghost of the thing they are moving — which for a statblock is most of a screen.
+    if (dragImage) dataTransfer.setDragImage(dragImage, 0, 0);
+  }
+
+  view.dragging = { slice, move: true };
+  return true;
+}
+
+// ─── What to call it ──────────────────────────────────────────────────────────
+
+/** The GM's word for each node the handle can hold. A name with no entry is "block". */
+const BLOCK_WORDS: Record<string, string> = {
+  paragraph: "paragraph",
+  heading: "heading",
+  bulletList: "list",
+  orderedList: "numbered list",
+  listItem: "list item",
+  codeBlock: "code block",
+  horizontalRule: "divider",
+  statblockBlock: "statblock",
+  infoboxBlock: "infobox",
+  timelineBlock: "timeline",
+  sceneBlock: "scene",
+  image: "image",
+};
+
+/**
+ * What the handle announces itself as holding — "Move statblock", "Move encounter
+ * callout".
+ *
+ * A handle that floats in the margin is a control with no text and no container, so a
+ * screen reader announcing "button" has told the GM nothing: which of the forty blocks in
+ * this note it would move is the only fact about it. The words are the GM's own, taken
+ * from the slash menu's vocabulary rather than from the schema — nobody typed
+ * `statblockBlock`.
+ *
+ * A callout is named by its type, because "encounter" and "warning" are how the GM thinks
+ * of the two boxes and both are `blockquote` underneath.
+ */
+export function blockLabel(node: ProseMirrorNode): string {
+  if (node.type.name === "blockquote") {
+    const type = node.attrs.calloutType as string | null;
+    return type ? `${type} callout` : "quote";
+  }
+  return BLOCK_WORDS[node.type.name] ?? "block";
+}
+
+// ─── Where it goes ────────────────────────────────────────────────────────────
+
+export interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Everything the handle's position is a function of. */
+export interface HandleGeometry {
+  /** The target block's box on screen. */
+  block: Box;
+  /** The height of the block's first line — see the note in `handlePlacement`. */
+  firstLine: number;
+  /** The handle's own size, measured rather than assumed: it is sized in CSS. */
+  handle: { width: number; height: number };
+  /** The space between the handle and the block, from `--block-handle-gap`. */
+  gap: number;
+  /** The left edge the handle may not cross: the padded column's own. */
+  columnLeft: number;
+}
+
+export interface HandlePlacement {
+  left: number;
+  top: number;
+}
+
+/**
+ * The handle's box, from the target block's own box.
+ *
+ * From the *block's* box and not the prose column's, which is what lets one handle track
+ * whatever the pointer is over: a paragraph inside a callout is indented, so the handle
+ * follows it into the callout's padding rather than sitting out in the margin pointing at
+ * nothing. It is placed entirely to the left of `block.left`, so it never covers a word.
+ *
+ * `firstLine` is the height of the block's first line box, not the block's height. A
+ * handle centred on a five-line paragraph sits beside its middle, which reads as belonging
+ * to whatever is next to it; centred on the first line it points at the thing it picks up.
+ * For a sealed block — a statblock, an image — there is no line box and the caller passes
+ * the block's height, which is the only honest answer and puts the handle beside the card.
+ *
+ * `columnLeft` is the floor. The gutter is sized in CSS (`--block-gutter`) so this never
+ * binds in the app, but a pane can be dragged narrower than any number a stylesheet
+ * commits to, and a handle half off the pane is worse than one a little close to the
+ * prose.
+ */
+export function handlePlacement(geometry: HandleGeometry): HandlePlacement {
+  const { block, firstLine, handle, gap, columnLeft } = geometry;
+  const left = Math.max(columnLeft, block.left - gap - handle.width);
+  const line = Math.min(firstLine, block.height);
+  return { left, top: block.top + (line - handle.height) / 2 };
+}
+
+/** The element a block is drawn as, which is the only thing that has a box. */
+export function blockElementAt(view: EditorView, pos: number): HTMLElement | null {
+  const dom = view.nodeDOM(pos);
+  return dom instanceof HTMLElement ? dom : null;
+}
+
+/**
+ * Everything above, measured — and the only part of the placement that needs a browser.
+ *
+ * It lives here rather than in the component for the reason this module's header gives
+ * about `posAtCoords`: measurement cannot be asserted without layout, so it is gathered in
+ * one place, holds no decisions, and hands numbers to a function that does. The component
+ * is left with two CSS properties to set.
+ *
+ * The first line comes from a **range over the element's contents**, not from the element.
+ * An element has one border box however many lines it holds — `getClientRects()` on a
+ * `<p>` answers with the paragraph, not its lines — and the version of this that asked the
+ * element put the grip 138px down the side of a wrapping paragraph. A range fragments into
+ * one rect per line, which is the number wanted. For a sealed block the first rect is its
+ * first row of chrome, which keeps the grip beside the top of the card rather than halfway
+ * down it; an element that yields no rects at all answers with its own height.
+ *
+ * The gap is read off the handle's own computed style so the number lives once, in the
+ * stylesheet that also sizes the gutter it has to fit inside. It must be written there in
+ * **pixels**: `getComputedStyle` returns a custom property as authored, not resolved, so a
+ * `rem` arrives here as its own numeral and silently becomes a sub-pixel gap.
+ */
+export function placeHandle(
+  view: EditorView,
+  target: BlockTarget,
+  handleEl: HTMLElement,
+): HandlePlacement | null {
+  const dom = blockElementAt(view, target.pos);
+  if (!dom) return null;
+
+  const block = dom.getBoundingClientRect();
+  const range = dom.ownerDocument.createRange();
+  range.selectNodeContents(dom);
+  const firstLine = range.getClientRects()[0]?.height || block.height;
+
+  const handle = handleEl.getBoundingClientRect();
+  const gap = parseFloat(getComputedStyle(handleEl).getPropertyValue("--block-handle-gap"));
+  // The padded column, not the prose: its left edge is the pane's, and the gutter is
+  // precisely the space between the two.
+  const column = (view.dom as HTMLElement).closest("[data-note-column]") ?? view.dom;
+
+  return handlePlacement({
+    block: {
+      left: block.left,
+      top: block.top,
+      width: block.width,
+      height: block.height,
+    },
+    firstLine,
+    handle: { width: handle.width, height: handle.height },
+    gap: Number.isFinite(gap) ? gap : 0,
+    columnLeft: column.getBoundingClientRect().left,
+  });
+}
+
 // ─── The plugin ───────────────────────────────────────────────────────────────
 
 export const blockHandleKey = new PluginKey("blockHandle");
@@ -208,13 +448,43 @@ export interface BlockHandleOptions {
    * how the handle *looks* stays where the design system is.
    */
   onTarget: (target: BlockTarget | null, view: EditorView) => void;
+  /**
+   * The GM asked for the handle from the keyboard: raise it on the block the caret is in,
+   * and put focus on it. Separate from `onTarget` because it is not a hover — the handle
+   * must stay up until it is dismissed, and it is the grip, not the prose, that has focus
+   * afterwards.
+   */
+  onGrab: (target: BlockTarget, view: EditorView) => void;
 }
+
+/**
+ * How the handle is reached without a mouse. Hover is the only other way in, so without
+ * this the grip — and the reorder, the selection and the delete behind it — simply do not
+ * exist for a GM who does not point at things.
+ *
+ * `Mod-Shift-h` for *handle*, and free: the app's own chords are Ctrl+W (close tab) and
+ * Ctrl+\ (sidebar), and no editor extension binds a Mod chord at all.
+ */
+export const GRAB_SHORTCUT = "Mod-Shift-h";
 
 export const BlockHandle = Extension.create<BlockHandleOptions>({
   name: "blockHandle",
 
   addOptions() {
-    return { onTarget: () => {} };
+    return { onTarget: () => {}, onGrab: () => {} };
+  },
+
+  addKeyboardShortcuts() {
+    const { onGrab } = this.options;
+    return {
+      [GRAB_SHORTCUT]: ({ editor }) => {
+        const { view } = editor;
+        const target = blockTargetAt(view.state.doc, view.state.selection.from);
+        if (!target) return false;
+        onGrab(target, view);
+        return true;
+      },
+    };
   },
 
   addProseMirrorPlugins() {

@@ -38,5 +38,12 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - run: bun install --frozen-lockfile
+
+      # The test suite has a second project that runs in a real headless Chromium —
+      # anything whose subject is a *box*, because jsdom performs no layout and a
+      # placement test written against it passes whatever the stylesheet says. Chromium
+      # is a separate download from the npm package, so it is fetched here.
+      - run: bunx playwright install --with-deps chromium
+
       - run: bun run check
       - run: bun run test

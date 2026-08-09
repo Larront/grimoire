@@ -12,7 +12,7 @@
 import { fireEvent } from "@testing-library/svelte";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-import { noteExtensions } from "$lib/editor/note-extensions";
+import { noteExtensions, type NoteExtensionOptions } from "$lib/editor/note-extensions";
 
 // jsdom has no layout, and ProseMirror asks the DOM where the selection is whenever it
 // scrolls it into view — which an undo and a gap-cursor arrow key both do. A text node
@@ -42,6 +42,17 @@ Element.prototype.getClientRects = zeroRects;
 Range.prototype.getClientRects = zeroRects;
 Range.prototype.getBoundingClientRect = () => ZERO_RECT;
 
+// `posAtCoords` reaches for this on every mousedown ProseMirror sees, and jsdom does not
+// implement it *at all* — not "returns nothing", but absent, so the call throws. Vitest
+// counts a throw inside an event handler as an unhandled error and fails the run with
+// every test still green, which reads as a phantom failure with no failing assertion.
+//
+// Null is the honest answer: nothing is at any point in a document with no layout.
+// ProseMirror handles that answer already — it falls back to its own box, finds the
+// coordinates outside it, and resolves no position, which is what a test that never meant
+// to depend on a coordinate wants.
+Document.prototype.elementFromPoint = () => null;
+
 let open: { editor: Editor; element: HTMLElement } | null = null;
 
 /** Tears down the editor a test opened. Every consumer registers this as `afterEach`. */
@@ -51,13 +62,19 @@ export function closeNote(): void {
   open = null;
 }
 
-/** A note's markdown, in an editor whose node views are mounted. */
-export function note(markdown: string): Editor {
+/**
+ * A note's markdown, in an editor whose node views are mounted.
+ *
+ * `options` are the extension callbacks — the overlays' way of reporting what the GM's
+ * gesture asked for. They belong at construction because Tiptap builds its schema and its
+ * plugins once, from the list it is given.
+ */
+export function note(markdown: string, options: NoteExtensionOptions = {}): Editor {
   const element = document.createElement("div");
   document.body.appendChild(element);
   const editor = new Editor({
     element,
-    extensions: noteExtensions(),
+    extensions: noteExtensions(options),
     content: markdown,
     contentType: "markdown",
   });
@@ -87,8 +104,16 @@ export function caretAt(editor: Editor, pos: number): void {
  * handler's document *steps*, so a boundary whose whole job is to move the caret would
  * report success and change nothing. What is asserted is always the outcome.
  */
-export function press(editor: Editor, key: string): void {
-  fireEvent.keyDown(editor.view.dom, { key });
+export function press(editor: Editor, key: string, modifiers: KeyModifiers = {}): void {
+  fireEvent.keyDown(editor.view.dom, { key, ...modifiers });
+}
+
+/** The chord keys a shortcut is pressed with, for the bindings that take one. */
+export interface KeyModifiers {
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
 }
 
 /** The textblock the caret is in, by its text — where a boundary left the GM. */

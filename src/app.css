@@ -162,6 +162,48 @@
   --statblock-comfortable: 46rem;
 }
 
+/* ── The block gutter ─────────────────────────────────────────── */
+/*
+  The strip to the left of the prose the block handle (#190) lives in, and the size of the
+  grip that lives in it. Three numbers that must agree, so they are written once and read
+  from here by both halves: the grip's own size in CSS, and the gap in the placement maths,
+  which reads this custom property rather than repeating the number in TypeScript.
+
+  The gutter is SIZED, not assumed. A note pane can be split, so the prose column's padding
+  is not a comfortable margin it can borrow from — at the narrowest pane it is all there is,
+  and a grip that fits only in a full-width window is a grip that vanishes off the edge of
+  every split. Hence 36px: the grip (18) plus its gap (6) plus 12px of air between the grip
+  and the pane's own edge, which is what stops it reading as stuck to the divider between
+  two panes.
+
+  In px, like the density scale above, and here for a second reason as well: the gap is
+  read back out of this stylesheet by `BlockHandle.svelte`, and `getComputedStyle` does NOT
+  resolve a custom property's units — it hands back the text as written. A `rem` here is
+  therefore a silent 0.375-pixel gap in the placement, not a 6-pixel one.
+*/
+:root {
+  --block-handle-size: 18px;
+  --block-handle-gap: 6px;
+  --block-gutter: 36px;
+}
+
+/*
+  The note's column, which owns its own horizontal padding for that reason — the leading
+  edge is the gutter and cannot be a utility class someone tidies to match the trailing
+  one. `max()` because the gutter is a floor rather than a fixed inset: a wide pane gives
+  the prose more room to breathe and the grip simply sits further out with it.
+*/
+[data-note-column] {
+  padding-inline: max(var(--block-gutter), 24px) 24px;
+}
+
+/* The wide-pane inset, matching the `@5xl` step the column's other spacing uses. */
+@container (min-width: 64rem) {
+  [data-note-column] {
+    padding-inline: max(var(--block-gutter), 40px) 40px;
+  }
+}
+
 /* ── Density System ───────────────────────────────────────────── */
 
 :root,

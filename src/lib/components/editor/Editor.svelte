@@ -13,7 +13,10 @@
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
+  import { createBlockHandleHover } from "$lib/editor/block-handle-hover.svelte";
+
   import SlashCommandMenu from "./SlashCommandMenu.svelte";
+  import BlockHandle from "./BlockHandle.svelte";
   import WikiLinkSuggestion from "./WikiLinkSuggestion.svelte";
   import WikiLinkPreview from "./WikiLinkPreview.svelte";
   import { notes } from "$lib/stores/notes.svelte";
@@ -57,6 +60,11 @@
     y: number;
   } | null>(null);
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // ── The block handle ─────────────────────────────────────────────────────────
+  // Which block the grip belongs to, and whether it is on screen at all. The rules — in
+  // particular why the grip survives the pointer moving onto it — live in the module.
+  const blockHover = createBlockHandleHover();
 
   function scrollToFirstMatch(editorInstance: Editor, query: string) {
     const terms = query
@@ -105,12 +113,17 @@
         onWikiSuggestion: (state) => {
           wikiState = state;
         },
+        onBlockTarget: blockHover.point,
+        onBlockGrab: blockHover.grab,
       }),
       content: initialContent,
       contentType: "markdown",
       onUpdate: () => {
         docVersion++;
         dirty = true;
+        // The positions in the grip's target are the old document's, and the pointer has
+        // not moved to re-answer them.
+        blockHover.invalidate();
         if (autosavePaused) return;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 500);
@@ -125,11 +138,20 @@
       // Allow the editor to finish its initial render before searching
       setTimeout(() => scrollToFirstMatch(editor!, highlightQuery), 150);
     }
+
+    // The grip is placed from measurements taken when the pointer last moved, so a scroll
+    // leaves it beside whatever has since slid into that spot — dropped rather than
+    // re-placed, because which block the (still) pointer is over now is a question only
+    // the next mousemove answers. Capture phase: the note scrolls in an ancestor
+    // container, not on the window, and a scroll event does not bubble out of one.
+    window.addEventListener("scroll", blockHover.invalidate, true);
+    return () => window.removeEventListener("scroll", blockHover.invalidate, true);
   });
 
   onDestroy(() => {
     unregisterFlush?.();
     clearTimeout(previewTimer);
+    blockHover.destroy();
     // flush() captures the markdown synchronously (before its first await),
     // so the pending edit is safe to hand off before destroying the editor.
     void flush();
@@ -336,6 +358,18 @@
 
 {#if slashState}
   <SlashCommandMenu state={slashState} />
+{/if}
+
+{#if editor && blockHover.target}
+  <BlockHandle
+    {editor}
+    target={blockHover.target}
+    grabbed={blockHover.grabbed}
+    onHold={blockHover.hold}
+    onRetarget={blockHover.retarget}
+    onRelease={blockHover.release}
+    onGrabHandled={blockHover.grabHandled}
+  />
 {/if}
 
 {#if wikiState}

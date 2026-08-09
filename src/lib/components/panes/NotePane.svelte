@@ -519,7 +519,10 @@
             </div>
           </div>
         {/if}
-        <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
+        <!-- The horizontal padding is in app.css under `[data-note-column]`, not here:
+             its leading edge is the block gutter (#190) and is derived from the grip's
+             own size, so it must not drift apart from a utility class. -->
+        <div data-note-column class="w-full mx-auto pt-10 pb-20 @5xl:max-w-[70%]">
           <input
             bind:this={titleInput}
             bind:value={draftTitle}

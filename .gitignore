@@ -6,6 +6,11 @@ node_modules
 .env
 .env.*
 !.env.example
+# What the browser test project writes when a layout assertion fails: a PNG of the
+# page at the moment it failed. Useful while reading a failure, worthless in a branch.
+src/test/__screenshots__/
+.vitest-attachments/
+
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/.grimoire/
