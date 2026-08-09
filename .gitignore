@@ -16,4 +16,10 @@ src-tauri/.grimoire/
 # creature content) stay on local checkouts only.
 docs/research/*.local.md
 
+# Impeccable's live-mode working state: the helper's port and token, and the
+# append-only session journal it replays after an interrupted run. Machine- and
+# run-specific, so it never belongs to a branch. `.impeccable/design.json` and
+# the config beside it are project files and stay tracked.
+.impeccable/live/
+
 
