@@ -76,6 +76,7 @@ async function grip(editor: Editor, target: BlockTarget): Promise<DOMRect> {
       editor,
       target,
       onHold: () => {},
+      onPin: () => {},
       onRetarget: () => {},
       onRelease: () => {},
     },

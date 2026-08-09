@@ -171,6 +171,29 @@ function withDefaults(attrs: BlockAttrs, defaults?: BlockAttrs): BlockAttrs {
   return out;
 }
 
+// ─── Stale positions ──────────────────────────────────────────────────────────
+
+/**
+ * The node at a position a view is holding, or null — and never a throw.
+ *
+ * Every write below re-reads the document before touching it, because a position taken
+ * when a view was drawn may not hold that view's node by the time the GM acts on it. The
+ * bounds check is part of that and not decoration: `nodeAt` throws a `RangeError` past the
+ * end of the document, which is exactly the shape a note that live-reloaded to something
+ * shorter leaves behind — and a throw here surfaces as the gesture that raised it dying,
+ * rather than as the no-op the guard is written to produce.
+ *
+ * `doc` is optional because a real transaction always carries one and a test stub need
+ * not.
+ */
+function nodeAtOrNull(
+  doc: ProseMirrorNode | undefined,
+  pos: number,
+): ProseMirrorNode | null {
+  if (!doc || pos < 0 || pos > doc.content.size) return null;
+  return doc.nodeAt(pos);
+}
+
 // ─── Connector ────────────────────────────────────────────────────────────────
 
 /**
@@ -211,7 +234,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
           // step through update(). A position holding some other node means the
           // node this view drew is gone, and the write must not land on whatever
           // replaced it.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          const atPos = nodeAtOrNull(tr.doc, pos);
           if (atPos && atPos.type !== current.type) return false;
           const attrs = (atPos ?? current).attrs;
           // ADR-0016 §6: every mutation is one undo. Without this, a write landing
@@ -228,7 +251,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         editor.commands.command(({ tr }) => {
           // The same guard `updateAttributes` uses, for the same reason and with more
           // at stake: a stale position holding some other node would delete it.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          const atPos = nodeAtOrNull(tr.doc, pos);
           if (atPos && atPos.type !== current.type) return false;
           closeHistory(tr);
           tr.delete(pos, pos + (atPos ?? current).nodeSize);
@@ -245,8 +268,14 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         editor.commands.command(({ tr, dispatch }) => {
           // The same stale-position guard the two writes above use: selecting whatever
           // has taken this position would put the grip's drag on the wrong block.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
-          if (atPos && atPos.type !== current.type) return false;
+          const atPos = nodeAtOrNull(tr.doc, pos);
+          // `!atPos` too, unlike its two neighbours above — and the difference is not an
+          // oversight in either direction. They fall back to `current` and write against
+          // a position that is still theirs; this one hands the position to
+          // `NodeSelection.create`, which reads the node *starting* there and throws
+          // outright when nothing does. A stale grip would take the mousedown that
+          // raised it down with it.
+          if (!atPos || atPos.type !== current.type) return false;
           if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, pos));
           return true;
         });

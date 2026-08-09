@@ -30,6 +30,13 @@ interface RecordedMeta {
 /** The document position the harness reports the node sits at. */
 const NODE_POS = 3;
 
+/**
+ * The fake document's size. Real, rather than absent, because the connector bounds-checks
+ * every stale position before reading it — `nodeAt` throws past the end of a document, and
+ * a note that live-reloaded to something shorter is precisely the case the guard is for.
+ */
+const DOC_SIZE = 200;
+
 /** One `tr.delete` the node view asked for. */
 interface RecordedDelete {
   from: number;
@@ -52,6 +59,8 @@ interface MountedNodeView {
   writes: RecordedAttrWrite[];
   metas: RecordedMeta[];
   deletes: RecordedDelete[];
+  /** Every `tr.setSelection` the node view asked for — the grip's path. */
+  selections: unknown[];
   /** How many times the node view asked the editor for focus. */
   focuses: () => number;
   nodeType: { name: string };
@@ -96,17 +105,30 @@ function mountNodeView(
   const writes: RecordedAttrWrite[] = [];
   const metas: RecordedMeta[] = [];
   const deletes: RecordedDelete[] = [];
+  const selections: unknown[] = [];
   let focusCount = 0;
   const nodeType = { name: "fixtureBlock" };
   const node = { type: nodeType, attrs, nodeSize };
   const editor = {
+    // `selectNode` focuses through the view rather than the command, so that the
+    // selection it just set survives being focused.
+    view: {
+      focus() {
+        focusCount++;
+      },
+    },
     commands: {
       focus() {
         focusCount++;
       },
-      command(fn: (props: { tr: unknown }) => boolean) {
+      // `dispatch` is real here, unlike in a dry run: the selection path is the only
+      // one that reads it, and it is the difference between that path running and
+      // silently doing nothing.
+      command(fn: (props: { tr: unknown; dispatch?: () => void }) => boolean) {
         const tr = {
-          doc: nodeAtPos ? { nodeAt: () => nodeAtPos(nodeType) } : undefined,
+          doc: nodeAtPos
+            ? { content: { size: DOC_SIZE }, nodeAt: () => nodeAtPos(nodeType) }
+            : undefined,
           // `closeHistory(tr)` is a `setMeta` under a private key, so what the stub
           // records is *that* a meta was set before the markup change — enough to
           // pin the ordering ADR-0016 §6 needs, without reaching into
@@ -127,8 +149,12 @@ function mountNodeView(
             deletes.push({ from, to, afterMeta: metas.length > 0 });
             return tr;
           },
+          setSelection(selection: unknown) {
+            selections.push(selection);
+            return tr;
+          },
         };
-        return fn({ tr });
+        return fn({ tr, dispatch: () => {} });
       },
     },
   };
@@ -140,10 +166,16 @@ function mountNodeView(
     writes,
     metas,
     deletes,
+    selections,
     focuses: () => focusCount,
     nodeType,
   };
   return mounted;
+}
+
+/** The fixture's grip, which calls the connector's `selectNode`. */
+function gripButton(view: MountedNodeView["view"]): HTMLElement {
+  return view.dom.querySelector("[data-fixture-grip]") as HTMLElement;
 }
 
 /** The fixture's remove control, which calls the connector's `deleteNode`. */
@@ -548,6 +580,79 @@ describe("node-view connector — selection", () => {
 
     expect(view.selectNode).toBeUndefined();
     expect(view.deselectNode).toBeUndefined();
+  });
+});
+
+// ─── A grip asking to be selected ─────────────────────────────────────────────
+//
+// `ctx.selectNode` is what a block's own grip calls, and it is the one write here that
+// hands a raw position to ProseMirror rather than describing a range itself. Its two
+// neighbours fall back to the node this view already holds when the document has nothing
+// at the position; `NodeSelection.create` has no such fallback — it throws outright,
+// which would take down the mousedown that raised it.
+//
+// Only the refusals are here. The selection *landing* needs a real document to be created
+// against, so it is asserted against a real editor in block-grip.test.ts; each of these
+// carries its own positive control instead — `asked` counts the document lookup, which
+// only happens if the click reached the command at all.
+
+describe("node-view connector — selectNode", () => {
+  const gripSpec = () =>
+    createBlockNodeView({
+      component: SealedBlockFixture,
+      props: ({ selectNode }) => ({ onSelect: selectNode }),
+    });
+
+  /** The grip clicked, with the document answering `atPos` — and a count of the asking. */
+  async function clickGrip(
+    atPos: (ownType: { name: string }) => NodeAtPos | null,
+    getPos?: () => number | undefined,
+  ) {
+    let asked = 0;
+    const { view, selections } = mountNodeView(
+      gripSpec(),
+      { label: "Ambush" },
+      getPos,
+      (ownType) => {
+        asked++;
+        return atPos(ownType);
+      },
+    );
+    await fireEvent.click(gripButton(view));
+    return { selections, asked: () => asked };
+  }
+
+  it("refuses when the position holds a different node", async () => {
+    const { selections, asked } = await clickGrip(() => ({
+      type: { name: "paragraph" },
+      attrs: {},
+    }));
+
+    expect(asked()).toBe(1);
+    expect(selections).toHaveLength(0);
+  });
+
+  it("refuses when the position holds nothing at all", async () => {
+    // Where this parts company with the writes beside it: they carry on against their
+    // own copy of the node, and this one cannot — a position with nothing starting at it
+    // makes `NodeSelection.create` throw rather than answer.
+    const { selections, asked } = await clickGrip(() => null);
+
+    expect(asked()).toBe(1);
+    expect(selections).toHaveLength(0);
+  });
+
+  it("refuses a position past the end of a note that shrank under it", async () => {
+    // Out here `nodeAt` throws rather than answering, so the bounds check is the guard
+    // itself and not a tidy-up in front of one — which is why the document is never even
+    // asked.
+    const { selections, asked } = await clickGrip(
+      (ownType) => ({ type: ownType, attrs: {} }),
+      () => DOC_SIZE + 50,
+    );
+
+    expect(asked()).toBe(0);
+    expect(selections).toHaveLength(0);
   });
 });
 

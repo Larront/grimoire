@@ -47,6 +47,19 @@ export interface BlockHandleHover {
   /** The pointer or focus arriving on, or leaving, the grip itself. */
   hold: (held: boolean) => void;
   /**
+   * The grip's menu opened, or closed (#191).
+   *
+   * A second latch rather than more `hold`, because the menu holds the grip up for a
+   * different reason and the two overlap in both orders: the pointer crosses a gap to
+   * reach the menu, so the grip's own `mouseleave` fires *while the menu is open*, and
+   * Escape closes the menu with the pointer still on the grip. Either alone must keep it.
+   *
+   * A pin also **freezes the target**. The menu names one block and every item acts on
+   * that block, so a pointer wandering back over the prose underneath it — which the
+   * editor reports as ordinary movement — must not quietly change which one that is.
+   */
+  pin: (pinned: boolean) => void;
+  /**
    * The gesture is over and its result has landed — a drag that dropped. Down at once
    * rather than after the hide delay: the positions the handle holds describe the
    * document as it was *before* the drop, so a grip left on screen is a grip pointing at
@@ -58,7 +71,8 @@ export interface BlockHandleHover {
   /**
    * The handle's target is no longer good: the note scrolled under a still pointer, or
    * the document changed beneath positions taken from the old one. A held grip is exempt
-   * — it is mid-gesture and its own move is what changed the document.
+   * — it is mid-gesture and its own move is what changed the document. An open menu is
+   * not; see the note on the implementation.
    */
   invalidate: () => void;
   destroy: () => void;
@@ -72,13 +86,22 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
   // Plain `let`: nothing is drawn from it, and the scheduled hide must read the value as
   // it is when the timer fires rather than as it was when the timer was set.
   let held = false;
+  // The grip's menu, and the same kind of plain `let` as `held` beside it, for the same
+  // reason: nothing is drawn from it, and a scheduled hide must read it as it is when the
+  // timer fires. The two are separate latches — see `pin` on the interface.
+  let pinned = false;
   let grabbed = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Whether anything is keeping the grip up regardless of where the pointer is. */
+  function kept() {
+    return held || pinned;
+  }
 
   function scheduleHide() {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      if (!held) target = null;
+      if (!kept()) target = null;
     }, hideDelay);
   }
 
@@ -90,6 +113,8 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
       return grabbed;
     },
     point(next) {
+      // The menu owns the target while it is open, and the pointer under it is noise.
+      if (pinned) return;
       if (next) {
         clearTimeout(timer);
         target = next;
@@ -109,12 +134,18 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
     release() {
       clearTimeout(timer);
       held = false;
+      pinned = false;
       grabbed = false;
       target = null;
     },
     hold(next) {
       held = next;
-      if (next) clearTimeout(timer);
+      if (kept()) clearTimeout(timer);
+      else scheduleHide();
+    },
+    pin(next) {
+      pinned = next;
+      if (kept()) clearTimeout(timer);
       else scheduleHide();
     },
     retarget(next) {
@@ -122,8 +153,16 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
       target = next;
     },
     invalidate() {
-      if (held) return;
+      // An open menu is emphatically NOT exempt, and the `!pinned` is what says so —
+      // *including* when the pointer happens to be resting on the grip, which is the one
+      // way the two latches overlap here. The menu is drawn `fixed` and anchored to a
+      // grip placed from a measurement a scroll has just made wrong, so a menu that
+      // survived one would hang in the window naming a block that has slid out from
+      // under it. Its own three actions need no exemption either: each closes the menu
+      // *before* it writes.
+      if (held && !pinned) return;
       clearTimeout(timer);
+      pinned = false;
       target = null;
     },
     destroy() {

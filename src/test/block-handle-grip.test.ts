@@ -21,30 +21,9 @@ import {
   type BlockTarget,
   type HandleGeometry,
 } from "$lib/editor/block-handle";
-import { caretAt, closeNote, note, press, saved } from "./fixtures/note-editor";
+import { caretAt, closeNote, note, posOf, posOfNth, press, saved } from "./fixtures/note-editor";
 
 afterEach(closeNote);
-
-/** The position of the first node of `type` — where the handle would be holding it. */
-function posOf(editor: ReturnType<typeof note>, type: string): number {
-  let found = -1;
-  editor.state.doc.descendants((node, pos) => {
-    if (found === -1 && node.type.name === type) found = pos;
-    return found === -1;
-  });
-  expect(found, `the note holds a ${type}`).toBeGreaterThanOrEqual(0);
-  return found;
-}
-
-/** The position of the nth node of `type`, for the fights that hold identical siblings. */
-function posOfNth(editor: ReturnType<typeof note>, type: string, index: number): number {
-  const found: number[] = [];
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name === type) found.push(pos);
-  });
-  expect(found.length).toBeGreaterThan(index);
-  return found[index];
-}
 
 // jsdom has no `DataTransfer`, and the one thing under test about it is what was written
 // to it — so this records exactly that and nothing else.

@@ -155,7 +155,111 @@ describe("the grip's hover", () => {
     expect(hover.grabbed).toBe(false);
   });
 
-  it("cancels a pending hide on teardown, so nothing fires into a destroyed editor", () => {
+});
+
+// ─── While the menu is open ───────────────────────────────────────────────────
+//
+// A menu is a second surface, further from the prose than the grip is, and the pointer
+// crosses a gap to reach it — so `hold` alone cannot keep the grip up: the grip's own
+// `mouseleave` fires on the way into the menu and would schedule the hide the menu is
+// still sitting on. The pin is that second latch, and it also freezes the target: the
+// menu names one block and every one of its items acts on that block, so a pointer
+// wandering back across the prose underneath must not change which one it is.
+
+describe("the grip while its menu is open", () => {
+  it("stays up when the pointer leaves the grip for the menu", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+    hover.pin(true);
+    hover.hold(false);
+    vi.advanceTimersByTime(HANDLE_HIDE_MS * 5);
+
+    expect(hover.target).toBe(paragraph);
+  });
+
+  it("keeps naming the block the menu was opened on, whatever the pointer does", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.pin(true);
+    hover.point(statblock);
+
+    expect(hover.target).toBe(paragraph);
+  });
+
+  it("comes down once the menu closes and nothing else holds it", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.pin(true);
+    hover.pin(false);
+    vi.advanceTimersByTime(HANDLE_HIDE_MS);
+
+    expect(hover.target).toBeNull();
+  });
+
+  it("stays up after the menu closes if the pointer is back on the grip", () => {
+    // Escape closes the menu and hands focus back to the grip; the grip is still there.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+    hover.pin(true);
+    hover.pin(false);
+    vi.advanceTimersByTime(HANDLE_HIDE_MS * 5);
+
+    expect(hover.target).toBe(paragraph);
+  });
+
+  it("comes down even with the pointer resting on the grip", () => {
+    // The one way the two latches overlap. A held grip is exempt from `invalidate`; a
+    // pinned one is not, and the pin has to win — otherwise a note that live-reloads
+    // under a menu leaves it open over a document that no longer exists.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+    hover.pin(true);
+    hover.invalidate();
+
+    expect(hover.target).toBeNull();
+  });
+
+  it("comes down when the note scrolls out from under it", () => {
+    // Unlike a held grip, which is exempt. The menu is drawn `fixed` off a grip placed
+    // from a measurement the scroll has just made wrong, so one that survived would hang
+    // in the window naming a block that is no longer beside it.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.pin(true);
+    hover.invalidate();
+
+    expect(hover.target).toBeNull();
+  });
+
+  it("lets go of the pin when it does, so the grip is not frozen off", () => {
+    // The pin's own release runs on the menu closing, and an invalidated handle is
+    // unmounted without ever closing one — a latch left set here would ignore the
+    // pointer for the rest of the session.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.pin(true);
+    hover.invalidate();
+    hover.point(statblock);
+
+    expect(hover.target).toBe(statblock);
+  });
+
+  it("lets go of the pin when the whole gesture is released", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.pin(true);
+    hover.release();
+    hover.point(statblock);
+
+    expect(hover.target).toBe(statblock);
+  });
+});
+
+describe("the hover's teardown", () => {
+  it("cancels a pending hide, so nothing fires into a destroyed editor", () => {
     const hover = createBlockHandleHover();
     hover.point(paragraph);
     hover.point(null);

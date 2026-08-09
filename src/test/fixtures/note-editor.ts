@@ -13,6 +13,7 @@ import { fireEvent } from "@testing-library/svelte";
 import { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { noteExtensions, type NoteExtensionOptions } from "$lib/editor/note-extensions";
+import { blockTargetAt, type BlockTarget } from "$lib/editor/block-handle";
 
 // jsdom has no layout, and ProseMirror asks the DOM where the selection is whenever it
 // scrolls it into view — which an undo and a gap-cursor arrow key both do. A text node
@@ -119,6 +120,42 @@ export interface KeyModifiers {
 /** The textblock the caret is in, by its text — where a boundary left the GM. */
 export function caretIn(editor: Editor): string {
   return editor.state.selection.$from.parent.textContent;
+}
+
+/**
+ * The position of the nth node of `type` — where a grip holding it would be.
+ *
+ * Here rather than in one test file because the fights these are written against hold
+ * *identical siblings* on purpose: "the second kobold" is the only way to say which one a
+ * gesture was supposed to reach, and a second copy of that walk is the copy that ends up
+ * counting something subtly different.
+ */
+export function posOfNth(editor: Editor, type: string, index: number): number {
+  const found: number[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === type) found.push(pos);
+  });
+  if (found.length <= index) {
+    throw new Error(`the note holds no ${type} at index ${index}`);
+  }
+  return found[index];
+}
+
+/** The position of the first node of `type`. */
+export function posOf(editor: Editor, type: string): number {
+  return posOfNth(editor, type, 0);
+}
+
+/** The nth node of `type` as the handle holds it — a position *and* the node there. */
+export function targetOfNth(editor: Editor, type: string, index: number): BlockTarget {
+  const target = blockTargetAt(editor.state.doc, posOfNth(editor, type, index));
+  if (!target) throw new Error(`no block at the ${type} found at index ${index}`);
+  return target;
+}
+
+/** The first node of `type`, as the handle holds it. */
+export function targetOf(editor: Editor, type: string): BlockTarget {
+  return targetOfNth(editor, type, 0);
 }
 
 /** The first caret position inside a quote's body — the nth quote in the note. */

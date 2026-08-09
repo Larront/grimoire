@@ -366,6 +366,7 @@
     target={blockHover.target}
     grabbed={blockHover.grabbed}
     onHold={blockHover.hold}
+    onPin={blockHover.pin}
     onRetarget={blockHover.retarget}
     onRelease={blockHover.release}
     onGrabHandled={blockHover.grabHandled}
