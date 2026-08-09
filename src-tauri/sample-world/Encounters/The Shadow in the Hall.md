@@ -16,7 +16,7 @@ The party enters the lower halls and realises they are not alone. The thing move
 HP: 68/68
 Armor Class: 15
 Speed: 40 ft.
-Conditions: [ ] Hesitating [ ] Cornered
+Legendary Actions: [ ] [ ]
 
 ## Traits
 Darkness sense: It sees without light, and moves faster where there is none.
