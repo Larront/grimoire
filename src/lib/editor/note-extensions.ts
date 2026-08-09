@@ -22,6 +22,7 @@ import { StatblockBlock } from "$lib/editor/statblock-block";
 import { TimelineBlock } from "$lib/editor/timeline-block";
 import { WikiLink } from "$lib/editor/wiki-link";
 import { SlashCommand } from "$lib/editor/slash-command";
+import { BlockHandle, type BlockTarget } from "$lib/editor/block-handle";
 import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -30,6 +31,12 @@ export interface NoteExtensionOptions {
   onSlashCommand?: (state: SlashCommandSuggestionState | null) => void;
   /** Pushes the wikilink autocomplete's state to the surface drawing it. */
   onWikiSuggestion?: (state: WikiLinkSuggestionState | null) => void;
+  /**
+   * Pushes the block under the pointer to the surface drawing the handle. Null as the
+   * pointer leaves the prose. The extension holds no markup — where the handle sits and
+   * what it looks like belong to the surface, like the two menus above.
+   */
+  onBlockTarget?: (target: BlockTarget | null) => void;
 }
 
 /**
@@ -57,6 +64,9 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
     Markdown,
     SlashCommand.configure({
       onSlashCommand: options.onSlashCommand ?? (() => {}),
+    }),
+    BlockHandle.configure({
+      onTarget: options.onBlockTarget ?? (() => {}),
     }),
   ];
 }
