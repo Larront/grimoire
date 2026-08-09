@@ -286,6 +286,44 @@
   container-name: note-column;
 }
 
+/* ── The gap cursor ────────────────────────────────────────────────
+   Where the caret goes when there is no text to put it in: after the last statblock in
+   an encounter, between two stacked panels, at the end of a note that ends in a block.
+   StarterKit registers the plugin, so those positions have always been reachable by
+   click and by arrow key — but ProseMirror ships the caret as `display: none` and leaves
+   the drawing to us, so it has been landing somewhere invisible. A caret nobody can see
+   reads as a caret that would not go there.
+
+   Ours rather than prosemirror-gapcursor's stylesheet, because that one draws a 1px
+   black rule, which on Iron Dark is a caret you still cannot see. The blink is the
+   text caret's own rhythm, and the reduce-motion block near the top of this file already
+   stops it for a GM who asked for that. */
+.tiptap .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+
+.tiptap .ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 1.5rem;
+  border-top: 2px solid var(--foreground);
+  animation: gapcursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes gapcursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.tiptap.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
 /* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
 [data-note-scroll] {
   scrollbar-gutter: stable;
