@@ -287,8 +287,7 @@ export const InfoboxBlock = Node.create({
       // like it decides the layout (#148).
       domAttrs: { "data-infobox-block": "", "data-note-block": "infobox" },
       defaults: { title: "", image: "", imageAlt: "", rows: [] },
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (infobox: Infobox) =>
           updateAttributes({
             title: infobox.title,

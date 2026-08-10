@@ -254,8 +254,7 @@ export const TimelineBlock = Node.create({
       component: TimelineBlockView,
       domAttrs: { "data-note-block": "timeline" },
       defaults: { events: [] },
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
         onRemove: deleteNode,
       }),

@@ -484,11 +484,6 @@ describe("an Infobox has nothing that plays", () => {
         "Remove infobox",
         "Row 1 label",
         "Row 1 value",
-        // The grip, which is neither: it mutates nothing at all. It hands ProseMirror a
-        // hold on the whole panel so it can be copied, cut or dragged — the gesture a
-        // sealed block cannot otherwise be given, for the same reason "Remove infobox"
-        // above has to exist.
-        "Select infobox",
       ].sort(),
     );
     expect(getAllByLabelText("Delete row")).toHaveLength(1);

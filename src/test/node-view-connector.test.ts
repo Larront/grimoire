@@ -59,7 +59,7 @@ interface MountedNodeView {
   writes: RecordedAttrWrite[];
   metas: RecordedMeta[];
   deletes: RecordedDelete[];
-  /** Every `tr.setSelection` the node view asked for — the grip's path. */
+  /** Every `tr.setSelection` the node view asked for — `selectNode`'s path. */
   selections: unknown[];
   /** How many times the node view asked the editor for focus. */
   focuses: () => number;
@@ -173,9 +173,9 @@ function mountNodeView(
   return mounted;
 }
 
-/** The fixture's grip, which calls the connector's `selectNode`. */
-function gripButton(view: MountedNodeView["view"]): HTMLElement {
-  return view.dom.querySelector("[data-fixture-grip]") as HTMLElement;
+/** The fixture's select control, which calls the connector's `selectNode`. */
+function selectButton(view: MountedNodeView["view"]): HTMLElement {
+  return view.dom.querySelector("[data-fixture-select]") as HTMLElement;
 }
 
 /** The fixture's remove control, which calls the connector's `deleteNode`. */
@@ -583,34 +583,34 @@ describe("node-view connector — selection", () => {
   });
 });
 
-// ─── A grip asking to be selected ─────────────────────────────────────────────
+// ─── Asking for the block to be selected ──────────────────────────────────────
 //
-// `ctx.selectNode` is what a block's own grip calls, and it is the one write here that
-// hands a raw position to ProseMirror rather than describing a range itself. Its two
+// `ctx.selectNode` is what the gutter handle reaches for, and it is the one write here
+// that hands a raw position to ProseMirror rather than describing a range itself. Its two
 // neighbours fall back to the node this view already holds when the document has nothing
 // at the position; `NodeSelection.create` has no such fallback — it throws outright,
-// which would take down the mousedown that raised it.
+// which would take down the gesture that raised it.
 //
 // Only the refusals are here. The selection *landing* needs a real document to be created
-// against, so it is asserted against a real editor in block-grip.test.ts; each of these
-// carries its own positive control instead — `asked` counts the document lookup, which
-// only happens if the click reached the command at all.
+// against, so it is asserted against a real editor in block-handle-grip.test.ts; each of
+// these carries its own positive control instead — `asked` counts the document lookup,
+// which only happens if the click reached the command at all.
 
 describe("node-view connector — selectNode", () => {
-  const gripSpec = () =>
+  const selectSpec = () =>
     createBlockNodeView({
       component: SealedBlockFixture,
       props: ({ selectNode }) => ({ onSelect: selectNode }),
     });
 
-  /** The grip clicked, with the document answering `atPos` — and a count of the asking. */
-  async function clickGrip(
+  /** The control clicked, with the document answering `atPos` — and a count of the asking. */
+  async function clickSelect(
     atPos: (ownType: { name: string }) => NodeAtPos | null,
     getPos?: () => number | undefined,
   ) {
     let asked = 0;
     const { view, selections } = mountNodeView(
-      gripSpec(),
+      selectSpec(),
       { label: "Ambush" },
       getPos,
       (ownType) => {
@@ -618,12 +618,12 @@ describe("node-view connector — selectNode", () => {
         return atPos(ownType);
       },
     );
-    await fireEvent.click(gripButton(view));
+    await fireEvent.click(selectButton(view));
     return { selections, asked: () => asked };
   }
 
   it("refuses when the position holds a different node", async () => {
-    const { selections, asked } = await clickGrip(() => ({
+    const { selections, asked } = await clickSelect(() => ({
       type: { name: "paragraph" },
       attrs: {},
     }));
@@ -636,7 +636,7 @@ describe("node-view connector — selectNode", () => {
     // Where this parts company with the writes beside it: they carry on against their
     // own copy of the node, and this one cannot — a position with nothing starting at it
     // makes `NodeSelection.create` throw rather than answer.
-    const { selections, asked } = await clickGrip(() => null);
+    const { selections, asked } = await clickSelect(() => null);
 
     expect(asked()).toBe(1);
     expect(selections).toHaveLength(0);
@@ -646,7 +646,7 @@ describe("node-view connector — selectNode", () => {
     // Out here `nodeAt` throws rather than answering, so the bounds check is the guard
     // itself and not a tidy-up in front of one — which is why the document is never even
     // asked.
-    const { selections, asked } = await clickGrip(
+    const { selections, asked } = await clickSelect(
       (ownType) => ({ type: ownType, attrs: {} }),
       () => DOC_SIZE + 50,
     );

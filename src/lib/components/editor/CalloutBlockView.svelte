@@ -17,7 +17,7 @@
   // before typing into an aside would be absurd. The one piece of chrome that is not a
   // field is the collapse chevron, and collapse is **view state** — it never reaches the
   // file, in either direction. Obsidian's fold marker seeds it and is otherwise a no-op.
-  import { ChevronDown, GripVertical, Trash2 } from "@lucide/svelte";
+  import { ChevronDown, Trash2 } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { oneLine } from "$lib/editor/labelled-row";
@@ -35,7 +35,6 @@
     onTitleCommit,
     onCollapse,
     onUnwrap,
-    onGrab,
   }: {
     calloutType?: string | null;
     calloutTitle?: string | null;
@@ -52,11 +51,6 @@
      * delete — see the control's own note below.
      */
     onUnwrap?: () => void;
-    /**
-     * Selects the box and its contents as one thing, so it can be copied, cut or dragged
-     * somewhere else. The grip in the header is the only way in.
-     */
-    onGrab?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -137,24 +131,6 @@
         placeholder={fallback}
         class="callout-title"
       />
-
-      <!-- The grip: the box and everything in it, as one thing. A callout's children are
-           real text, so a caret can already be dragged around inside it — what it could
-           not do is move as a unit. `data-block-grip` is the connector's seam, and the one
-           place a container block lets an event past on purpose. -->
-      <button
-        type="button"
-        draggable="true"
-        data-block-grip
-        class="callout-toggle shrink-0 rounded p-0.5 opacity-0 cursor-grab active:cursor-grabbing
-               transition-opacity motion-reduce:transition-none
-               group-hover/callout:opacity-100 focus-visible:opacity-100
-               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        aria-label="Select callout"
-        onmousedown={onGrab}
-      >
-        <GripVertical size={14} />
-      </button>
 
       {#if onUnwrap}
         <!-- Takes the box away and leaves the prose. Not a delete, and the label says so:

@@ -567,8 +567,7 @@ export const CalloutBlock = Blockquote.extend({
       component: CalloutBlockView,
       domAttrs: { "data-note-block": "callout" },
       mode: "container",
-      props: ({ getPos, updateAttributes, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ getPos, updateAttributes }) => ({
         // A merge, so the type and the fold marker the GM never touched survive an edit
         // to the title. The connector's write-back is what makes that true.
         onTitleCommit: (calloutTitle: string | null) => updateAttributes({ calloutTitle }),

@@ -20,7 +20,6 @@
     ChevronLeft,
     Plus,
     ExternalLink,
-    GripVertical,
     Trash2,
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
@@ -40,15 +39,12 @@
     sceneName: _nameInTheFile,
     onUpdate,
     onRemove,
-    onGrab,
   }: {
     sceneId: number | null;
     sceneName?: string;
     onUpdate: (attrs: { sceneId: number | null; sceneName: string }) => void;
     /** Takes the reference out of the note. The scene itself is untouched. */
     onRemove?: () => void;
-    /** Selects the whole block, so it can be copied, cut or dragged somewhere else. */
-    onGrab?: () => void;
   } = $props();
 
   // Internal copy updated by setAttrs() on undo/redo
@@ -499,21 +495,6 @@
           oninput={handleMasterVolumeInput}
         />
       </div>
-
-      <!-- The grip: the block as one thing. `data-block-grip` is the connector's seam,
-           and Scene also holds a slider drag through its own event hole, so the two do not
-           collide: the hole answers first and only for the slider. -->
-      <button
-        draggable="true"
-        data-block-grip
-        class="shrink-0 flex items-center justify-center size-6 rounded-sm cursor-grab
-               active:cursor-grabbing hover:bg-muted transition-colors"
-        aria-label="Select scene block"
-        title="Select scene block"
-        onmousedown={onGrab}
-      >
-        <GripVertical class="size-3.5 text-muted-foreground" />
-      </button>
 
       <!-- Remove the reference. Distinct from "Change scene" next to it, and the
            distinction is worth the two buttons: unbinding leaves the block waiting for

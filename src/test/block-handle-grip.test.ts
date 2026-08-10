@@ -11,7 +11,20 @@
 // dispatched. The placement arithmetic is here too, but only because `handlePlacement`
 // takes numbers rather than elements; the numbers it is given in the app are measured in
 // the browser test.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+// A scene block asks the ledger for its tracks the moment its node view mounts, and there
+// is no ledger here — the call resolves to null and the `.map` on it rejects into nowhere,
+// which Vitest reports as an unhandled error with every test still green. Nothing below
+// depends on a scene's contents; only on a scene being a block the handle can pick up.
+vi.mock("$lib/stores/scenes.svelte", () => ({
+  scenes: {
+    scenes: [],
+    getSlots: () => Promise.resolve([]),
+    invalidateSlots: () => {},
+  },
+}));
+
 import { NodeSelection } from "@tiptap/pm/state";
 import {
   blockTargetAt,
@@ -192,6 +205,65 @@ describe("starting a drag from the grip", () => {
     const editor = note("A sentence.");
     expect(startBlockDrag(editor, 9999, fakeDataTransfer().transfer)).toBe(false);
     expect(editor.view.dragging).toBeNull();
+  });
+});
+
+// ─── Every block, not just the one the cases above happen to use ──────────────
+//
+// Inherited from the per-block grips this replaced (#193). Both halves are worth keeping
+// and the first is the one that fails silently: without `draggable` on the node spec
+// ProseMirror refuses the drag however the selection was made, and nothing on screen says
+// so — the block is selected, it looks picked up, and it does not move.
+
+/** One note per Note Block, each holding exactly one of it. */
+const BLOCKS: [name: string, nodeType: string, markdown: string][] = [
+  ["statblock", "statblockBlock", "```statblock\n# Kobold A\nHP: 5/5\n```"],
+  ["infobox", "infoboxBlock", "```infobox\n# The Ember Keep\nRuler: Mira\n```"],
+  ["timeline", "timelineBlock", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```"],
+  ["scene", "sceneBlock", "```scene\n# The Tavern\nId: 7\n```"],
+  ["image", "image", "![The gate](images/gate.png)"],
+  ["callout", "blockquote", "> [!encounter] The Ambush\n> Something waits."],
+];
+
+describe("every block can be picked up by the handle", () => {
+  it.each(BLOCKS)("%s allows a drag, or it could not start", (_name, type, md) => {
+    const editor = note(md);
+    expect(editor.schema.nodes[type].spec.draggable).toBe(true);
+  });
+
+  it.each(BLOCKS)("%s becomes the selection the drag carries", (_name, type, md) => {
+    const editor = note(md);
+    expect(startBlockDrag(editor, posOf(editor, type), fakeDataTransfer().transfer)).toBe(true);
+
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(NodeSelection);
+    expect((selection as NodeSelection).node.type.name).toBe(type);
+  });
+
+  it("picks up the creature the handle was on, not its identical neighbour", () => {
+    // Two fences of the same shape in one note: a position that drifted by one node would
+    // pass every case above and still carry the wrong creature.
+    const editor = note(
+      ["```statblock", "# Kobold A", "HP: 5/5", "```", "", "```statblock", "# Kobold B", "HP: 5/5", "```"].join("\n"),
+    );
+    startBlockDrag(editor, posOfNth(editor, "statblockBlock", 1), fakeDataTransfer().transfer);
+
+    expect((editor.state.selection as NodeSelection).node.attrs.name).toBe("Kobold B");
+  });
+
+  it("takes the callout's contents with it, because they are its children", () => {
+    const editor = note(
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join("\n"),
+    );
+    startBlockDrag(editor, posOf(editor, "blockquote"), fakeDataTransfer().transfer);
+
+    const carried = editor.view.dragging?.slice.content.firstChild;
+    expect(carried?.type.name).toBe("blockquote");
+    const inside: string[] = [];
+    carried?.descendants((node) => {
+      if (node.type.name === "statblockBlock") inside.push(node.attrs.name);
+    });
+    expect(inside).toEqual(["Kobold A"]);
   });
 });
 

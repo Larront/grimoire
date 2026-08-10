@@ -220,8 +220,7 @@ export const SceneBlock = Node.create({
       class: "scene-block-wrapper",
       domAttrs: { "data-note-block": "scene" },
       defaults: { sceneId: null, sceneName: "" },
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes, deleteNode }) => ({
         onUpdate: updateAttributes,
         onRemove: deleteNode,
       }),
