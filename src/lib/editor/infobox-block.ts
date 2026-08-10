@@ -287,7 +287,7 @@ export const InfoboxBlock = Node.create({
       // like it decides the layout (#148).
       domAttrs: { "data-infobox-block": "", "data-note-block": "infobox" },
       defaults: { title: "", image: "", imageAlt: "", rows: [] },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes }) => ({
         onCommit: (infobox: Infobox) =>
           updateAttributes({
             title: infobox.title,
@@ -295,7 +295,6 @@ export const InfoboxBlock = Node.create({
             imageAlt: infobox.imageAlt,
             rows: infobox.rows,
           }),
-        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // A fresh `/infobox`: one empty row, opened for typing straight away.

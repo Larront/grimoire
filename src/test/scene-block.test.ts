@@ -113,11 +113,9 @@ function makeSlot(overrides: Partial<SceneSlot> = {}): SceneSlot {
 }
 
 function renderView(props: { sceneId: number | null }) {
-  const onRemove = vi.fn();
-  const rendered = render(SceneBlockView, {
-    props: { ...props, onUpdate: vi.fn(), onRemove },
+  return render(SceneBlockView, {
+    props: { ...props, onUpdate: vi.fn() },
   });
-  return { ...rendered, onRemove };
 }
 
 // A node view mounted by mountNodeView(), torn down after each test. Node views
@@ -217,32 +215,31 @@ describe("scene reference resolution", () => {
     expect(container.textContent).not.toContain("Unknown scene");
   });
 
-  it("offers a way out of the block whether or not a scene is bound", async () => {
-    // A sealed block holds every click, so ProseMirror never selects the node and
-    // Backspace has nothing to take (#175 review). The picker needs it as much as the
-    // mixer does: every other control in the picker *binds* a scene, so a `/scene`
-    // inserted by accident was stranded in the note.
+  it("draws no removal control of its own, bound or unbound", () => {
+    // Both states used to carry a trash can, because a sealed block holds every click so
+    // ProseMirror never selected the node for Backspace to take (#175 review) — and the
+    // picker needed it as much as the mixer did, since every other control in the picker
+    // *binds* a scene and a `/scene` inserted by accident was stranded. The gutter
+    // handle's menu deletes any block now (#194), so neither state draws one.
     mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
 
     const unbound = renderView({ sceneId: null });
-    await fireEvent.click(unbound.getByLabelText("Remove scene block"));
-    expect(unbound.onRemove).toHaveBeenCalledTimes(1);
+    expect(unbound.queryByLabelText("Remove scene block")).toBeNull();
     cleanup();
 
     const bound = renderView({ sceneId: 4 });
-    await fireEvent.click(bound.getByLabelText("Remove scene block"));
-    expect(bound.onRemove).toHaveBeenCalledTimes(1);
+    expect(bound.queryByLabelText("Remove scene block")).toBeNull();
   });
 
-  it("tells removing the block apart from unbinding the scene", () => {
-    // Two controls beside each other, and the difference is worth them: unbinding
-    // leaves the block waiting for a scene, removal takes the block out. Neither
-    // touches the scene in the Scenes pane.
+  it("still offers unbinding, the one gesture the block kept", () => {
+    // The two used to sit beside each other and the distinction was worth both buttons:
+    // unbinding leaves the block waiting for a scene, removal took the block out. Only
+    // unbinding is the block's own gesture now, and it still touches nothing in the
+    // Scenes pane.
     mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
     const { getByLabelText } = renderView({ sceneId: 4 });
 
     expect(getByLabelText("Change scene")).toBeTruthy();
-    expect(getByLabelText("Remove scene block")).toBeTruthy();
   });
 });
 

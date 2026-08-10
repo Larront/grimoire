@@ -129,32 +129,28 @@ describe("Timeline rows", () => {
 // ─── Removing the block ───────────────────────────────────────────────────────
 
 describe("removing a Timeline", () => {
-  it("offers a way out of the block, which the Row List cannot give it", async () => {
-    // Deleting every event leaves an empty timeline, not an absent one — and a sealed
-    // block holds every click, so ProseMirror never selects the node and Backspace has
-    // nothing to take (#175 review).
-    const onRemove = vi.fn();
-    const { getByLabelText } = render(TimelineBlockView, {
+  // The block's corner held a trash can, because deleting every event leaves an empty
+  // timeline rather than an absent one, and a sealed block holds every click so
+  // ProseMirror never selected the node for Backspace to take (#175 review). The gutter
+  // handle's menu deletes any block now (#194), which is where that gesture lives —
+  // pinned in block-handle.test.ts, not here.
+
+  it("draws no removal control of its own", () => {
+    const { queryByLabelText } = render(TimelineBlockView, {
       props: {
         events: [{ date: "Day 1", title: "Alpha", description: "" }],
         onCommit: vi.fn(),
-        onRemove,
       },
     });
 
-    await fireEvent.click(getByLabelText("Remove timeline"));
-
-    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(queryByLabelText("Remove timeline")).toBeNull();
   });
 
-  it("is reachable on an empty timeline too", async () => {
-    const onRemove = vi.fn();
-    const { getByLabelText } = render(TimelineBlockView, {
-      props: { events: [], onCommit: vi.fn(), onRemove },
+  it("draws none on an empty timeline either", () => {
+    const { queryByLabelText } = render(TimelineBlockView, {
+      props: { events: [], onCommit: vi.fn() },
     });
 
-    await fireEvent.click(getByLabelText("Remove timeline"));
-
-    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(queryByLabelText("Remove timeline")).toBeNull();
   });
 });

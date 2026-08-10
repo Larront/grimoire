@@ -5,8 +5,21 @@
 // module keeps the pointer maths down to one line and puts every decision behind
 // `blockTargetAt`, which takes a document and a position. What is below is that decision,
 // plus the four things the menu does — all of it real document behaviour.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { NodeSelection } from "@tiptap/pm/state";
+
+// A scene block asks the ledger for its tracks the moment its node view mounts, and there
+// is no ledger here — the call resolves to null and the `.map` on it rejects into nowhere,
+// which Vitest reports as an unhandled error with every test still green. Nothing below
+// depends on a scene's contents; only on a scene being a block the handle can delete.
+vi.mock("$lib/stores/scenes.svelte", () => ({
+  scenes: {
+    scenes: [],
+    getSlots: () => Promise.resolve([]),
+    invalidateSlots: () => {},
+  },
+}));
+
 import {
   blockTargetAt,
   blockMarkdownAt,
@@ -137,6 +150,28 @@ describe("deleting a block", () => {
     const out = saved(editor);
     expect(out).toBe("Before.\n\nAfter.");
     expect(out).not.toContain("waits");
+  });
+
+  // The blocks that gave up their own trash can (#194). Each one used to carry a control
+  // because it is sealed — it holds every click, so ProseMirror never selects the node
+  // and Backspace has nothing to take. Deleting them here is what makes taking those
+  // controls out a removal of a duplicate rather than a removal of the only way out.
+  it.each([
+    ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
+    [
+      "a timeline",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
+      "timelineBlock",
+    ],
+    ["a scene block", "```scene\n# The Tavern\nId: 7\n```", "sceneBlock"],
+  ])("takes %s, which has no removal control of its own", (_what, md, type) => {
+    const editor = note(["Before.", "", md, "", "After."].join("\n"));
+    deleteBlockAt(editor, posOf(editor, type));
+
+    expect(saved(editor)).toBe("Before.\n\nAfter.");
+
+    editor.commands.undo();
+    expect(saved(editor)).toBe(["Before.", "", md, "", "After."].join("\n"));
   });
 
   it("is one undo step, like every other write in the pattern", () => {
