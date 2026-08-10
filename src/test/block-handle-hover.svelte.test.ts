@@ -38,6 +38,34 @@ describe("the grip's hover", () => {
     expect(hover.target).toBe(statblock);
   });
 
+  it("holds the same answer still while the pointer crosses one block", () => {
+    // Identity, and it is a performance claim rather than bookkeeping: the grip re-places
+    // itself whenever this changes, and placing measures three times — the block's box,
+    // its first line's rects, the column's computed style. `blockTargetAt` builds a fresh
+    // object per answer, so a `point` that assigned unconditionally would force that
+    // reflow on every one of the sixty-odd `mousemove`s a second a GM generates crossing
+    // a single paragraph.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    const first = hover.target;
+    hover.point({ ...paragraph } as BlockTarget);
+    hover.point({ ...paragraph } as BlockTarget);
+
+    expect(hover.target).toBe(first);
+  });
+
+  it("takes the new answer when the block at that position was rewritten", () => {
+    // The other half, and why the node is compared and not only the position: an edit
+    // rebuilds the block into a new object, and the grip must re-measure a card that has
+    // just grown a row rather than sit where the old one ended.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    const edited = { pos: paragraph.pos, node: { type: { name: "paragraph" } } } as BlockTarget;
+    hover.point(edited);
+
+    expect(hover.target).toBe(edited);
+  });
+
   it("survives the pointer moving onto the grip itself", () => {
     // The whole point. The leave arrives first and the enter a moment later, and between
     // them a GM's hand is already on the way to a grip that must still be there.

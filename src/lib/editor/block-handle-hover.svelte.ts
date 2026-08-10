@@ -117,7 +117,20 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
       if (pinned) return;
       if (next) {
         clearTimeout(timer);
-        target = next;
+        // Only when it is a different block. `blockTargetAt` builds a fresh object for
+        // every answer and `$state.raw` compares by identity, so assigning unconditionally
+        // notifies on *every* `mousemove` — sixty to a hundred and twenty a second — and
+        // each notification re-runs the grip's placement, which measures the block's box,
+        // the first line's rects and the column's computed style. That is a forced reflow
+        // per pointer event to re-derive the position the grip is already at.
+        //
+        // Identity is the right test for the node half for the reason `blockStillThere`
+        // gives: ProseMirror rebuilds only the ancestors of what changed, so an edit to
+        // this block hands back a different object and the handle re-measures, which is
+        // exactly when it should.
+        if (!target || target.pos !== next.pos || target.node !== next.node) {
+          target = next;
+        }
       } else {
         scheduleHide();
       }

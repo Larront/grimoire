@@ -393,6 +393,27 @@ export function startBlockDrag(
   return true;
 }
 
+/**
+ * The other end of `startBlockDrag`: the drag is over, however it ended.
+ *
+ * `view.dragging` is a latch, and ProseMirror only ever unlatches it from two listeners of
+ * its own on `view.dom` — its `drop`, and its `dragend`. Neither can be relied on here.
+ * The grip is `fixed` chrome outside `view.dom` entirely, so the browser raises `dragend`
+ * on the grip and ProseMirror never hears it; and a drop landing *inside* a sealed block is
+ * held by that block's `stopEvent`, so its `drop` does not run either.
+ *
+ * Left set, the latch is read by the *next* drop into this editor — an image dragged in, a
+ * wikilink, a paragraph from another pane — and ProseMirror uses the slice it is holding
+ * instead of the payload that was actually dropped, deleting the current selection first
+ * because the latch also says `move`. So the block the GM dropped on the desktop ten
+ * minutes ago reappears in place of whatever they meant to drop. Clearing it on `dragend`
+ * closes that, and is safe on the ordinary path: `drop` fires before `dragend`, so a drop
+ * ProseMirror did handle has already consumed the slice by the time this runs.
+ */
+export function endBlockDrag(editor: Editor): void {
+  editor.view.dragging = null;
+}
+
 // ─── What to call it ──────────────────────────────────────────────────────────
 
 /** The GM's word for each node the handle can hold. A name with no entry is "block". */

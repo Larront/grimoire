@@ -17,6 +17,7 @@
     blockElementAt,
     blockLabel,
     blockTargetAt,
+    endBlockDrag,
     moveBlockAt,
     placeHandle,
     selectBlockAt,
@@ -24,6 +25,7 @@
     type BlockTarget,
   } from "$lib/editor/block-handle";
   import {
+    actionFailureMessage,
     blockHandleMenuSections,
     runBlockHandleAction,
     type BlockHandleCommand,
@@ -139,6 +141,11 @@
    * the GM's next keystrokes going nowhere at all. It is toasted rather than swallowed
    * because a copy that silently did not happen is discovered at the paste, in another
    * app, with the thing that was going to be pasted no longer to hand.
+   *
+   * The message names the command rather than always naming the clipboard, because the
+   * other three can reach here too — Turn into runs a chain of writes against a position
+   * taken when the menu opened — and telling a GM whose Delete failed that their clipboard
+   * is broken sends them looking in the wrong place for a gesture that also did nothing.
    */
   async function runMenuAction(command: BlockHandleCommand) {
     const acting = menuTarget;
@@ -146,7 +153,9 @@
     try {
       if (acting) await runBlockHandleAction(editor, acting, command);
     } catch {
-      toastError("Couldn't copy that block — this window has no clipboard access.");
+      toastError(
+        actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"),
+      );
     } finally {
       onRelease();
       editor.commands.focus();
@@ -204,6 +213,17 @@
     if (!startBlockDrag(editor, target.pos, event.dataTransfer, ghost)) {
       event.preventDefault();
     }
+  }
+
+  /**
+   * Every way a drag can end, including the ways that change nothing: dropped somewhere
+   * that took it, dropped on nothing, Escaped, dragged out of the window. The handle comes
+   * down for all of them, and the editor is told the drag is over for all of them — see
+   * `endBlockDrag` for what a drag that quietly stayed "in progress" does to the next one.
+   */
+  function handleDragEnd() {
+    endBlockDrag(editor);
+    onRelease();
   }
 
   /**
@@ -266,7 +286,7 @@
   onblur={() => ((focused = false), reportHold())}
   onmousedown={() => selectBlockAt(editor, target.pos)}
   ondragstart={handleDragStart}
-  ondragend={onRelease}
+  ondragend={handleDragEnd}
   onkeydown={handleKeydown}
   onclick={() => (menuOpen ? dismissMenu() : openMenu())}
 >

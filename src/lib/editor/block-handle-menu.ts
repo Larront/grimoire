@@ -136,6 +136,31 @@ export function blockHandleMenuSections(
   return sections;
 }
 
+/**
+ * What the GM is told when an item they chose threw, in the words of the item they chose.
+ *
+ * Copy is the one that fails as a matter of course rather than as a bug — it awaits a
+ * clipboard, and a clipboard rejects on a denied permission or a webview that will not hand
+ * one over — so it is the only one that names a cause, because for it the cause is known
+ * and actionable. The other three reach here only when a write throws, and the honest thing
+ * to say about those is that the block is unchanged: naming the clipboard for a Delete
+ * sends the GM to check a permission that had nothing to do with it.
+ */
+export function actionFailureMessage(
+  command: BlockHandleCommand,
+  what: string,
+): string {
+  if (typeof command !== "string") return `Couldn't turn that ${what} into anything.`;
+  switch (command) {
+    case "copy":
+      return `Couldn't copy that ${what} — this window has no clipboard access.`;
+    case "duplicate":
+      return `Couldn't duplicate that ${what}. It is unchanged.`;
+    case "delete":
+      return `Couldn't delete that ${what}. It is still there.`;
+  }
+}
+
 /** The part of `navigator.clipboard` this needs, so a test can hand over a fake. */
 export interface ClipboardWriter {
   writeText(text: string): Promise<void>;

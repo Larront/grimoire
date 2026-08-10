@@ -28,6 +28,7 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 import { NodeSelection } from "@tiptap/pm/state";
 import {
   blockTargetAt,
+  endBlockDrag,
   handlePlacement,
   moveBlockAt,
   startBlockDrag,
@@ -204,6 +205,21 @@ describe("starting a drag from the grip", () => {
   it("declines a position that no longer holds a block, and starts nothing", () => {
     const editor = note("A sentence.");
     expect(startBlockDrag(editor, 9999, fakeDataTransfer().transfer)).toBe(false);
+    expect(editor.view.dragging).toBeNull();
+  });
+
+  it("lets the drag go when it ends, however it ended", () => {
+    // The case with teeth is the drag that ends in *nothing*: Escape, or a drop on the
+    // desktop. ProseMirror clears `dragging` from listeners on its own DOM, and the grip
+    // is chrome outside that DOM, so a drag abandoned there would leave the latch set —
+    // and the next drop into this note, of anything at all, would insert this block
+    // instead of what was dropped and delete the selection to make room.
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    startBlockDrag(editor, posOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
+    expect(editor.view.dragging).not.toBeNull();
+
+    endBlockDrag(editor);
+
     expect(editor.view.dragging).toBeNull();
   });
 });

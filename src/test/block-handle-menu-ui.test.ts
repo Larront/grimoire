@@ -371,8 +371,70 @@ describe("choosing an item acts on the block the grip was on", () => {
     await fireEvent.click(item("Copy"));
 
     expect(toastError).toHaveBeenCalledOnce();
+    expect(vi.mocked(toastError).mock.calls[0][0]).toContain("clipboard");
     expect(released).toEqual([true]);
     expect(menu()).toBeNull();
+  });
+
+  it("names the command that failed, rather than blaming the clipboard for all four", async () => {
+    // Copy is the one that fails as a matter of course; the other three reach the same
+    // `catch` when a write throws. Telling a GM whose Delete failed that their clipboard
+    // has no access sends them to check a permission that had nothing to do with it — and
+    // the gesture did nothing either way, so the message is all they have to go on.
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    // The write itself is what throws here: a dispatch into a view torn out from under it
+    // is the shape of the real failure, a stale position reaching ProseMirror. Once only,
+    // so the focus the handler restores on its way out still works — otherwise the test
+    // breaks the recovery it is asserting reached the GM.
+    vi.spyOn(editor.view, "dispatch").mockImplementationOnce(() => {
+      throw new Error("no");
+    });
+    await fireEvent.click(item("Delete"));
+
+    expect(toastError).toHaveBeenCalledOnce();
+    const said = vi.mocked(toastError).mock.calls[0][0];
+    expect(said).toContain("delete");
+    expect(said).not.toContain("clipboard");
+  });
+});
+
+// ─── The drag, at both ends ───────────────────────────────────────────────────
+
+describe("dragging from the grip", () => {
+  /** jsdom has no `DataTransfer`, and `dragstart` needs one to write the payload to. */
+  const transfer = () =>
+    ({
+      clearData: () => {},
+      setData: () => {},
+      getData: () => "",
+      setDragImage: () => {},
+      effectAllowed: "none",
+    }) as unknown as DataTransfer;
+
+  it("hands the drag to ProseMirror, so the drop is a move and not a copy", async () => {
+    const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el } = grip(editor, "statblockBlock");
+    await fireEvent.dragStart(el, { dataTransfer: transfer() });
+
+    expect(editor.view.dragging?.move).toBe(true);
+  });
+
+  it("lets it go again when the drag ends in nothing at all", async () => {
+    // Escape, or a drop on the desktop. ProseMirror clears `dragging` only from listeners
+    // on its own DOM, and the grip is chrome outside it — so the latch would survive, and
+    // the next drop of anything into this note would insert the statblock instead and
+    // delete the selection to make room for it.
+    const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el, released } = grip(editor, "statblockBlock");
+    await fireEvent.dragStart(el, { dataTransfer: transfer() });
+    await fireEvent.dragEnd(el);
+
+    expect(editor.view.dragging).toBeNull();
+    // Still the other thing dragend is for: the positions the handle holds describe the
+    // note as it was before the drop.
+    expect(released).toEqual([true]);
   });
 
   it("closes the menu and takes the handle down with it", async () => {
