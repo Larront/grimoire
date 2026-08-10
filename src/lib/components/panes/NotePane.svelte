@@ -452,9 +452,10 @@
                external divergence without blocking the rest of the app. -->
           <div
             data-testid="conflict-banner"
+            data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -488,9 +489,10 @@
                viewing is lost. Sticky, not modal. -->
           <div
             data-testid="deleted-banner"
+            data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />

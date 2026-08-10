@@ -192,14 +192,28 @@
   edge is the gutter and cannot be a utility class someone tidies to match the trailing
   one. `max()` because the gutter is a floor rather than a fixed inset: a wide pane gives
   the prose more room to breathe and the grip simply sits further out with it.
+
+  `data-note-inset` is the same inset for the pane's full-width chrome — the sticky conflict
+  and deleted-note banners above the column. They are siblings of it rather than children,
+  so they do not inherit the padding, and a hardcoded one drifts: while these were `px-6`
+  the banner text started 12px left of the title beneath it in every split pane, which is
+  the width the gutter was sized for in the first place.
+
+  NOTE, because it is invisible otherwise: these rules are deliberately OUTSIDE `@layer`, so
+  under Tailwind v4 they beat every utility in `@layer utilities` whatever its specificity.
+  That is what makes the comment above true — a `px-8` added to the column would be
+  overridden rather than break the gutter — but it also means such a class would compile,
+  ship, and silently do nothing. Change the padding here, never in the markup.
 */
-[data-note-column] {
+[data-note-column],
+[data-note-inset] {
   padding-inline: max(var(--block-gutter), 24px) 24px;
 }
 
 /* The wide-pane inset, matching the `@5xl` step the column's other spacing uses. */
 @container (min-width: 64rem) {
-  [data-note-column] {
+  [data-note-column],
+  [data-note-inset] {
     padding-inline: max(var(--block-gutter), 40px) 40px;
   }
 }
