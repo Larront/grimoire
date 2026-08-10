@@ -18,13 +18,19 @@
 // #182). The cost, accepted: a callout is grabbable over its own header and padding, not
 // over its children. Notion behaves the same way and for the same reason.
 //
+// The **gutter beside** a block hovers it too, at any height — see the section on the hover
+// zone. Reaching for the grip means leaving the words, and a hover that ended at the prose's
+// edge was a grip that vanished as the hand arrived.
+//
 // ─── Why the seam is here and not in the plugin ───────────────────────────────
 //
 // `blockTargetAt` takes a document and a position, not a mouse event. Everything about
 // *which* block is chosen is therefore testable, and it is the half that holds the design
-// decision above. Turning a pointer into a position is `posAtCoords`, one call, in the
-// plugin — and untestable anywhere without layout, which is exactly why it is kept down to
-// one line and holds no decisions of its own.
+// decision above. Turning a pointer into a position needs boxes — `posAtCoords`, the prose's
+// own rect, the column's — and boxes are untestable without layout, so every function that
+// takes a measurement here is a thin one wrapped around a decision made somewhere it can be
+// asserted: `hoverProbeAt` from numbers, `blockTargetAt` from a document. What is left in
+// the plugin is two listeners.
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state";
 import { closeHistory } from "@tiptap/pm/history";
@@ -79,6 +85,151 @@ export function targetFromCoords(
   const found = view.posAtCoords(coords);
   if (!found) return null;
   return blockTargetAt(view.state.doc, found.inside >= 0 ? found.inside : found.pos);
+}
+
+// ─── The gutter is part of the hover ──────────────────────────────────────────
+//
+// The grip sits beside a block's **first line**, and a GM reaching for it moves left out of
+// the prose and then up. The first half of that move leaves the document entirely — the
+// gutter is the column's own padding, not the editor's — so the prose raised a leave, the
+// hide was scheduled, and the grip was gone before the second half of the move arrived. It
+// only survived a pointer that went straight onto it, which for anything taller than one
+// line is a diagonal into a 16px square.
+//
+// So the gutter beside a block hovers that block, exactly as the block's own text does. The
+// pointer's height is what names the block and its distance out into the margin is ignored,
+// which is the rule a GM is already assuming when they move left towards the grip.
+
+/** Where a pointer may be and still be hovering a block. */
+export interface HoverZone {
+  /** The prose's box — where the words are, and what the pointer's x is clamped into. */
+  prose: Box;
+  /** The gutter's outer edge: the padded column's own left. */
+  columnLeft: number;
+}
+
+/**
+ * A pixel, so a clamped coordinate lands *in* the first character rather than on the
+ * boundary before it — `posAtCoords` on an edge can answer with the position outside.
+ */
+const PROBE_INSET = 1;
+
+export interface HoverProbe {
+  left: number;
+  top: number;
+  /**
+   * True when the pointer was out in the gutter and its x had to be pulled into the prose
+   * to ask the question at all. The answer then needs `innermostAtHeight` behind it — see
+   * the note there for what a clamped x alone gets wrong.
+   */
+  fromGutter: boolean;
+}
+
+/**
+ * The coordinates to ask the document about for a pointer at `coords`, or null when the
+ * pointer is nowhere the handle answers for.
+ *
+ * Inside the prose the pointer is its own answer. Out in the gutter the x is pulled back to
+ * the prose's leading edge and the y left alone, which is what makes the whole strip beside
+ * a block hover that block.
+ *
+ * Null outside the prose's own vertical run, which is the part that keeps this honest: the
+ * column also holds the note's title and the space under the last block, and a clamp with
+ * no vertical bound would answer "the first paragraph" for a pointer up in the title field
+ * and raise a grip beside prose the GM is not pointing at.
+ */
+export function hoverProbeAt(
+  coords: { left: number; top: number },
+  zone: HoverZone,
+): HoverProbe | null {
+  const { prose, columnLeft } = zone;
+  if (coords.top < prose.top || coords.top > prose.top + prose.height) return null;
+  if (coords.left < columnLeft || coords.left > prose.left + prose.width) return null;
+  const inside = prose.left + PROBE_INSET;
+  return coords.left < inside
+    ? { left: inside, top: coords.top, fromGutter: true }
+    : { left: coords.left, top: coords.top, fromGutter: false };
+}
+
+/** The padded column a note is drawn in, which is the element the gutter belongs to. */
+export function noteColumn(view: EditorView): HTMLElement {
+  const dom = view.dom as HTMLElement;
+  return dom.closest<HTMLElement>("[data-note-column]") ?? dom;
+}
+
+/** The block child of `parent` whose box the height `top` falls in, if there is one. */
+function blockChildAtHeight(
+  view: EditorView,
+  parent: BlockTarget,
+  top: number,
+): BlockTarget | null {
+  let found: BlockTarget | null = null;
+  parent.node.forEach((child, offset) => {
+    if (found || !child.isBlock) return;
+    // A non-leaf node's content starts one position after the node itself.
+    const pos = parent.pos + 1 + offset;
+    const dom = blockElementAt(view, pos);
+    if (!dom) return;
+    const box = dom.getBoundingClientRect();
+    if (top >= box.top && top <= box.bottom) found = { pos, node: child };
+  });
+  return found;
+}
+
+/**
+ * The innermost block at a height, descending from a block that contains it.
+ *
+ * This is what a clamped x cannot do on its own, and the case is a creature inside an
+ * encounter callout. The gutter is outside the callout, so a pointer level with the creature
+ * but out in the margin is level with the *box* as well — and the position at the prose's
+ * leading edge is inside the callout, not inside the card. Asked with coordinates alone the
+ * answer is "the callout", so a GM reaching left for a creature's grip would watch it slide
+ * up to the encounter's own first line, mid-reach, having asked for nothing.
+ *
+ * Height alone is the right test out here, and only out here: distance out into the margin
+ * is exactly what the gutter hover disregards. Inside the prose the x still decides, because
+ * statblocks tile two to a row and two cards at the same height are not the same block.
+ */
+export function innermostAtHeight(
+  view: EditorView,
+  target: BlockTarget,
+  top: number,
+): BlockTarget {
+  // Terminates on its own: every step descends a level, and an atom has no block children.
+  let current = target;
+  for (let child = blockChildAtHeight(view, current, top); child; ) {
+    current = child;
+    child = blockChildAtHeight(view, current, top);
+  }
+  return current;
+}
+
+/**
+ * The block a pointer anywhere in the column is hovering — the gutter included.
+ *
+ * The measuring half of `hoverProbeAt`, kept beside `placeHandle` and for the same reason:
+ * boxes cannot be asserted without layout, so they are gathered where there are no
+ * decisions to hide behind them.
+ */
+export function targetFromPointer(
+  view: EditorView,
+  coords: { left: number; top: number },
+): BlockTarget | null {
+  const prose = (view.dom as HTMLElement).getBoundingClientRect();
+  const probe = hoverProbeAt(coords, {
+    prose: {
+      left: prose.left,
+      top: prose.top,
+      width: prose.width,
+      height: prose.height,
+    },
+    columnLeft: noteColumn(view).getBoundingClientRect().left,
+  });
+  if (!probe) return null;
+
+  const target = targetFromCoords(view, probe);
+  if (!target || !probe.fromGutter) return target;
+  return innermostAtHeight(view, target, probe.top);
 }
 
 // ─── Acting on one ────────────────────────────────────────────────────────────
@@ -551,7 +702,7 @@ export function placeHandle(
   const gap = parseFloat(getComputedStyle(handleEl).getPropertyValue("--block-handle-gap"));
   // The padded column, not the prose: its left edge is the pane's, and the gutter is
   // precisely the space between the two.
-  const column = (view.dom as HTMLElement).closest("[data-note-column]") ?? view.dom;
+  const column = noteColumn(view);
 
   return handlePlacement({
     block: {
@@ -622,23 +773,34 @@ export const BlockHandle = Extension.create<BlockHandleOptions>({
     return [
       new Plugin({
         key: blockHandleKey,
-        props: {
-          handleDOMEvents: {
-            // `mousemove` rather than per-node `mouseenter`: a sealed block's node view
-            // swallows its own events, so listening inside the blocks is exactly what does
-            // not work. The editor's own surface sees every move regardless.
-            mousemove(view, event) {
-              onTarget(
-                targetFromCoords(view, { left: event.clientX, top: event.clientY }),
-                view,
-              );
-              return false;
+        // Listened for on the **column**, not through `handleDOMEvents` on the prose, which
+        // is what brings the gutter into the hover: the gutter is the column's padding and
+        // no event in it ever reaches the editor's own surface. The prose is inside the
+        // column, so one listener still hears every move across the words as well.
+        //
+        // `mousemove` rather than per-node `mouseenter`: a sealed block's node view swallows
+        // its own events (ADR-0016 §4), so listening inside the blocks is exactly what does
+        // not work. A move over the column is seen whatever it is over.
+        view(view) {
+          const column = noteColumn(view);
+          const move = (event: MouseEvent) => {
+            onTarget(
+              targetFromPointer(view, { left: event.clientX, top: event.clientY }),
+              view,
+            );
+          };
+          // The grip is `fixed` chrome and no descendant of the column, so a pointer moving
+          // onto it leaves here — which is the leave the hide delay exists to survive.
+          const leave = () => onTarget(null, view);
+
+          column.addEventListener("mousemove", move);
+          column.addEventListener("mouseleave", leave);
+          return {
+            destroy() {
+              column.removeEventListener("mousemove", move);
+              column.removeEventListener("mouseleave", leave);
             },
-            mouseleave(view) {
-              onTarget(null, view);
-              return false;
-            },
-          },
+          };
         },
       }),
     ];

@@ -26,6 +26,7 @@ import {
   canTurnInto,
   deleteBlockAt,
   duplicateBlockAt,
+  hoverProbeAt,
   selectBlockAt,
   turnIntoAt,
   turnIntoKindAt,
@@ -106,6 +107,55 @@ describe("the handle targets the innermost block", () => {
     const editor = note("A sentence.");
     expect(blockTargetAt(editor.state.doc, -1)).toBeNull();
     expect(blockTargetAt(editor.state.doc, 9999)).toBeNull();
+  });
+});
+
+// ─── Where a pointer counts as hovering ───────────────────────────────────────
+//
+// The numbers half of the gutter hover. What it does to a real document at a real coordinate
+// is in `block-handle-placement.browser.test.ts`, where there is layout to measure; this is
+// the rule itself, which is a decision about four edges.
+
+describe("the pointer's hover zone", () => {
+  // A pane 300 wide with a 36px gutter: prose from 36 to 300, one block tall.
+  const zone = {
+    prose: { left: 36, top: 100, width: 264, height: 200 },
+    columnLeft: 0,
+  };
+
+  it("leaves a pointer over the words exactly where it is", () => {
+    expect(hoverProbeAt({ left: 120, top: 150 }, zone)).toEqual({
+      left: 120,
+      top: 150,
+      fromGutter: false,
+    });
+  });
+
+  it("pulls a pointer out in the gutter back to the prose, keeping its height", () => {
+    // The height is the whole answer: it is what says *which* block, and the distance out
+    // into the margin is what the GM is not making a claim about.
+    expect(hoverProbeAt({ left: 4, top: 260 }, zone)).toEqual({
+      left: 37,
+      top: 260,
+      fromGutter: true,
+    });
+  });
+
+  it("answers for the far edge of the gutter, which is where a pointer overshoots to", () => {
+    expect(hoverProbeAt({ left: 0, top: 150 }, zone)?.fromGutter).toBe(true);
+    expect(hoverProbeAt({ left: -1, top: 150 }, zone)).toBeNull();
+  });
+
+  it("declines a pointer above or below the prose", () => {
+    // Above is the note's title, below is the empty space under the last block. Neither is
+    // a claim about a block, and a clamp with no vertical bound would make both into one.
+    expect(hoverProbeAt({ left: 10, top: 99 }, zone)).toBeNull();
+    expect(hoverProbeAt({ left: 10, top: 301 }, zone)).toBeNull();
+  });
+
+  it("declines a pointer past the far side of the prose", () => {
+    // The trailing margin is not a gutter: there is no grip over there to reach for.
+    expect(hoverProbeAt({ left: 301, top: 150 }, zone)).toBeNull();
   });
 });
 

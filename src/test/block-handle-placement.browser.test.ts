@@ -36,23 +36,37 @@ afterEach(() => {
 /**
  * The note pane's column, as NotePane draws it: a container-query parent — which is all
  * Tailwind's `@container` is — holding the element that carries the gutter.
+ *
+ * The title sits inside the column above the prose, as it does in the app, because the
+ * column is now what the handle listens on — so what the handle does about a pointer up in
+ * the title is a real question and there has to be a title for it to be asked about.
  */
-function openNote(markdown: string, paneWidth: number) {
+function openNote(
+  markdown: string,
+  paneWidth: number,
+  onBlockTarget?: (target: BlockTarget | null) => void,
+) {
   const pane = document.createElement("div");
   pane.style.cssText = `container-type: inline-size; width: ${paneWidth}px; position: absolute; left: 0; top: 0;`;
   const column = document.createElement("div");
   column.setAttribute("data-note-column", "");
+  const title = document.createElement("input");
+  title.style.cssText = "display: block; width: 100%; height: 40px;";
+  column.appendChild(title);
   pane.appendChild(column);
   document.body.appendChild(pane);
 
+  const host = document.createElement("div");
+  column.appendChild(host);
+
   const editor = new Editor({
-    element: column,
-    extensions: noteExtensions(),
+    element: host,
+    extensions: noteExtensions({ onBlockTarget }),
     content: markdown,
     contentType: "markdown",
   });
   open = { editor, pane };
-  return { editor, pane, column };
+  return { editor, pane, column, title };
 }
 
 /** A point a little inside an element — where a pointer crossing it first lands. */
@@ -293,6 +307,95 @@ describe("dragging the grip", () => {
     );
 
     expect(editor.getMarkdown().trim()).toBe("Second.\n\nFirst.");
+  });
+});
+
+describe("reaching for the grip", () => {
+  // The move a GM actually makes: left out of the words, then up to the grip. The first
+  // half of it leaves the prose — the gutter is the column's padding, not the editor's —
+  // and until #190's follow-on that leave took the grip away before the second half
+  // arrived. These dispatch real `mousemove`s at real coordinates and read what the
+  // extension reports, so the whole path is under test: the listener, the clamp, and
+  // `posAtCoords` on the coordinate the clamp produced.
+  function open(markdown: string, paneWidth = NARROW_PANE) {
+    const seen: (BlockTarget | null)[] = [];
+    const opened = openNote(markdown, paneWidth, (t) => seen.push(t));
+    return { ...opened, last: () => seen.at(-1) ?? null };
+  }
+
+  function pointerAtColumn(column: Element, point: { left: number; top: number }) {
+    column.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: point.left,
+        clientY: point.top,
+      }),
+    );
+  }
+
+  /** A point out in the gutter, level with `top` — where the grip is reached from. */
+  function inGutter(column: Element, top: number) {
+    return { left: column.getBoundingClientRect().left + 2, top };
+  }
+
+  it("holds the block while the pointer sits in the gutter beside its last line", async () => {
+    const { editor, column, last } = open(`${"A very long sentence ".repeat(20).trim()}.`);
+    const paragraph = firstBlock(editor);
+    const block = paragraph.getBoundingClientRect();
+    expect(block.height).toBeGreaterThan(60); // it really did wrap
+
+    // Level with the bottom of a paragraph several lines tall, which is the y furthest
+    // from the grip: the grip is drawn beside the *first* line.
+    const low = block.bottom - 6;
+    pointerAtColumn(column, { left: block.left + 8, top: low });
+    expect(last()?.node.textContent).toBe(paragraph.textContent);
+
+    const rect = await grip(editor, last()!);
+    expect(rect.bottom, "the grip is a long way up from that y").toBeLessThan(low - 20);
+
+    // Straight out into the margin, nowhere near the grip, and the block is still held.
+    pointerAtColumn(column, inGutter(column, low));
+    expect(last()?.node.textContent).toBe(paragraph.textContent);
+  });
+
+  it("holds a paragraph under the pointer's own height, not the one the grip is beside", () => {
+    // Two paragraphs, and the gutter beside the second must answer with the second. A
+    // "keep whatever was showing" fix would pass the test above and fail this one.
+    const { editor, column, last } = open("First.\n\nSecond.", WIDE_PANE);
+    const blocks = Array.from(editor.view.dom.children);
+    const first = blocks[0].getBoundingClientRect();
+    const second = blocks[1].getBoundingClientRect();
+
+    pointerAtColumn(column, inGutter(column, first.top + first.height / 2));
+    expect(last()?.node.textContent).toBe("First.");
+
+    pointerAtColumn(column, inGutter(column, second.top + second.height / 2));
+    expect(last()?.node.textContent).toBe("Second.");
+  });
+
+  it("keeps a creature inside an encounter when the pointer goes out to the margin", () => {
+    // The nested case, and the one a clamp can get wrong: the gutter is outside the
+    // callout, so a pointer level with a creature but out in the margin is level with the
+    // *box* too — and answering with the box would move the grip off the creature the GM
+    // was reaching for, silently, mid-reach.
+    const { editor, column, last } = open(
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join(
+        "\n",
+      ),
+      WIDE_PANE,
+    );
+    const card = editor.view.dom.querySelector("[data-note-block='statblock']")!;
+    const box = card.getBoundingClientRect();
+
+    pointerAtColumn(column, inGutter(column, box.top + box.height / 2));
+    expect(last()?.node.type.name).toBe("statblockBlock");
+  });
+
+  it("answers nothing for a pointer up in the note's title", () => {
+    const { column, title, last } = open("The lower halls are flooded.");
+    const box = title.getBoundingClientRect();
+    pointerAtColumn(column, { left: box.left + 20, top: box.top + box.height / 2 });
+    expect(last()).toBeNull();
   });
 });
 
