@@ -75,6 +75,12 @@ export default defineConfig({
         // imports it, and without the plugin the stylesheet under test is not the one
         // that ships.
         plugins: [tailwindcss()],
+        // Pre-bundled rather than discovered. The browser project serves its modules to a
+        // real page, so a dependency Vite meets for the first time mid-run is optimized and
+        // the page *reloads* — which Vitest reports as "failed to find the current suite"
+        // and fails the whole file, once, on the run that introduced the dependency. Adding
+        // jest-dom to the setup file did exactly that; a name here is the cost of a new one.
+        optimizeDeps: { include: ["@testing-library/jest-dom"] },
         test: {
           name: "browser",
           include: ["src/**/*.browser.{test,spec}.{js,ts}"],

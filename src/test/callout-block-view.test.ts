@@ -11,10 +11,10 @@
 // that reaches the top of a body and leaves it, and a keystroke that must *not* escape
 // the title input are all facts about the document after an event, and a component
 // mounted on its own has no document to be right about.
-import { fireEvent } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
-import { deleteBlockAt } from "$lib/editor/block-handle";
+import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import {
   bodyStart,
   caretAt,
@@ -22,9 +22,9 @@ import {
   closeNote,
   dom,
   note,
-  posOf,
   press,
   saved,
+  targetOf,
 } from "./fixtures/note-editor";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
@@ -507,6 +507,47 @@ describe("a callout follows the document", () => {
 // deleted because the record of a reversed decision is worth more than a clean file —
 // callout-block.ts holds the reasoning, this holds the behaviour it produced.
 
+/**
+ * The removal a GM actually performs, end to end: the grip beside the callout, the menu it
+ * opens, the Delete in it.
+ *
+ * Driven through the real `BlockHandle` rather than by calling `deleteBlockAt` — which is
+ * how these read at first, and it made every claim below pass with the grip, the menu and
+ * their whole module deleted from the app. The callout offers no removal of its own (the
+ * test above pins that), so this gesture is the *only* way a box comes off a note, and it is
+ * the thing this suite is about.
+ *
+ * The `mousedown` is part of it and not noise: it is what selects the block for the drag
+ * that shares this button, so it is also what leaves a whole-block selection for the menu
+ * action to hand back to the prose.
+ */
+async function deleteViaGrip(editor: Editor) {
+  render(BlockHandle, {
+    props: {
+      editor,
+      target: targetOf(editor, "blockquote"),
+      onHold: () => {},
+      onPin: () => {},
+      onRetarget: () => {},
+      onRelease: () => {},
+    },
+  });
+  const grip = document.querySelector<HTMLButtonElement>("[data-block-handle]");
+  expect(grip, "a grip on the callout").not.toBeNull();
+
+  await fireEvent.mouseDown(grip!);
+  await fireEvent.click(grip!);
+
+  const remove = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+    el.textContent?.trim().startsWith("Delete"),
+  );
+  expect(remove, "a Delete item in the grip's menu").toBeTruthy();
+  await fireEvent.click(remove!);
+  // The action is genuinely async — Copy awaits a clipboard, so all four go through a
+  // promise — and the write lands in its `finally`.
+  await Promise.resolve();
+}
+
 describe("removing a callout", () => {
   it("draws no removal control of its own, in the header or anywhere else", () => {
     const editor = note(
@@ -535,8 +576,7 @@ describe("removing a callout", () => {
       "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.",
     );
 
-    deleteBlockAt(editor, posOf(editor, "blockquote"));
-    await Promise.resolve();
+    await deleteViaGrip(editor);
 
     expect(saved(editor)).toBe("");
   });
@@ -549,8 +589,7 @@ describe("removing a callout", () => {
       "> [!encounter] The Ambush\n> Two kobolds.\n>\n> - a rusted blade\n> - a lantern",
     );
 
-    deleteBlockAt(editor, posOf(editor, "blockquote"));
-    await Promise.resolve();
+    await deleteViaGrip(editor);
 
     const out = saved(editor);
     expect(out).not.toContain("Two kobolds.");
@@ -562,9 +601,8 @@ describe("removing a callout", () => {
     const md = "> [!tip] Ask the ferryman\n> He knows the crossing.";
     const editor = note(md);
 
-    deleteBlockAt(editor, posOf(editor, "blockquote"));
+    await deleteViaGrip(editor);
     editor.commands.undo();
-    await Promise.resolve();
 
     expect(saved(editor)).toBe(md);
   });
@@ -574,8 +612,7 @@ describe("removing a callout", () => {
       "Before the box.\n\n> [!note] Aside\n> Inside the box.\n\nAfter the box.",
     );
 
-    deleteBlockAt(editor, posOf(editor, "blockquote"));
-    await Promise.resolve();
+    await deleteViaGrip(editor);
 
     expect(saved(editor)).toBe("Before the box.\n\nAfter the box.");
   });

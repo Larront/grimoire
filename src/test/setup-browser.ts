@@ -1,3 +1,10 @@
+// The same matchers as the jsdom project, first: `setup.ts` imports jest-dom and this file
+// did not, so `expect` meant two different things in the two projects. Latent rather than
+// live — the browser files happen to use core matchers only — but the most natural assertion
+// to reach for there is `expect(grip).toBeVisible()`, and it died as "not a function" in the
+// one project whose whole purpose is asking about boxes.
+import "@testing-library/jest-dom";
+
 // What a real browser is missing that the app assumes: the Tauri bridge.
 //
 // The jsdom project mocks `@tauri-apps/api/core` with `vi.mock`. That is a module-graph
