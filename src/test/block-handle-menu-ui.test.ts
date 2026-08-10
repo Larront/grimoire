@@ -18,6 +18,7 @@ vi.mock("$lib/toast", () => ({ toastError: vi.fn() }));
 import { toastError } from "$lib/toast";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import { deleteBlockAt } from "$lib/editor/block-handle";
+import { NodeSelection } from "@tiptap/pm/state";
 import { closeNote, note, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
 afterEach(closeNote);
@@ -597,5 +598,72 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     await fireEvent.click(item("Bullet List"));
 
     expect(saved(editor)).toBe(md);
+  });
+});
+
+// ─── What the next keystroke lands on ─────────────────────────────────────────
+//
+// Three parts of this gesture set a whole-block `NodeSelection` on purpose — the grip's own
+// `mousedown` and `startBlockDrag`, so a drag has something to carry, and `moveBlockAt`, so
+// a second `↑` moves the same block. A node selection is *replaced* by the next character
+// typed, so every route that hands focus back to the prose has to collapse it first or the
+// GM's next letter stands in for the block they just acted on.
+//
+// Typed as ProseMirror types: `insertText` against the live selection is the same write a
+// keypress performs, and it is the write that made these three destructive.
+
+describe("handing focus back to the prose", () => {
+  /** The GM's next character, exactly as a keypress applies it: over the selection. */
+  function typeNext(editor: Editor, text = "x") {
+    editor.view.dispatch(editor.state.tr.insertText(text));
+  }
+
+  it("leaves a caret and not the block, after a menu action reached by mouse", async () => {
+    const editor = note("First.\n\nSecond.");
+    const { el } = grip(editor);
+    // The whole gesture, `mousedown` included: that press is what selects the block.
+    await fireEvent.mouseDown(el);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Duplicate"));
+    await Promise.resolve();
+
+    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+    typeNext(editor);
+    // The duplicate is still there and so is the original — one of them carries the
+    // character, neither is replaced by it.
+    expect(saved(editor)).toContain("First.");
+    expect(saved(editor).split("\n\n")).toHaveLength(3);
+  });
+
+  it("leaves a caret after a copy, which is the paragraph a GM types straight after", async () => {
+    stubClipboard();
+    const editor = note("First.\n\nSecond.");
+    const { el } = grip(editor);
+    await fireEvent.mouseDown(el);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Copy"));
+    await Promise.resolve();
+    typeNext(editor);
+
+    // The thing that was copied survives being typed next to. Before this it did not: the
+    // paragraph became "x" on the first character.
+    expect(saved(editor)).toContain("First.");
+    expect(saved(editor)).toContain("Second.");
+  });
+
+  it("leaves a caret when Escape follows a keyboard reorder", async () => {
+    // The route that survives fixing the mouse one: `moveBlockAt` leaves the block it
+    // moved selected by design, and Escape is the way out of a grip raised by `Mod-Shift-h`
+    // — so the exit from a reorder handed the prose a node selection with no press involved.
+    const editor = note("First.\n\nSecond.\n\nThird.");
+    const { el } = grip(editor, "paragraph", 2);
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(saved(editor)).toBe("First.\n\nThird.\n\nSecond.");
+
+    await fireEvent.keyDown(el, { key: "Escape" });
+    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+
+    typeNext(editor);
+    expect(saved(editor)).toContain("Third.");
   });
 });

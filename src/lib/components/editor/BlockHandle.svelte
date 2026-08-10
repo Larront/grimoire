@@ -18,6 +18,7 @@
     blockLabel,
     blockTargetAt,
     endBlockDrag,
+    focusProse,
     moveBlockAt,
     placeHandle,
     selectBlockAt,
@@ -146,6 +147,10 @@
    * other three can reach here too — Turn into runs a chain of writes against a position
    * taken when the menu opened — and telling a GM whose Delete failed that their clipboard
    * is broken sends them looking in the wrong place for a gesture that also did nothing.
+   *
+   * `focusProse` and not `editor.commands.focus()`, here and on Escape, because the grip
+   * sets a whole-block selection on `mousedown` and `moveBlockAt` leaves one behind:
+   * focusing with one still set hands the GM a block their next character replaces.
    */
   async function runMenuAction(command: BlockHandleCommand) {
     const acting = menuTarget;
@@ -158,7 +163,7 @@
       );
     } finally {
       onRelease();
-      editor.commands.focus();
+      focusProse(editor);
     }
   }
 
@@ -257,10 +262,12 @@
       // the more discoverable of the two by a distance.
       case "Escape":
         // Back to the prose. A grip that traps focus is worse than one that is skipped —
-        // and this is the way out of the one raised by `Mod-Shift-h`.
+        // and this is the way out of the one raised by `Mod-Shift-h`. With a caret, not
+        // with the moved block still selected — an Escape after `↑` would otherwise leave
+        // the GM's next character standing in for the block they just reordered.
         event.preventDefault();
         onRelease();
-        editor.commands.focus();
+        focusProse(editor);
         break;
     }
   }
@@ -271,9 +278,11 @@
   type="button"
   draggable="true"
   data-block-handle
-  aria-label="Move {label}"
+  aria-label="Actions for {label}"
   aria-haspopup="menu"
   aria-expanded={menuOpen}
+  aria-controls={menuOpen ? "block-handle-menu" : undefined}
+  aria-describedby="block-handle-hint"
   title="Click for actions · drag to move · ↑ ↓ to reorder"
   style="left: {left}px; top: {top}px; visibility: {placed ? 'visible' : 'hidden'}"
   class="fixed z-40 flex items-center justify-center rounded
@@ -292,6 +301,16 @@
 >
   <GripVertical size={14} />
 </button>
+
+<!-- The reorder hint, said where a screen reader will reach it.
+     The `title` above carries all three gestures for a GM with a mouse, but an `aria-label`
+     *replaces* a `title` in the accessible name — so with the label alone the arrow keys
+     were documented only in a tooltip you need a pointer to see, and the one gesture the
+     grip exists for was announced nowhere. The name says what Enter does (open the menu),
+     and this says what the arrows do. -->
+<span id="block-handle-hint" class="sr-only">
+  Arrow up and down move this block among its siblings.
+</span>
 
 <!-- Click and not pointerdown is what keeps this out of the drag's way: a completed drag
      raises no click at all, so the two gestures share one button without a timer or a

@@ -135,9 +135,14 @@
 <!-- `tabindex` is never used: the items carry the roving one and one of them holds focus
      for as long as the menu is open. It is on the container because a `menu` must be
      focusable to be one at all — there has to be somewhere for focus to sit if an item
-     goes out from under it. -->
+     goes out from under it.
+
+     A fixed `id`, which the grip points `aria-controls` at: one handle exists at a time and
+     it is the only thing that opens this, so there is never a second one to collide with. -->
+
 <div
   bind:this={menuEl}
+  id="block-handle-menu"
   data-block-handle-menu
   class="fixed z-50 min-w-[190px] rounded-lg border border-border bg-popover py-1
          shadow-xl shadow-black/30"

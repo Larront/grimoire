@@ -44,7 +44,7 @@
 // asserted: `hoverProbeAt` from numbers, `blockTargetAt` from a document. What is left in
 // the plugin is two listeners.
 import { Extension } from "@tiptap/core";
-import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
@@ -347,6 +347,37 @@ export function selectBlockAt(editor: Editor, pos: number): boolean {
       return true;
     })
     .run();
+}
+
+/**
+ * Hands focus back to the prose with a **caret**, never a whole-block selection.
+ *
+ * Three separate parts of the gesture leave a `NodeSelection` over the block on purpose,
+ * and every one of them can be the last thing that happened before the GM types again:
+ *
+ *   - `selectBlockAt`, on the grip's `mousedown`, because that is what a drag carries.
+ *   - `startBlockDrag`, for the same reason.
+ *   - `moveBlockAt`, which leaves the block it moved selected so the next `ArrowUp` acts
+ *     on the same block rather than on whatever slid into the old position.
+ *
+ * A node selection is *replaced* by the next character typed. So focusing the prose with
+ * one still set means the GM's next keystroke destroys the block they just copied, moved
+ * or duplicated — a whole paragraph gone, one Ctrl+Z away but with nothing on screen
+ * saying why. Collapsing it here is what makes those three selections safe to set.
+ *
+ * `TextSelection.between` and not `Selection.near`: `near` answers with another
+ * `NodeSelection` for a selectable leaf, which is the case that has to be got rid of. This
+ * searches for a *text* position, forwards first — so a divider's grip puts the caret at
+ * the start of the paragraph after it, and a paragraph's puts it at that paragraph's start.
+ */
+export function focusProse(editor: Editor): void {
+  const { selection } = editor.state;
+  if (selection instanceof NodeSelection) {
+    const tr = editor.state.tr;
+    const $pos = tr.doc.resolve(selection.from);
+    editor.view.dispatch(tr.setSelection(TextSelection.between($pos, $pos, 1)));
+  }
+  editor.commands.focus();
 }
 
 export function deleteBlockAt(editor: Editor, pos: number): boolean {
@@ -814,10 +845,18 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
     if (!(child instanceof HTMLElement)) break;
     el = child;
   }
-  // Nothing in there reads as a line — an empty block, or chrome built out of rows taller
-  // than their own text. The grip's top edge goes level with the block's, which is the one
-  // thing that is true whatever is inside it.
-  return { top: dom.getBoundingClientRect().top, height: handleHeight };
+  // Nothing in there reads as a line — an empty block, chrome built out of rows taller than
+  // their own text, or a divider, which has no contents to range over at all.
+  //
+  // So the block's own top, with one line's worth of height at most to centre within. Both
+  // halves earn their place. The cap is what keeps a block taller than a line from centring
+  // the grip halfway down itself, which is the failure the descent above exists to avoid.
+  // And taking the box's height where it is *smaller* than a line is what a divider needs:
+  // its box is a single pixel, and a fallback that reported `handleHeight` here would zero
+  // the centring term in `handlePlacement` and hang the whole grip below the rule, reading
+  // as the next paragraph's.
+  const box = dom.getBoundingClientRect();
+  return { top: box.top, height: Math.min(box.height, lineHeightOf(dom) || handleHeight) };
 }
 
 /**

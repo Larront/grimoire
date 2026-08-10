@@ -251,6 +251,34 @@ describe("the grip beside a block", () => {
     expect(rect.top).toBeGreaterThanOrEqual(block.top - 2);
   });
 
+  it("straddles a divider rather than hanging below it", async () => {
+    // The other end of the test above, and excluded from it by construction: its guard is
+    // `height > 40`, so every block *shorter* than the grip sat outside the one claim about
+    // the vertical. A divider is the extreme — its box is a single pixel — and the fallback
+    // in `firstLineBox` reported the handle's own height for it, which zeroes the centring
+    // term and degenerates the placement to top-alignment. An 18px grip whose top edge is
+    // level with a 1px rule hangs entirely *below* it and reads as the next paragraph's.
+    //
+    // Targeted by position rather than by pointer: a rule is thinner than any point a hand
+    // could aim at it, which is what the gutter's full-height hover is for.
+    const { editor } = openNote("Above.\n\n---\n\nBelow.", NARROW_PANE);
+    let pos = -1;
+    editor.state.doc.descendants((node, at) => {
+      if (node.type.name === "horizontalRule") pos = at;
+    });
+    const target = blockTargetAt(editor.state.doc, pos)!;
+    expect(target.node.type.name).toBe("horizontalRule");
+
+    const block = boxOf(editor, target);
+    const rect = await grip(editor, target);
+
+    // Centred on the block, which for something shorter than the grip means the block's own
+    // middle falls inside the grip rather than at its top edge.
+    const middle = block.top + block.height / 2;
+    expect(rect.top).toBeLessThanOrEqual(middle);
+    expect(rect.bottom).toBeGreaterThanOrEqual(middle);
+  });
+
   it.each([
     ["an infobox", "```infobox\nPopulation: 4,200\n```", "infoboxBlock"],
     [
@@ -336,7 +364,13 @@ describe("the grip beside a block", () => {
     await grip(editor, target);
 
     const el = document.querySelector("[data-block-handle]") as HTMLElement;
-    expect(el.getAttribute("aria-label")).toBe("Move statblock");
+    // Named for what pressing it does — Enter and Space open the menu — with the reorder
+    // gesture the arrows carry described alongside rather than folded into the name.
+    expect(el.getAttribute("aria-label")).toBe("Actions for statblock");
+    expect(el.getAttribute("aria-describedby")).toBe("block-handle-hint");
+    expect(document.getElementById("block-handle-hint")?.textContent?.trim()).toContain(
+      "Arrow up and down",
+    );
     el.focus();
     expect(document.activeElement).toBe(el);
   });
