@@ -24,9 +24,10 @@
     type BlockTarget,
   } from "$lib/editor/block-handle";
   import {
-    blockHandleMenuItems,
+    blockHandleMenuSections,
     runBlockHandleAction,
-    type BlockHandleAction,
+    type BlockHandleCommand,
+    type BlockHandleMenuSection,
   } from "$lib/editor/block-handle-menu";
   import BlockHandleMenu from "./BlockHandleMenu.svelte";
   import { toastError } from "$lib/toast";
@@ -80,14 +81,19 @@
 
   // ── The menu ────────────────────────────────────────────────────────────────
   //
-  // The three actions a click on the grip reaches (#191). The block the menu acts on is
-  // captured *when it opens* — the whole target, position and node both, so that an edit
-  // landing while the menu is up is caught rather than silently redirected to whichever
-  // block has moved into that position.
+  // What a click on the grip reaches (#191, #192). The block the menu acts on is captured
+  // *when it opens* — the whole target, position and node both, so that an edit landing
+  // while the menu is up is caught rather than silently redirected to whichever block has
+  // moved into that position.
+  //
+  // The sections are captured with it, and for the same reason rather than for symmetry:
+  // they are read off the document, and which kind is ticked as current is a fact about
+  // the block as it stood when the GM opened the menu. Deriving them live would have the
+  // list under the pointer change shape mid-reach.
   let menuOpen = $state(false);
   let menuTarget = $state.raw<BlockTarget | null>(null);
+  let menuSections = $state.raw<BlockHandleMenuSection[]>([]);
   let menuAnchor = $state({ x: 0, y: 0, anchorTop: 0 });
-  const menuItems = $derived(blockHandleMenuItems(target.node));
 
   function openMenu() {
     if (!el) return;
@@ -95,6 +101,7 @@
     // Off the grip's own box: below it where there is room, above it where there is not.
     menuAnchor = { x: box.left, y: box.bottom + 4, anchorTop: box.top - 4 };
     menuTarget = target;
+    menuSections = blockHandleMenuSections(editor.state.doc, target);
     menuOpen = true;
     onPin(true);
   }
@@ -119,7 +126,7 @@
   }
 
   /**
-   * One of the three, on the block the menu was opened on.
+   * One menu item, on the block the menu was opened on.
    *
    * The handle comes down afterwards whatever happened, and focus goes back to the prose.
    * Every position it holds describes the document as it was before the write — after a
@@ -133,11 +140,11 @@
    * because a copy that silently did not happen is discovered at the paste, in another
    * app, with the thing that was going to be pasted no longer to hand.
    */
-  async function runMenuAction(action: BlockHandleAction) {
+  async function runMenuAction(command: BlockHandleCommand) {
     const acting = menuTarget;
     closeMenu();
     try {
-      if (acting) await runBlockHandleAction(editor, acting, action);
+      if (acting) await runBlockHandleAction(editor, acting, command);
     } catch {
       toastError("Couldn't copy that block — this window has no clipboard access.");
     } finally {
@@ -271,11 +278,11 @@
      movement threshold between them. -->
 {#if menuOpen}
   <BlockHandleMenu
-    items={menuItems}
+    sections={menuSections}
     {label}
     anchor={menuAnchor}
     trigger={el}
-    onSelect={(action) => void runMenuAction(action)}
+    onSelect={(command) => void runMenuAction(command)}
     onClose={(returnFocus) => (returnFocus ? dismissMenu() : closeMenu())}
   />
 {/if}

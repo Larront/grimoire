@@ -15,6 +15,8 @@ import {
   ChevronDown,
   CircleQuestionMark,
   Code,
+  Copy,
+  CopyPlus,
   Heading1,
   Heading2,
   Heading3,
@@ -34,6 +36,7 @@ import {
   Speech,
   StickyNote,
   Swords,
+  Trash2,
   TriangleAlert,
 } from "@lucide/svelte";
 
@@ -50,6 +53,8 @@ export const BLOCK_ICONS: Record<string, IconComponent> = {
   ChevronDown,
   CircleQuestionMark,
   Code,
+  Copy,
+  CopyPlus,
   Heading1,
   Heading2,
   Heading3,
@@ -69,5 +74,6 @@ export const BLOCK_ICONS: Record<string, IconComponent> = {
   Speech,
   StickyNote,
   Swords,
+  Trash2,
   TriangleAlert,
 };

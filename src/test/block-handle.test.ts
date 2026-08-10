@@ -15,6 +15,7 @@ import {
   duplicateBlockAt,
   selectBlockAt,
   turnIntoAt,
+  turnIntoKindAt,
 } from "$lib/editor/block-handle";
 import { closeNote, note, saved } from "./fixtures/note-editor";
 
@@ -254,5 +255,100 @@ describe("turning one block into another", () => {
 
     expect(turnIntoAt(editor, posOf(editor, "statblockBlock"), "heading1")).toBe(false);
     expect(saved(editor)).toBe(md);
+  });
+
+  it("lifts a list item out of its list on the way to being a quote", () => {
+    // `wrapIn` alone refuses inside a list item — a blockquote is not valid there — and
+    // returns having done nothing, so the Quote the menu offers on a bullet (#192) would
+    // be one a GM can click and watch not happen. The lift is not a workaround either:
+    // the block they asked to quote is no longer a bullet.
+    const editor = note("- the one with the sling\n- and the other");
+    turnIntoAt(editor, posOf(editor, "paragraph"), "quote");
+
+    expect(saved(editor)).toBe("> the one with the sling\n\n- and the other");
+  });
+
+  it("lifts a list item out on the way to a heading, taking only that item", () => {
+    const editor = note("- the one with the sling\n- and the other");
+    turnIntoAt(editor, posOf(editor, "paragraph"), "heading2");
+
+    expect(saved(editor)).toBe("## the one with the sling\n\n- and the other");
+  });
+
+  it("answers that something happened even where the chain reports otherwise", () => {
+    // `setNode` returns false down its `clearNodes` fallback — the path that unwraps a
+    // quote — so a chain's own answer says "nothing happened" about a write that plainly
+    // did. The caller uses this to tell an ordinary no-op from a stale menu.
+    const editor = note("> Something waits.");
+    const done = turnIntoAt(editor, posOf(editor, "paragraph"), "paragraph");
+
+    expect(saved(editor)).toBe("Something waits.");
+    expect(done).toBe(true);
+  });
+
+  it("is one undo, taking back the heading and not the sentence before it", () => {
+    // The other three writes close the history group and this one did not, so a GM who
+    // typed a line and turned it into a heading in the same breath lost both to one
+    // Ctrl+Z — the typing being the part they did not ask to take back (ADR-0016 §6).
+    const editor = note("The Lower");
+    const pos = posOf(editor, "paragraph");
+    editor.commands.insertContentAt(pos + 1 + "The Lower".length, " Halls");
+    turnIntoAt(editor, pos, "heading2");
+    editor.commands.undo();
+
+    expect(saved(editor)).toBe("The Lower Halls");
+  });
+});
+
+// ─── What it already is ───────────────────────────────────────────────────────
+
+describe("naming the kind a block already is", () => {
+  it("reads a paragraph, and a heading at its own level", () => {
+    const editor = note("A sentence.\n\n## The Lower Halls");
+
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "paragraph"))).toBe("paragraph");
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "heading"))).toBe("heading2");
+  });
+
+  it("reads the list a list item is in, not the paragraph inside it", () => {
+    // The handle targets the *innermost* block, which for a list item is the paragraph
+    // its text lives in — so the answer is only in the ancestry above it.
+    const bullets = note("- the one with the sling");
+    expect(turnIntoKindAt(bullets.state.doc, posOf(bullets, "paragraph"))).toBe(
+      "bulletList",
+    );
+    closeNote();
+
+    const numbered = note("1. first light");
+    expect(turnIntoKindAt(numbered.state.doc, posOf(numbered, "paragraph"))).toBe(
+      "orderedList",
+    );
+  });
+
+  it("reads a plain quote as a quote, and a callout's own prose as a paragraph", () => {
+    // A GM turning a paragraph into a quote is asking for a quote, so a plain one is on
+    // offer and its prose reads as it. An encounter box is *not* on offer — it is a
+    // container — so what is inside it is a paragraph, which is both true and the thing
+    // that stops "Paragraph" tearing that prose out of the box.
+    const quote = note("> Something waits.");
+    expect(turnIntoKindAt(quote.state.doc, posOf(quote, "paragraph"))).toBe("quote");
+    closeNote();
+
+    const callout = note("> [!encounter] The Ambush\n> Two kobolds.");
+    expect(turnIntoKindAt(callout.state.doc, posOf(callout, "paragraph"))).toBe(
+      "paragraph",
+    );
+  });
+
+  it("has no answer for a block that cannot be turned into anything", () => {
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "statblockBlock"))).toBeNull();
+  });
+
+  it("declines a position past the end of the document", () => {
+    const editor = note("A sentence.");
+
+    expect(turnIntoKindAt(editor.state.doc, 9999)).toBeNull();
   });
 });

@@ -30,7 +30,7 @@ import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 
 /** A block the handle can act on, and where it starts. */
 export interface BlockTarget {
@@ -172,29 +172,138 @@ export function canTurnInto(node: ProseMirrorNode): boolean {
   return node.isTextblock;
 }
 
+/**
+ * The kind the block at `pos` **already is**, or null where nothing on offer names it.
+ *
+ * Two things need this and neither can get it from the node alone. The menu marks the
+ * GM's current type, and the handle targets the *innermost* block — which for a list item
+ * is the paragraph its text lives in, so "this is a bullet list" is a fact about the
+ * ancestry above the target and not about the target.
+ *
+ * The other is the guard in front of the transformation itself, and it is the half with
+ * teeth. Every one of these commands is a *toggle* or a rewrap underneath:
+ * `toggleBulletList` on a bullet list lifts it back out, and Tiptap's `setNode` falls
+ * back to `clearNodes` when the block is already that node — which lifts it out of every
+ * wrapper it is in. So the item naming what the block already is, chosen, is the one
+ * thing it cannot be asking for, and this is what recognises it.
+ *
+ * A callout's own paragraph therefore answers **"paragraph"**, not null. The callout is a
+ * container and not one of the seven, so what the block inside it is, is a paragraph —
+ * and saying so is what stops "Turn into → Paragraph" tearing the prose out of an
+ * encounter box and leaving the box empty behind it. A *plain* quote is different: it is
+ * on offer, so its paragraph reads as the quote it is part of.
+ *
+ * Null is still the answer where nothing on offer names the block at all — a code block,
+ * or a heading below level 3.
+ */
+export function turnIntoKindAt(
+  doc: ProseMirrorNode,
+  pos: number,
+): TurnIntoKind | null {
+  if (pos < 0 || pos > doc.content.size) return null;
+  const node = doc.nodeAt(pos);
+  if (!node || !canTurnInto(node)) return null;
+
+  if (node.type.name === "heading") {
+    const level = node.attrs.level as number;
+    return level >= 1 && level <= 3 ? (`heading${level}` as TurnIntoKind) : null;
+  }
+  // A code block is a textblock and so may be turned into these, but none of them is what
+  // it is — which is exactly what "no entry" says.
+  if (node.type.name !== "paragraph") return null;
+
+  // Deepest first, so a bullet list inside a callout reads as the list it is.
+  const $pos = doc.resolve(pos);
+  for (let depth = $pos.depth; depth >= 1; depth--) {
+    const ancestor = $pos.node(depth);
+    switch (ancestor.type.name) {
+      case "bulletList":
+        return "bulletList";
+      case "orderedList":
+        return "orderedList";
+      // A typed callout stops the walk without claiming it: the box is not one of the
+      // seven, so the paragraph inside it is just a paragraph. Walking past it would
+      // read a callout nested in a plain quote as "quote", which is the outer box.
+      case "blockquote":
+        return ancestor.attrs.calloutType ? "paragraph" : "quote";
+    }
+  }
+  return "paragraph";
+}
+
+/** Whether a resolved position is inside a list item — the one case `wrapIn` refuses. */
+function isInListItem($pos: ResolvedPos): boolean {
+  for (let depth = $pos.depth; depth >= 1; depth--) {
+    if ($pos.node(depth).type.name === "listItem") return true;
+  }
+  return false;
+}
+
+/**
+ * Turns the block at `pos` into `kind`, and answers whether the **document changed**.
+ *
+ * Not whether the chain reported success, which is a different question and the wrong
+ * one: `editor.chain()` dispatches what it accumulated whichever way each command
+ * answered, and Tiptap's `setNode` returns false down its `clearNodes` fallback — the
+ * path that unwraps a quote — so `run()` says "nothing happened" about a write that
+ * plainly did. ProseMirror rebuilds the doc node only when a transaction changes it, so
+ * comparing identity across the call answers what the caller actually asked.
+ */
 export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boolean {
   const node = nodeAt(editor, pos);
   if (!node || !canTurnInto(node)) return false;
 
+  const before = editor.state.doc;
   // Inside the block, not before it: these are all selection-driven commands, and a node
   // selection would have them replace the block rather than change what it is.
-  const chain = editor.chain().focus().setTextSelection(pos + 1);
+  const chain = editor
+    .chain()
+    .focus()
+    // Its own history group, like the three writes above it (ADR-0016 §6). Without this a
+    // GM who types a line and turns it into a heading in the same breath loses both to
+    // one Ctrl+Z, the typing being the half they did not ask to take back.
+    .command(({ tr }) => {
+      closeHistory(tr);
+      return true;
+    })
+    .setTextSelection(pos + 1);
+
   switch (kind) {
     case "paragraph":
-      return chain.setNode("paragraph").run();
+      chain.setNode("paragraph").run();
+      break;
     case "heading1":
-      return chain.setNode("heading", { level: 1 }).run();
+      chain.setNode("heading", { level: 1 }).run();
+      break;
     case "heading2":
-      return chain.setNode("heading", { level: 2 }).run();
+      chain.setNode("heading", { level: 2 }).run();
+      break;
     case "heading3":
-      return chain.setNode("heading", { level: 3 }).run();
+      chain.setNode("heading", { level: 3 }).run();
+      break;
     case "bulletList":
-      return chain.toggleBulletList().run();
+      chain.toggleBulletList().run();
+      break;
     case "orderedList":
-      return chain.toggleOrderedList().run();
+      chain.toggleOrderedList().run();
+      break;
     case "quote":
-      return chain.wrapIn("blockquote").run();
+      // Out of the list first, where it is in one. A blockquote is not valid inside a
+      // list item, so `wrapIn` alone refuses there and returns having done nothing —
+      // which, once the menu offers this on a list item (#192), is a Quote a GM can
+      // click and watch not happen. Leaving the list is what they asked for anyway: the
+      // block they wanted quoted is no longer a bullet.
+      chain
+        .command(({ commands, state }) => {
+          if (isInListItem(state.selection.$from)) commands.liftListItem("listItem");
+          return true;
+        })
+        .wrapIn("blockquote")
+        .run();
+      break;
   }
+
+  return editor.state.doc !== before;
 }
 
 /**

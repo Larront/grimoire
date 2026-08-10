@@ -64,7 +64,16 @@ function grip(editor: Editor, type = "paragraph", index = 0) {
 }
 
 const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]");
-const items = () => Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+
+/**
+ * Every item, in reading order. Both roles, because the transformations are radios — one
+ * of the seven is the kind the block already is — and the three that apply to every block
+ * are plain items. A selector naming only the first would quietly stop seeing the other.
+ */
+const items = () =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'),
+  );
 
 /** The menu item whose label starts with a word — how a GM picks one out. */
 function item(verb: string): HTMLElement {
@@ -72,6 +81,12 @@ function item(verb: string): HTMLElement {
   expect(found, `a "${verb}" item`).toBeTruthy();
   return found!;
 }
+
+/** The section headings a GM reads down the menu. */
+const sectionTitles = () =>
+  Array.from(menu()?.querySelectorAll<HTMLElement>('[role="group"]') ?? []).map((el) =>
+    el.getAttribute("aria-label"),
+  );
 
 // ─── What is holding the grip up ──────────────────────────────────────────────
 
@@ -104,13 +119,32 @@ describe("the pointer and the focus, which are two different holds", () => {
 // ─── Opening it ───────────────────────────────────────────────────────────────
 
 describe("clicking the grip", () => {
-  it("opens a menu of the three actions", async () => {
-    const editor = note("A sentence.");
-    const { el } = grip(editor);
+  it("opens a menu of the three actions that apply to any block", async () => {
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
 
     expect(menu()).not.toBeNull();
     expect(items().map((i) => i.getAttribute("aria-label"))).toEqual([
+      "Duplicate statblock",
+      "Copy statblock as Markdown",
+      "Delete statblock",
+    ]);
+  });
+
+  it("puts Turn into above them on a paragraph, and Delete last of all", async () => {
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+
+    expect(items().map((i) => i.getAttribute("aria-label"))).toEqual([
+      "Paragraph",
+      "Heading 1",
+      "Heading 2",
+      "Heading 3",
+      "Bullet List",
+      "Numbered List",
+      "Quote",
       "Duplicate paragraph",
       "Copy paragraph as Markdown",
       "Delete paragraph",
@@ -223,8 +257,8 @@ describe("dismissing the menu without choosing anything", () => {
 
 describe("the menu from the keyboard", () => {
   it("moves focus down the items and wraps round the end", async () => {
-    const editor = note("A sentence.");
-    const { el } = grip(editor);
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
 
     for (const expected of [1, 2, 0]) {
@@ -234,12 +268,34 @@ describe("the menu from the keyboard", () => {
   });
 
   it("moves back up, wrapping the other way", async () => {
-    const editor = note("A sentence.");
-    const { el } = grip(editor);
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
     await fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
 
     expect(document.activeElement).toBe(items()[2]);
+  });
+
+  it("walks straight through the section heading into the actions below it", async () => {
+    // The heading is not a stop: a GM holding ↓ must not have to press past a word they
+    // cannot choose, and the transformations and the three actions are one list to walk.
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    for (let i = 0; i < 7; i++) {
+      await fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    }
+
+    expect(document.activeElement).toBe(item("Duplicate"));
+  });
+
+  it("jumps to the last item with End, ten items down", async () => {
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.keyDown(document.activeElement!, { key: "End" });
+
+    expect(document.activeElement).toBe(item("Delete"));
   });
 
   it("keeps exactly one item in the tab order", async () => {
@@ -330,6 +386,16 @@ describe("choosing an item acts on the block the grip was on", () => {
     expect(released).toEqual([true]);
   });
 
+  it("does nothing when the block went while the menu was open, mid-transformation", async () => {
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    const { el } = grip(editor, "paragraph", 1);
+    await fireEvent.click(el);
+    deleteBlockAt(editor, targetOf(editor, "paragraph").pos);
+    await fireEvent.click(item("Heading 1"));
+
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+  });
+
   it("does nothing when the block went while the menu was open", async () => {
     // The menu is open on "Bravo."; the note loses "Alpha." underneath it, so the
     // position it holds now lands on "Delta." — a resolvable position, the wrong block.
@@ -340,5 +406,134 @@ describe("choosing an item acts on the block the grip was on", () => {
     await fireEvent.click(item("Delete"));
 
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+  });
+});
+
+// ─── Turn into ────────────────────────────────────────────────────────────────
+
+describe("the Turn into section, on the blocks that have an answer to it", () => {
+  it.each([
+    ["a paragraph", "A sentence.", "paragraph"],
+    ["a heading", "## The Lower Halls", "heading"],
+    // A grip on a list item holds the paragraph its text lives in — the innermost block —
+    // so this is the same claim reached through one more layer of ancestry.
+    ["a list item", "- the one with the sling", "paragraph"],
+  ])("is there for %s", async (_what, md, type) => {
+    const editor = note(md);
+    const { el } = grip(editor, type);
+    await fireEvent.click(el);
+
+    expect(sectionTitles()).toContain("Turn into");
+  });
+
+  it.each([
+    ["a statblock", "```statblock\n# Kobold A\nHP: 5/5\n```", "statblockBlock"],
+    ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
+    [
+      "a timeline",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
+      "timelineBlock",
+    ],
+    ["an image", "![The gate](images/gate.png)", "image"],
+  ])("is absent entirely on %s — not drawn dim", async (_what, md, type) => {
+    // A creature is not a sentence with extra steps: there is no deciding which of its
+    // rows survives becoming a heading. A greyed-out section would still be a claim that
+    // some arrangement of the note makes it work, and there is none.
+    const editor = note(md);
+    const { el } = grip(editor, type);
+    await fireEvent.click(el);
+
+    expect(sectionTitles()).toEqual([null]);
+    expect(items()).toHaveLength(3);
+  });
+
+  it.each([
+    ["Heading 2", "## The Lower Halls"],
+    ["Bullet List", "- The Lower Halls"],
+    ["Quote", "> The Lower Halls"],
+    ["Numbered List", "1. The Lower Halls"],
+  ])("writes the markers %s is spelled with", async (label, expected) => {
+    const editor = note("The Lower Halls");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.click(item(label));
+
+    expect(saved(editor)).toBe(expected);
+  });
+
+  it("drops the markers on the way back to a paragraph", async () => {
+    const editor = note("## The Lower Halls");
+    const { el } = grip(editor, "heading");
+    await fireEvent.click(el);
+    await fireEvent.click(item("Paragraph"));
+
+    expect(saved(editor)).toBe("The Lower Halls");
+  });
+
+  it("makes a plain quote and never a typed callout", async () => {
+    // A GM asking for a quote is asking for a quote; picking "encounter" or "warning"
+    // for them would be inventing an intent they did not express.
+    const editor = note("Something waits.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Quote"));
+
+    expect(saved(editor)).toBe("> Something waits.");
+  });
+
+  it("is one undo, taking back the heading and not the sentence", async () => {
+    const editor = note("The Lower");
+    editor.commands.insertContentAt(
+      targetOf(editor, "paragraph").pos + 1 + "The Lower".length,
+      " Halls",
+    );
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Heading 2"));
+    editor.commands.undo();
+
+    expect(saved(editor)).toBe("The Lower Halls");
+  });
+
+  it("ticks the kind the block already is, and nothing else", async () => {
+    const editor = note("## The Lower Halls");
+    const { el } = grip(editor, "heading");
+    await fireEvent.click(el);
+    const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
+
+    expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Heading 2"]);
+  });
+
+  it("ticks a list item as the list it is in, not as a paragraph", async () => {
+    const editor = note("1. first light");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
+
+    expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Numbered List"]);
+  });
+
+  it("offers every kind as a radio, so a screen reader reads it as a choice", async () => {
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+
+    expect(
+      items()
+        .filter((i) => i.getAttribute("role") === "menuitemradio")
+        .map((i) => i.getAttribute("aria-checked")),
+    ).toEqual(["true", "false", "false", "false", "false", "false", "false"]);
+  });
+
+  it("leaves the note alone when the GM picks the kind it already is", async () => {
+    // `toggleBulletList` on a bullet list lifts it back out, so the ticked item would
+    // un-list the block — the one thing "turn into a bullet list" cannot be asking for.
+    const md = "- the one with the sling";
+    const editor = note(md);
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Bullet List"));
+
+    expect(saved(editor)).toBe(md);
   });
 });

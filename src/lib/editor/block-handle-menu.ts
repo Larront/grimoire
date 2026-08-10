@@ -24,36 +24,116 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import {
   blockLabel,
   blockMarkdownAt,
+  canTurnInto,
   deleteBlockAt,
   duplicateBlockAt,
+  turnIntoAt,
+  turnIntoKindAt,
   type BlockTarget,
+  type TurnIntoKind,
 } from "./block-handle";
 
 export type BlockHandleAction = "duplicate" | "copy" | "delete";
 
+/**
+ * What choosing one item does: one of the three that apply to every block, or the kind
+ * this item would turn a text block into.
+ *
+ * A bare string for the first three and an object for the second, rather than a tagged
+ * union throughout, because the two are genuinely different in kind — the three name
+ * *the block*, whatever it is, and a transformation names a destination the block may
+ * already be at.
+ */
+export type BlockHandleCommand = BlockHandleAction | { turnInto: TurnIntoKind };
+
 export interface BlockHandleMenuItem {
-  action: BlockHandleAction;
+  command: BlockHandleCommand;
   /**
-   * What the GM reads, and what a screen reader announces. It names the *block* as well
-   * as the verb — the grip floats in the margin with no container to be read in, so
-   * "Delete" on its own says nothing about which of forty blocks is about to go.
+   * What the GM reads, and what a screen reader announces. The three verbs name the
+   * *block* as well — the grip floats in the margin with no container to be read in, so
+   * "Delete" on its own says nothing about which of forty blocks is about to go. A
+   * transformation does not repeat it: its section heading has already said "Turn into",
+   * and "Turn paragraph into Heading 2" read seven times is noise.
    */
   label: string;
+  /** A Lucide icon *name*, resolved through `BLOCK_ICONS` the way the slash menu's are. */
+  icon: string;
+  /** For a transformation: whether the block is already this. Never true of the three. */
+  current?: boolean;
+}
+
+export interface BlockHandleMenuSection {
+  /** The heading above the group, or undefined for the unlabelled one at the foot. */
+  title?: string;
+  items: BlockHandleMenuItem[];
 }
 
 /**
- * The menu, for one block. Ordered least to most destructive, so the item a mis-aimed
- * click lands on is the one that can be undone without the GM noticing what they lost.
+ * What a text block can become, in the order the GM reads it — the same words and icons
+ * the slash menu uses for these seven, because they are the same seven things and a GM
+ * who learned them there should not have to learn them twice.
+ *
+ * Quote is the *ordinary* quote and not a typed callout. A GM turning a paragraph into a
+ * quote is asking for a quote; picking "encounter" or "warning" for them would be
+ * inventing an intent they did not express.
  */
-export function blockHandleMenuItems(node: ProseMirrorNode): BlockHandleMenuItem[] {
-  const what = blockLabel(node);
-  return [
-    { action: "duplicate", label: `Duplicate ${what}` },
-    // "as Markdown" because the alternative a GM might expect is the rendered card, and
-    // this is emphatically the fence on disk (ADR-0016 §1).
-    { action: "copy", label: `Copy ${what} as Markdown` },
-    { action: "delete", label: `Delete ${what}` },
-  ];
+const TURN_INTO: { into: TurnIntoKind; label: string; icon: string }[] = [
+  { into: "paragraph", label: "Paragraph", icon: "Pilcrow" },
+  { into: "heading1", label: "Heading 1", icon: "Heading1" },
+  { into: "heading2", label: "Heading 2", icon: "Heading2" },
+  { into: "heading3", label: "Heading 3", icon: "Heading3" },
+  { into: "bulletList", label: "Bullet List", icon: "List" },
+  { into: "orderedList", label: "Numbered List", icon: "ListOrdered" },
+  { into: "quote", label: "Quote", icon: "Quote" },
+];
+
+/**
+ * The menu, for one block, in sections.
+ *
+ * Ordered least to most destructive *across the whole menu*, so the item a mis-aimed
+ * click lands on is one that can be undone without the GM noticing what they lost, and
+ * Delete stays at the far end from where the pointer arrives.
+ *
+ * "Turn into" is **absent** rather than disabled on everything else (#192). A statblock,
+ * an infobox, a timeline, a scene or an image has no answer to "become a heading" —
+ * there is no deciding which of a creature's rows survives, because a creature is not a
+ * sentence with extra steps. A greyed-out section would still be a claim that some
+ * arrangement of the note makes it work; there is none.
+ *
+ * It takes the document as well as the target because the handle holds the *innermost*
+ * block, so which kind a list item already is lives in the ancestry above it.
+ */
+export function blockHandleMenuSections(
+  doc: ProseMirrorNode,
+  target: BlockTarget,
+): BlockHandleMenuSection[] {
+  const what = blockLabel(target.node);
+  const sections: BlockHandleMenuSection[] = [];
+
+  if (canTurnInto(target.node)) {
+    const current = turnIntoKindAt(doc, target.pos);
+    sections.push({
+      title: "Turn into",
+      items: TURN_INTO.map(({ into, label, icon }) => ({
+        command: { turnInto: into },
+        label,
+        icon,
+        current: into === current,
+      })),
+    });
+  }
+
+  sections.push({
+    items: [
+      { command: "duplicate", label: `Duplicate ${what}`, icon: "CopyPlus" },
+      // "as Markdown" because the alternative a GM might expect is the rendered card,
+      // and this is emphatically the fence on disk (ADR-0016 §1).
+      { command: "copy", label: `Copy ${what} as Markdown`, icon: "Copy" },
+      { command: "delete", label: `Delete ${what}`, icon: "Trash2" },
+    ],
+  });
+
+  return sections;
 }
 
 /** The part of `navigator.clipboard` this needs, so a test can hand over a fake. */
@@ -105,13 +185,21 @@ export function blockStillThere(editor: Editor, target: BlockTarget): boolean {
 export async function runBlockHandleAction(
   editor: Editor,
   target: BlockTarget,
-  action: BlockHandleAction,
+  command: BlockHandleCommand,
   clipboard: ClipboardWriter | undefined = systemClipboard(),
 ): Promise<boolean> {
   if (!blockStillThere(editor, target)) return false;
   const { pos } = target;
 
-  switch (action) {
+  if (typeof command !== "string") {
+    // Already this kind: nothing to do, and emphatically not the toggle the underlying
+    // command would perform — `toggleBulletList` on a bullet list lifts it back out, so
+    // choosing the item that names what the block already is would un-list it.
+    if (turnIntoKindAt(editor.state.doc, pos) === command.turnInto) return false;
+    return turnIntoAt(editor, pos, command.turnInto);
+  }
+
+  switch (command) {
     case "duplicate":
       return duplicateBlockAt(editor, pos);
     case "delete":
