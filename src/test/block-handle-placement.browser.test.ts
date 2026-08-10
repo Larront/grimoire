@@ -465,6 +465,67 @@ describe("reaching for the grip", () => {
     expect(last()?.node.type.name).toBe("statblockBlock");
   });
 
+  it("never answers with the list while the pointer walks down its bullets", () => {
+    // The flicker this closes: a list's own surface is the strip its markers sit in and the
+    // leading between its items, so a pointer crossing a bullet crossed list, item, list,
+    // item — and the grip jumped between the whole list and one bullet, twice a bullet.
+    const { editor, column, last } = open(
+      ["- first bullet", "- second bullet", "- third bullet"].join("\n"),
+      WIDE_PANE,
+    );
+    const list = editor.view.dom.querySelector("ul")!.getBoundingClientRect();
+    const items = Array.from(editor.view.dom.querySelectorAll("li"));
+
+    // Every height the list covers, in one-pixel steps: the items, the gaps between them,
+    // the markers' own rows. Two x's — the marker strip inside the list's padding, and the
+    // gutter outside the prose — because both were reported and they take different paths.
+    for (const left of [list.left + 6, column.getBoundingClientRect().left + 2]) {
+      const seen = new Set<string>();
+      for (let top = Math.ceil(list.top); top <= Math.floor(list.bottom); top++) {
+        pointerAtColumn(column, { left, top });
+        const target = last();
+        expect(target, `a block at (${left}, ${top})`).not.toBeNull();
+        seen.add(target!.node.type.name);
+        expect(["bulletList", "listItem"]).not.toContain(target!.node.type.name);
+      }
+      expect(seen).toEqual(new Set(["paragraph"]));
+    }
+
+    // And each of the three is still reachable, one per item, which is what the list gave up
+    // being a target for.
+    const held = items.map((li) => {
+      pointerAtColumn(column, inside(li));
+      return last()?.node.textContent;
+    });
+    expect(held).toEqual(["first bullet", "second bullet", "third bullet"]);
+  });
+
+  it("holds a callout's own blocks all the way down its side, and the box by its header", () => {
+    // The same flicker as the bullets, in the one other place a note has it: the blocks
+    // inside a callout are a paragraph's margin apart, and the gaps answered "the callout"
+    // — throwing the grip up to the header and back, once per block.
+    const { editor, column, last } = open(
+      ["> [!encounter] The Ambush", "> The first thing.", ">", "> The second thing."].join("\n"),
+      WIDE_PANE,
+    );
+    const body = Array.from(editor.view.dom.querySelectorAll(".callout-body p"));
+    expect(body).toHaveLength(2);
+    const first = body[0].getBoundingClientRect();
+    const second = body[1].getBoundingClientRect();
+    expect(second.top).toBeGreaterThan(first.bottom); // there really is a gap
+
+    for (let top = Math.ceil(first.top); top <= Math.floor(second.bottom); top++) {
+      pointerAtColumn(column, inGutter(column, top));
+      expect(last()?.node.type.name, `at y ${top}`).toBe("paragraph");
+    }
+
+    // The header is still the box's own, which is what "between two children" protects: it
+    // has no block above it, so nothing there is a gap between anything.
+    const header = editor.view.dom.querySelector(".callout-header")!.getBoundingClientRect();
+    pointerAtColumn(column, inGutter(column, header.top + header.height / 2));
+    expect(last()?.node.type.name).toBe("blockquote");
+  });
+
   it("answers nothing for a pointer up in the note's title", () => {
     const { column, title, last } = open("The lower halls are flooded.");
     const box = title.getBoundingClientRect();

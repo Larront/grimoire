@@ -18,6 +18,13 @@
 // #182). The cost, accepted: a callout is grabbable over its own header and padding, not
 // over its children. Notion behaves the same way and for the same reason.
 //
+// A **list is never** the target, at any depth — see `outOfList`. Its markers and the leading
+// between its items are all the surface it has, so a pointer walking down a list crossed
+// list, item, list, item, and the grip flicked between the two. Nor is any container the
+// target for a pointer level with the *gap between two of its children*, for the same reason
+// and by the same measure — see `blockChildAtHeight`. A box keeps its header and the padding
+// at its ends, which is where a GM aims for the box itself.
+//
 // Wherever the target is, its grip is drawn out in the **gutter**, in the same column as
 // every other grip in the note rather than indented to the block's own edge — see
 // `leadingEdgeOf`, which is where the reason is: a nested block's edge has a bullet or a
@@ -162,23 +169,63 @@ export function noteColumn(view: EditorView): HTMLElement {
   return dom.closest<HTMLElement>("[data-note-column]") ?? dom;
 }
 
-/** The block child of `parent` whose box the height `top` falls in, if there is one. */
+/** Every block child of `parent`, with the box each one is drawn as. */
+function blockChildren(
+  view: EditorView,
+  parent: BlockTarget,
+): { target: BlockTarget; box: DOMRect }[] {
+  const children: { target: BlockTarget; box: DOMRect }[] = [];
+  parent.node.forEach((child, offset) => {
+    if (!child.isBlock) return;
+    // A non-leaf node's content starts one position after the node itself.
+    const pos = parent.pos + 1 + offset;
+    const dom = blockElementAt(view, pos);
+    if (dom) children.push({ target: { pos, node: child }, box: dom.getBoundingClientRect() });
+  });
+  return children;
+}
+
+/**
+ * The block child of `parent` the height `top` belongs to: the one whose box covers it, or —
+ * where the height falls in the leading *between* two children — the nearer of those two.
+ *
+ * The second half is the same flicker the list rule closes, in the one other place a note has
+ * it. A callout's children are a paragraph's margin apart, and a pointer coming down the
+ * gutter past one crossed paragraph, gap, paragraph — with the gap answering "the callout",
+ * which threw the grip up to the encounter's header and back for every block in the box.
+ *
+ * Null above the first child and below the last, and that asymmetry is the whole reason this
+ * is written as "between two" rather than "within a few pixels of one": a callout's header
+ * band and the padding under its last block have no child on one side, and they are exactly
+ * where the box itself is meant to be grabbed.
+ */
 function blockChildAtHeight(
   view: EditorView,
   parent: BlockTarget,
   top: number,
 ): BlockTarget | null {
-  let found: BlockTarget | null = null;
-  parent.node.forEach((child, offset) => {
-    if (found || !child.isBlock) return;
-    // A non-leaf node's content starts one position after the node itself.
-    const pos = parent.pos + 1 + offset;
-    const dom = blockElementAt(view, pos);
-    if (!dom) return;
-    const box = dom.getBoundingClientRect();
-    if (top >= box.top && top <= box.bottom) found = { pos, node: child };
-  });
-  return found;
+  const children = blockChildren(view, parent);
+  const covering = children.find(({ box }) => top >= box.top && top <= box.bottom);
+  if (covering) return covering.target;
+
+  const above = children.filter(({ box }) => box.bottom < top).at(-1);
+  const below = children.find(({ box }) => box.top > top);
+  if (!above || !below) return null;
+  return top - above.box.bottom <= below.box.top - top ? above.target : below.target;
+}
+
+/** The block child of `parent` nearest the height `top`, whether or not it covers it. */
+function nearestBlockChild(
+  view: EditorView,
+  parent: BlockTarget,
+  top: number,
+): BlockTarget | null {
+  let best: { target: BlockTarget; distance: number } | null = null;
+  for (const { target, box } of blockChildren(view, parent)) {
+    const distance = Math.max(box.top - top, top - box.bottom, 0);
+    if (!best || distance < best.distance) best = { target, distance };
+  }
+  return best?.target ?? null;
 }
 
 /**
@@ -209,6 +256,41 @@ export function innermostAtHeight(
   return current;
 }
 
+/** Whether a node is a list, which is the one container the handle never holds. */
+function isListLike(node: ProseMirrorNode): boolean {
+  const name = node.type.name;
+  return name === "bulletList" || name === "orderedList" || name === "listItem";
+}
+
+/**
+ * Out of a list and onto the item the pointer is level with — the block a GM means.
+ *
+ * A list is the one container that is **never** a target, and the reason is what the pointer
+ * is over when it lands on one. A list's own surface is the strip its markers are drawn in
+ * and the few pixels of margin between items: nothing else in a `<ul>` is not an item. So a
+ * pointer walking down its bullets crosses list, item, list, item — and the grip flicked
+ * between the whole list and one bullet several times a second, which is what #190's
+ * follow-on was reported for a second time.
+ *
+ * The nearest item is right rather than merely convenient: a gap between two bullets is two
+ * pixels of leading, not a place a GM was pointing at, and no GM reaches for a bullet's grip
+ * by aiming at the space above it.
+ *
+ * The whole list stops being grabbable, which is the accepted cost and a small one. A list
+ * has no chrome of its own — no header, no box — so there was never anywhere to grab it that
+ * did not belong to an item, and Notion has no handle for one either. Its items each have a
+ * grip, and Turn into on one reaches the list.
+ */
+function outOfList(view: EditorView, target: BlockTarget, top: number): BlockTarget {
+  let current = target;
+  while (isListLike(current.node)) {
+    const child = nearestBlockChild(view, current, top);
+    if (!child) break;
+    current = child;
+  }
+  return current;
+}
+
 /**
  * The block a pointer anywhere in the column is hovering — the gutter included.
  *
@@ -233,8 +315,10 @@ export function targetFromPointer(
   if (!probe) return null;
 
   const target = targetFromCoords(view, probe);
-  if (!target || !probe.fromGutter) return target;
-  return innermostAtHeight(view, target, probe.top);
+  if (!target) return null;
+  // The gutter answer needs the descent; both answers need to be out of a list.
+  const inside = probe.fromGutter ? innermostAtHeight(view, target, probe.top) : target;
+  return outOfList(view, inside, probe.top);
 }
 
 // ─── Acting on one ────────────────────────────────────────────────────────────
