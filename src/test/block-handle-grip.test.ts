@@ -291,8 +291,8 @@ describe("every block can be picked up by the handle", () => {
 describe("placing the handle beside a block", () => {
   /** A paragraph in a column, and a grip of the size the stylesheet gives one. */
   const geometry = (over: Partial<HandleGeometry> = {}): HandleGeometry => ({
-    block: { left: 100, top: 200, width: 400, height: 24 },
-    firstLine: 24,
+    blockLeft: 100,
+    firstLine: { top: 204, height: 16 },
     handle: { width: 18, height: 18 },
     gap: 6,
     columnLeft: 40,
@@ -306,38 +306,25 @@ describe("placing the handle beside a block", () => {
 
   it("follows a block indented inside a callout", () => {
     const outer = handlePlacement(geometry());
-    const inner = handlePlacement(
-      geometry({ block: { left: 132, top: 200, width: 340, height: 24 } }),
-    );
+    const inner = handlePlacement(geometry({ blockLeft: 132 }));
 
     expect(inner.left).toBe(outer.left + 32);
   });
 
-  it("centres on the first line, not on the middle of a long paragraph", () => {
-    const tall = handlePlacement(
-      geometry({ block: { left: 100, top: 200, width: 400, height: 120 } }),
-    );
-
-    expect(tall.top).toBe(handlePlacement(geometry()).top);
-    expect(tall.top).toBe(200 + (24 - 18) / 2);
+  it("centres on the first line wherever that line is", () => {
+    // Not on a height measured from the block's own top: a callout's first line is its
+    // header, twelve pixels of padding down, and anchoring at the top of the box put the
+    // grip above the text it belongs to.
+    const { top } = handlePlacement(geometry({ firstLine: { top: 252, height: 18 } }));
+    expect(top).toBe(252);
   });
 
-  it("centres on a sealed block's own height, which is all it has", () => {
-    // A statblock has no line box, so the caller passes the card's height and the handle
-    // sits beside the card rather than above it.
-    const { top } = handlePlacement(
-      geometry({
-        block: { left: 100, top: 200, width: 400, height: 60 },
-        firstLine: 60,
-      }),
-    );
-    expect(top).toBe(200 + (60 - 18) / 2);
+  it("centres the grip on that line rather than sitting on top of it", () => {
+    expect(handlePlacement(geometry()).top).toBe(204 + (16 - 18) / 2);
   });
 
   it("stops at the column's edge rather than hanging off a pane dragged narrow", () => {
-    const { left } = handlePlacement(
-      geometry({ block: { left: 44, top: 200, width: 200, height: 24 } }),
-    );
+    const { left } = handlePlacement(geometry({ blockLeft: 44 }));
     expect(left).toBe(40);
   });
 });

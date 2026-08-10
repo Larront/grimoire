@@ -14,7 +14,11 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mount, unmount, tick } from "svelte";
 import { Editor } from "@tiptap/core";
 import { noteExtensions } from "$lib/editor/note-extensions";
-import { targetFromCoords, type BlockTarget } from "$lib/editor/block-handle";
+import {
+  blockTargetAt,
+  targetFromCoords,
+  type BlockTarget,
+} from "$lib/editor/block-handle";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import "../app.css";
 
@@ -177,6 +181,76 @@ describe("the grip beside a block", () => {
     expect(rect.right).toBeLessThanOrEqual(boxOf(editor, item).left);
   });
 
+  it("clears the bullet a list item is marked with, rather than sitting on it", async () => {
+    // A bullet is drawn outside the item's own box — `list-style-position: outside` puts it
+    // in the list's padding, inside no block at all — so a grip placed from the paragraph in
+    // the item lands squarely on top of the marker.
+    const { editor } = openNote("- the one with the sling\n- the one with the net", WIDE_PANE);
+    const list = editor.view.dom.querySelector("ul")!;
+    const item = pointerAt(editor, inside(editor.view.dom.querySelector("li")!));
+    const rect = await grip(editor, item);
+
+    // Clear of the whole list, marker and all, which puts a bullet's grip in the same
+    // column as every other grip in the note.
+    expect(rect.right).toBeLessThanOrEqual(list.getBoundingClientRect().left);
+  });
+
+  it("puts every grip in one column, whatever depth its block is at", async () => {
+    const { editor } = openNote(
+      [
+        "A plain paragraph.",
+        "",
+        "- a bullet",
+        "",
+        "> [!encounter] The Ambush",
+        "> ```statblock",
+        "> # Kobold A",
+        "> HP: 5/5",
+        "> ```",
+      ].join("\n"),
+      WIDE_PANE,
+    );
+    const shapes = [
+      firstBlock(editor),
+      editor.view.dom.querySelector("li")!,
+      editor.view.dom.querySelector("[data-note-block='statblock']")!,
+    ];
+
+    const lefts: number[] = [];
+    for (const el of shapes) {
+      lefts.push((await grip(editor, pointerAt(editor, inside(el)))).left);
+      dropGrip();
+    }
+    // One column, so the grip never moves sideways as the pointer walks down a note — and
+    // the vertical, which is exact, is what says which block it holds.
+    expect(new Set(lefts).size).toBe(1);
+  });
+
+  it.each([
+    ["a callout, beside its header", "> [!encounter] The Ambush\n> Something waits."],
+    ["a plain quote, beside its first line", "> A quoted line.\n> And a second one."],
+    ["a statblock, beside its first row", "```statblock\n# Kobold A\nHP: 5/5\n```"],
+  ])("sits at the top of %s — not halfway down it", async (_name, markdown) => {
+    // Every block with children or chrome above its text got this wrong at once, and for one
+    // reason: a range over a wrapper element yields a single rect the size of the whole
+    // block, so "the first line" was the block itself and the grip was centred on it. The
+    // target is the container rather than what a pointer inside it would find, because the
+    // container is the thing that was mis-measured.
+    const { editor } = openNote(markdown, NARROW_PANE);
+    const target = blockTargetAt(editor.state.doc, 0)!;
+    const block = boxOf(editor, target);
+    const rect = await grip(editor, target);
+
+    // Tall enough that the middle is unmistakably not the top.
+    expect(block.height).toBeGreaterThan(40);
+    // Within a line of the block's leading edge...
+    expect(rect.top).toBeLessThan(block.top + 20);
+    // ...and not above it, which is the half a naive "align with the top" gets wrong: a
+    // callout's header is a dozen pixels of padding down from the box's own edge, and the
+    // grip belongs beside the header.
+    expect(rect.top).toBeGreaterThanOrEqual(block.top - 2);
+  });
+
   it.each([
     ["an infobox", "```infobox\nPopulation: 4,200\n```", "infoboxBlock"],
     [
@@ -234,13 +308,13 @@ describe("the grip beside a block", () => {
 
     const block = boxOf(editor, target);
     const rect = await grip(editor, target);
+    const callout = editor.view.dom.querySelector("blockquote")!.getBoundingClientRect();
 
-    // Always the same distance from the block it holds, whatever holds *that*. A
-    // callout's own padding is narrower than the gutter, so the grip for a creature
-    // inside one reaches a few pixels past the box's edge — the accepted cost of one
-    // rule rather than a special case per container, and it still covers no prose and
-    // stays on the pane.
+    // Clear of the card, and of the box holding it: the gap between the two is narrower
+    // than a grip, so a grip that only cleared the card sat on the callout's accent rule
+    // and its tint. It goes out in the gutter instead, and still on the pane.
     expect(rect.right).toBeLessThanOrEqual(block.left);
+    expect(rect.right).toBeLessThanOrEqual(callout.left);
     expect(rect.left).toBeGreaterThan(pane.getBoundingClientRect().left);
   });
 

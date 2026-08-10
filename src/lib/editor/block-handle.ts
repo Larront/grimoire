@@ -18,6 +18,11 @@
 // #182). The cost, accepted: a callout is grabbable over its own header and padding, not
 // over its children. Notion behaves the same way and for the same reason.
 //
+// Wherever the target is, its grip is drawn out in the **gutter**, in the same column as
+// every other grip in the note rather than indented to the block's own edge — see
+// `leadingEdgeOf`, which is where the reason is: a nested block's edge has a bullet or a
+// callout's accent rule beside it, and a grip placed from it covers them.
+//
 // The **gutter beside** a block hovers it too, at any height — see the section on the hover
 // zone. Reaching for the grip means leaving the words, and a hover that ended at the prose's
 // edge was a grip that vanished as the hand arrived.
@@ -615,10 +620,14 @@ export interface Box {
 
 /** Everything the handle's position is a function of. */
 export interface HandleGeometry {
-  /** The target block's box on screen. */
-  block: Box;
-  /** The height of the block's first line — see the note in `handlePlacement`. */
-  firstLine: number;
+  /**
+   * The leading edge the handle is placed to the left of — the block's own, or its outermost
+   * container's where it has one. See `leadingEdgeOf` for why a nested block hands over the
+   * container's.
+   */
+  blockLeft: number;
+  /** The block's first line box — where it is and how tall, see `handlePlacement`. */
+  firstLine: { top: number; height: number };
   /** The handle's own size, measured rather than assumed: it is sized in CSS. */
   handle: { width: number; height: number };
   /** The space between the handle and the block, from `--block-handle-gap`. */
@@ -633,18 +642,22 @@ export interface HandlePlacement {
 }
 
 /**
- * The handle's box, from the target block's own box.
+ * The handle's box, from the block's leading edge and its first line.
  *
- * From the *block's* box and not the prose column's, which is what lets one handle track
- * whatever the pointer is over: a paragraph inside a callout is indented, so the handle
- * follows it into the callout's padding rather than sitting out in the margin pointing at
- * nothing. It is placed entirely to the left of `block.left`, so it never covers a word.
+ * It is placed entirely to the left of `blockLeft`, so it never covers a word — or a bullet,
+ * or a callout's accent rule, which is why that edge is the one `leadingEdgeOf` hands over
+ * and not the block's own box.
  *
- * `firstLine` is the height of the block's first line box, not the block's height. A
- * handle centred on a five-line paragraph sits beside its middle, which reads as belonging
- * to whatever is next to it; centred on the first line it points at the thing it picks up.
- * For a sealed block — a statblock, an image — there is no line box and the caller passes
- * the block's height, which is the only honest answer and puts the handle beside the card.
+ * Centred on the **first line box, where that line actually is** — not on a height measured
+ * from the top of the block. Both halves of that matter and each was wrong once:
+ *
+ *   - A handle centred on the block's height sits beside the middle of a five-line
+ *     paragraph, reading as belonging to whatever is next to it. Centred on the first line
+ *     it points at the thing it picks up.
+ *   - Measuring only the line's *height* and anchoring at the block's top is right for a
+ *     paragraph, whose first line is at its top, and wrong for everything with chrome above
+ *     its text — a callout's header, a statblock's card — where it drifts up out of the
+ *     block by however much padding is in the way.
  *
  * `columnLeft` is the floor. The gutter is sized in CSS (`--block-gutter`) so this never
  * binds in the app, but a pane can be dragged narrower than any number a stylesheet
@@ -652,16 +665,104 @@ export interface HandlePlacement {
  * prose.
  */
 export function handlePlacement(geometry: HandleGeometry): HandlePlacement {
-  const { block, firstLine, handle, gap, columnLeft } = geometry;
-  const left = Math.max(columnLeft, block.left - gap - handle.width);
-  const line = Math.min(firstLine, block.height);
-  return { left, top: block.top + (line - handle.height) / 2 };
+  const { blockLeft, firstLine, handle, gap, columnLeft } = geometry;
+  return {
+    left: Math.max(columnLeft, blockLeft - gap - handle.width),
+    top: firstLine.top + (firstLine.height - handle.height) / 2,
+  };
 }
 
 /** The element a block is drawn as, which is the only thing that has a box. */
 export function blockElementAt(view: EditorView, pos: number): HTMLElement | null {
   const dom = view.nodeDOM(pos);
   return dom instanceof HTMLElement ? dom : null;
+}
+
+/** One line's worth of height for `el`, which is the cap on what can be a line box. */
+function lineHeightOf(el: HTMLElement): number {
+  const style = getComputedStyle(el);
+  // `line-height: normal` computes to the keyword, not a number. 1.6 is generous on
+  // purpose: this is only ever used to tell a line from a whole block.
+  return parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.6 || 0;
+}
+
+/** The rects a range over an element's contents fragments into — one per line box. */
+function contentRects(el: HTMLElement): DOMRect[] {
+  const range = el.ownerDocument.createRange();
+  range.selectNodeContents(el);
+  return Array.from(range.getClientRects());
+}
+
+/**
+ * How far down the DOM the search for a first line will go. Six levels is past every shape
+ * in a note — a callout's wrapper, its blockquote, its header, the field inside that — and
+ * the bound is here so a node view nobody has written yet cannot turn this into a walk.
+ */
+const FIRST_LINE_DEPTH = 6;
+
+/**
+ * The block's first line box: where the top of it is, and how tall.
+ *
+ * A range over an element's contents fragments into one rect per line, which is what makes
+ * this answerable at all — an element has one border box however many lines it holds, and
+ * the version of this that asked the element put the grip 138px down the side of a wrapping
+ * paragraph. But the first of those rects is only a *line* for a text block. Two shapes in a
+ * note answer with something much larger, and both put the grip in the middle of a block:
+ *
+ *   - A list. The first rect of a range over a `<ul>` is the whole first `<li>`, so a list
+ *     whose first item wraps to six lines centred the grip on the sixth of them.
+ *   - Anything with a node view. `nodeDOM` hands back the connector's wrapper `<div>`, whose
+ *     only content is one element — so the one rect is the entire block, and every callout,
+ *     statblock and image in a note had its grip halfway down.
+ *
+ * So a rect taller than one line is not a line, and the answer is inside the first child.
+ * Descending is what finds a callout's header text and a card's first row of chrome, which
+ * is where a GM looks for the grip on those.
+ */
+function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; height: number } {
+  let el = dom;
+  for (let depth = 0; depth < FIRST_LINE_DEPTH; depth++) {
+    const first = contentRects(el)[0];
+    if (first && first.height <= lineHeightOf(el) + 1) {
+      return { top: first.top, height: first.height };
+    }
+    const child = el.firstElementChild;
+    if (!(child instanceof HTMLElement)) break;
+    el = child;
+  }
+  // Nothing in there reads as a line — an empty block, or chrome built out of rows taller
+  // than their own text. The grip's top edge goes level with the block's, which is the one
+  // thing that is true whatever is inside it.
+  return { top: dom.getBoundingClientRect().top, height: handleHeight };
+}
+
+/**
+ * The edge the grip is placed to the left of: the block's own, or its outermost container's.
+ *
+ * A nested block's own box is the wrong edge, and both containers a note has say so:
+ *
+ *   - A bullet is drawn *outside* its list item — `list-style-position: outside` puts the
+ *     marker in the list's padding, left of the item's box and inside no block at all — so a
+ *     grip placed from the item lands squarely on the bullet.
+ *   - A callout is a tinted box with an accent rule down its left edge. A grip placed from a
+ *     creature inside one lands on that rule and on the tint, because the gap between the
+ *     card and the callout's edge is narrower than a grip.
+ *
+ * So the walk goes out to the prose and takes the leftmost edge it crosses, which puts every
+ * grip in a note in one column out in the gutter, whatever depth its block is at. The version
+ * of this that indented with the block read better in the one case where the padding was wide
+ * enough and covered content in every other.
+ *
+ * The vertical is what identifies the block, and it is exact: the grip is level with the
+ * first line of the thing it holds, one block at a time, because only one grip exists.
+ */
+function leadingEdgeOf(view: EditorView, dom: HTMLElement, blockLeft: number): number {
+  let edge = blockLeft;
+  const prose = view.dom as HTMLElement;
+  for (let el = dom.parentElement; el && el !== prose && prose.contains(el); el = el.parentElement) {
+    edge = Math.min(edge, el.getBoundingClientRect().left);
+  }
+  return edge;
 }
 
 /**
@@ -671,14 +772,6 @@ export function blockElementAt(view: EditorView, pos: number): HTMLElement | nul
  * about `posAtCoords`: measurement cannot be asserted without layout, so it is gathered in
  * one place, holds no decisions, and hands numbers to a function that does. The component
  * is left with two CSS properties to set.
- *
- * The first line comes from a **range over the element's contents**, not from the element.
- * An element has one border box however many lines it holds — `getClientRects()` on a
- * `<p>` answers with the paragraph, not its lines — and the version of this that asked the
- * element put the grip 138px down the side of a wrapping paragraph. A range fragments into
- * one rect per line, which is the number wanted. For a sealed block the first rect is its
- * first row of chrome, which keeps the grip beside the top of the card rather than halfway
- * down it; an element that yields no rects at all answers with its own height.
  *
  * The gap is read off the handle's own computed style so the number lives once, in the
  * stylesheet that also sizes the gutter it has to fit inside. It must be written there in
@@ -694,10 +787,6 @@ export function placeHandle(
   if (!dom) return null;
 
   const block = dom.getBoundingClientRect();
-  const range = dom.ownerDocument.createRange();
-  range.selectNodeContents(dom);
-  const firstLine = range.getClientRects()[0]?.height || block.height;
-
   const handle = handleEl.getBoundingClientRect();
   const gap = parseFloat(getComputedStyle(handleEl).getPropertyValue("--block-handle-gap"));
   // The padded column, not the prose: its left edge is the pane's, and the gutter is
@@ -705,13 +794,8 @@ export function placeHandle(
   const column = noteColumn(view);
 
   return handlePlacement({
-    block: {
-      left: block.left,
-      top: block.top,
-      width: block.width,
-      height: block.height,
-    },
-    firstLine,
+    blockLeft: leadingEdgeOf(view, dom, block.left),
+    firstLine: firstLineBox(dom, handle.height),
     handle: { width: handle.width, height: handle.height },
     gap: Number.isFinite(gap) ? gap : 0,
     columnLeft: column.getBoundingClientRect().left,
