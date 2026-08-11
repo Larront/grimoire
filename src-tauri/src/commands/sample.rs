@@ -45,9 +45,9 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
     let map: crate::db::models::Map = diesel::insert_into(maps::table)
         .values(&NewMap {
             title: "Ashfen Region",
-            image_path: Some("maps/ashfen-region.png"),
-            image_width: Some(256),
-            image_height: Some(192),
+            image_path: Some("Maps/ashfen-region.webp"),
+            image_width: Some(1200),
+            image_height: Some(896),
         })
         .returning(crate::db::models::Map::as_returning())
         .get_result(conn)
@@ -109,24 +109,28 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
         .optional()
         .map_err(|e| e.to_string())?;
 
+    // Fractions of the sheet, measured off the drawing rather than chosen: each one is the
+    // place itself — the keep's courtyard, the village's central hall, the reed island with
+    // the tent on it. A pin a few percent out lands in open bog beside the thing it names,
+    // which is the one way this map can still look wrong after being drawn correctly.
     let pin_data = [
         (
-            0.63_f32,
-            0.68_f32,
+            0.723_f32,
+            0.714_f32,
             "The Ember Keep",
             ruin_id,
             keep_id,
         ),
         (
-            0.28_f32,
-            0.22_f32,
+            0.397_f32,
+            0.212_f32,
             "Thornhaven Village",
             town_id,
             thornhaven_id,
         ),
         (
-            0.60_f32,
-            0.55_f32,
+            0.682_f32,
+            0.553_f32,
             "Mira's Camp",
             poi_id,
             mira_id,
@@ -435,6 +439,40 @@ mod tests {
         // ── Map count ────────────────────────────────────────────────────────
         let map_count: i64 = maps::table.count().get_result(&mut conn).unwrap();
         assert_eq!(map_count, 1, "expected exactly 1 map (Ashfen Region)");
+
+        // ── The map's image resolves, at the size its pins were placed against ──
+        //
+        // Both halves of this have already been wrong once. The seeded `image_path` is a
+        // string the compiler never checks against the bundled fixture, so an art swap that
+        // changes the extension — or the folder's capitalisation, which a Windows checkout
+        // will happily disagree with a Linux one about — leaves a map row pointing at
+        // nothing, and the ledger opens on an empty frame. CI runs this on a case-sensitive
+        // filesystem, which is exactly where that mistake shows up.
+        //
+        // The dimensions are load-bearing for a subtler reason: pins are stored as fractions
+        // and MapCanvas builds its bounds from these two numbers, so a pair that disagrees
+        // with the file stretches every pin away from the thing it names — a map that looks
+        // perfectly fine until you notice the keep's pin sitting out in the bog.
+        let map: crate::db::models::Map = maps::table.first(&mut conn).unwrap();
+        let image_path = map
+            .image_path
+            .as_deref()
+            .expect("the sample map must carry an image path");
+        let resolved = tmp.path().join(image_path);
+        assert!(
+            resolved.exists(),
+            "map image '{image_path}' not found at {resolved:?}"
+        );
+        let (width, height) = image::image_dimensions(&resolved)
+            .unwrap_or_else(|e| panic!("map image at {resolved:?} is not readable: {e}"));
+        assert_eq!(
+            (width as i32, height as i32),
+            (
+                map.image_width.expect("seeded map must record a width"),
+                map.image_height.expect("seeded map must record a height"),
+            ),
+            "seeded dimensions must match the image on disk, or every pin lands off its mark"
+        );
 
         // ── Pin count ────────────────────────────────────────────────────────
         let pin_count: i64 = crate::db::schema::pins::table
