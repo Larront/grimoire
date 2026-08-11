@@ -14,11 +14,32 @@ name: pages
 # site/src/lib/releases.ts), so without this the site would keep advertising
 # the previous version's installers until something else touched site/.
 #
+# ⚠️ THAT TRIGGER CANNOT DEPLOY UNTIL THE ENVIRONMENT ALLOWS THE TAG. A
+# release-published run has `github.ref` = the tag (refs/tags/v0.3.0), and the
+# `github-pages` environment is restricted to the branch `main` alone. So the
+# build passes, the deploy is REJECTED — "Tag v0.3.0 is not allowed to deploy to
+# github-pages due to environment protection rules" — and the site keeps serving
+# the old installers, which is exactly what this trigger exists to prevent. It
+# failed that way on 0.3.0, its first real outing.
+#
+# Fixing it is a repo setting, not a workflow change: add a `v*` TAG policy to the
+# github-pages environment's deployment branch policies. Until that exists, a
+# published release needs a manual `gh workflow run pages.yml --ref main` — which
+# is what recovered 0.3.0. (GITHUB_TOKEN cannot do that dispatch from inside this
+# workflow: events it triggers deliberately do not start new runs.)
+#
+# `next` builds but never deploys. The site is checked on the integration branch
+# for the reason ci.yml now builds it too — three breakages reached 0.3.0 because
+# nothing built `next` — while publishing stays main's alone. That is why the
+# deploy gate below names its refs explicitly instead of testing `!= pull_request`:
+# with `next` pushing, that older test would have deployed the integration branch
+# to production.
+#
 # (The two path lists below are duplicated rather than shared with a YAML
 # anchor because the GitHub Actions workflow parser does not support anchors.)
 on:
   push:
-    branches: [main]
+    branches: [main, next]
     paths:
       - "site/**"
       - "shared/**"
@@ -46,6 +67,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    # Which refs may publish. Named explicitly rather than as `!= pull_request`,
+    # because `next` now pushes here too and that older test would have deployed
+    # the integration branch to production. A release-published run is included
+    # for when the environment gains its `v*` tag policy; until then its deploy
+    # is rejected before it starts (see the header).
+    env:
+      DEPLOYING: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -75,7 +103,7 @@ jobs:
         run: bun run --cwd site check
 
       - uses: actions/configure-pages@v6
-        if: github.event_name != 'pull_request'
+        if: env.DEPLOYING == 'true'
 
       - name: Build site
         run: bun run --cwd site build
@@ -90,14 +118,16 @@ jobs:
           REQUIRE_RELEASE_ASSETS: "1"
 
       - uses: actions/upload-pages-artifact@v5
-        if: github.event_name != 'pull_request'
+        if: env.DEPLOYING == 'true'
         with:
           path: site/dist
 
   deploy:
     needs: build
-    # A PR proves the site still builds; publishing is main's job only.
-    if: github.event_name != 'pull_request'
+    # A PR or a `next` push proves the site still builds; publishing is main's
+    # job only. Same ref list as the build job's DEPLOYING — repeated rather than
+    # shared because a job-level `env` is not visible in another job's `if`.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
