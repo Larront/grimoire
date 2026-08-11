@@ -475,8 +475,7 @@ export const StatblockBlock = Node.create({
         sections: [],
         width: DEFAULT_STATBLOCK_WIDTH,
       },
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes, deleteNode }) => ({
         onCommit: (block: Statblock) =>
           updateAttributes({
             name: block.name,

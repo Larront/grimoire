@@ -1,5 +1,7 @@
 import { defineConfig } from "vitest/config";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { playwright } from "@vitest/browser-playwright";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 export default defineConfig({
@@ -42,10 +44,56 @@ export default defineConfig({
       "$app/state": resolve("./src/test/mocks/app-state.ts"),
     },
   },
+  // Two projects, because two questions need two different machines.
+  //
+  // Almost everything is a claim about a document, a store or a component's output, and
+  // jsdom answers those in milliseconds. But jsdom performs NO LAYOUT: every box is
+  // 0×0 at 0,0, so a test that measured one would pass no matter what the stylesheet
+  // said. That is not hypothetical here — a tiling bug shipped green exactly that way
+  // (see the statblock widths comment in app.css), and the block handle (#190) is
+  // placement and nothing else.
+  //
+  // So anything whose subject is a *box* goes in `*.browser.test.ts` and runs in a real
+  // headless Chromium, with the app's real stylesheet loaded. It is the slower machine
+  // and it stays a small file count on purpose.
   test: {
-    include: ["src/**/*.{test,spec}.{js,ts}"],
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test/setup.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["src/**/*.{test,spec}.{js,ts}"],
+          exclude: ["src/**/*.browser.{test,spec}.{js,ts}"],
+          environment: "jsdom",
+          globals: true,
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+      {
+        extends: true,
+        // Tailwind, because the CSS these tests measure is the app's own: `app.css`
+        // imports it, and without the plugin the stylesheet under test is not the one
+        // that ships.
+        plugins: [tailwindcss()],
+        // Pre-bundled rather than discovered. The browser project serves its modules to a
+        // real page, so a dependency Vite meets for the first time mid-run is optimized and
+        // the page *reloads* — which Vitest reports as "failed to find the current suite"
+        // and fails the whole file, once, on the run that introduced the dependency. Adding
+        // jest-dom to the setup file did exactly that; a name here is the cost of a new one.
+        optimizeDeps: { include: ["@testing-library/jest-dom"] },
+        test: {
+          name: "browser",
+          include: ["src/**/*.browser.{test,spec}.{js,ts}"],
+          globals: true,
+          setupFiles: ["./src/test/setup-browser.ts"],
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
   },
 });

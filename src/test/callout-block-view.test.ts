@@ -11,9 +11,10 @@
 // that reaches the top of a body and leaves it, and a keystroke that must *not* escape
 // the title input are all facts about the document after an event, and a component
 // mounted on its own has no document to be right about.
-import { fireEvent } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
+import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import {
   bodyStart,
   caretAt,
@@ -23,6 +24,7 @@ import {
   note,
   press,
   saved,
+  targetOf,
 } from "./fixtures/note-editor";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
@@ -499,48 +501,110 @@ describe("a callout follows the document", () => {
 });
 
 // ─── Removing the box ─────────────────────────────────────────────────────────
+//
+// These assertions used to say the opposite: the header's own control *unwrapped*, so
+// the box went and the prose inside it stayed. They are rewritten here rather than
+// deleted because the record of a reversed decision is worth more than a clean file —
+// callout-block.ts holds the reasoning, this holds the behaviour it produced.
 
-describe("removing a callout keeps what was inside it", () => {
-  function removeButton(editor: Editor): HTMLElement {
-    return dom(editor).querySelector<HTMLElement>(
-      '[aria-label="Remove callout box, keep its contents"]',
-    )!;
-  }
+/**
+ * The removal a GM actually performs, end to end: the grip beside the callout, the menu it
+ * opens, the Delete in it.
+ *
+ * Driven through the real `BlockHandle` rather than by calling `deleteBlockAt` — which is
+ * how these read at first, and it made every claim below pass with the grip, the menu and
+ * their whole module deleted from the app. The callout offers no removal of its own (the
+ * test above pins that), so this gesture is the *only* way a box comes off a note, and it is
+ * the thing this suite is about.
+ *
+ * The `mousedown` is part of it and not noise: it is what selects the block for the drag
+ * that shares this button, so it is also what leaves a whole-block selection for the menu
+ * action to hand back to the prose.
+ */
+async function deleteViaGrip(editor: Editor) {
+  render(BlockHandle, {
+    props: {
+      editor,
+      target: targetOf(editor, "blockquote"),
+      onHold: () => {},
+      onPin: () => {},
+      onRetarget: () => {},
+      onRelease: () => {},
+    },
+  });
+  const grip = document.querySelector<HTMLButtonElement>("[data-block-handle]");
+  expect(grip, "a grip on the callout").not.toBeNull();
 
-  it("unwraps the body into the note rather than deleting it", async () => {
-    // The container block's answer to the sealed blocks' *remove*, and deliberately a
-    // different gesture (#175 review): a callout is a wrapper the GM put around their
-    // own writing, so the control that takes the box away must not take the writing.
+  await fireEvent.mouseDown(grip!);
+  await fireEvent.click(grip!);
+
+  const remove = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+    el.textContent?.trim().startsWith("Delete"),
+  );
+  expect(remove, "a Delete item in the grip's menu").toBeTruthy();
+  await fireEvent.click(remove!);
+  // The action is genuinely async — Copy awaits a clipboard, so all four go through a
+  // promise — and the write lands in its `finally`.
+  await Promise.resolve();
+}
+
+describe("removing a callout", () => {
+  it("draws no removal control of its own, in the header or anywhere else", () => {
+    const editor = note(
+      "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.",
+    );
+    const labels = [...dom(editor).querySelectorAll("button")].map((b) =>
+      b.getAttribute("aria-label"),
+    );
+
+    // The title, which is a field opened for typing, and the chevron — collapse being
+    // the header's one piece of chrome that is not a field. Nothing else.
+    expect(labels.sort()).toEqual(["Callout title", "Collapse callout"]);
+  });
+
+  it("draws none on an ordinary quote either, which has no header at all", () => {
+    // The old unwrap was offered only by a typed callout, a quote with no type having no
+    // header to put it in. Nothing is offered by either now, and the quote still draws
+    // no chrome — which is the half of that claim that outlived the control.
+    const editor = note("> Just a quotation.");
+
+    expect(dom(editor).querySelectorAll("button")).toHaveLength(0);
+  });
+
+  it("takes the body with the box when the handle's menu deletes it", async () => {
     const editor = note(
       "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.",
     );
 
-    await fireEvent.click(removeButton(editor));
+    await deleteViaGrip(editor);
 
-    expect(saved(editor)).toBe("The eastern crossing collapsed last winter.");
+    expect(saved(editor)).toBe("");
   });
 
-  it("keeps every block the body held, in order", async () => {
+  it("takes every block the body held, not just the first", async () => {
+    // The case the old unwrap was careful about, now answered the other way: a fight
+    // grouped in an `encounter` callout (#182) is a body of several blocks, and Delete
+    // takes all of them because they are the block's children.
     const editor = note(
       "> [!encounter] The Ambush\n> Two kobolds.\n>\n> - a rusted blade\n> - a lantern",
     );
 
-    await fireEvent.click(removeButton(editor));
+    await deleteViaGrip(editor);
 
     const out = saved(editor);
-    expect(out).not.toContain(">");
-    expect(out).toContain("Two kobolds.");
-    expect(out).toContain("- a rusted blade");
-    expect(out).toContain("- a lantern");
+    expect(out).not.toContain("Two kobolds.");
+    expect(out).not.toContain("a rusted blade");
+    expect(out).not.toContain("a lantern");
   });
 
-  it("is one undo step, which puts the box back", async () => {
-    const editor = note("> [!tip] Ask the ferryman\n> He knows the crossing.");
+  it("is one undo step, which puts the box and its contents back", async () => {
+    const md = "> [!tip] Ask the ferryman\n> He knows the crossing.";
+    const editor = note(md);
 
-    await fireEvent.click(removeButton(editor));
+    await deleteViaGrip(editor);
     editor.commands.undo();
 
-    expect(saved(editor)).toBe("> [!tip] Ask the ferryman\n> He knows the crossing.");
+    expect(saved(editor)).toBe(md);
   });
 
   it("leaves the prose around it alone", async () => {
@@ -548,18 +612,8 @@ describe("removing a callout keeps what was inside it", () => {
       "Before the box.\n\n> [!note] Aside\n> Inside the box.\n\nAfter the box.",
     );
 
-    await fireEvent.click(removeButton(editor));
+    await deleteViaGrip(editor);
 
-    expect(saved(editor)).toBe(
-      "Before the box.\n\nInside the box.\n\nAfter the box.",
-    );
-  });
-
-  it("is offered only by a callout, not by an ordinary quote", () => {
-    // A quote with no type draws no header, so there is no chrome to put it in — and
-    // nothing to remove either: unwrapping it is `>` characters, which the GM deletes.
-    const editor = note("> Just a quotation.");
-
-    expect(removeButton(editor)).toBeNull();
+    expect(saved(editor)).toBe("Before the box.\n\nAfter the box.");
   });
 });

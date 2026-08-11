@@ -138,8 +138,7 @@ export const ImageBlock = Image.extend({
       domAttrs: { "data-image-block": "", "data-note-block": "image" },
       defaults: { src: "", alt: "", align: "center", width: "100%" },
       drawsOwnSelection: true,
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes, deleteNode }) => ({
         onUpdate: updateAttributes,
         onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
         onSrcReplace: (src: string) => updateAttributes({ src }),

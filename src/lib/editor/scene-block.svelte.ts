@@ -220,10 +220,8 @@ export const SceneBlock = Node.create({
       class: "scene-block-wrapper",
       domAttrs: { "data-note-block": "scene" },
       defaults: { sceneId: null, sceneName: "" },
-      props: ({ updateAttributes, deleteNode, selectNode }) => ({
-        onGrab: selectNode,
+      props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
-        onRemove: deleteNode,
       }),
 
       // Scene's use of the connector's event hole: hold a slider drag that

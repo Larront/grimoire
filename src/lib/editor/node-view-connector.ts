@@ -21,18 +21,6 @@ import type { Component } from "svelte";
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-/**
- * Marks the element a block offers as ProseMirror's handle on it — its grip.
- *
- * The attribute is the seam, and it is deliberately only that. §8 keeps *how a block
- * looks* out of this file, so the connector never draws a grip: a block renders its own,
- * in its own chrome, with its own design-system idiom, and marks it with this. What the
- * connector then owns is the routing, which is plumbing every block would otherwise
- * re-derive: events on a grip are not held back, so ProseMirror can select the node and
- * start a drag.
- */
-export const BLOCK_GRIP_ATTR = "data-block-grip";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -79,13 +67,16 @@ export interface BlockNodeViewContext {
    */
   getPos: () => number | undefined;
   /**
-   * Selects the whole block as one thing, which is what a grip's `mousedown` does.
+   * Selects the whole block as one thing.
    *
    * A sealed block holds no text position, so nothing about it is reachable by dragging a
    * caret across it — there is no caret to drag. Copying one, cutting one, or dragging one
    * somewhere else all need the node itself to be the selection, and `stopEvent` holding
    * every click is exactly what stops ProseMirror ever making that selection on its own
    * (the same reason `deleteNode` above has to exist at all).
+   *
+   * The gutter handle (#190) is what reaches for this from outside the node views, so no
+   * block draws a control of its own for it any more.
    *
    * The editor is focused afterwards, because an unfocused editor's selection is not the
    * one the operating system copies: Ctrl+C would reach whatever else holds focus.
@@ -171,6 +162,29 @@ function withDefaults(attrs: BlockAttrs, defaults?: BlockAttrs): BlockAttrs {
   return out;
 }
 
+// ─── Stale positions ──────────────────────────────────────────────────────────
+
+/**
+ * The node at a position a view is holding, or null — and never a throw.
+ *
+ * Every write below re-reads the document before touching it, because a position taken
+ * when a view was drawn may not hold that view's node by the time the GM acts on it. The
+ * bounds check is part of that and not decoration: `nodeAt` throws a `RangeError` past the
+ * end of the document, which is exactly the shape a note that live-reloaded to something
+ * shorter leaves behind — and a throw here surfaces as the gesture that raised it dying,
+ * rather than as the no-op the guard is written to produce.
+ *
+ * `doc` is optional because a real transaction always carries one and a test stub need
+ * not.
+ */
+function nodeAtOrNull(
+  doc: ProseMirrorNode | undefined,
+  pos: number,
+): ProseMirrorNode | null {
+  if (!doc || pos < 0 || pos > doc.content.size) return null;
+  return doc.nodeAt(pos);
+}
+
 // ─── Connector ────────────────────────────────────────────────────────────────
 
 /**
@@ -211,7 +225,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
           // step through update(). A position holding some other node means the
           // node this view drew is gone, and the write must not land on whatever
           // replaced it.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          const atPos = nodeAtOrNull(tr.doc, pos);
           if (atPos && atPos.type !== current.type) return false;
           const attrs = (atPos ?? current).attrs;
           // ADR-0016 §6: every mutation is one undo. Without this, a write landing
@@ -228,7 +242,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         editor.commands.command(({ tr }) => {
           // The same guard `updateAttributes` uses, for the same reason and with more
           // at stake: a stale position holding some other node would delete it.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
+          const atPos = nodeAtOrNull(tr.doc, pos);
           if (atPos && atPos.type !== current.type) return false;
           closeHistory(tr);
           tr.delete(pos, pos + (atPos ?? current).nodeSize);
@@ -244,9 +258,15 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         if (pos == null) return;
         editor.commands.command(({ tr, dispatch }) => {
           // The same stale-position guard the two writes above use: selecting whatever
-          // has taken this position would put the grip's drag on the wrong block.
-          const atPos = tr.doc?.nodeAt(pos) ?? null;
-          if (atPos && atPos.type !== current.type) return false;
+          // has taken this position would act on the wrong block.
+          const atPos = nodeAtOrNull(tr.doc, pos);
+          // `!atPos` too, unlike its two neighbours above — and the difference is not an
+          // oversight in either direction. They fall back to `current` and write against
+          // a position that is still theirs; this one hands the position to
+          // `NodeSelection.create`, which reads the node *starting* there and throws
+          // outright when nothing does. A stale position would take the gesture that
+          // reached for it down with it.
+          if (!atPos || atPos.type !== current.type) return false;
           if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, pos));
           return true;
         });
@@ -294,12 +314,6 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
         if (decided !== undefined) return decided;
         const target = event.target as globalThis.Node | null;
         if (!target || !dom.contains(target)) return false;
-        // A grip is the block handing ProseMirror a hold on itself, so its events are the
-        // one thing here that must NOT be held: the mousedown selects the node and the
-        // dragstart carries it. Checked before the hole below because a container's grip
-        // sits outside its content, and a sealed block holds everything.
-        const el = target instanceof Element ? target : target.parentElement;
-        if (el?.closest(`[${BLOCK_GRIP_ATTR}]`)) return false;
         // Content inside the hole is ProseMirror's: typing in it is its business.
         return contentDOM ? !contentDOM.contains(target) : true;
       },

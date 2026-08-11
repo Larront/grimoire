@@ -5,16 +5,31 @@
 // module keeps the pointer maths down to one line and puts every decision behind
 // `blockTargetAt`, which takes a document and a position. What is below is that decision,
 // plus the four things the menu does — all of it real document behaviour.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { NodeSelection } from "@tiptap/pm/state";
+
+// A scene block asks the ledger for its tracks the moment its node view mounts, and there
+// is no ledger here — the call resolves to null and the `.map` on it rejects into nowhere,
+// which Vitest reports as an unhandled error with every test still green. Nothing below
+// depends on a scene's contents; only on a scene being a block the handle can delete.
+vi.mock("$lib/stores/scenes.svelte", () => ({
+  scenes: {
+    scenes: [],
+    getSlots: () => Promise.resolve([]),
+    invalidateSlots: () => {},
+  },
+}));
+
 import {
   blockTargetAt,
   blockMarkdownAt,
   canTurnInto,
   deleteBlockAt,
   duplicateBlockAt,
+  hoverProbeAt,
   selectBlockAt,
   turnIntoAt,
+  turnIntoKindAt,
 } from "$lib/editor/block-handle";
 import { closeNote, note, saved } from "./fixtures/note-editor";
 
@@ -95,6 +110,55 @@ describe("the handle targets the innermost block", () => {
   });
 });
 
+// ─── Where a pointer counts as hovering ───────────────────────────────────────
+//
+// The numbers half of the gutter hover. What it does to a real document at a real coordinate
+// is in `block-handle-placement.browser.test.ts`, where there is layout to measure; this is
+// the rule itself, which is a decision about four edges.
+
+describe("the pointer's hover zone", () => {
+  // A pane 300 wide with a 36px gutter: prose from 36 to 300, one block tall.
+  const zone = {
+    prose: { left: 36, top: 100, width: 264, height: 200 },
+    columnLeft: 0,
+  };
+
+  it("leaves a pointer over the words exactly where it is", () => {
+    expect(hoverProbeAt({ left: 120, top: 150 }, zone)).toEqual({
+      left: 120,
+      top: 150,
+      fromGutter: false,
+    });
+  });
+
+  it("pulls a pointer out in the gutter back to the prose, keeping its height", () => {
+    // The height is the whole answer: it is what says *which* block, and the distance out
+    // into the margin is what the GM is not making a claim about.
+    expect(hoverProbeAt({ left: 4, top: 260 }, zone)).toEqual({
+      left: 37,
+      top: 260,
+      fromGutter: true,
+    });
+  });
+
+  it("answers for the far edge of the gutter, which is where a pointer overshoots to", () => {
+    expect(hoverProbeAt({ left: 0, top: 150 }, zone)?.fromGutter).toBe(true);
+    expect(hoverProbeAt({ left: -1, top: 150 }, zone)).toBeNull();
+  });
+
+  it("declines a pointer above or below the prose", () => {
+    // Above is the note's title, below is the empty space under the last block. Neither is
+    // a claim about a block, and a clamp with no vertical bound would make both into one.
+    expect(hoverProbeAt({ left: 10, top: 99 }, zone)).toBeNull();
+    expect(hoverProbeAt({ left: 10, top: 301 }, zone)).toBeNull();
+  });
+
+  it("declines a pointer past the far side of the prose", () => {
+    // The trailing margin is not a gutter: there is no grip over there to reach for.
+    expect(hoverProbeAt({ left: 301, top: 150 }, zone)).toBeNull();
+  });
+});
+
 // ─── Select ───────────────────────────────────────────────────────────────────
 
 describe("selecting a block", () => {
@@ -136,6 +200,28 @@ describe("deleting a block", () => {
     const out = saved(editor);
     expect(out).toBe("Before.\n\nAfter.");
     expect(out).not.toContain("waits");
+  });
+
+  // The blocks that gave up their own trash can (#194). Each one used to carry a control
+  // because it is sealed — it holds every click, so ProseMirror never selects the node
+  // and Backspace has nothing to take. Deleting them here is what makes taking those
+  // controls out a removal of a duplicate rather than a removal of the only way out.
+  it.each([
+    ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
+    [
+      "a timeline",
+      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
+      "timelineBlock",
+    ],
+    ["a scene block", "```scene\n# The Tavern\nId: 7\n```", "sceneBlock"],
+  ])("takes %s, which has no removal control of its own", (_what, md, type) => {
+    const editor = note(["Before.", "", md, "", "After."].join("\n"));
+    deleteBlockAt(editor, posOf(editor, type));
+
+    expect(saved(editor)).toBe("Before.\n\nAfter.");
+
+    editor.commands.undo();
+    expect(saved(editor)).toBe(["Before.", "", md, "", "After."].join("\n"));
   });
 
   it("is one undo step, like every other write in the pattern", () => {
@@ -254,5 +340,100 @@ describe("turning one block into another", () => {
 
     expect(turnIntoAt(editor, posOf(editor, "statblockBlock"), "heading1")).toBe(false);
     expect(saved(editor)).toBe(md);
+  });
+
+  it("lifts a list item out of its list on the way to being a quote", () => {
+    // `wrapIn` alone refuses inside a list item — a blockquote is not valid there — and
+    // returns having done nothing, so the Quote the menu offers on a bullet (#192) would
+    // be one a GM can click and watch not happen. The lift is not a workaround either:
+    // the block they asked to quote is no longer a bullet.
+    const editor = note("- the one with the sling\n- and the other");
+    turnIntoAt(editor, posOf(editor, "paragraph"), "quote");
+
+    expect(saved(editor)).toBe("> the one with the sling\n\n- and the other");
+  });
+
+  it("lifts a list item out on the way to a heading, taking only that item", () => {
+    const editor = note("- the one with the sling\n- and the other");
+    turnIntoAt(editor, posOf(editor, "paragraph"), "heading2");
+
+    expect(saved(editor)).toBe("## the one with the sling\n\n- and the other");
+  });
+
+  it("answers that something happened even where the chain reports otherwise", () => {
+    // `setNode` returns false down its `clearNodes` fallback — the path that unwraps a
+    // quote — so a chain's own answer says "nothing happened" about a write that plainly
+    // did. The caller uses this to tell an ordinary no-op from a stale menu.
+    const editor = note("> Something waits.");
+    const done = turnIntoAt(editor, posOf(editor, "paragraph"), "paragraph");
+
+    expect(saved(editor)).toBe("Something waits.");
+    expect(done).toBe(true);
+  });
+
+  it("is one undo, taking back the heading and not the sentence before it", () => {
+    // The other three writes close the history group and this one did not, so a GM who
+    // typed a line and turned it into a heading in the same breath lost both to one
+    // Ctrl+Z — the typing being the part they did not ask to take back (ADR-0016 §6).
+    const editor = note("The Lower");
+    const pos = posOf(editor, "paragraph");
+    editor.commands.insertContentAt(pos + 1 + "The Lower".length, " Halls");
+    turnIntoAt(editor, pos, "heading2");
+    editor.commands.undo();
+
+    expect(saved(editor)).toBe("The Lower Halls");
+  });
+});
+
+// ─── What it already is ───────────────────────────────────────────────────────
+
+describe("naming the kind a block already is", () => {
+  it("reads a paragraph, and a heading at its own level", () => {
+    const editor = note("A sentence.\n\n## The Lower Halls");
+
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "paragraph"))).toBe("paragraph");
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "heading"))).toBe("heading2");
+  });
+
+  it("reads the list a list item is in, not the paragraph inside it", () => {
+    // The handle targets the *innermost* block, which for a list item is the paragraph
+    // its text lives in — so the answer is only in the ancestry above it.
+    const bullets = note("- the one with the sling");
+    expect(turnIntoKindAt(bullets.state.doc, posOf(bullets, "paragraph"))).toBe(
+      "bulletList",
+    );
+    closeNote();
+
+    const numbered = note("1. first light");
+    expect(turnIntoKindAt(numbered.state.doc, posOf(numbered, "paragraph"))).toBe(
+      "orderedList",
+    );
+  });
+
+  it("reads a plain quote as a quote, and a callout's own prose as a paragraph", () => {
+    // A GM turning a paragraph into a quote is asking for a quote, so a plain one is on
+    // offer and its prose reads as it. An encounter box is *not* on offer — it is a
+    // container — so what is inside it is a paragraph, which is both true and the thing
+    // that stops "Paragraph" tearing that prose out of the box.
+    const quote = note("> Something waits.");
+    expect(turnIntoKindAt(quote.state.doc, posOf(quote, "paragraph"))).toBe("quote");
+    closeNote();
+
+    const callout = note("> [!encounter] The Ambush\n> Two kobolds.");
+    expect(turnIntoKindAt(callout.state.doc, posOf(callout, "paragraph"))).toBe(
+      "paragraph",
+    );
+  });
+
+  it("has no answer for a block that cannot be turned into anything", () => {
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+
+    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "statblockBlock"))).toBeNull();
+  });
+
+  it("declines a position past the end of the document", () => {
+    const editor = note("A sentence.");
+
+    expect(turnIntoKindAt(editor.state.doc, 9999)).toBeNull();
   });
 });

@@ -98,7 +98,9 @@
     data-template-scroll
     class="@container h-[calc(100svh_-_var(--tab-bar-h)_-_1px)] overflow-y-auto"
   >
-    <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
+    <!-- A template is a note being written, so it gets the note's column and with it the
+         block gutter (#190) — see `[data-note-column]` in app.css. -->
+    <div data-note-column class="w-full mx-auto pt-10 pb-20 @5xl:max-w-[70%]">
       <input
         bind:value={draftTitle}
         class="w-full bg-transparent border-none outline-none p-0

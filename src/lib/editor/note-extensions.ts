@@ -37,6 +37,11 @@ export interface NoteExtensionOptions {
    * what it looks like belong to the surface, like the two menus above.
    */
   onBlockTarget?: (target: BlockTarget | null) => void;
+  /**
+   * The GM asked for the handle from the keyboard (`Mod-Shift-h`) rather than by hovering:
+   * raise it on the block the caret is in, and let it take focus.
+   */
+  onBlockGrab?: (target: BlockTarget) => void;
 }
 
 /**
@@ -67,6 +72,7 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
     }),
     BlockHandle.configure({
       onTarget: options.onBlockTarget ?? (() => {}),
+      onGrab: options.onBlockGrab ?? (() => {}),
     }),
   ];
 }

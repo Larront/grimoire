@@ -46,7 +46,6 @@
     Check,
     ChevronDown,
     FoldHorizontal,
-    GripVertical,
     Pencil,
     Trash2,
     UnfoldHorizontal,
@@ -84,7 +83,6 @@
     width,
     onCommit,
     onRemove,
-    onGrab,
   }: {
     name: string;
     rows: LabelledRow[];
@@ -93,12 +91,6 @@
     onCommit: (block: Statblock) => void;
     /** Takes the whole block out of the note. Offered in edit mode only — see below. */
     onRemove?: () => void;
-    /**
-     * Selects the whole card, so it can be copied, cut or dragged. The grip below is the
-     * only way in: a sealed block holds no text position, so there is no caret to drag
-     * across it and ProseMirror never selects it on its own.
-     */
-    onGrab?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -573,22 +565,6 @@
           : ''}"
       />
     </button>
-    <!-- The grip. `data-block-grip` is the connector's seam: events raised on it are the
-         only ones a sealed block does not hold, so this mousedown reaches ProseMirror and
-         becomes a selection of the whole card, and the drag that follows carries it.
-         `draggable` on the element is what makes the browser start that drag at all. -->
-    <button
-      type="button"
-      draggable="true"
-      data-block-grip
-      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-grab
-             active:cursor-grabbing
-             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      aria-label="Select statblock"
-      onmousedown={onGrab}
-    >
-      <GripVertical size={13} />
-    </button>
     <!-- Width, which is how the GM lays an encounter out: narrow the creatures in a
          fight and they tile inside the callout holding them. Saved with the block, so
          the arrangement is still there next session. -->
@@ -648,6 +624,12 @@
     {/if}
   </div>
 
+  <!-- The name, with the gutter the control row above sits in reserved on its right so a
+       long name never runs under the icons. One step tighter in each mode since the grip
+       moved out to the gutter (#193) and left the row a button shorter. The numbers are
+       the same ones the row already used at each length rather than a fresh guess: edit
+       mode's five buttons are exactly what view mode held at `pr-24` before this change,
+       and view mode is now four. -->
   <LinkedTextField
     value={_name}
     onCommit={setName}
@@ -656,7 +638,7 @@
     ariaLabel="Statblock name"
     placeholder="Unnamed statblock"
     class="statblock-field font-heading text-sm leading-snug text-foreground mb-1
-           {editing ? 'pr-32' : 'pr-24'}"
+           {editing ? 'pr-24' : 'pr-20'}"
   />
 
   {#if !collapsed && _rows.length === 0}

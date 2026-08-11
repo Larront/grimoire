@@ -452,9 +452,10 @@
                external divergence without blocking the rest of the app. -->
           <div
             data-testid="conflict-banner"
+            data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -488,9 +489,10 @@
                viewing is lost. Sticky, not modal. -->
           <div
             data-testid="deleted-banner"
+            data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 px-6 py-2.5 backdrop-blur"
+                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -519,7 +521,10 @@
             </div>
           </div>
         {/if}
-        <div class="w-full mx-auto px-6 pt-10 pb-20 @5xl:max-w-[70%] @5xl:px-10">
+        <!-- The horizontal padding is in app.css under `[data-note-column]`, not here:
+             its leading edge is the block gutter (#190) and is derived from the grip's
+             own size, so it must not drift apart from a utility class. -->
+        <div data-note-column class="w-full mx-auto pt-10 pb-20 @5xl:max-w-[70%]">
           <input
             bind:this={titleInput}
             bind:value={draftTitle}
