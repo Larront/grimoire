@@ -17,6 +17,8 @@ import {
   Cross,
   Flag,
   TreePine,
+  Mountain,
+  Landmark,
 } from "@lucide/svelte";
 
 export type ResolvedAppearance = {
@@ -43,6 +45,11 @@ export const CURATED_ICON_COMPONENTS = new Map<PinIcon, Component<any>>([
   ["cross", Cross],
   ["flag", Flag],
   ["tree-pine", TreePine],
+  // Both of these were named by the default categories (Cave, Ruin) before they existed
+  // here, which drew those two markers as an empty shape in every ledger. They are the
+  // right icons for those places; it was the registry that was short.
+  ["mountain", Mountain],
+  ["landmark", Landmark],
 ]);
 
 export function resolvedAppearance(

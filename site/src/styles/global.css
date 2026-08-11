@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+/* Colour, type and radius come from the app — see shared/tokens.css. The
+   website does not define a palette of its own: it is advertising the
+   product, and a screenshot that no longer matches the chrome around it is
+   the failure mode this import exists to prevent.
+
+   Everything below is site-only. Nothing here belongs in the shared file:
+   the app has its own motion system (and a reduce-motion setting the OS
+   query cannot see), so these reveals would be dead weight in the binary. */
+@import "../../../shared/tokens.css";
+
+html {
+  background-color: var(--background-subtle);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background-color: var(--primary-muted);
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────
+   All reveal start-states are scoped to `.js-motion` (set pre-paint in
+   Layout.astro, and never under reduced-motion or no-JS). So the default,
+   un-enhanced page renders fully visible — motion is pure enhancement, and
+   a JS failure cannot ship a blank page. */
+
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise-scale-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ember-kindle {
+  from {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  to {
+    box-shadow: 0 8px 30px -12px var(--primary-muted);
+  }
+}
+
+/* Hero: orchestrated entrance on load, staggered by --i. */
+.js-motion .reveal-hero {
+  opacity: 0;
+  animation: rise-in 700ms var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+/* Scroll-in reveals: hidden until the observer in Layout.astro adds
+   `.is-visible`. */
+.js-motion .reveal {
+  opacity: 0;
+}
+.js-motion .reveal.is-visible {
+  animation: rise-in 620ms var(--ease-out-expo) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.js-motion .reveal-scale {
+  opacity: 0;
+}
+.js-motion .reveal-scale.is-visible {
+  animation: rise-scale-in 780ms var(--ease-out-expo) both;
+}
+
+/* Ember glow on the primary CTA — energy/affordance, not depth (a deliberate,
+   documented exception to DESIGN.md's Shadowless Rule; the ember earning its
+   name). Site-only: the app is flat throughout, without exception. */
+.ember-cta {
+  transition:
+    box-shadow 220ms var(--ease-out-expo),
+    transform 150ms ease-out,
+    background-color 150ms ease-out;
+}
+.js-motion .ember-cta {
+  animation: ember-kindle 1100ms var(--ease-out-expo) 550ms both;
+}
+.ember-cta:hover {
+  box-shadow: 0 12px 34px -10px var(--primary);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

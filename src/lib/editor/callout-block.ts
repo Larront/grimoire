@@ -362,47 +362,31 @@ function caretOutOfCallout(editor: Editor, getPos: () => number | undefined): vo
   editor.view.dispatch(state.tr.setSelection(target).scrollIntoView());
 }
 
-/**
- * Take the box away and leave what was in it (#175 review).
- *
- * The container block's answer to the sealed blocks' *remove*, and deliberately not the
- * same gesture. A sealed block **is** its content, so deleting the node deletes the
- * thing the GM was looking at; a callout is a wrapper around prose the GM wrote, and a
- * trash can that swallowed a fight's worth of statblocks because they wanted the tint
- * gone would be the most expensive control in the editor. Deleting the content remains
- * available and needs nothing from us: the body is ordinary document content, so
- * selecting it and pressing Backspace already works, which is exactly what a sealed
- * block cannot offer.
- *
- * `lift` is ProseMirror's own unwrap and is reused rather than reimplemented as a
- * delete-and-reinsert, so the children move without being re-parsed and one undo puts
- * the box back.
- *
- * The selection is stretched over the **whole body** before lifting, and that is the
- * part worth not simplifying: `lift` acts on the blocks the selection touches, so a
- * caret in the first paragraph lifts that paragraph alone and leaves the rest of the
- * body inside a callout the GM just asked to remove. A fight grouped in an `encounter`
- * callout — the case #182 exists for — is exactly a body of several blocks.
- */
-function unwrapCallout(editor: Editor, getPos: () => number | undefined): void {
-  const pos = getPos();
-  if (pos == null) return;
-  const callout = editor.state.doc.nodeAt(pos);
-  if (!callout) return;
-
-  editor
-    .chain()
-    .focus()
-    // Inside the blockquote, from before its first child to after its last. TipTap
-    // clamps these to the nearest text positions, so the ends do not need to be exact.
-    .setTextSelection({ from: pos + 1, to: pos + callout.nodeSize - 1 })
-    .lift("blockquote")
-    .run();
-}
+// ─── Unwrap: what the header used to offer, and why it no longer does ─────────
+//
+// The header carried its own trash can (#175 review), and it *unwrapped*: the box went
+// and the prose inside it stayed. The reason was that a callout is a wrapper a GM put
+// around their own writing, so the control that removed it must not remove what it
+// wrapped — a sealed block **is** its content, but a callout is not.
+//
+// That distinction is dropped (#194). The handle's menu can now delete anything,
+// including blocks no click could select, so every block answers to one Delete — and a
+// callout that alone meant "keep the contents" would be the odd one out in the only
+// gesture that is meant to be uniform. Deleting a callout takes the box and the body
+// together, and Ctrl+Z is the way back.
+//
+// The gesture itself is not being argued against, only its shape: if "keep the contents"
+// is missed, it belongs in the handle's menu as its own item — Unwrap beside Delete,
+// offered on any container — rather than as a control only callouts draw.
 
 // ─── Extension ────────────────────────────────────────────────────────────────
 
 export const CalloutBlock = Blockquote.extend({
+  // Draggable so the header's grip can carry the whole box, contents included. A callout
+  // is the one member whose children are real text, so a caret can already be dragged
+  // *within* it; what it could not do is move as one thing.
+  draggable: true,
+
   addAttributes() {
     return {
       calloutType: {
@@ -567,7 +551,6 @@ export const CalloutBlock = Blockquote.extend({
         // to the title. The connector's write-back is what makes that true.
         onTitleCommit: (calloutTitle: string | null) => updateAttributes({ calloutTitle }),
         onCollapse: () => caretOutOfCallout(editor, getPos),
-        onUnwrap: () => unwrapCallout(editor, getPos),
       }),
     });
   },

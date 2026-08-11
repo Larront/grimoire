@@ -33,12 +33,12 @@
       },
       "devCsp": {
         "default-src": "'self'",
-        "script-src": "'self' 'unsafe-eval' 'wasm-unsafe-eval' https://sdk.scdn.co",
+        "script-src": "'self' 'unsafe-eval' 'wasm-unsafe-eval' https://sdk.scdn.co http://localhost:8400",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' asset: http://asset.localhost data: blob:",
         "media-src": "'self' asset: http://asset.localhost blob: https://*.spotify.com https://*.scdn.co",
         "font-src": "'self' data:",
-        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost ws://localhost:1420 http://localhost:1420 https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
+        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost ws://localhost:1420 http://localhost:1420 http://localhost:8400 https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
         "worker-src": "'self' blob:",
         "frame-src": "https://sdk.scdn.co",
         "object-src": "'none'"

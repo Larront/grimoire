@@ -202,6 +202,9 @@ export const TimelineBlock = Node.create({
   name: "timelineBlock",
   group: "block",
   atom: true,
+  // Draggable so a grip can carry it. ProseMirror will not drag a node whose spec does
+  // not allow it, however the selection was made.
+  draggable: true,
 
   addAttributes() {
     return {
@@ -251,9 +254,8 @@ export const TimelineBlock = Node.create({
       component: TimelineBlockView,
       domAttrs: { "data-note-block": "timeline" },
       defaults: { events: [] },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes }) => ({
         onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
-        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // Fresh /timeline insert: one blank event → open it in edit mode immediately

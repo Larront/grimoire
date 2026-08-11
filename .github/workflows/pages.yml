@@ -1,0 +1,107 @@
+name: pages
+
+# The product website (site/), built on every PR and deployed to GitHub Pages
+# from main.
+#
+# Path-filtered so copy edits do not spin up the Linux Tauri toolchain that
+# ci.yml needs — and ci.yml ignores site/** for the same reason in reverse.
+# Between them, each product's CI only runs for its own changes. The
+# pull_request trigger is what keeps a site-only PR from having no CI at all
+# now that ci.yml skips it.
+#
+# `release: published` is not redundant with the push trigger: the download
+# grid is resolved from the latest release AT BUILD TIME (see
+# site/src/lib/releases.ts), so without this the site would keep advertising
+# the previous version's installers until something else touched site/.
+#
+# (The two path lists below are duplicated rather than shared with a YAML
+# anchor because the GitHub Actions workflow parser does not support anchors.)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "shared/**"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "shared/**"
+      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys of the same ref race; a superseded build has nothing
+# worth finishing. Keyed by ref so a PR build cannot cancel a main deploy.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      # Installs the whole Bun workspace from the root lockfile — the site is a
+      # workspace member, not a standalone project, so this cannot be scoped to
+      # site/ alone.
+      - run: bun install --frozen-lockfile
+
+      # Generates .svelte-kit/tsconfig.json, which the site build reads whether it
+      # wants to or not. Bundler resolution walks up from the root node_modules and
+      # finds the repo root's tsconfig.json — the APP's — and that file extends
+      # `./.svelte-kit/tsconfig.json`, which does not exist until this runs. So the
+      # site build died with "Tsconfig not found .svelte-kit/tsconfig.json" on a
+      # fresh checkout, while passing on every developer machine where `bun run
+      # check` had already left the file behind.
+      #
+      # It costs about a second and pulls in none of the app's real toolchain — no
+      # Rust, no webkit2gtk — so the split this workflow exists to maintain still
+      # holds. The alternative is the root tsconfig not extending a generated file,
+      # which is SvelteKit's own layout and not ours to rearrange.
+      - name: Generate SvelteKit types (the root tsconfig extends them)
+        run: bunx svelte-kit sync
+
+      - name: Type-check
+        run: bun run --cwd site check
+
+      - uses: actions/configure-pages@v6
+        if: github.event_name != 'pull_request'
+
+      - name: Build site
+        run: bun run --cwd site build
+        env:
+          # Lifts the GitHub API rate limit from 60/hour per shared runner IP to
+          # 5000/hour, so resolving the release assets does not fail on a busy
+          # runner.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # And if it fails anyway, fail the build rather than silently
+          # publishing a download page whose buttons all point at the generic
+          # releases page. See the comment in site/src/lib/releases.ts.
+          REQUIRE_RELEASE_ASSETS: "1"
+
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    # A PR proves the site still builds; publishing is main's job only.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

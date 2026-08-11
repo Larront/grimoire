@@ -16,7 +16,7 @@
   // once. What is *not* here is the float: nothing in this component knows whether the
   // panel is beside the prose or stacked above it, because that is a container query on
   // the block's own column in `app.css` and never an attribute (#148).
-  import { ImagePlus, RefreshCw, Trash2, X } from "@lucide/svelte";
+  import { ImagePlus, RefreshCw, X } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
@@ -35,15 +35,12 @@
     imageAlt,
     rows,
     onCommit,
-    onRemove,
   }: {
     title: string;
     image: string;
     imageAlt: string;
     rows: LabelledRow[];
     onCommit: (infobox: Infobox) => void;
-    /** Takes the whole panel out of the note. Undo brings it back in one step. */
-    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -257,17 +254,21 @@
     {@render thumbnail()}
   {/if}
 
-  <!-- The title row, and the panel's own two controls beside it.
+  <!-- The title row, and the panel's own "Add image" offer beside it.
        The title is the GM's name for the panel, so it carries the world's voice
        (DESIGN.md's two-voice rule); the rows around it are structure and stay in the
        tool's. Empty by default — a panel sitting under a note's own heading should not
        have to say the same thing twice.
 
-       Both controls sit *in* this row rather than above the title, which is where the
+       The control sits *in* this row rather than above the title, which is where the
        "Add image" offer used to be: a full-width dashed button reserved a strip of
        vertical space in every panel that had no image, so the emptiest panels looked
-       the most cluttered (#175 review). Here they cost 3rem of a line that was going
-       to be drawn anyway, and nothing when they are not being reached for. -->
+       the most cluttered (#175 review). Here it costs part of a line that was going
+       to be drawn anyway, and nothing when it is not being reached for.
+
+       It used to have a trash can for company — the panel's only way out, because a
+       sealed block holds every click and Backspace had no node to take. The gutter
+       handle's menu deletes anything now (#194), so the panel no longer draws its own. -->
   <div class="mb-1 flex items-start gap-1">
     <LinkedTextField
       value={_title}
@@ -292,21 +293,6 @@
           onclick={chooseImage}
         >
           <ImagePlus size={13} aria-hidden="true" />
-        </button>
-      {/if}
-      {#if onRemove}
-        <!-- The only way out of a sealed block: nothing here is selectable, so
-             Backspace has no node to take (#175 review). Undoable in one step, so it
-             asks nothing before doing it. -->
-        <button
-          type="button"
-          class="rounded p-0.5 cursor-pointer text-muted-foreground hover:text-destructive
-                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1
-                 focus-visible:ring-primary"
-          aria-label="Remove infobox"
-          onclick={onRemove}
-        >
-          <Trash2 size={13} aria-hidden="true" />
         </button>
       {/if}
     </div>

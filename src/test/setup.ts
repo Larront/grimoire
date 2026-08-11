@@ -1,5 +1,38 @@
 import "@testing-library/jest-dom";
-import { vi } from "vitest";
+import { afterAll, vi } from "vitest";
+
+// bits-ui's body scroll lock (dialogs, the command palette) does not restore the
+// body style the moment its last lock releases. It schedules the restore on a
+// 24ms timer, so a lock re-registering in the same tick can cancel it — and
+// nothing awaits that timer. So when a file's final test unmounts a locking
+// component, the restore is still queued while Vitest tears the jsdom
+// environment down, and it dereferences `document` on the way out:
+//
+//   ReferenceError: document is not defined
+//     ❯ resetBodyStyle bits-ui/dist/internal/body-scroll-lock.svelte.js:34:9
+//
+// Vitest counts that as an unhandled error and fails the whole run even when
+// every test passed. It is intermittent because it needs teardown to land inside
+// the 24ms window — which is exactly the kind of failure that wastes an
+// afternoon, so we drain the timer here instead.
+//
+// Draining is per file rather than per test: a pending restore is only dangerous
+// at the point the environment goes away. The wait is conditional on the lock's
+// own marker, so the ~90 files that never open a dialog pay nothing, and a file
+// that does waits only the ~24ms it actually needs.
+//
+// Read through the style *attribute* rather than `style.getPropertyValue()`:
+// jsdom's CSSStyleDeclaration does not resolve CSS custom properties, so the
+// getter returns "" for a marker that is plainly there in the attribute text.
+const scrollLockRestorePending = () =>
+  (document.body.getAttribute("style") ?? "").includes("--scrollbar-width");
+
+afterAll(async () => {
+  const deadline = Date.now() + 250;
+  while (scrollLockRestorePending() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+});
 
 // mode-watcher uses PersistedState (runed) which reads localStorage as source of truth —
 // the mock must actually store and retrieve values for setMode/resetMode to work in tests.

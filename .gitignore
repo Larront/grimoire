@@ -6,6 +6,11 @@ node_modules
 .env
 .env.*
 !.env.example
+# What the browser test project writes when a layout assertion fails: a PNG of the
+# page at the moment it failed. Useful while reading a failure, worthless in a branch.
+src/test/__screenshots__/
+.vitest-attachments/
+
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/.grimoire/
@@ -15,5 +20,11 @@ src-tauri/.grimoire/
 # public; the system's own words (field-label inventories, rules text,
 # creature content) stay on local checkouts only.
 docs/research/*.local.md
+
+# Impeccable's live-mode working state: the helper's port and token, and the
+# append-only session journal it replays after an interrupted run. Machine- and
+# run-specific, so it never belongs to a branch. `.impeccable/design.json` and
+# the config beside it are project files and stay tracked.
+.impeccable/live/
 
 

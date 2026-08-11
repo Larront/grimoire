@@ -45,9 +45,9 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
     let map: crate::db::models::Map = diesel::insert_into(maps::table)
         .values(&NewMap {
             title: "Ashfen Region",
-            image_path: Some("maps/ashfen-region.png"),
-            image_width: Some(256),
-            image_height: Some(192),
+            image_path: Some("Maps/ashfen-region.webp"),
+            image_width: Some(1200),
+            image_height: Some(896),
         })
         .returning(crate::db::models::Map::as_returning())
         .get_result(conn)
@@ -109,24 +109,35 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
         .optional()
         .map_err(|e| e.to_string())?;
 
+    // Fractions of the sheet, measured off the drawing rather than chosen: each one is the
+    // place itself — the keep's courtyard, the village's central hall, the reed island with
+    // the tent on it. A pin a few percent out lands in open bog beside the thing it names,
+    // which is the one way this map can still look wrong after being drawn correctly.
+    //
+    // **`y` is measured from the BOTTOM of the image, not the top.** The canvas is Leaflet
+    // on `CRS.Simple` with bounds `[[0, 0], [height, width]]`, so a pin's `y` is a latitude:
+    // 0 is the bottom edge and 1 the top. Read these numbers off an image viewer, which
+    // counts down from the top, and every pin lands at `1 - y` — mirrored about the middle,
+    // near enough to look deliberate and wrong enough to put the village in the marsh. That
+    // is not hypothetical; it is what the first pass at these numbers did.
     let pin_data = [
         (
-            0.63_f32,
-            0.68_f32,
+            0.723_f32,
+            0.286_f32,
             "The Ember Keep",
             ruin_id,
             keep_id,
         ),
         (
-            0.28_f32,
-            0.22_f32,
+            0.397_f32,
+            0.788_f32,
             "Thornhaven Village",
             town_id,
             thornhaven_id,
         ),
         (
-            0.60_f32,
-            0.55_f32,
+            0.682_f32,
+            0.447_f32,
             "Mira's Camp",
             poi_id,
             mira_id,
@@ -436,6 +447,40 @@ mod tests {
         let map_count: i64 = maps::table.count().get_result(&mut conn).unwrap();
         assert_eq!(map_count, 1, "expected exactly 1 map (Ashfen Region)");
 
+        // ── The map's image resolves, at the size its pins were placed against ──
+        //
+        // Both halves of this have already been wrong once. The seeded `image_path` is a
+        // string the compiler never checks against the bundled fixture, so an art swap that
+        // changes the extension — or the folder's capitalisation, which a Windows checkout
+        // will happily disagree with a Linux one about — leaves a map row pointing at
+        // nothing, and the ledger opens on an empty frame. CI runs this on a case-sensitive
+        // filesystem, which is exactly where that mistake shows up.
+        //
+        // The dimensions are load-bearing for a subtler reason: pins are stored as fractions
+        // and MapCanvas builds its bounds from these two numbers, so a pair that disagrees
+        // with the file stretches every pin away from the thing it names — a map that looks
+        // perfectly fine until you notice the keep's pin sitting out in the bog.
+        let map: crate::db::models::Map = maps::table.first(&mut conn).unwrap();
+        let image_path = map
+            .image_path
+            .as_deref()
+            .expect("the sample map must carry an image path");
+        let resolved = tmp.path().join(image_path);
+        assert!(
+            resolved.exists(),
+            "map image '{image_path}' not found at {resolved:?}"
+        );
+        let (width, height) = image::image_dimensions(&resolved)
+            .unwrap_or_else(|e| panic!("map image at {resolved:?} is not readable: {e}"));
+        assert_eq!(
+            (width as i32, height as i32),
+            (
+                map.image_width.expect("seeded map must record a width"),
+                map.image_height.expect("seeded map must record a height"),
+            ),
+            "seeded dimensions must match the image on disk, or every pin lands off its mark"
+        );
+
         // ── Pin count ────────────────────────────────────────────────────────
         let pin_count: i64 = crate::db::schema::pins::table
             .count()
@@ -450,6 +495,59 @@ mod tests {
             .get_result(&mut conn)
             .unwrap();
         assert_eq!(unlinked_pins, 0, "all 3 pins must link to notes");
+
+        // ── The pins sit where the prose says these places are ───────────────
+        //
+        // Every note that touches the geography agrees on three things: Thornhaven is on the
+        // northern edge of the marsh, the keep is east and south of it — "three hours to the
+        // Ember Keep on foot, along the Order's raised stone causeway" — and Mira camps
+        // between the two, within sight of the keep's western approach.
+        //
+        // This is the only part of a hand-placed pin a test can check. Nothing here can know
+        // whether a pin landed on the drawn courtyard, but a keep north-west of the village
+        // is provably not the map the notes describe. And it is worth checking because it
+        // has already been wrong: the first version of these coordinates was measured off an
+        // image viewer, which counts y down from the top, against a canvas whose y counts up
+        // from the bottom. Mirroring the sheet inverts every one of these relations at once,
+        // so this assertion is exactly what fails when someone re-measures them that way.
+        let all_pins: Vec<crate::db::models::Pin> = crate::db::schema::pins::table
+            .load(&mut conn)
+            .unwrap();
+        let pin_at = |title: &str| -> &crate::db::models::Pin {
+            all_pins
+                .iter()
+                .find(|p| p.title == title)
+                .unwrap_or_else(|| panic!("expected a pin titled '{title}'"))
+        };
+        let keep = pin_at("The Ember Keep");
+        let town = pin_at("Thornhaven Village");
+        let camp = pin_at("Mira's Camp");
+
+        assert!(
+            town.x < keep.x,
+            "Thornhaven lies west of the keep — the causeway runs east to it — but the pins \
+             put the village at x {} and the keep at x {}",
+            town.x,
+            keep.x
+        );
+        assert!(
+            town.y > keep.y,
+            "Thornhaven lies north of the keep, and y counts up from the bottom of the sheet, \
+             so the village's y ({}) must exceed the keep's ({})",
+            town.y,
+            keep.y
+        );
+        assert!(
+            camp.x > town.x && camp.x < keep.x && camp.y < town.y && camp.y > keep.y,
+            "Mira camps between the village and the keep, in sight of the western approach — \
+             camp ({}, {}) is not between Thornhaven ({}, {}) and the keep ({}, {})",
+            camp.x,
+            camp.y,
+            town.x,
+            town.y,
+            keep.x,
+            keep.y
+        );
 
         // ── Stub: The Order of Embers is referenced but not written ──────────
         let stub_links: i64 = note_links::table

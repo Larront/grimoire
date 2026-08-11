@@ -32,9 +32,24 @@
   // **Mode and collapse never serialize.** Document state is what the GM carries to
   // another device; view state is how this pane happens to be showing it.
   //
+  // **Width does serialize**, and the line between it and the collapse is that same
+  // sentence read carefully. Collapsing is how this pane is showing the block right now.
+  // Narrowing is a decision *about* the block: it is how the GM laid out an encounter, so
+  // that three creatures tile inside the callout holding them, and a layout that reset on
+  // reopening the note was never laid out. It lives on the fence rather than in the body,
+  // where the GM's own lines are.
+  //
   // Nothing here knows what an entry *is*, and nothing knows what a mark *means*. A
   // section heading, an entry name and a condition label are all text the GM typed.
-  import { Bookmark, Check, ChevronDown, Pencil, Trash2 } from "@lucide/svelte";
+  import {
+    Bookmark,
+    Check,
+    ChevronDown,
+    FoldHorizontal,
+    Pencil,
+    Trash2,
+    UnfoldHorizontal,
+  } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
@@ -50,6 +65,7 @@
     type Mark,
   } from "$lib/editor/statblock-play";
   import {
+    asStatblockWidth,
     blankStatblockEntry,
     blankStatblockSection,
     entryBodyText,
@@ -57,18 +73,21 @@
     type Statblock,
     type StatblockEntry,
     type StatblockSection,
+    type StatblockWidth,
   } from "$lib/editor/statblock-block";
 
   let {
     name,
     rows,
     sections,
+    width,
     onCommit,
     onRemove,
   }: {
     name: string;
     rows: LabelledRow[];
     sections: StatblockSection[];
+    width: StatblockWidth;
     onCommit: (block: Statblock) => void;
     /** Takes the whole block out of the note. Offered in edit mode only — see below. */
     onRemove?: () => void;
@@ -80,6 +99,8 @@
   let _rows = $state<LabelledRow[]>(rows);
   // svelte-ignore state_referenced_locally
   let _sections = $state<StatblockSection[]>(sections);
+  // svelte-ignore state_referenced_locally
+  let _width = $state<StatblockWidth>(width);
 
   /**
    * View state, both of it. Neither is ever handed to `onCommit`, and `setAttrs` leaves
@@ -112,7 +133,20 @@
       name: _name,
       rows: $state.snapshot(_rows) as LabelledRow[],
       sections: $state.snapshot(_sections) as StatblockSection[],
+      width: _width,
     });
+  }
+
+  /**
+   * Width is the one drawing decision that reaches the document, so it commits like a
+   * value rather than toggling like collapse. It stays in view chrome all the same: it
+   * cannot touch what the creature *is*, so ADR-0016 §6's mis-click argument has nothing
+   * to protect here, and a GM tiling an encounter mid-session should not have to open the
+   * structure mode to do it.
+   */
+  function toggleWidth() {
+    _width = _width === "narrow" ? "comfortable" : "narrow";
+    commit();
   }
 
   function setName(next: string) {
@@ -263,6 +297,10 @@
       name: _name,
       rows: $state.snapshot(_rows) as LabelledRow[],
       sections: $state.snapshot(_sections) as StatblockSection[],
+      // Width travels with the shape, because it is part of what the GM is keeping: a
+      // preset made from a narrowed creature stamps narrowed creatures, which is what
+      // building a preset off one member of a tiled encounter is for.
+      width: _width,
     });
     savingPreset = true;
   }
@@ -271,6 +309,9 @@
     _name = attrs.name;
     _rows = attrs.rows;
     _sections = attrs.sections;
+    // Width is document state, so it comes back with the rest of it — an undo of a
+    // narrowing has to redraw the card, not just rewrite the fence underneath it.
+    _width = asStatblockWidth(attrs.width);
     focus = null;
     poolRow = null;
   }
@@ -322,17 +363,24 @@
      prose, which is where a system's in-block description and a section's preamble
      live, so the name field sits empty rather than being another shape. -->
 {#snippet entryFields(entry: StatblockEntry, s: number, i: number, edit: boolean)}
-  <LinkedTextField
-    value={entry.name}
-    onCommit={(next) => setEntry(s, i, { name: next })}
-    restrict={statblockLabelText}
-    focused={edit && entryFocused(s, i)}
-    readonly={!edit}
-    ariaLabel={`Section ${s + 1} entry ${i + 1} name`}
-    placeholder="Name (optional)"
-    class="{edit ? 'statblock-field ' : ''}font-sans text-xs font-semibold leading-snug
-           text-foreground"
-  />
+  <!-- An unnamed entry reads as prose, so in view mode it is drawn as prose: no name
+       line at all. The placeholder is an authoring affordance and belongs behind the
+       pencil — left in view mode it puts the words "Name (optional)" into the middle of
+       the creature's lore, which is the tool describing its own form to a GM who is
+       reading the world. -->
+  {#if edit || entry.name?.trim()}
+    <LinkedTextField
+      value={entry.name}
+      onCommit={(next) => setEntry(s, i, { name: next })}
+      restrict={statblockLabelText}
+      focused={edit && entryFocused(s, i)}
+      readonly={!edit}
+      ariaLabel={`Section ${s + 1} entry ${i + 1} name`}
+      placeholder="Name (optional)"
+      class="{edit ? 'statblock-field ' : ''}font-sans text-xs font-semibold leading-snug
+             text-foreground"
+    />
+  {/if}
   <LinkedTextField
     value={entry.body}
     onCommit={(next) => setEntry(s, i, { body: next })}
@@ -487,16 +535,15 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="statblock-block group/block relative my-2 select-none rounded-lg border border-l-[3px]
          border-border bg-card/40 px-3 py-2"
   class:statblock-editing={editing}
+  data-width={_width}
   contenteditable="false"
   onkeydown={handleKeydown}
 >
-  <!-- The block's hover chrome: the way into the mode, and the way out of it. The check
-       stays visible while the mode is open, so there is always a way back that does not
-       depend on finding the block with a pointer. -->
   <div
     class="absolute top-1 right-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity
            duration-150 motion-reduce:transition-none group-hover/block:opacity-100
@@ -518,9 +565,22 @@
           : ''}"
       />
     </button>
-    <!-- Authoring, and the one gesture that makes a preset. Reachable in both modes:
-         a shape is worth keeping whether the GM has just built it or just recognised
-         it mid-session, and the capture is verbatim either way. -->
+    <!-- Width, which is how the GM lays an encounter out: narrow the creatures in a
+         fight and they tile inside the callout holding them. Saved with the block, so
+         the arrangement is still there next session. -->
+    <button
+      type="button"
+      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
+             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      aria-label={_width === "narrow" ? "Widen statblock" : "Narrow statblock"}
+      onclick={toggleWidth}
+    >
+      {#if _width === "narrow"}
+        <UnfoldHorizontal size={13} />
+      {:else}
+        <FoldHorizontal size={13} />
+      {/if}
+    </button>
     <button
       type="button"
       class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
@@ -531,11 +591,6 @@
       <Bookmark size={13} />
     </button>
     {#if editing}
-      <!-- Removal lives *behind the pencil*, and that is this block's own rule rather
-           than an accident of where there was room: the mode exists because a slipped
-           click mid-fight must not reach the creature's definition (ADR-0016 §6), and
-           deleting the creature is the largest version of that slip. In view mode there
-           is no trash to hit. -->
       {#if onRemove}
         <button
           type="button"
@@ -569,10 +624,12 @@
     {/if}
   </div>
 
-  <!-- The name carries the world's voice (DESIGN.md's two-voice rule); everything
-       around it is structure and stays in the tool's. Empty by default — a note about
-       one creature already says its name in the note's own title. It is the creature's
-       definition, so it is behind the pencil like every other label. -->
+  <!-- The name, with the gutter the control row above sits in reserved on its right so a
+       long name never runs under the icons. One step tighter in each mode since the grip
+       moved out to the gutter (#193) and left the row a button shorter. The numbers are
+       the same ones the row already used at each length rather than a fresh guess: edit
+       mode's five buttons are exactly what view mode held at `pr-24` before this change,
+       and view mode is now four. -->
   <LinkedTextField
     value={_name}
     onCommit={setName}
@@ -580,7 +637,8 @@
     readonly={!editing}
     ariaLabel="Statblock name"
     placeholder="Unnamed statblock"
-    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-14"
+    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1
+           {editing ? 'pr-24' : 'pr-20'}"
   />
 
   {#if !collapsed && _rows.length === 0}
@@ -588,8 +646,6 @@
   {/if}
 
   {#if collapsed}
-    <!-- A collapsed creature is a combat row, not just less of one: the name and every
-         playable row, inline, and every one of them still live. -->
     <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {#each playableRows as { row, index } (index)}
         <span class="inline-flex items-baseline gap-1.5">
@@ -615,18 +671,23 @@
       onChange={handleSectionChange}
     />
   {:else}
-    {#each _rows as row, i (i)}
-      {@render viewRow(row, i)}
-    {/each}
-
-    {#each _sections as section, s (s)}
-      <div class="pt-2">
-        {@render sectionHeading(section, s, false)}
-        {#each section.entries as entry, i (i)}
-          <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
+    <div class="statblock-split">
+      <div class="statblock-stats">
+        {#each _rows as row, i (i)}
+          {@render viewRow(row, i)}
         {/each}
       </div>
-    {/each}
+      <div class="statblock-reference">
+        {#each _sections as section, s (s)}
+          <div class="pt-2">
+            {@render sectionHeading(section, s, false)}
+            {#each section.entries as entry, i (i)}
+              <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -650,6 +711,66 @@
      child component owns and Svelte cannot scope that on its own. */
   .statblock-editing :global(.statblock-field) {
     border-bottom-color: var(--border);
+  }
+
+  /* ─── The view-mode reading ─────────────────────────────────────────────────
+     Header rows in a rail, the GM's own sections beside them. A creature read
+     mid-session is a reference card, not a document: the numbers being played on
+     hold one column and the prose that explains them holds the other, so neither
+     pushes the other off the first glance.
+
+     The block sizes to its content rather than to the pane — a wide window is not
+     a reason to stretch one creature across it. `inline-size` containment is what
+     makes the fold below answer to the block's own width instead of the viewport's,
+     so a narrowed card stacks its columns rather than squeezing them into slivers. */
+  /* Both widths come from app.css, where the callout that tiles a fight reads the same
+     two numbers to size its columns. One of each number, or the tiling mis-sizes. */
+  .statblock-block {
+    container-type: inline-size;
+    container-name: statblock;
+    max-width: var(--statblock-comfortable);
+  }
+
+  /* Narrow is the width a GM picks to tile an encounter, so it is sized to fold the
+     split below rather than to a taste about line length: two of these fit a wide
+     callout, and each one stacks its own columns instead of squeezing them. */
+  .statblock-block[data-width="narrow"] {
+    max-width: var(--statblock-narrow);
+  }
+
+  .statblock-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr);
+    column-gap: 1.25rem;
+    align-items: start;
+    padding-top: 0.25rem;
+  }
+
+  /* A hairline, not a filled gutter: the two columns are one card's two readings,
+     and a heavier divider would make them read as two cards. */
+  .statblock-reference {
+    border-left: 1px solid var(--border);
+    padding-left: 1.25rem;
+  }
+
+  /* The first section already sits against the name's baseline, so it does not pay
+     the inter-section gap the ones below it need. */
+  .statblock-reference > div:first-child {
+    padding-top: 0;
+  }
+
+  @container statblock (max-width: 34rem) {
+    .statblock-split {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 0.75rem;
+    }
+
+    .statblock-reference {
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding-left: 0;
+      padding-top: 0.75rem;
+    }
   }
 
   /* One mark. Sized to the text it sits in rather than to a form control: a run of

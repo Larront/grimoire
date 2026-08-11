@@ -1,64 +1,35 @@
-/* Self-hosted fonts (bundled by Vite, served from 'self'). The app is
-   local-first and the packaged CSP blocks fonts.googleapis.com/gstatic.com,
-   so a Google Fonts @import silently fails on a fresh install (#141). These
-   @fontsource packages register the families as "Nunito Variable" /
-   "JetBrains Mono Variable" — referenced under those names below. */
-@import "@fontsource-variable/nunito/index.css";
-@import "@fontsource-variable/nunito/wght-italic.css";
-@import "@fontsource/metamorphous/index.css";
-@import "@fontsource-variable/jetbrains-mono/index.css";
-@import "@fontsource-variable/jetbrains-mono/wght-italic.css";
-
 @import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
 
+/* The design tokens — colour, type, radius — shared with the website in
+   site/. Also imports the roman font faces, self-hosted and bundled by Vite
+   so they are served from 'self': the app is local-first and the packaged
+   CSP blocks fonts.googleapis.com/gstatic.com, so a Google Fonts @import
+   silently fails on a fresh install (#141). See shared/tokens.css for why
+   the @import and the --font-* token are deliberately bound together. */
+@import "../shared/tokens.css";
+
+/* Italic subsets, app-only: the editor sets italics (blockquotes, emphasis)
+   and the website has no prose that needs them. */
+@import "@fontsource-variable/nunito/wght-italic.css";
+@import "@fontsource-variable/jetbrains-mono/wght-italic.css";
+
 @custom-variant dark (&:is(.dark *));
 
 /* ── Grimoire Design Tokens ──────────────────────────────────── */
 /*
-  Default is dark. Light mode is opt-in via the .light class
-  applied by mode-watcher when the user selects light theme.
+  The token values themselves live in shared/tokens.css, imported above and
+  shared with the website. Default is dark; light mode is opt-in via the
+  .light class applied by mode-watcher when the user selects light theme.
 
-  Token families:
-    background  — surface hierarchy
-    foreground  — text hierarchy
-    primary     — accent / interactive states  (set per accent preset)
-    error       — destructive feedback
-    success     — confirmatory feedback
+  What remains below is app-only: the shadcn compatibility aliases, the
+  accent presets, and the density scale. The website has no shadcn
+  components, no accent picker, and no density setting.
 */
 
 :root {
-  /* Background family */
-  --background: #1f1f1f;
-  --background-subtle: #181818;
-  --background-elevated: #262626;
-  --background-border: rgba(255, 255, 255, 0.08);
-
-  /* Foreground family */
-  --foreground: #f0ece8;
-  --foreground-muted: #a39e99;
-  --foreground-faint: #6b6460;
-
-  /* Primary family — default: Crimson preset */
-  --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
-  --primary-subtle: rgba(194, 72, 61, 0.12);
-  --primary-muted: rgba(194, 72, 61, 0.24);
-
-  /* Semantic feedback */
-  --error: #d4645a;
-  --success: #6ab187;
-
-  /* Hover overlays */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
-
-  /* Border radius scale */
-  --radius-structural: 6px;
-  --radius-elevated: 8px;
-  --radius-pill: 100px;
-
   /* Shadcn compatibility aliases */
   --background-card: var(--background-elevated);
   --foreground-card: var(--foreground);
@@ -85,29 +56,9 @@
   --sidebar-ring: var(--primary);
 }
 
-/* Light mode values applied by mode-watcher via .light class */
-.light {
-  --background: #faf8f5;
-  --background-subtle: #f2ede8;
-  --background-elevated: #ffffff;
-  --background-border: rgba(31, 26, 29, 0.1);
-
-  --foreground: #1a1614;
-  --foreground-muted: #6b6460;
-  --foreground-faint: #a39e99;
-
-  --primary: #a83228;
-  --primary-foreground: #ffffff;
-  --primary-subtle: rgba(168, 50, 40, 0.1);
-  --primary-muted: rgba(168, 50, 40, 0.2);
-
-  --error: #a02020;
-  --success: #2e6e4a;
-
-  --hover-overlay: rgba(31, 26, 29, 0.05);
-
-  /* Shadcn aliases inherit from updated custom props */
-}
+/* Light mode values live in shared/tokens.css under the same .light class.
+   The shadcn aliases above are defined in terms of those custom properties,
+   so they re-resolve on theme change without being restated here. */
 
 /* ── Accent Presets ───────────────────────────────────────────── */
 /* Applied as a class on <html>; dark mode overrides via inline style */
@@ -188,6 +139,85 @@
   scroll-behavior: auto !important;
 }
 
+/* ── Statblock widths ─────────────────────────────────────────── */
+/*
+  The two widths a GM can put a statblock at. They live here rather than in the block
+  because two different files need the same number: the card caps itself at its width,
+  and the callout that tiles a fight sizes each column to it. If those two ever disagree
+  the tiling silently mis-sizes, so there is one of each number.
+
+  Narrow is the TILING width, and the number is a derivation rather than a taste. Two of
+  them plus the gap between have to fit the body of a callout in a note pane — a pane that
+  has already given up the icon rail, the sidebar and its own padding — so the ceiling is
+  about (53rem - 1rem) / 2. 24rem sits under that with room for a narrower pane, and it is
+  comfortably below the 34rem at which the card folds its own two columns, which is the
+  other thing a tiled creature must do: read as one column, so it can sit beside another.
+
+  Sizing narrow to the fold threshold instead (34rem) is the mistake this replaces. It
+  folded correctly and never once tiled: two of them are 68rem, wider than any pane this
+  app has, so every fight wrapped to one creature per row.
+*/
+:root {
+  --statblock-narrow: 24rem;
+  --statblock-comfortable: 46rem;
+}
+
+/* ── The block gutter ─────────────────────────────────────────── */
+/*
+  The strip to the left of the prose the block handle (#190) lives in, and the size of the
+  grip that lives in it. Three numbers that must agree, so they are written once and read
+  from here by both halves: the grip's own size in CSS, and the gap in the placement maths,
+  which reads this custom property rather than repeating the number in TypeScript.
+
+  The gutter is SIZED, not assumed. A note pane can be split, so the prose column's padding
+  is not a comfortable margin it can borrow from — at the narrowest pane it is all there is,
+  and a grip that fits only in a full-width window is a grip that vanishes off the edge of
+  every split. Hence 36px: the grip (18) plus its gap (6) plus 12px of air between the grip
+  and the pane's own edge, which is what stops it reading as stuck to the divider between
+  two panes.
+
+  In px, like the density scale above, and here for a second reason as well: the gap is
+  read back out of this stylesheet by `BlockHandle.svelte`, and `getComputedStyle` does NOT
+  resolve a custom property's units — it hands back the text as written. A `rem` here is
+  therefore a silent 0.375-pixel gap in the placement, not a 6-pixel one.
+*/
+:root {
+  --block-handle-size: 18px;
+  --block-handle-gap: 6px;
+  --block-gutter: 36px;
+}
+
+/*
+  The note's column, which owns its own horizontal padding for that reason — the leading
+  edge is the gutter and cannot be a utility class someone tidies to match the trailing
+  one. `max()` because the gutter is a floor rather than a fixed inset: a wide pane gives
+  the prose more room to breathe and the grip simply sits further out with it.
+
+  `data-note-inset` is the same inset for the pane's full-width chrome — the sticky conflict
+  and deleted-note banners above the column. They are siblings of it rather than children,
+  so they do not inherit the padding, and a hardcoded one drifts: while these were `px-6`
+  the banner text started 12px left of the title beneath it in every split pane, which is
+  the width the gutter was sized for in the first place.
+
+  NOTE, because it is invisible otherwise: these rules are deliberately OUTSIDE `@layer`, so
+  under Tailwind v4 they beat every utility in `@layer utilities` whatever its specificity.
+  That is what makes the comment above true — a `px-8` added to the column would be
+  overridden rather than break the gutter — but it also means such a class would compile,
+  ship, and silently do nothing. Change the padding here, never in the markup.
+*/
+[data-note-column],
+[data-note-inset] {
+  padding-inline: max(var(--block-gutter), 24px) 24px;
+}
+
+/* The wide-pane inset, matching the `@5xl` step the column's other spacing uses. */
+@container (min-width: 64rem) {
+  [data-note-column],
+  [data-note-inset] {
+    padding-inline: max(var(--block-gutter), 40px) 40px;
+  }
+}
+
 /* ── Density System ───────────────────────────────────────────── */
 
 :root,
@@ -218,34 +248,12 @@
   --tab-bar-h: 32px;
 }
 
-/* ── Tailwind theme bridge ────────────────────────────────────── */
+/* ── Tailwind theme bridge ──────────────────────────────────────
+   The colour, font and radius utilities are bridged in shared/tokens.css.
+   This block adds only the shadcn aliases, which exist to satisfy the
+   vendored component library and are not part of Grimoire's vocabulary. */
 
 @theme inline {
-  --font-sans: "Nunito Variable", sans-serif;
-  --font-heading: "Metamorphous", serif;
-  --font-mono: "JetBrains Mono Variable", monospace;
-
-  /* Surface */
-  --color-background: var(--background);
-  --color-background-subtle: var(--background-subtle);
-  --color-background-elevated: var(--background-elevated);
-  --color-background-border: var(--background-border);
-
-  /* Text */
-  --color-foreground: var(--foreground);
-  --color-foreground-muted: var(--foreground-muted);
-  --color-foreground-faint: var(--foreground-faint);
-
-  /* Accent */
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary-subtle: var(--primary-subtle);
-  --color-primary-muted: var(--primary-muted);
-
-  /* Feedback */
-  --color-error: var(--error);
-  --color-success: var(--success);
-
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);
@@ -314,6 +322,17 @@
 
 /* ── Map ──────────────────────────────────────────────────────── */
 
+/* The ground a map is pinned to.
+   Leaflet ships `.leaflet-container { background: #ddd }` in its own stylesheet, which is
+   the right default for a tile map — grey is what unloaded tiles look like. Here the map
+   is a single image the GM supplied, and anywhere it does not reach shows that grey: a
+   pale panel down the side of a dark app, brightest exactly where the pane is widest.
+   Themed rather than overridden to transparent, so the pane reads as one surface with the
+   note beside it. */
+.leaflet-container {
+  background: var(--background);
+}
+
 .placing-pin,
 .placing-pin .leaflet-container,
 .placing-pin .leaflet-interactive {
@@ -332,6 +351,44 @@
      would jump by ~340px at the point the column stops being pane-width. */
   container-type: inline-size;
   container-name: note-column;
+}
+
+/* ── The gap cursor ────────────────────────────────────────────────
+   Where the caret goes when there is no text to put it in: after the last statblock in
+   an encounter, between two stacked panels, at the end of a note that ends in a block.
+   StarterKit registers the plugin, so those positions have always been reachable by
+   click and by arrow key — but ProseMirror ships the caret as `display: none` and leaves
+   the drawing to us, so it has been landing somewhere invisible. A caret nobody can see
+   reads as a caret that would not go there.
+
+   Ours rather than prosemirror-gapcursor's stylesheet, because that one draws a 1px
+   black rule, which on Iron Dark is a caret you still cannot see. The blink is the
+   text caret's own rhythm, and the reduce-motion block near the top of this file already
+   stops it for a GM who asked for that. */
+.tiptap .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+}
+
+.tiptap .ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 1.5rem;
+  border-top: 2px solid var(--foreground);
+  animation: gapcursor-blink 1.1s steps(2, start) infinite;
+}
+
+@keyframes gapcursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.tiptap.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
 }
 
 /* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
@@ -558,6 +615,77 @@
 .tiptap .callout-body {
   container-type: inline-size;
   container-name: note-column;
+}
+
+/* Tiling, and it is the encounter's whole argument for existing. A fight is several
+   creatures the GM reads *at once* — initiative goes around the table, not down a page —
+   so narrowed statblocks inside a callout sit side by side and wrap when the row runs
+   out. Nothing declares it: a statblock the GM narrowed is narrow, and two narrow ones
+   in a wide box already fit beside each other.
+
+   Three things about the selector, each of them load bearing:
+
+   `> *` because the body is ProseMirror's content hole and the blocks are its
+   grandchildren — one wrapper element sits between, the same one the trailing-margin
+   rule above reaches through. Flexing the body itself does nothing at all: it has
+   exactly one child.
+
+   `:has(… ~ …)` so this engages only where a *second* statblock exists. A flex container
+   stops its children's margins collapsing, so applying it unconditionally would retune
+   the vertical rhythm of every callout in every note already written, to tile a row of
+   one. Two blocks are the first point at which there is anything to tile.
+
+   A flex row rather than a grid, because the blocks are not a matrix: they are as many as
+   the GM put in the box, at whatever widths they chose, and a wrapping row is the one of
+   the two that does not invent a column count on their behalf. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 1rem;
+}
+
+/* Only the cards tile. Everything else the GM put in the box — the prose above a fight,
+   a scene link under it — takes the whole row and breaks the line, so tiling never turns
+   a sentence into a column beside a creature. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > :not([data-note-block="statblock"]) {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+/* A DEFINITE basis, and this is the whole correctness of the row.
+
+   `flex-basis: auto` sizes the item from its content, and this content cannot be measured
+   that way: every field inside a statblock is `width: 100%`, which has nothing to resolve
+   against inside a content-sized parent, so the item falls back to its min-content width
+   — and because the fields also wrap on word boundaries, min-content is ONE CHARACTER.
+   Two creatures rendered as two vertical ribbons of single letters. `min-width: 0` made it
+   worse by removing the automatic minimum that would otherwise have caught it.
+
+   So each column is sized from the card's own width instead, which also keeps the feature
+   honest: the tiling is the GM's width choice doing something, not a number this
+   stylesheet invented. Wrapping happens at the basis, before any shrinking, so three
+   narrow creatures in a two-wide box give a row of two and a row of one rather than three
+   squeezed columns. They may then shrink to share a line, which is why the shrink factor
+   is 1 and not 0: a row that slightly overflows is worse than one slightly under width. */
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > [data-note-block="statblock"] {
+  flex: 1 1 var(--statblock-narrow);
+  min-width: 0;
+}
+
+.tiptap
+  .callout-body
+  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"])
+  > [data-note-block="statblock"]:has([data-width="comfortable"]) {
+  flex-basis: var(--statblock-comfortable);
 }
 
 /* ── Infobox presentation ──────────────────────────────────────── */

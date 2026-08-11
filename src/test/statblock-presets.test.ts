@@ -11,6 +11,7 @@ import {
 import {
   parseStatblockBody,
   serializeStatblock,
+  DEFAULT_STATBLOCK_WIDTH,
 } from "$lib/editor/statblock-block";
 
 const authored = (name: string, body: string): StatblockPreset => ({
@@ -177,6 +178,7 @@ describe("statblockFromPreset", () => {
       "name",
       "rows",
       "sections",
+      "width",
     ]);
   });
 
@@ -209,6 +211,7 @@ describe("statblockFromPreset", () => {
       name: "Bugbear",
       rows: [{ label: "", value: "" }],
       sections: [],
+      width: DEFAULT_STATBLOCK_WIDTH,
     });
   });
 
@@ -217,6 +220,7 @@ describe("statblockFromPreset", () => {
       name: "",
       rows: [{ label: "", value: "" }],
       sections: [],
+      width: DEFAULT_STATBLOCK_WIDTH,
     });
   });
 });

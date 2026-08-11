@@ -450,6 +450,11 @@ pub fn create_pin_category(
         name: &name,
         icon: &icon,
         color: &color,
+        // Not the column's `'circle'` default, for the reason the seeded categories avoid it:
+        // a circle is anchored on its own centre, so it sits on top of the place it marks.
+        // A category made here can be changed to one afterwards — `update_pin_category` takes
+        // the whole row, shape included — which is the right way round for a default.
+        shape: "pin",
     };
     diesel::insert_into(pin_categories::table)
         .values(&new_cat)

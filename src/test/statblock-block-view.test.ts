@@ -13,7 +13,12 @@
 import { render, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
-import type { Statblock, StatblockSection } from "$lib/editor/statblock-block";
+import {
+  DEFAULT_STATBLOCK_WIDTH,
+  type Statblock,
+  type StatblockSection,
+  type StatblockWidth,
+} from "$lib/editor/statblock-block";
 import type { LabelledRow } from "$lib/editor/labelled-row";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
@@ -38,7 +43,12 @@ const ACTIONS: StatblockSection[] = [
 ];
 
 function statblock(
-  props: { name?: string; rows?: LabelledRow[]; sections?: StatblockSection[] } = {},
+  props: {
+    name?: string;
+    rows?: LabelledRow[];
+    sections?: StatblockSection[];
+    width?: StatblockWidth;
+  } = {},
 ) {
   const onCommit = vi.fn();
   const onRemove = vi.fn();
@@ -47,6 +57,7 @@ function statblock(
       name: "Goblin Scout",
       rows: HEADER,
       sections: ACTIONS,
+      width: DEFAULT_STATBLOCK_WIDTH,
       onCommit,
       onRemove,
       ...props,
@@ -656,6 +667,10 @@ describe("the mode is scoped to structure", () => {
         // Authoring, but of a *preset* rather than of this creature — it opens a
         // dialog and cannot change the block (#179).
         "Save shape as preset",
+        // How wide to draw the card. It writes to the document, unlike the mode and the
+        // collapse, but it is still not a label, heading, entry or row: there is nothing
+        // here for a mis-click to damage, which is the rule this case guards.
+        "Narrow statblock",
         "Row 1 current value",
         "Row 2 value",
       ].sort(),
@@ -729,7 +744,15 @@ describe("the mode is scoped to structure", () => {
     await fireEvent.input(getByLabelText("Row 1 value"), { target: { value: "40/59" } });
     await fireEvent.blur(getByLabelText("Row 1 value"));
 
-    expect(Object.keys(lastCommitted(onCommit)).sort()).toEqual(["name", "rows", "sections"]);
+    // `width` is the one drawing decision that does reach the document, on purpose: a GM
+    // who narrowed three creatures so they tile has arranged their prep. `editing` and
+    // `collapsed` are still absent, which is what this case is about.
+    expect(Object.keys(lastCommitted(onCommit)).sort()).toEqual([
+      "name",
+      "rows",
+      "sections",
+      "width",
+    ]);
   });
 });
 
@@ -821,5 +844,64 @@ describe("a Statblock follows the document", () => {
     await Promise.resolve();
 
     expect(getByLabelText("Row 1 label").tagName).toBe("INPUT");
+  });
+
+  it("redraws the width an undo restored", async () => {
+    const { container, component } = statblock({ width: "narrow" });
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
+      "narrow",
+    );
+
+    (component as unknown as { setAttrs: (a: unknown) => void }).setAttrs({
+      name: "Goblin Scout",
+      rows: HEADER,
+      sections: ACTIONS,
+      width: "comfortable",
+    });
+    await Promise.resolve();
+
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
+      "comfortable",
+    );
+  });
+});
+
+// ─── Width ────────────────────────────────────────────────────────────────────
+
+describe("the card's width is the GM's, and it is kept", () => {
+  it("narrows without opening the structure mode, and writes it to the document", async () => {
+    // The gesture a GM makes mid-session to tile an encounter. Unlike every other
+    // control that reaches the document, this one is in view chrome: there is nothing
+    // here a slipped click could damage.
+    const { container, getByLabelText, onCommit } = statblock();
+
+    await fireEvent.click(getByLabelText("Narrow statblock"));
+
+    expect(lastCommitted(onCommit).width).toBe("narrow");
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
+      "narrow",
+    );
+  });
+
+  it("widens back, and offers the gesture that undoes the one just made", async () => {
+    const { container, getByLabelText, onCommit } = statblock({ width: "narrow" });
+
+    await fireEvent.click(getByLabelText("Widen statblock"));
+
+    expect(lastCommitted(onCommit).width).toBe("comfortable");
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
+      "comfortable",
+    );
+  });
+
+  it("leaves the creature alone while doing it", async () => {
+    const { getByLabelText, onCommit } = statblock();
+
+    await fireEvent.click(getByLabelText("Narrow statblock"));
+
+    const committed = lastCommitted(onCommit);
+    expect(committed.name).toBe("Goblin Scout");
+    expect(committed.rows).toEqual(HEADER);
+    expect(committed.sections).toEqual(ACTIONS);
   });
 });

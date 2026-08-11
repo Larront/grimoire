@@ -1,0 +1,348 @@
+// The grip half of the block handle (#190) — the part a GM can see and pull.
+//
+// Three seams, and the split between them is the same one the engine already makes: what
+// is a decision about a document is asserted here, and what is layout is asserted in a
+// browser (`block-handle-placement.browser.test.ts`), because jsdom has no boxes and a
+// placement test written against it would pass whatever the numbers were.
+//
+// So: the keyboard move is a document change and lives here. The drag's *handoff* to
+// ProseMirror is a state change and lives here — the drag itself is a pointer gesture
+// jsdom cannot perform, and firing `dragstart` at it would prove only that an event
+// dispatched. The placement arithmetic is here too, but only because `handlePlacement`
+// takes numbers rather than elements; the numbers it is given in the app are measured in
+// the browser test.
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+// A scene block asks the ledger for its tracks the moment its node view mounts, and there
+// is no ledger here — the call resolves to null and the `.map` on it rejects into nowhere,
+// which Vitest reports as an unhandled error with every test still green. Nothing below
+// depends on a scene's contents; only on a scene being a block the handle can pick up.
+vi.mock("$lib/stores/scenes.svelte", () => ({
+  scenes: {
+    scenes: [],
+    getSlots: () => Promise.resolve([]),
+    invalidateSlots: () => {},
+  },
+}));
+
+import { NodeSelection } from "@tiptap/pm/state";
+import {
+  blockTargetAt,
+  endBlockDrag,
+  handlePlacement,
+  moveBlockAt,
+  startBlockDrag,
+  type BlockTarget,
+  type HandleGeometry,
+} from "$lib/editor/block-handle";
+import { caretAt, closeNote, note, posOf, posOfNth, press, saved } from "./fixtures/note-editor";
+
+afterEach(closeNote);
+
+// jsdom has no `DataTransfer`, and the one thing under test about it is what was written
+// to it — so this records exactly that and nothing else.
+function fakeDataTransfer() {
+  const data = new Map<string, string>();
+  let dragImage: Element | null = null;
+  return {
+    data,
+    get dragImage() {
+      return dragImage;
+    },
+    transfer: {
+      effectAllowed: "none",
+      clearData: () => data.clear(),
+      setData: (format: string, value: string) => data.set(format, value),
+      getData: (format: string) => data.get(format) ?? "",
+      setDragImage: (el: Element) => {
+        dragImage = el;
+      },
+    } as unknown as DataTransfer,
+  };
+}
+
+// ─── Moving a block by keyboard ───────────────────────────────────────────────
+
+describe("moving a block one place", () => {
+  it("moves a paragraph down, and the note's markdown holds the new order", () => {
+    const editor = note("First.\n\nSecond.");
+    moveBlockAt(editor, posOf(editor, "paragraph"), 1);
+
+    expect(saved(editor)).toBe("Second.\n\nFirst.");
+  });
+
+  it("moves a paragraph up", () => {
+    const editor = note("First.\n\nSecond.");
+    moveBlockAt(editor, posOfNth(editor, "paragraph", 1), -1);
+
+    expect(saved(editor)).toBe("Second.\n\nFirst.");
+  });
+
+  it("reorders a fight creature by creature, which is why the grip exists", () => {
+    const editor = note(
+      [
+        "> [!encounter] The Ambush",
+        "> ```statblock",
+        "> # Kobold A",
+        "> HP: 5/5",
+        "> ```",
+        "> ```statblock",
+        "> # Kobold B",
+        "> HP: 5/5",
+        "> ```",
+      ].join("\n"),
+    );
+    moveBlockAt(editor, posOfNth(editor, "statblockBlock", 1), -1);
+
+    const out = saved(editor);
+    expect(out.indexOf("Kobold B")).toBeLessThan(out.indexOf("Kobold A"));
+    // Still in the box: the creature moved up the order, it did not fall out of the fight.
+    expect(
+      out
+        .split("\n")
+        .filter((l) => l.includes("Kobold"))
+        .every((l) => l.startsWith(">")),
+    ).toBe(true);
+  });
+
+  it("stops at the first sibling rather than walking out of the callout", () => {
+    const md = ["Before.", "", "> [!note] The Halls", "> Something waits."].join("\n");
+    const editor = note(md);
+
+    // The paragraph inside the quote is the first thing in it; there is nowhere above it
+    // that is still inside the box, and leaving the box is not a move the GM asked for.
+    expect(moveBlockAt(editor, posOfNth(editor, "paragraph", 1), -1)).toBeNull();
+    expect(saved(editor)).toBe(md);
+  });
+
+  it("declines at the ends of the note, changing nothing", () => {
+    const editor = note("Only.");
+    expect(moveBlockAt(editor, posOf(editor, "paragraph"), -1)).toBeNull();
+    expect(moveBlockAt(editor, posOf(editor, "paragraph"), 1)).toBeNull();
+    expect(saved(editor)).toBe("Only.");
+  });
+
+  it("answers with where the block landed, still holding it", () => {
+    // What the handle draws itself against next: the old position now holds a neighbour.
+    const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
+    const from = posOf(editor, "statblockBlock");
+    const landed = moveBlockAt(editor, from, -1);
+
+    expect(landed).not.toBeNull();
+    expect(landed).not.toBe(from);
+    expect(blockTargetAt(editor.state.doc, landed!)?.node.type.name).toBe("statblockBlock");
+  });
+
+  it("leaves the moved block selected, so a second press moves the same one", () => {
+    const editor = note("First.\n\nSecond.\n\nThird.");
+    const landed = moveBlockAt(editor, posOfNth(editor, "paragraph", 2), -1)!;
+
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.state.selection.from).toBe(landed);
+    expect((editor.state.selection as NodeSelection).node.textContent).toBe("Third.");
+  });
+
+  it("is one undo step, like every other write in the pattern", () => {
+    const md = "First.\n\nSecond.";
+    const editor = note(md);
+    moveBlockAt(editor, posOf(editor, "paragraph"), 1);
+    editor.commands.undo();
+
+    expect(saved(editor)).toBe(md);
+  });
+
+  it("declines a position that no longer holds a block", () => {
+    const editor = note("A sentence.");
+    expect(moveBlockAt(editor, 9999, 1)).toBeNull();
+  });
+});
+
+// ─── Handing the drag to ProseMirror ──────────────────────────────────────────
+
+describe("starting a drag from the grip", () => {
+  it("tells the view the drag is its own, and that it is a move", () => {
+    // Without this the drop is parsed back out of the clipboard HTML as foreign content
+    // and *copied*, so the block ends up in two places — the silent failure the grip
+    // would otherwise ship with, since the drag looks right the whole way.
+    const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { transfer } = fakeDataTransfer();
+
+    expect(startBlockDrag(editor, posOf(editor, "statblockBlock"), transfer)).toBe(true);
+    expect(editor.view.dragging?.move).toBe(true);
+    expect(editor.view.dragging?.slice.content.firstChild?.type.name).toBe("statblockBlock");
+  });
+
+  it("selects the block, which is what the slice is taken from", () => {
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    startBlockDrag(editor, posOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
+
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect((editor.state.selection as NodeSelection).node.type.name).toBe("statblockBlock");
+  });
+
+  it("carries the block's markdown for anything outside this window", () => {
+    // A creature dragged into Obsidian lands as the fence a GM could have typed, for the
+    // reason the copy action gives (ADR-0016 §1). Inside the editor this payload is never
+    // read — the view moves the slice it was handed above.
+    const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
+    const editor = note(md);
+    const { transfer, data } = fakeDataTransfer();
+    startBlockDrag(editor, posOf(editor, "statblockBlock"), transfer);
+
+    expect(data.get("text/plain")).toBe(md);
+    expect(data.get("text/html")).toContain("statblock");
+  });
+
+  it("drags a ghost of the block rather than of the grip", () => {
+    const editor = note("A sentence.");
+    const fake = fakeDataTransfer();
+    const block = document.createElement("p");
+    startBlockDrag(editor, posOf(editor, "paragraph"), fake.transfer, block);
+
+    expect(fake.dragImage).toBe(block);
+  });
+
+  it("declines a position that no longer holds a block, and starts nothing", () => {
+    const editor = note("A sentence.");
+    expect(startBlockDrag(editor, 9999, fakeDataTransfer().transfer)).toBe(false);
+    expect(editor.view.dragging).toBeNull();
+  });
+
+  it("lets the drag go when it ends, however it ended", () => {
+    // The case with teeth is the drag that ends in *nothing*: Escape, or a drop on the
+    // desktop. ProseMirror clears `dragging` from listeners on its own DOM, and the grip
+    // is chrome outside that DOM, so a drag abandoned there would leave the latch set —
+    // and the next drop into this note, of anything at all, would insert this block
+    // instead of what was dropped and delete the selection to make room.
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    startBlockDrag(editor, posOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
+    expect(editor.view.dragging).not.toBeNull();
+
+    endBlockDrag(editor);
+
+    expect(editor.view.dragging).toBeNull();
+  });
+});
+
+// ─── Every block, not just the one the cases above happen to use ──────────────
+//
+// Inherited from the per-block grips this replaced (#193). Both halves are worth keeping
+// and the first is the one that fails silently: without `draggable` on the node spec
+// ProseMirror refuses the drag however the selection was made, and nothing on screen says
+// so — the block is selected, it looks picked up, and it does not move.
+
+/** One note per Note Block, each holding exactly one of it. */
+const BLOCKS: [name: string, nodeType: string, markdown: string][] = [
+  ["statblock", "statblockBlock", "```statblock\n# Kobold A\nHP: 5/5\n```"],
+  ["infobox", "infoboxBlock", "```infobox\n# The Ember Keep\nRuler: Mira\n```"],
+  ["timeline", "timelineBlock", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```"],
+  ["scene", "sceneBlock", "```scene\n# The Tavern\nId: 7\n```"],
+  ["image", "image", "![The gate](images/gate.png)"],
+  ["callout", "blockquote", "> [!encounter] The Ambush\n> Something waits."],
+];
+
+describe("every block can be picked up by the handle", () => {
+  it.each(BLOCKS)("%s allows a drag, or it could not start", (_name, type, md) => {
+    const editor = note(md);
+    expect(editor.schema.nodes[type].spec.draggable).toBe(true);
+  });
+
+  it.each(BLOCKS)("%s becomes the selection the drag carries", (_name, type, md) => {
+    const editor = note(md);
+    expect(startBlockDrag(editor, posOf(editor, type), fakeDataTransfer().transfer)).toBe(true);
+
+    const { selection } = editor.state;
+    expect(selection).toBeInstanceOf(NodeSelection);
+    expect((selection as NodeSelection).node.type.name).toBe(type);
+  });
+
+  it("picks up the creature the handle was on, not its identical neighbour", () => {
+    // Two fences of the same shape in one note: a position that drifted by one node would
+    // pass every case above and still carry the wrong creature.
+    const editor = note(
+      ["```statblock", "# Kobold A", "HP: 5/5", "```", "", "```statblock", "# Kobold B", "HP: 5/5", "```"].join("\n"),
+    );
+    startBlockDrag(editor, posOfNth(editor, "statblockBlock", 1), fakeDataTransfer().transfer);
+
+    expect((editor.state.selection as NodeSelection).node.attrs.name).toBe("Kobold B");
+  });
+
+  it("takes the callout's contents with it, because they are its children", () => {
+    const editor = note(
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join("\n"),
+    );
+    startBlockDrag(editor, posOf(editor, "blockquote"), fakeDataTransfer().transfer);
+
+    const carried = editor.view.dragging?.slice.content.firstChild;
+    expect(carried?.type.name).toBe("blockquote");
+    const inside: string[] = [];
+    carried?.descendants((node) => {
+      if (node.type.name === "statblockBlock") inside.push(node.attrs.name);
+    });
+    expect(inside).toEqual(["Kobold A"]);
+  });
+});
+
+// ─── Where the handle goes ────────────────────────────────────────────────────
+//
+// The arithmetic only. What these numbers are in the app — the block's real box, the
+// column's real left edge — is measured in Chromium, next door.
+
+describe("placing the handle beside a block", () => {
+  /** A paragraph in a column, and a grip of the size the stylesheet gives one. */
+  const geometry = (over: Partial<HandleGeometry> = {}): HandleGeometry => ({
+    blockLeft: 100,
+    firstLine: { top: 204, height: 16 },
+    handle: { width: 18, height: 18 },
+    gap: 6,
+    columnLeft: 40,
+    ...over,
+  });
+
+  it("sits entirely to the left of the block, never over a word", () => {
+    const { left } = handlePlacement(geometry());
+    expect(left + 18).toBeLessThanOrEqual(100);
+  });
+
+  it("follows a block indented inside a callout", () => {
+    const outer = handlePlacement(geometry());
+    const inner = handlePlacement(geometry({ blockLeft: 132 }));
+
+    expect(inner.left).toBe(outer.left + 32);
+  });
+
+  it("centres on the first line wherever that line is", () => {
+    // Not on a height measured from the block's own top: a callout's first line is its
+    // header, twelve pixels of padding down, and anchoring at the top of the box put the
+    // grip above the text it belongs to.
+    const { top } = handlePlacement(geometry({ firstLine: { top: 252, height: 18 } }));
+    expect(top).toBe(252);
+  });
+
+  it("centres the grip on that line rather than sitting on top of it", () => {
+    expect(handlePlacement(geometry()).top).toBe(204 + (16 - 18) / 2);
+  });
+
+  it("stops at the column's edge rather than hanging off a pane dragged narrow", () => {
+    const { left } = handlePlacement(geometry({ blockLeft: 44 }));
+    expect(left).toBe(40);
+  });
+});
+
+// ─── Reaching the handle without a mouse ──────────────────────────────────────
+
+describe("the keyboard's way in", () => {
+  it("raises the handle on the block the caret is in", () => {
+    // Hover is the only other way in, so without this the grip and everything behind it
+    // do not exist for a GM who does not point at things.
+    const grabbed: BlockTarget[] = [];
+    const editor = note("First.\n\nSecond.", {
+      onBlockGrab: (target) => grabbed.push(target),
+    });
+    caretAt(editor, posOfNth(editor, "paragraph", 1) + 1);
+    press(editor, "h", { ctrlKey: true, shiftKey: true });
+
+    expect(grabbed).toHaveLength(1);
+    expect(grabbed[0].node.textContent).toBe("Second.");
+  });
+});

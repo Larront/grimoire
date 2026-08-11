@@ -152,6 +152,9 @@ export const SceneBlock = Node.create({
   name: "sceneBlock",
   group: "block",
   atom: true,
+  // Draggable so a grip can carry it. ProseMirror will not drag a node whose spec does
+  // not allow it, however the selection was made.
+  draggable: true,
 
   addAttributes() {
     return {
@@ -217,9 +220,8 @@ export const SceneBlock = Node.create({
       class: "scene-block-wrapper",
       domAttrs: { "data-note-block": "scene" },
       defaults: { sceneId: null, sceneName: "" },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
-        onRemove: deleteNode,
       }),
 
       // Scene's use of the connector's event hole: hold a slider drag that

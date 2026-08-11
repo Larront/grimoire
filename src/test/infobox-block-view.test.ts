@@ -29,7 +29,6 @@ function panel(
   props: { title?: string; image?: string; imageAlt?: string; rows?: LabelledRow[] } = {},
 ) {
   const onCommit = vi.fn();
-  const onRemove = vi.fn();
   const rendered = render(InfoboxBlockView, {
     props: {
       title: "Harbor's End",
@@ -37,11 +36,10 @@ function panel(
       imageAlt: "",
       rows: HARBOR,
       onCommit,
-      onRemove,
       ...props,
     },
   });
-  return { ...rendered, onCommit, onRemove };
+  return { ...rendered, onCommit };
 }
 
 /** The panel as the block last handed it to the document. */
@@ -481,7 +479,6 @@ describe("an Infobox has nothing that plays", () => {
         "Insert row at top",
         "Move row down",
         "Move row up",
-        "Remove infobox",
         "Row 1 label",
         "Row 1 value",
       ].sort(),
@@ -489,17 +486,14 @@ describe("an Infobox has nothing that plays", () => {
     expect(getAllByLabelText("Delete row")).toHaveLength(1);
   });
 
-  it("removes the whole panel, without asking", () => {
-    // The gesture a sealed block has no other route to: nothing in the panel is
-    // selectable, so Backspace has no node to take (#175 review). No confirmation,
-    // because one Ctrl+Z puts it back.
-    const { getByLabelText, onRemove, onCommit } = panel();
+  it("draws no removal control of its own", () => {
+    // The panel used to carry a trash can, as the one route out of a block nothing in
+    // could select for Backspace to take (#175 review). The gutter handle's menu deletes
+    // any block now (#194), so removal is not the panel's business — and a control that
+    // duplicates it would be a second answer to a question already answered once.
+    const { queryByLabelText } = panel();
 
-    fireEvent.click(getByLabelText("Remove infobox"));
-
-    expect(onRemove).toHaveBeenCalledTimes(1);
-    // Removal is the document's business, not an attribute change on the way out.
-    expect(onCommit).not.toHaveBeenCalled();
+    expect(queryByLabelText("Remove infobox")).toBeNull();
   });
 
   it("offers the image control only while there is no image, and never both", () => {

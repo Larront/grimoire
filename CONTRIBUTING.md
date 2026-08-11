@@ -30,6 +30,7 @@ way into a release.
 
 ```bash
 bun install
+bunx playwright install chromium   # once — see the note on browser tests below
 
 bun run tauri dev   # full desktop app (Tauri + Vite)
 bun run dev         # frontend only (browser, no Tauri APIs)
@@ -65,6 +66,11 @@ These mirror [`docs/agents/conventions.md`](docs/agents/conventions.md):
 - **Rust commands return `Result`** with string errors surfaced to the frontend
   (see [ADR-0010](docs/adr/0010-command-error-posture.md)). Avoid `unwrap()`/`panic!`
   in command paths.
+- **Tests that measure a box go in `*.browser.test.ts`** — `bun run test` runs two Vitest
+  projects: `unit` in jsdom, and `browser` in a real headless Chromium (hence the
+  `playwright install` above). jsdom performs **no layout**, so an assertion about a
+  position, a width, or one thing fitting beside another passes no matter what the
+  stylesheet says. Everything else stays in jsdom, which is far faster.
 - **Formatting** — run Prettier (`bunx prettier --write .`) before committing.
 - **Both `bun run check` and `bun run test` must pass** — CI enforces them.
 
