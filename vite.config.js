@@ -45,6 +45,25 @@ export default defineConfig(async () => ({
     ],
   },
 
+  // SvelteKit's server bundle must carry its own `cookie`, not find one at runtime.
+  //
+  // Kit emits `import { parse, serialize } from "cookie"` into
+  // `.svelte-kit/output/server/index.js` and leaves the specifier external, so Node resolves
+  // it when the prerender step runs — from the *output file's* location, which walks up to
+  // the repo root rather than into Kit's own node_modules. Kit depends on `cookie@^0.6.0`
+  // and has that copy nested correctly; the root has `cookie@2`, hoisted there by the Astro
+  // site workspace. Version 2 renamed the whole API (`parseCookie`, `stringifyCookie`), so
+  // the build dies at prerender with "does not provide an export named 'parse'".
+  //
+  // Inlining it moves the resolution to build time, where Vite resolves from the importer —
+  // Kit's own dist — and gets the 0.6.0 it asked for. The alternatives are worse: pinning
+  // the root to 0.6.0 breaks Astro, which genuinely needs v2, and both packages having a
+  // correct nested copy already is exactly why hoisting order is the only thing that decides
+  // which one the app gets today. That is not a thing to leave a release build resting on.
+  ssr: {
+    noExternal: ["cookie"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

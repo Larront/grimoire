@@ -47,3 +47,12 @@ jobs:
 
       - run: bun run check
       - run: bun run test
+
+      # And the production build, which neither of the above exercises. `check` typechecks
+      # and `test` runs Vite's dev/test pipeline; only this runs the adapter and prerenders
+      # the shell, which is where an import that resolves differently in a production bundle
+      # actually breaks. Until this line existed, the first place the app was ever built was
+      # tauri-action on a release tag — so a dependency hoisted into the root by the site
+      # workspace could sit unnoticed until the moment it stopped a release going out.
+      # ~30s, and it fails on the same machine shape that ships the installers.
+      - run: bun run build
