@@ -21,14 +21,27 @@ pub(crate) fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(),
         return Ok(());
     }
 
+    // Every field here is read by the frontend against a closed set: `icon` must be a key of
+    // CURATED_ICON_COMPONENTS and `shape` a member of PinShape, both in
+    // src/lib/components/map/pinAppearance.ts. Rust writes free strings and TypeScript holds
+    // the union, so nothing in either compiler connects the two — an icon named here that
+    // does not exist there draws a marker with a hole in the middle, silently, in every
+    // ledger anyone creates. `default_categories_name_icons_and_shapes_the_frontend_has`
+    // over in the test module is the only thing standing between those two lists.
+    //
+    // Shape carries meaning as much as the icon does — a headstone for the places that are
+    // finished, a banner for the ones that hold a seat. None of them is `circle` or
+    // `diamond`, which are the two shapes anchored on their own centre: they sit *over* the
+    // point rather than beside it, so the marker hides the drawing of the thing it names.
+    // Both remain available to pick by hand, where covering a spot on purpose is the point.
     let defaults: Vec<NewPinCategory> = vec![
-        NewPinCategory { map_id: None, name: "Town",              icon: "house",     color: "#c4843a" },
-        NewPinCategory { map_id: None, name: "City",              icon: "castle",    color: "#e0b44a" },
-        NewPinCategory { map_id: None, name: "Cave",              icon: "mountain",  color: "#8b6abf" },
-        NewPinCategory { map_id: None, name: "Dungeon",           icon: "skull",     color: "#cf4545" },
-        NewPinCategory { map_id: None, name: "Ruin",              icon: "landmark",  color: "#7a8499" },
-        NewPinCategory { map_id: None, name: "Forest",            icon: "tree-pine", color: "#4a9b5a" },
-        NewPinCategory { map_id: None, name: "Point of Interest", icon: "map-pin",   color: "#6a9b87" },
+        NewPinCategory { map_id: None, name: "Town",              icon: "house",     color: "#c4843a", shape: "pin" },
+        NewPinCategory { map_id: None, name: "City",              icon: "castle",    color: "#e0b44a", shape: "banner" },
+        NewPinCategory { map_id: None, name: "Cave",              icon: "mountain",  color: "#8b6abf", shape: "pin" },
+        NewPinCategory { map_id: None, name: "Dungeon",           icon: "skull",     color: "#cf4545", shape: "headstone" },
+        NewPinCategory { map_id: None, name: "Ruin",              icon: "landmark",  color: "#7a8499", shape: "headstone" },
+        NewPinCategory { map_id: None, name: "Forest",            icon: "tree-pine", color: "#4a9b5a", shape: "pin" },
+        NewPinCategory { map_id: None, name: "Point of Interest", icon: "star",      color: "#6a9b87", shape: "pin" },
     ];
 
     diesel::insert_into(pin_categories::table)
@@ -372,5 +385,106 @@ mod tests {
             crate::note_index::stale_marker_path(ledger_path).exists(),
             "marker must remain after a failed rebuild"
         );
+    }
+
+    /// The default pin categories name an icon and a shape the frontend has to recognise.
+    ///
+    /// This reads the TypeScript, which is unusual and deliberate. The two lists are a
+    /// contract across a language boundary that neither compiler can see: `seed_default_
+    /// categories` writes `&str`, the frontend narrows to a closed union, and a name that
+    /// exists on one side and not the other fails silently — the marker renders, correctly
+    /// coloured and positioned, with nothing inside it. Three of the seven defaults shipped
+    /// that way (Cave, Ruin, Point of Interest) until someone looked closely at a map.
+    ///
+    /// Parsing source with a regex is a poor way to know a fact, so this asserts it found
+    /// all seven categories before it checks any of them: a table that has been reformatted
+    /// past recognition fails loudly here rather than quietly passing on nothing.
+    #[test]
+    fn default_categories_name_icons_and_shapes_the_frontend_has() {
+        let appearance = std::fs::read_to_string(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../src/lib/components/map/pinAppearance.ts"),
+        )
+        .expect("pinAppearance.ts must be readable from the crate");
+        let ledger_ts = std::fs::read_to_string(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../src/lib/types/ledger.ts"),
+        )
+        .expect("ledger.ts must be readable from the crate");
+
+        // Every `["name", Component]` row of CURATED_ICON_COMPONENTS.
+        let known_icons: Vec<String> = appearance
+            .lines()
+            .filter_map(|line| {
+                let rest = line.trim().strip_prefix("[\"")?;
+                let name = rest.split('"').next()?;
+                line.contains("],").then(|| name.to_string())
+            })
+            .collect();
+        assert!(
+            known_icons.len() >= 16,
+            "expected the curated icon registry, found {known_icons:?}"
+        );
+
+        // The PinShape union: the members between `export type PinShape =` and its `;`.
+        let shapes_block = ledger_ts
+            .split("export type PinShape =")
+            .nth(1)
+            .and_then(|rest| rest.split(';').next())
+            .expect("ledger.ts must declare PinShape");
+        let known_shapes: Vec<String> = shapes_block
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect();
+        assert!(
+            known_shapes.len() >= 6,
+            "expected the PinShape union, found {known_shapes:?}"
+        );
+
+        // The seed table itself, read the same way a reviewer reads it.
+        //
+        // The needle is assembled at runtime rather than written as one literal, because
+        // this file is reading itself: spelled out in full, the line doing the searching
+        // matches the search, and the test parses its own filter as an eighth category.
+        let source = include_str!("ledger.rs");
+        let needle = format!("NewPinCategory {{ map_id{}", ": None");
+        let seeded: Vec<(String, String, String)> = source
+            .lines()
+            .filter(|line| line.contains(&needle))
+            .map(|line| {
+                let field = |key: &str| {
+                    line.split(&format!("{key}: \""))
+                        .nth(1)
+                        .and_then(|rest| rest.split('"').next())
+                        .unwrap_or_else(|| panic!("no {key} in default category line: {line}"))
+                        .to_string()
+                };
+                (field("name"), field("icon"), field("shape"))
+            })
+            .collect();
+        assert_eq!(
+            seeded.len(),
+            7,
+            "expected 7 default categories, parsed {seeded:?}"
+        );
+
+        for (name, icon, shape) in &seeded {
+            assert!(
+                known_icons.contains(icon),
+                "default category '{name}' uses icon '{icon}', which CURATED_ICON_COMPONENTS \
+                 does not have — its marker will draw empty"
+            );
+            assert!(
+                known_shapes.contains(shape),
+                "default category '{name}' uses shape '{shape}', which PinShape does not have"
+            );
+            assert!(
+                shape != "circle" && shape != "diamond",
+                "default category '{name}' uses '{shape}', which anchors on its own centre \
+                 and covers the place it marks; those two are for deliberate hand-picking"
+            );
+        }
     }
 }

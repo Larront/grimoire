@@ -128,6 +128,10 @@ pub struct NewPinCategory<'a> {
     pub name: &'a str,
     pub icon: &'a str,
     pub color: &'a str,
+    /// One of `PinShape` (src/lib/types/ledger.ts). Written explicitly because the column
+    /// defaults to `'circle'`, which is the one shape anchored on its own centre — a pin
+    /// that covers the thing it points at.
+    pub shape: &'a str,
 }
 
 // ── Pin ───────────────────────────────────────────────────────────────────────

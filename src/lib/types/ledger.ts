@@ -52,7 +52,9 @@ export type PinIcon =
   | "gem"
   | "cross"
   | "flag"
-  | "tree-pine";
+  | "tree-pine"
+  | "mountain"
+  | "landmark";
 
 export interface PinCategory {
   id: number;
