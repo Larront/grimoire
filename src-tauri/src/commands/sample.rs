@@ -113,24 +113,31 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
     // place itself — the keep's courtyard, the village's central hall, the reed island with
     // the tent on it. A pin a few percent out lands in open bog beside the thing it names,
     // which is the one way this map can still look wrong after being drawn correctly.
+    //
+    // **`y` is measured from the BOTTOM of the image, not the top.** The canvas is Leaflet
+    // on `CRS.Simple` with bounds `[[0, 0], [height, width]]`, so a pin's `y` is a latitude:
+    // 0 is the bottom edge and 1 the top. Read these numbers off an image viewer, which
+    // counts down from the top, and every pin lands at `1 - y` — mirrored about the middle,
+    // near enough to look deliberate and wrong enough to put the village in the marsh. That
+    // is not hypothetical; it is what the first pass at these numbers did.
     let pin_data = [
         (
             0.723_f32,
-            0.714_f32,
+            0.286_f32,
             "The Ember Keep",
             ruin_id,
             keep_id,
         ),
         (
             0.397_f32,
-            0.212_f32,
+            0.788_f32,
             "Thornhaven Village",
             town_id,
             thornhaven_id,
         ),
         (
             0.682_f32,
-            0.553_f32,
+            0.447_f32,
             "Mira's Camp",
             poi_id,
             mira_id,
@@ -488,6 +495,59 @@ mod tests {
             .get_result(&mut conn)
             .unwrap();
         assert_eq!(unlinked_pins, 0, "all 3 pins must link to notes");
+
+        // ── The pins sit where the prose says these places are ───────────────
+        //
+        // Every note that touches the geography agrees on three things: Thornhaven is on the
+        // northern edge of the marsh, the keep is east and south of it — "three hours to the
+        // Ember Keep on foot, along the Order's raised stone causeway" — and Mira camps
+        // between the two, within sight of the keep's western approach.
+        //
+        // This is the only part of a hand-placed pin a test can check. Nothing here can know
+        // whether a pin landed on the drawn courtyard, but a keep north-west of the village
+        // is provably not the map the notes describe. And it is worth checking because it
+        // has already been wrong: the first version of these coordinates was measured off an
+        // image viewer, which counts y down from the top, against a canvas whose y counts up
+        // from the bottom. Mirroring the sheet inverts every one of these relations at once,
+        // so this assertion is exactly what fails when someone re-measures them that way.
+        let all_pins: Vec<crate::db::models::Pin> = crate::db::schema::pins::table
+            .load(&mut conn)
+            .unwrap();
+        let pin_at = |title: &str| -> &crate::db::models::Pin {
+            all_pins
+                .iter()
+                .find(|p| p.title == title)
+                .unwrap_or_else(|| panic!("expected a pin titled '{title}'"))
+        };
+        let keep = pin_at("The Ember Keep");
+        let town = pin_at("Thornhaven Village");
+        let camp = pin_at("Mira's Camp");
+
+        assert!(
+            town.x < keep.x,
+            "Thornhaven lies west of the keep — the causeway runs east to it — but the pins \
+             put the village at x {} and the keep at x {}",
+            town.x,
+            keep.x
+        );
+        assert!(
+            town.y > keep.y,
+            "Thornhaven lies north of the keep, and y counts up from the bottom of the sheet, \
+             so the village's y ({}) must exceed the keep's ({})",
+            town.y,
+            keep.y
+        );
+        assert!(
+            camp.x > town.x && camp.x < keep.x && camp.y < town.y && camp.y > keep.y,
+            "Mira camps between the village and the keep, in sight of the western approach — \
+             camp ({}, {}) is not between Thornhaven ({}, {}) and the keep ({}, {})",
+            camp.x,
+            camp.y,
+            town.x,
+            town.y,
+            keep.x,
+            keep.y
+        );
 
         // ── Stub: The Order of Embers is referenced but not written ──────────
         let stub_links: i64 = note_links::table
