@@ -56,6 +56,21 @@ jobs:
       # site/ alone.
       - run: bun install --frozen-lockfile
 
+      # Generates .svelte-kit/tsconfig.json, which the site build reads whether it
+      # wants to or not. Bundler resolution walks up from the root node_modules and
+      # finds the repo root's tsconfig.json — the APP's — and that file extends
+      # `./.svelte-kit/tsconfig.json`, which does not exist until this runs. So the
+      # site build died with "Tsconfig not found .svelte-kit/tsconfig.json" on a
+      # fresh checkout, while passing on every developer machine where `bun run
+      # check` had already left the file behind.
+      #
+      # It costs about a second and pulls in none of the app's real toolchain — no
+      # Rust, no webkit2gtk — so the split this workflow exists to maintain still
+      # holds. The alternative is the root tsconfig not extending a generated file,
+      # which is SvelteKit's own layout and not ours to rearrange.
+      - name: Generate SvelteKit types (the root tsconfig extends them)
+        run: bunx svelte-kit sync
+
       - name: Type-check
         run: bun run --cwd site check
 
