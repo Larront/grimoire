@@ -11,6 +11,8 @@
   // menus are: the block it belongs to is inside a scroll container the grip is not in,
   // and an absolutely positioned element would need an offset parent that agrees with it.
   import { onDestroy, tick } from "svelte";
+  import { cubicOut } from "svelte/easing";
+  import { MediaQuery } from "svelte/reactivity";
   import { GripVertical } from "@lucide/svelte";
   import type { Editor } from "@tiptap/core";
   import {
@@ -246,6 +248,51 @@
     place();
   }
 
+  // ── Coming and going ────────────────────────────────────────────────────────
+  //
+  // The grip appears and disappears at the edge of vision, under a pointer that is doing
+  // something else — reading a paragraph, crossing the gutter on the way somewhere — and a
+  // thing that pops into existence out there reads as a flicker rather than as an offer.
+  // So it fades.
+  //
+  // Opacity and nothing else, which is a constraint rather than a preference: `placeHandle`
+  // measures this button's own box to place it, that measurement is taken by the effect
+  // below on the same frame the fade starts, and *any* transform — a scale, a nudge in from
+  // the gutter — is inside the box `getBoundingClientRect` reports. A grip that grew into
+  // place would be measured while small and settle a pixel off the line it belongs on.
+  //
+  // Short both ways, and shorter leaving than arriving: the hide is already delayed by
+  // `HANDLE_HIDE_MS` before this starts, and a grip still visibly fading while the GM
+  // types is a grip pointing at a block their edit may have moved.
+  const reducedMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
+
+  /**
+   * `in:`/`out:` rather than one bidirectional `transition:`, deliberately.
+   *
+   * A grip on its way out is scenery: still in the DOM for the length of the fade, and no
+   * longer the grip of any block — the handle it belonged to is gone. A pointer landing on
+   * it there would report a hold to a latch with nothing left to release it, and the next
+   * scroll or edit would find the handle exempt from being taken down. So the outro turns
+   * pointer events off, and a one-way outro is what makes that safe to do: an element that
+   * can reverse back into view is an element that would have to become live again.
+   *
+   * `|global` because the block that comes and goes is the editor's `{#if}` around this
+   * whole component, not anything inside it: a local transition is one that plays only for
+   * its own block, and this element's own block is never the one being destroyed.
+   */
+  function grip(
+    node: HTMLElement,
+    _params: undefined,
+    { direction }: { direction: "in" | "out" | "both" },
+  ) {
+    if (direction === "out") node.style.pointerEvents = "none";
+    return {
+      duration: reducedMotion.current ? 0 : direction === "out" ? 90 : 130,
+      easing: cubicOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     switch (event.key) {
       case "ArrowUp":
@@ -298,6 +345,8 @@
   ondragend={handleDragEnd}
   onkeydown={handleKeydown}
   onclick={() => (menuOpen ? dismissMenu() : openMenu())}
+  in:grip|global
+  out:grip|global
 >
   <GripVertical size={14} />
 </button>
