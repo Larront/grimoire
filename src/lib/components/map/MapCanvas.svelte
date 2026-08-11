@@ -307,6 +307,11 @@
         minZoom: -3,
         maxBoundsViscosity: 1.0,
         zoomControl: false,
+        // No attribution control. It exists to credit whoever supplied the *tiles*, and
+        // there are none here — the only thing on this canvas is an image out of the GM's
+        // own ledger. Leaflet's own licence asks for its notice in the source, which the
+        // dependency carries; it does not ask for a badge over someone's map.
+        attributionControl: false,
       });
 
       leaflet.imageOverlay(imageDataUrl, bounds).addTo(mapInstance);

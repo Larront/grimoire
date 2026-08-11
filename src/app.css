@@ -322,6 +322,17 @@
 
 /* ── Map ──────────────────────────────────────────────────────── */
 
+/* The ground a map is pinned to.
+   Leaflet ships `.leaflet-container { background: #ddd }` in its own stylesheet, which is
+   the right default for a tile map — grey is what unloaded tiles look like. Here the map
+   is a single image the GM supplied, and anywhere it does not reach shows that grey: a
+   pale panel down the side of a dark app, brightest exactly where the pane is widest.
+   Themed rather than overridden to transparent, so the pane reads as one surface with the
+   note beside it. */
+.leaflet-container {
+  background: var(--background);
+}
+
 .placing-pin,
 .placing-pin .leaflet-container,
 .placing-pin .leaflet-interactive {
