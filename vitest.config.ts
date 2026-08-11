@@ -80,7 +80,49 @@ export default defineConfig({
         // the page *reloads* — which Vitest reports as "failed to find the current suite"
         // and fails the whole file, once, on the run that introduced the dependency. Adding
         // jest-dom to the setup file did exactly that; a name here is the cost of a new one.
-        optimizeDeps: { include: ["@testing-library/jest-dom"] },
+        //
+        // The rest of this list is not belt-and-braces: Vite's dependency SCAN cannot run
+        // here at all. It fails with five errors out of
+        // `vite-plugin-svelte-module:optimize-svelte` — the plugin is not compatible with
+        // the rolldown-based scanner Vite now uses (the same mismatch behind the
+        // `optimizeDeps.esbuildOptions is deprecated` warning this run prints) — and Vite
+        // then reports "Failed to run dependency scan. Skipping dependency pre-bundling"
+        // and carries on. With nothing pre-bundled, EVERY dependency below is one Vite
+        // meets mid-run, so it optimizes, reloads, and the in-flight import of the test
+        // file dies as "Failed to fetch dynamically imported module".
+        //
+        // That makes this the difference between a green run and a red one on any COLD
+        // cache — which is every CI run, always. It passes locally on a second run purely
+        // because the first one left these in node_modules/.vite. To reproduce the CI
+        // condition: `rm -rf node_modules/.vite && bun run test`.
+        //
+        // The list is what Vite itself reported optimizing on a cold run. Icons come from
+        // the `@lucide/svelte` barrel as named exports, so the one entry covers every icon
+        // in block-icons.ts; `icons/x` is bits-ui reaching for its own.
+        optimizeDeps: {
+          include: [
+            "@testing-library/jest-dom",
+            "@lucide/svelte",
+            "@lucide/svelte/icons/x",
+            "@tauri-apps/api/core",
+            "@tauri-apps/plugin-dialog",
+            "@tauri-apps/plugin-log",
+            "@tiptap/core",
+            "@tiptap/extension-blockquote",
+            "@tiptap/extension-image",
+            "@tiptap/markdown",
+            "@tiptap/pm/history",
+            "@tiptap/pm/state",
+            "@tiptap/starter-kit",
+            "@tiptap/suggestion",
+            "bits-ui",
+            "prosemirror-state",
+            "prosemirror-view",
+            "svelte-sonner",
+            "tailwind-merge",
+            "tailwind-variants",
+          ],
+        },
         test: {
           name: "browser",
           include: ["src/**/*.browser.{test,spec}.{js,ts}"],
