@@ -229,12 +229,15 @@ describe("saying yes", () => {
     await flush();
 
     // The report is the record; the toast only points at it, and a clean sweep
-    // is news rather than an unresolved state, so it expires.
+    // is news rather than an unresolved state, so it expires. The path reaches
+    // the description as a prop now rather than interpolated into a string,
+    // because it is rendered as a link that reveals the file.
     const [message, options] = vi.mocked(toast).mock.calls.at(-1) ?? [];
     expect(message).toBe("23 notes updated");
     expect(
-      String((options as { description?: string })?.description),
-    ).toContain("migration-report.md");
+      (options as { componentProps?: { reportPath?: string } })?.componentProps
+        ?.reportPath,
+    ).toBe(`${VAULT}/.grimoire/format-backup-20260730T120000Z/migration-report.md`);
     expect((options as { duration?: number })?.duration).not.toBe(Infinity);
   });
 
@@ -263,7 +266,8 @@ describe("saying yes", () => {
     expect(message).toContain("1 note couldn't be updated");
     expect((options as { duration?: number })?.duration).toBe(Infinity);
     expect(
-      String((options as { description?: string })?.description),
+      (options as { componentProps?: { reportPath?: string } })?.componentProps
+        ?.reportPath,
     ).toContain("migration-report.md");
   });
 
