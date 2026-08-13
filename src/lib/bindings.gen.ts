@@ -85,7 +85,11 @@ export const commands = {
 	getAccentPreset: () => __TAURI_INVOKE<string | null>("get_accent_preset"),
 	getAliasCollisions: (noteId: number) => __TAURI_INVOKE<AliasCollision[]>("get_alias_collisions", { noteId }),
 	getAnnotations: (mapId: number) => __TAURI_INVOKE<MapAnnotation[]>("get_annotations", { mapId }),
-	getAppPrefs: () => __TAURI_INVOKE<AppPrefs>("get_app_prefs"),
+	getAppPrefs: () => __TAURI_INVOKE<{
+	reduceMotion?: boolean,
+	confirmRenameLinks?: boolean,
+	sampleBannerDismissed?: boolean,
+} | null>("get_app_prefs"),
 	getAudioAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_audio_absolute_path", { relativePath }),
 	getBacklinks: (noteId: number) => __TAURI_INVOKE<BacklinkNote[]>("get_backlinks", { noteId }),
 	getDensityLevel: () => __TAURI_INVOKE<string | null>("get_density_level"),

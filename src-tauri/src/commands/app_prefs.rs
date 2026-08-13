@@ -26,13 +26,21 @@ fn app_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join(APP_PREFS_FILE))
 }
 
-fn read_prefs_file(path: &Path) -> Result<AppPrefs, String> {
+/// `None` when the GM has never saved prefs, which is a different answer from "every
+/// pref is false" and the frontend needs to tell them apart: on a first run it seeds
+/// `reduceMotion` from the operating system's own setting, and it can only do that
+/// while it knows nobody has chosen yet. Returning `AppPrefs::default()` here made a
+/// fresh install indistinguishable from an explicit "no, I want motion", so a GM who
+/// had asked for reduced motion system-wide got the full-motion app regardless.
+fn read_prefs_file(path: &Path) -> Result<Option<AppPrefs>, String> {
     if !path.exists() {
-        return Ok(AppPrefs::default());
+        return Ok(None);
     }
     let contents = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read app prefs: {}", e))?;
-    serde_json::from_str(&contents).map_err(|e| format!("Failed to parse app prefs: {}", e))
+    serde_json::from_str(&contents)
+        .map(Some)
+        .map_err(|e| format!("Failed to parse app prefs: {}", e))
 }
 
 fn write_prefs_file(path: &Path, prefs: &AppPrefs) -> Result<(), String> {
@@ -43,7 +51,7 @@ fn write_prefs_file(path: &Path, prefs: &AppPrefs) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_app_prefs(app: AppHandle) -> Result<AppPrefs, String> {
+pub fn get_app_prefs(app: AppHandle) -> Result<Option<AppPrefs>, String> {
     let path = app_prefs_path(&app)?;
     read_prefs_file(&path)
 }
@@ -72,15 +80,17 @@ mod tests {
         };
         write_prefs_file(&path, &prefs).unwrap();
 
-        assert_eq!(read_prefs_file(&path).unwrap(), prefs);
+        assert_eq!(read_prefs_file(&path).unwrap(), Some(prefs));
     }
 
+    /// Not `Some(AppPrefs::default())`. The absence is the signal: it is what lets the
+    /// frontend seed reduced motion from the OS instead of assuming the GM said no.
     #[test]
-    fn missing_file_yields_defaults() {
+    fn missing_file_is_reported_as_absent_not_as_defaults() {
         let dir = tempdir().unwrap();
         let path = dir.path().join(APP_PREFS_FILE);
 
-        assert_eq!(read_prefs_file(&path).unwrap(), AppPrefs::default());
+        assert_eq!(read_prefs_file(&path).unwrap(), None);
     }
 
     #[test]
@@ -89,7 +99,7 @@ mod tests {
         let path = dir.path().join(APP_PREFS_FILE);
         fs::write(&path, r#"{ "reduceMotion": true }"#).unwrap();
 
-        let prefs = read_prefs_file(&path).unwrap();
+        let prefs = read_prefs_file(&path).unwrap().expect("file exists");
         assert!(prefs.reduce_motion);
         assert!(!prefs.confirm_rename_links);
         assert!(!prefs.sample_banner_dismissed);

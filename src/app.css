@@ -165,6 +165,36 @@
 }
 
 /* ── Reduce Motion ────────────────────────────────────────────── */
+/*
+  Reduced motion removes MOVEMENT, not FEEDBACK, and the difference is the whole reason
+  this is two rules rather than one.
+
+  The blanket rule is the familiar one and it is right for almost everything: a state
+  change that arrives instantly still reads as a state change, so collapsing every
+  transition to nothing costs a GM who asked for this precisely nothing.
+
+  It is wrong for exactly one element in the app. A SPINNER'S MOTION IS ITS MESSAGE —
+  it is the answer to "is this working, or has it hung?" — and a partial circle is all
+  it draws, so `animation-iteration-count: 1` did not quieten it, it broke it. A GM with
+  reduced motion on watched a frozen arc and could not tell a slow ledger from a dead
+  one. That is the failure this setting exists to spare people, reached from the far side.
+
+  The exemption is keyed to `.animate-spin` rather than to an opt-in attribute on each
+  spinner, and that is the load-bearing part: there are around thirty of them across the
+  app, some through `ui/spinner` and most as a bare `LoaderCircle`, and an attribute the
+  thirty-first has to remember is an attribute the thirty-first forgets. The class is
+  already the thing that makes it spin. `data-motion-essential` stays as the hatch for
+  anything that animates without it — a bespoke `@keyframes` progress element — and
+  should stay hard to reach for. Both outrank the blanket rule on specificity, (0,2,0)
+  against (0,1,0), rather than on source order.
+
+  1.6s, not the ~1s default: unmistakably alive, comfortably below any rate that
+  provokes anyone.
+
+  `animate-pulse` is deliberately NOT exempt. A skeleton communicates "content pending"
+  by its shape and position, which survive being held still; the spinner has nothing
+  left when it stops.
+*/
 
 [data-reduce-motion="true"] *,
 [data-reduce-motion="true"] *::before,
