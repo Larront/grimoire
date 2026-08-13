@@ -7,6 +7,11 @@
 // - Non-grimoire frontmatter keys preserved verbatim on write
 // - Frontmatter block created on first tag; removed when the last tag is
 //   removed *if no other keys remain*
+//
+// The editor never sees a note's frontmatter: `parseFrontmatter`
+// (`src/lib/utils.ts`) splits it off before the buffer is seeded, so the
+// markdown a content save carries back is body-only. [`body_save_content`] is
+// the inverse of that strip and the reason a save doesn't erase the block.
 
 /// Split `raw` into (frontmatter block, body). Tolerates CRLF line endings —
 /// files checked out or written on Windows must parse identically to LF files.
@@ -108,6 +113,45 @@ pub fn apply_tags(content: &str, new_tags: &[String]) -> String {
 
 pub fn read_aliases(content: &str) -> Vec<String> {
     read_list(content, "aliases")
+}
+
+/// Put `disk_raw`'s frontmatter block back in front of a body-only `body`.
+///
+/// The exact inverse of the load-side strip: this splits `disk_raw` by the same
+/// rule `parseFrontmatter` used to remove the block, so what came off goes back
+/// on. Consequences of that symmetry worth stating, because both look like bugs
+/// until you check the pairing:
+/// - A body that legitimately opens with a `---` horizontal rule is neither
+///   eaten nor duplicated — the load side stripped only the real block, so only
+///   the real block is restored.
+/// - A file whose leading `---` fence was never frontmatter at all is treated
+///   the same way going out as it was coming in, so the bytes still round-trip.
+///
+/// Frontmatter-only whitespace and line endings normalise to LF exactly as
+/// [`apply_list`] already normalises them; the *keys* are what the portability
+/// contract preserves verbatim, and the body is untouched either way.
+fn reattach(disk_raw: &str, body: &str) -> String {
+    match split_frontmatter(disk_raw) {
+        Some((block, _)) => {
+            let lines: Vec<&str> = block.lines().collect();
+            format!("---\n{}\n---\n{}", lines.join("\n"), body)
+        }
+        None => body.to_string(),
+    }
+}
+
+/// The bytes a content save should write, given the body the editor produced.
+///
+/// `full_path` is read here, at write time, rather than trusting a block the
+/// frontend captured when the note was opened: a note can sit open for an hour
+/// while Obsidian adds a key to it, and the save must not roll that back. A
+/// path that can't be read (a note being recreated after an external delete, a
+/// brand-new file) simply has no block to restore.
+pub fn body_save_content(full_path: &std::path::Path, body: &str) -> String {
+    match std::fs::read_to_string(full_path) {
+        Ok(disk_raw) => reattach(&disk_raw, body),
+        Err(_) => body.to_string(),
+    }
 }
 
 pub fn apply_aliases(content: &str, new_aliases: &[String]) -> String {
@@ -261,6 +305,112 @@ mod tests {
         let raw = "---\ntags: [npc]\naliases: [Captain Ash]\n---\nBody\n";
         assert_eq!(read_tags(raw), vec!["npc"]);
         assert_eq!(read_aliases(raw), vec!["Captain Ash"]);
+    }
+
+    // ── Body-only content saves ───────────────────────────────────────────────
+    // The editor autosaves a body with no frontmatter in it. Writing that body
+    // verbatim erased the block — tags, aliases and foreign keys alike — so
+    // every one of these guards a way a note's metadata could vanish under an
+    // ordinary keystroke.
+
+    #[test]
+    fn reattach_restores_the_block_a_body_only_save_lacks() {
+        let disk = "---\ntags: [npc]\naliases: [Mira]\n---\nOld body\n";
+        assert_eq!(
+            reattach(disk, "New body\n"),
+            "---\ntags: [npc]\naliases: [Mira]\n---\nNew body\n"
+        );
+    }
+
+    #[test]
+    fn reattach_preserves_foreign_keys() {
+        let disk = "---\ncover: portrait.png\nauthor: GM\ntags: [npc]\n---\nOld\n";
+        assert_eq!(
+            reattach(disk, "New\n"),
+            "---\ncover: portrait.png\nauthor: GM\ntags: [npc]\n---\nNew\n"
+        );
+    }
+
+    #[test]
+    fn reattach_leaves_an_unadorned_note_alone() {
+        assert_eq!(reattach("Old body\n", "New body\n"), "New body\n");
+    }
+
+    #[test]
+    fn reattach_on_empty_disk_file_writes_the_body() {
+        assert_eq!(reattach("", "New body\n"), "New body\n");
+    }
+
+    #[test]
+    fn reattach_round_trips_an_untouched_note() {
+        // Split then rejoin must be byte-identical, or merely opening a note and
+        // letting a save fire would rewrite the file.
+        let disk = "---\ntags: [npc]\ncover: img.png\n---\nBody text\n";
+        let (_, body) = split_frontmatter(disk).unwrap();
+        assert_eq!(reattach(disk, &body), disk);
+    }
+
+    #[test]
+    fn reattach_keeps_a_leading_horizontal_rule_in_the_body() {
+        // A note whose prose opens with `---` is the case where eating or
+        // duplicating a delimiter is easiest. The rule is body, and stays body.
+        let disk = "---\ntags: [npc]\n---\n---\nOld\n";
+        let (_, body) = split_frontmatter(disk).unwrap();
+        assert_eq!(body, "---\nOld\n");
+        assert_eq!(reattach(disk, "---\nNew\n"), "---\ntags: [npc]\n---\n---\nNew\n");
+    }
+
+    #[test]
+    fn reattach_does_not_invent_a_block_from_an_hr_only_note() {
+        // No closing fence ⇒ no frontmatter on the way in, so nothing is put
+        // back and the body is not prefixed with a fabricated block.
+        let disk = "---\nJust a rule and prose\n";
+        assert_eq!(reattach(disk, "---\nEdited prose\n"), "---\nEdited prose\n");
+    }
+
+    #[test]
+    fn reattach_normalises_crlf_frontmatter_to_lf() {
+        // Same normalisation `apply_tags` already performs; the body's own line
+        // endings are the editor's business and pass through untouched.
+        let disk = "---\r\ntags: [npc]\r\ncover: img.png\r\n---\r\nOld\r\n";
+        assert_eq!(
+            reattach(disk, "New\r\n"),
+            "---\ntags: [npc]\ncover: img.png\n---\nNew\r\n"
+        );
+    }
+
+    #[test]
+    fn body_save_content_restores_the_block_from_the_file_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ash.md");
+        std::fs::write(&path, "---\ntags: [npc]\n---\nOld body\n").unwrap();
+        assert_eq!(
+            body_save_content(&path, "New body\n"),
+            "---\ntags: [npc]\n---\nNew body\n"
+        );
+    }
+
+    #[test]
+    fn body_save_content_reads_the_block_at_write_time() {
+        // A note can sit open while another tool edits its frontmatter. The save
+        // must carry the key that tool added, not the block as it was on open.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ash.md");
+        std::fs::write(&path, "---\ntags: [npc]\n---\nOld\n").unwrap();
+        std::fs::write(&path, "---\ntags: [npc]\ncover: added.png\n---\nOld\n").unwrap();
+        assert_eq!(
+            body_save_content(&path, "New\n"),
+            "---\ntags: [npc]\ncover: added.png\n---\nNew\n"
+        );
+    }
+
+    #[test]
+    fn body_save_content_on_a_missing_file_writes_the_body() {
+        // The recreate-after-external-delete path: the old file (and its block)
+        // is gone, and the save must still land rather than fail.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("gone.md");
+        assert_eq!(body_save_content(&path, "New body\n"), "New body\n");
     }
 
     // ── CRLF tolerance ────────────────────────────────────────────────────────

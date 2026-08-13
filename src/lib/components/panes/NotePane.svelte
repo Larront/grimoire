@@ -328,6 +328,11 @@
     }
   });
 
+  // `markdown` is body-only — the frontmatter was split off when the buffer was
+  // seeded (see the read above) and writeNoteContent restores it from disk on
+  // the way in. Do not prepend it here as well: two restorations write the block
+  // twice, and a block captured at load time would roll back a key some other
+  // tool added while the note sat open.
   async function handleSave(markdown: string) {
     lastMarkdown = markdown;
     if (editorNoteId === null || isSavingTitle) return;
