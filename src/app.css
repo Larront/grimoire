@@ -369,6 +369,31 @@
     font-size: var(--font-body);
   }
 
+  /*
+    `overflow-x: hidden` is why `minWidth` exists in `tauri.conf.json`, and the two are a
+    pair rather than two separate settings. Clipping is right for this shell — a desktop
+    app that grows a horizontal scrollbar has already lost — but clipping with no floor
+    means a window dragged narrow enough simply cuts the interface off, with no scrollbar
+    left to recover what went past the edge. There was no floor at all, so it did.
+
+    THE FLOOR IS DERIVED, and from the widest arrangement a GM can be in without having
+    chosen anything unusual — not from the narrowest one that technically renders. The
+    parts, all of them fixed or already floored elsewhere:
+
+      48   icon rail
+    + 192  sidebar at SIDEBAR_WIDTH_MIN_PX
+    + 36   block gutter (--block-gutter)
+    + 320  prose at a readable measure — ~45 characters at the body size, the same
+           number the Infobox float threshold is derived from
+    + 24   the column's trailing inset
+    + 300  the docked detail panel, which is `shrink-0`: it takes its full width or
+           the note column pays for it
+    = 920
+
+    Re-derive from those parts if one of them changes; do not nudge the total. The panel
+    is the term worth noticing — it is the reason the floor is not ~620. A GM who closes
+    it has room to spare, which is the right way round.
+  */
   html {
     font-family: "Nunito Variable", sans-serif;
     @apply overflow-x-hidden;
