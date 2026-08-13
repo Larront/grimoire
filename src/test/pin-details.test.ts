@@ -51,7 +51,7 @@ async function flush() {
 describe("PinDetails — rendering", () => {
   it("renders all sections", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     expect(container.querySelector('[data-section="linked-note"]')).toBeTruthy();
@@ -63,7 +63,7 @@ describe("PinDetails — rendering", () => {
 
   it("renders title input with pin title", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const input = container.querySelector('input[placeholder="Name this pin"]') as HTMLInputElement;
@@ -73,7 +73,7 @@ describe("PinDetails — rendering", () => {
 
   it("renders lock button", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const btn = container.querySelector('button[title="Unlock to drag"]');
@@ -87,7 +87,7 @@ describe("PinDetails — title editing", () => {
   it("calls onUpdate with new title on blur", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate },
+      props: { pin: basePin, onUpdate, onDelete: vi.fn() },
     });
     await flush();
     const input = container.querySelector('input[placeholder="Name this pin"]') as HTMLInputElement;
@@ -99,7 +99,7 @@ describe("PinDetails — title editing", () => {
   it("does not call onUpdate when title unchanged on blur", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate },
+      props: { pin: basePin, onUpdate, onDelete: vi.fn() },
     });
     await flush();
     const input = container.querySelector('input[placeholder="Name this pin"]') as HTMLInputElement;
@@ -113,7 +113,7 @@ describe("PinDetails — title editing", () => {
 describe("PinDetails — linked note", () => {
   it("shows linked note title when linkedNote is provided", async () => {
     const { getByText } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn() },
+      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     expect(getByText("Aldric")).toBeTruthy();
@@ -125,7 +125,7 @@ describe("PinDetails — linked note", () => {
         pin: { ...basePin, note_id: 42 },
         linkedNote,
         notePreview: "Some note content",
-        onUpdate: vi.fn(),
+        onUpdate: vi.fn(), onDelete: vi.fn(),
       },
     });
     await flush();
@@ -134,7 +134,7 @@ describe("PinDetails — linked note", () => {
 
   it("shows search input when no linked note", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const input = container.querySelector('input[placeholder="Search notes…"]');
@@ -144,7 +144,7 @@ describe("PinDetails — linked note", () => {
   it("calls onOpenNote when the open-note button is clicked", async () => {
     const onOpenNote = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onOpenNote },
+      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn(), onOpenNote },
     });
     await flush();
     const btn = container.querySelector('button[title="Open note"]') as HTMLElement;
@@ -155,7 +155,7 @@ describe("PinDetails — linked note", () => {
   it("calls onUpdate with note_id: null when Unlink is clicked", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { getByText } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate },
+      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate, onDelete: vi.fn() },
     });
     await flush();
     await fireEvent.click(getByText("Unlink"));
@@ -165,7 +165,7 @@ describe("PinDetails — linked note", () => {
   it("does not use goto navigation (no goto import)", async () => {
     // This test verifies the component file exists and is importable as PinDetails
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn() },
+      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     // If goto were called, it would throw in test environment — reaching here confirms it's not
@@ -179,7 +179,7 @@ describe("PinDetails — tags", () => {
   it("calls onTagsChange when the chip editor commits a change", async () => {
     const onTagsChange = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: basePin, pinTags: [], allTags: ["npc"], onTagsChange, onUpdate: vi.fn() },
+      props: { pin: basePin, pinTags: [], allTags: ["npc"], onTagsChange, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const input = container.querySelector('[data-section="tags"] input') as HTMLInputElement;
@@ -196,7 +196,7 @@ describe("PinDetails — tags", () => {
 describe("PinDetails — Pin Category", () => {
   it("renders a category section", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, categories, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     expect(container.querySelector('[data-section="category"]')).toBeTruthy();
@@ -204,7 +204,7 @@ describe("PinDetails — Pin Category", () => {
 
   it("shows 'Uncategorized' option in the select", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, categories, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -215,7 +215,7 @@ describe("PinDetails — Pin Category", () => {
 
   it("populates the select from the categories prop", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, categories, onUpdate: vi.fn() },
+      props: { pin: basePin, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -226,7 +226,7 @@ describe("PinDetails — Pin Category", () => {
 
   it("shows the current category_id as selected", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate: vi.fn() },
+      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -236,7 +236,7 @@ describe("PinDetails — Pin Category", () => {
   it("calls onUpdate with new category_id when a category is selected", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: basePin, categories, onUpdate },
+      props: { pin: basePin, categories, onUpdate, onDelete: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -247,7 +247,7 @@ describe("PinDetails — Pin Category", () => {
   it("calls onUpdate with category_id: null when Uncategorized is selected", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate },
+      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate, onDelete: vi.fn() },
     });
     await flush();
     const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
@@ -261,7 +261,7 @@ describe("PinDetails — Pin Category", () => {
 describe("PinDetails — appearance section", () => {
   it("renders appearance section", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     expect(container.querySelector('[data-section="appearance"]')).toBeTruthy();
@@ -269,7 +269,7 @@ describe("PinDetails — appearance section", () => {
 
   it("renders ColorSwatches in the appearance section", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn() },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
     // ColorSwatches uses data-slot="color-swatches"
@@ -283,7 +283,7 @@ describe("PinDetails — lock/unlock", () => {
   it("calls onToggleLock when lock button is clicked", async () => {
     const onToggleLock = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn(), onToggleLock },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn(), onToggleLock },
     });
     await flush();
     const btn = container.querySelector('button[title="Unlock to drag"]') as HTMLElement;
@@ -293,10 +293,53 @@ describe("PinDetails — lock/unlock", () => {
 
   it("shows LockOpen icon when unlocked=true", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn(), unlocked: true },
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn(), unlocked: true },
     });
     await flush();
     const btn = container.querySelector('button[title="Lock pin"]');
     expect(btn).toBeTruthy();
+  });
+});
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+/*
+  A pin could not be deleted at all. `delete_pin` had been in the backend and in the
+  generated bindings the whole time, and nothing on the frontend ever called it — the
+  panel simply had no such control, which is why the gap survived review: a details panel
+  that looks finished reads as finished.
+
+  So this suite asserts the control EXISTS before it asserts what it does. A test that
+  only checked the callback would have passed just as happily against a button no one
+  could find, which is the neighbouring failure the annotation delete shipped with.
+*/
+describe("PinDetails — delete", () => {
+  it("renders a delete control", async () => {
+    const { getByTestId } = render(PinDetails, {
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
+    });
+    await flush();
+    expect(getByTestId("pin-delete")).toBeTruthy();
+  });
+
+  /* In its own section rather than tucked under Appearance. Deleting is not an appearance
+     setting, and filing the only destructive action inside a collapsible is the
+     discoverability bug this change exists to undo. */
+  it("lives in Actions, not inside the appearance section", async () => {
+    const { getByTestId } = render(PinDetails, {
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
+    });
+    await flush();
+    const section = getByTestId("pin-delete").closest("[data-section]");
+    expect(section?.getAttribute("data-section")).toBe("actions");
+  });
+
+  it("calls onDelete with the pin id", async () => {
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    const { getByTestId } = render(PinDetails, {
+      props: { pin: basePin, onUpdate: vi.fn(), onDelete },
+    });
+    await flush();
+    await fireEvent.click(getByTestId("pin-delete"));
+    expect(onDelete).toHaveBeenCalledWith(basePin.id);
   });
 });

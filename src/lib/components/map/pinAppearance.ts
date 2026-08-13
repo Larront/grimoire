@@ -125,6 +125,23 @@ const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
   },
 };
 
+/**
+ * What a pin with nothing set looks like — which is exactly what `createPin` makes, since
+ * the place-pin flow passes null for shape, colour and icon.
+ *
+ * Derived by running `resolvedAppearance` over an empty pin rather than by restating its
+ * three fallbacks, so the placement ghost cannot promise one thing and the created pin
+ * arrive as another. Change a default in `resolvedAppearance` and the ghost follows.
+ */
+export function defaultAppearance(): ResolvedAppearance {
+  return resolvedAppearance(
+    { shape: null, color: null, icon: null } as unknown as Pin,
+    undefined,
+  );
+}
+
+/** Where a pin's tooltip sits, measured from the shape's own anchor so the label clears
+    the point of a teardrop as well as the middle of a circle. */
 export function tooltipOffset(shape: PinShape): [number, number] {
   const { anchor } = SHAPE_DEFS[shape] ?? SHAPE_DEFS.circle;
   return [0, 40 - anchor[1] + 8];
@@ -136,6 +153,7 @@ export function buildDivIcon(
   iconHtml: string,
   L: typeof import("leaflet"),
   selected = false,
+  className = "",
 ): import("leaflet").DivIcon {
   const def = SHAPE_DEFS[shape] ?? SHAPE_DEFS.circle;
   const safeCol = safeColor(color);
@@ -160,7 +178,7 @@ export function buildDivIcon(
 		</div>`;
 
   return L.divIcon({
-    className: "",
+    className,
     html,
     iconSize: [40, 40],
     iconAnchor: def.anchor,

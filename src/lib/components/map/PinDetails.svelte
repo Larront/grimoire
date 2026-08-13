@@ -1,7 +1,7 @@
 <script lang="ts">
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
-  import { ExternalLink, Lock, LockOpen, ChevronDown } from "@lucide/svelte";
+  import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
   import {
     Collapsible,
     CollapsibleContent,
@@ -25,6 +25,7 @@
     onTagsChange?: (tags: string[]) => void;
     onToggleLock?: () => void;
     onUpdate: (pin: Pin) => Promise<void>;
+    onDelete: (id: number) => Promise<void>;
     onOpenNote?: (id: number, title: string) => void;
   }
 
@@ -39,6 +40,7 @@
     onTagsChange,
     onToggleLock,
     onUpdate,
+    onDelete,
     onOpenNote,
   }: Props = $props();
 
@@ -278,7 +280,8 @@
           />
         </div>
 
-        <!-- Reset -->
+        <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
+             directly above it and nothing else, so its scope is the section it sits in. -->
         <button
           type="button"
           onclick={() => save({ shape: null, icon: null, color: null })}
@@ -289,4 +292,29 @@
       </div>
     </CollapsibleContent>
   </Collapsible>
+</DetailSection>
+
+<!--
+  Actions.
+
+  There was no way to delete a pin. `delete_pin` has existed in the backend and in the
+  generated bindings the whole time; nothing on this side ever called it, so a pin placed
+  by accident was permanent. That is a harder failure than the annotation delete being
+  hard to see, and it went unnoticed for the same reason — the panel reads as complete.
+
+  Outside the Appearance collapsible on purpose. Deleting is not an appearance setting,
+  and burying the only destructive action behind a closed section is what made the
+  equivalent control on annotations undiscoverable.
+-->
+<DetailSection label="Actions" sectionKey="actions">
+  <button
+    type="button"
+    data-testid="pin-delete"
+    onclick={() => onDelete(pin.id)}
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+           text-error hover:bg-error/10 transition-colors cursor-pointer"
+  >
+    <Trash2 class="size-3.5 shrink-0" />
+    Delete pin
+  </button>
 </DetailSection>
