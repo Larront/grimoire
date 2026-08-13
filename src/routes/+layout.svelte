@@ -13,6 +13,19 @@
 
   const { children } = $props();
 
+  // Dev-only toast harness (src/lib/components/dev/ToastLab.svelte). The import
+  // is inside the DEV branch on purpose: Vite replaces `import.meta.env.DEV`
+  // with `false` for production, so both the branch and the dynamic import are
+  // eliminated and the component never enters a release bundle.
+  let ToastLab = $state<
+    typeof import("$lib/components/dev/ToastLab.svelte").default | null
+  >(null);
+  if (import.meta.env.DEV) {
+    import("$lib/components/dev/ToastLab.svelte").then(
+      (m) => (ToastLab = m.default),
+    );
+  }
+
   // Load persisted global prefs once at startup (fire-and-forget).
   appPrefs.load();
 
@@ -89,6 +102,10 @@
 {#snippet closeIcon()}
   <X size={14} strokeWidth={2} aria-hidden="true" />
 {/snippet}
+
+{#if ToastLab}
+  <ToastLab />
+{/if}
 
 <DbRecoveryDialog />
 <FormatMigrationDialog />
