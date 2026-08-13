@@ -487,7 +487,7 @@
         </Button>
         {#if showLinkHint}
           <div
-            class="absolute right-0 top-full z-20 mt-1 w-max rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md"
+            class="absolute right-0 top-full z-20 mt-1 w-max rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground"
             role="status"
           >
             Select text to link a Scene

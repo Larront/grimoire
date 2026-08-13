@@ -250,7 +250,7 @@
                 class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.reduceMotion ? 'bg-primary' : 'bg-input'}"
               >
                 <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 {appPrefs.reduceMotion ? 'translate-x-4' : 'translate-x-0'} {appPrefs.reduceMotion ? '' : 'transition-transform'}"
+                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.reduceMotion ? 'translate-x-4' : 'translate-x-0'} {appPrefs.reduceMotion ? '' : 'transition-transform'}"
                 ></span>
               </button>
             </div>
@@ -273,7 +273,7 @@
                 class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.confirmRenameLinks ? 'bg-primary' : 'bg-input'}"
               >
                 <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 {appPrefs.confirmRenameLinks ? 'translate-x-4' : 'translate-x-0'} {appPrefs.confirmRenameLinks ? '' : 'transition-transform'}"
+                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.confirmRenameLinks ? 'translate-x-4' : 'translate-x-0'} {appPrefs.confirmRenameLinks ? '' : 'transition-transform'}"
                 ></span>
               </button>
             </div>

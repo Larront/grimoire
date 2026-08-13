@@ -204,6 +204,8 @@ This is a direct expression of "the tool disappears." Shadows would make the chr
 
 **The Shadowless Rule.** No `box-shadow` or `drop-shadow` on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border. Shadows exist in the GM's world — in scene art, map overlays, atmospheric imagery — not in the tool surrounding them.
 
+_Where the line falls._ "Chrome" was doing unstated work in that sentence, and the ambiguity cost: a dozen popovers and dropdowns grew shadows while the toast stylesheet was busy stripping sonner's, both citing this rule. **The test is what the surface floats over, not what kind of component it is.** A panel over the app's own surfaces knows what is behind it — Iron Deep, Iron Dark, or Iron Raised — and separates on a tonal step plus Iron Border, so it takes no shadow: dropdowns, popovers, tooltips, pickers, toggle knobs, editor toolbars. A panel over the GM's own imagery does not: a map is whatever picture they dropped in, a PDF page is white, scene art is arbitrary, and against an unknown background a border alone can vanish. Those keep a shadow, and it is the one place in the app that has one. If you are adding a shadow, name the image it sits on; if you cannot, it does not get one.
+
 ## 5. Components
 
 Components respond with precision and without hurry. State transitions are 150ms ease-out. Nothing bounces, nothing overshoots. Every component rests quiet and signals clearly.

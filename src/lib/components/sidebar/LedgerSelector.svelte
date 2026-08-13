@@ -90,7 +90,7 @@
 
     {#if open}
       <div
-        class="absolute bottom-full left-0 z-50 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg"
+        class="absolute bottom-full left-0 z-50 mb-1 w-56 overflow-hidden rounded-lg border border-border bg-popover py-1"
         role="menu"
       >
         {#each recentLedgers as v (v.path)}
