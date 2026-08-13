@@ -98,12 +98,20 @@
     }
   }
 
-  const ACCENT_PRESETS: { value: AccentPreset; label: string; color: string }[] = [
-    { value: 'accent-crimson', label: 'Crimson', color: '#c2483d' },
-    { value: 'accent-arcane',  label: 'Arcane',  color: '#9b6bbf' },
-    { value: 'accent-verdant', label: 'Verdant', color: '#5c9e6e' },
-    { value: 'accent-ice',     label: 'Ice',     color: '#5b9ec9' },
-    { value: 'accent-amber',   label: 'Amber',   color: '#c49a3c' },
+  /*
+    No hexes. Each swatch WEARS its own preset class and paints with `var(--primary)`, so
+    the colour it shows is resolved by the same declaration in app.css that will paint
+    the app once it is picked — including the light-mode step, which the five hardcoded
+    values here never had. They were the third copy of this table (app.css and a since-
+    deleted one in ThemeWatcher were the others), and a swatch that lies about what you
+    are choosing is the exact failure that duplication produces.
+  */
+  const ACCENT_PRESETS: { value: AccentPreset; label: string }[] = [
+    { value: 'accent-crimson', label: 'Crimson' },
+    { value: 'accent-arcane',  label: 'Arcane'  },
+    { value: 'accent-verdant', label: 'Verdant' },
+    { value: 'accent-ice',     label: 'Ice'     },
+    { value: 'accent-amber',   label: 'Amber'   },
   ];
 
   const THEME_MODES: { value: 'dark' | 'light' | 'system'; label: string }[] = [
@@ -203,8 +211,8 @@
                     aria-label={preset.label}
                     aria-pressed={ledger.accent === preset.value}
                     onclick={() => ledger.setAccent(preset.value)}
-                    style="background-color: {preset.color}"
-                    class="size-6 rounded-full ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent === preset.value ? 'ring-2 ring-ring ring-offset-1' : 'opacity-70 hover:opacity-100'}"
+                    style="background-color: var(--primary)"
+                    class="{preset.value} size-6 rounded-full ring-offset-background transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent === preset.value ? 'ring-2 ring-ring ring-offset-1' : 'opacity-70 hover:opacity-100'}"
                   ></button>
                 {/each}
               </div>

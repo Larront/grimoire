@@ -30,7 +30,18 @@
 */
 
 :root {
-  /* Shadcn compatibility aliases */
+  /* Shadcn compatibility aliases.
+
+     READ THIS BEFORE REACHING FOR `--accent`. In shadcn's vocabulary `accent` is a
+     *muted hover surface*, not the brand colour. Grimoire's brand accent is `--primary`.
+     The two names collide, and the collision has cost real defects: `bg-accent` was used
+     as the armed state of the map's tool palette, which made an armed tool a 12%-alpha
+     wash indistinguishable from a hover, and `hover:bg-accent/10` composed to roughly
+     1.2% alpha — a hover state that did not exist.
+
+     `--accent` is therefore kept ONLY so the vendored components in `ui/` keep working.
+     App code wants one of the two aliases below, which say what they are, or `--primary`
+     for the brand accent. Nothing outside `ui/` should name `accent` again. */
   --background-card: var(--background-elevated);
   --foreground-card: var(--foreground);
   --popover: var(--background-elevated);
@@ -41,6 +52,13 @@
   --muted-foreground: var(--foreground-muted);
   --accent: var(--primary-subtle);
   --accent-foreground: var(--foreground);
+
+  /* What `--accent` was being reached for. Selection is the resting state of a chosen
+     row (DESIGN.md §5, sidebar: "Crimson Tint background, Crimson icon"); hover is the
+     4% white wash over any surface. Named so neither can be mistaken for the other or
+     for the brand accent. */
+  --surface-selected: var(--primary-subtle);
+  --surface-hover: var(--hover-overlay);
   --destructive: var(--error);
   --border: var(--background-border);
   --input: var(--background-border);
@@ -61,7 +79,20 @@
    so they re-resolve on theme change without being restated here. */
 
 /* ── Accent Presets ───────────────────────────────────────────── */
-/* Applied as a class on <html>; dark mode overrides via inline style */
+/*
+  THE ONLY PLACE A PRESET'S VALUES EXIST. ThemeWatcher applies one of these classes to
+  <html> in both modes and reads none of the numbers; it used to carry a duplicate table
+  and set four inline properties in dark mode, so a preset edited here changed light mode
+  only. The Settings swatches were a third copy, hardcoded in the component.
+
+  Each preset is stated twice, once per mode, and the light rule is written both as
+  `.light.accent-x` and as `.light .accent-x` on purpose: the first is the class sitting
+  on <html> beside `.light`, the second is the class scoped to any element inside it.
+  That second form is what lets the accent picker's swatches simply WEAR their preset and
+  paint with `var(--primary)` instead of restating a hex — the swatch shows the value the
+  GM will actually get, in the mode they are actually in, because it is the same
+  declaration doing both jobs.
+*/
 
 .accent-crimson {
   --primary: #c2483d;
@@ -69,7 +100,8 @@
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 }
-.light.accent-crimson {
+.light.accent-crimson,
+.light .accent-crimson {
   --primary: #a83228;
   --primary-foreground: #ffffff;
   --primary-subtle: rgba(168, 50, 40, 0.1);
@@ -82,7 +114,8 @@
   --primary-subtle: rgba(155, 107, 191, 0.12);
   --primary-muted: rgba(155, 107, 191, 0.24);
 }
-.light.accent-arcane {
+.light.accent-arcane,
+.light .accent-arcane {
   --primary: #7b4da0;
   --primary-foreground: #ffffff;
   --primary-subtle: rgba(123, 77, 160, 0.1);
@@ -95,7 +128,8 @@
   --primary-subtle: rgba(92, 158, 110, 0.12);
   --primary-muted: rgba(92, 158, 110, 0.24);
 }
-.light.accent-verdant {
+.light.accent-verdant,
+.light .accent-verdant {
   --primary: #3d7a52;
   --primary-foreground: #ffffff;
   --primary-subtle: rgba(61, 122, 82, 0.1);
@@ -108,7 +142,8 @@
   --primary-subtle: rgba(91, 158, 201, 0.12);
   --primary-muted: rgba(91, 158, 201, 0.24);
 }
-.light.accent-ice {
+.light.accent-ice,
+.light .accent-ice {
   --primary: #3a7fa8;
   --primary-foreground: #ffffff;
   --primary-subtle: rgba(58, 127, 168, 0.1);
@@ -121,7 +156,8 @@
   --primary-subtle: rgba(196, 154, 60, 0.12);
   --primary-muted: rgba(196, 154, 60, 0.24);
 }
-.light.accent-amber {
+.light.accent-amber,
+.light .accent-amber {
   --primary: #a07a20;
   --primary-foreground: #ffffff;
   --primary-subtle: rgba(160, 122, 32, 0.1);
@@ -265,6 +301,10 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+
+  /* The two named surfaces above, as `bg-surface-selected` / `bg-surface-hover`. */
+  --color-surface-selected: var(--surface-selected);
+  --color-surface-hover: var(--surface-hover);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
