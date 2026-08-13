@@ -4,6 +4,7 @@
   import FormatMigrationDialog from "$lib/components/FormatMigrationDialog.svelte";
   import ThemeWatcher from "$lib/components/ThemeWatcher.svelte";
   import { Toaster } from "svelte-sonner";
+  import { CircleCheck, CircleX, X } from "@lucide/svelte";
   import { ledger } from "../lib/stores/ledger.svelte";
   import { appPrefs } from "../lib/stores/app-prefs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
@@ -61,8 +62,34 @@
 
 <ThemeWatcher />
 <!-- closeButton is set per-toast (errors, import failures) — transient success
-     and undo toasts stay clean; see $lib/toast. -->
-<Toaster richColors />
+     and undo toasts stay clean; see $lib/toast.
+
+     The icons are passed in because sonner ships solid Heroicons-style glyphs,
+     and every other icon in Grimoire is a stroked lucide one — a filled disc in
+     the corner of a toast is visibly from another set. circle-check / circle-x
+     are the pair DESIGN.md §6 names for confirmation and failure, and they are
+     what makes the status legible without relying on the hue (red and green are
+     invisible to ~8% of male users). Sonner's own error glyph is an
+     exclamation, not an x. Toast colours and geometry are in src/app.css. -->
+<Toaster
+  richColors
+  successIcon={circleCheckIcon}
+  errorIcon={circleXIcon}
+  closeIcon={closeIcon}
+/>
+
+{#snippet circleCheckIcon()}
+  <CircleCheck size={16} strokeWidth={2} aria-hidden="true" />
+{/snippet}
+
+{#snippet circleXIcon()}
+  <CircleX size={16} strokeWidth={2} aria-hidden="true" />
+{/snippet}
+
+{#snippet closeIcon()}
+  <X size={14} strokeWidth={2} aria-hidden="true" />
+{/snippet}
+
 <DbRecoveryDialog />
 <FormatMigrationDialog />
 

@@ -864,44 +864,313 @@ input[type="range"]:disabled {
   opacity: 0.35;
 }
 
-/* ── Sonner toast token overrides ────────────────────────────── */
+/* ── Sonner toasts ───────────────────────────────────────────── */
 /*
-  Override svelte-sonner's built-in rich-color palette with Grimoire's
-  --error / --success / --background-elevated design tokens so toast colours
-  are consistent with the rest of the UI and theme-aware.
+  svelte-sonner arrives wearing its own design system — system-ui type, a grey
+  Radix ramp, a cream-filled action button, a grey circle close chip floating
+  half off the corner, and drop-shadows. All of that reads as a widget bolted
+  onto Grimoire rather than a surface the app owns, so the whole component is
+  re-skinned here against the design tokens.
+
+  Everything below is styling only. What each toast *says*, how long it lives,
+  and which are permitted to persist are decisions in $lib/toast.ts.
+
+  **The status spine.** A toast carries its semantic hue as a 3px left border
+  over a quiet surface. That is not a new invention: it is the same grammar the
+  editor already speaks for callouts and blockquotes — accent left border, faint
+  tint of the same hue (see `.tiptap blockquote[data-callout]` above). A toast is
+  the app saying something and a callout is a note saying something; they should
+  read as one language. It is also the only place a *neutral* toast can carry
+  colour at all, since neutral toasts have no status icon and no tinted surface.
+
+  Roles, one hue per toast (`--toast-hue`), no second colour anywhere in it:
+    error   — error hue spine, 12% error tint on the surface
+    success — success hue spine, 12% success tint
+    neutral — the user's accent spine, surface left as plain Iron Raised
+
+  Neutral keeps the untinted surface deliberately: a routine "Deleted X / Undo"
+  should not spend the accent on a whole surface (DESIGN.md — "use Crimson
+  sparingly … its scarcity is what makes it read as signal"). The spine alone is
+  enough to make the accent preset visible in toasts, which it previously was
+  not — a Verdant or Ice user never saw their accent here.
+
+  **On the specificity.** Every selector here is deliberately over-qualified,
+  and that is load-bearing rather than defensive. Sonner sets its palette on
+  `[data-sonner-toaster][data-sonner-theme='light'|'dark']` and its component
+  colours on three and four attribute selectors. An earlier version of this file
+  declared the same token overrides on a bare `[data-sonner-toaster]` — one
+  attribute — so every one of them silently lost to sonner's own theme block and
+  the toasts were rendering in sonner's Radix palette the whole time. Repeating
+  attributes that are always present on the element (`[data-sonner-theme]`,
+  `[data-rich-colors]`, `[data-styled]`) buys the specificity to win without
+  `!important`, and without depending on stylesheet order.
 */
-[data-sonner-toaster] {
-  --success-bg: color-mix(
-    in srgb,
-    var(--success) 12%,
-    var(--background-elevated)
-  );
-  --success-border: color-mix(
-    in srgb,
-    var(--success) 25%,
-    var(--background-elevated)
-  );
-  --success-text: var(--success);
-  --error-bg: color-mix(in srgb, var(--error) 12%, var(--background-elevated));
-  --error-border: color-mix(
-    in srgb,
-    var(--error) 25%,
-    var(--background-elevated)
-  );
-  --error-text: var(--error);
+
+/* Three attributes: sonner's palette lives on `[data-sonner-toaster][data-sonner-theme]`. */
+[data-sonner-toaster][data-sonner-theme][data-y-position] {
+  /* The tool's voice, not the platform's. This is the single biggest tell that
+     the toast belongs to the app: sonner hardcodes a system-ui stack. */
+  font-family: var(--font-sans, "Nunito Variable", sans-serif);
+  --border-radius: var(--radius-elevated);
+
   --normal-bg: var(--background-elevated);
   --normal-border: var(--background-border);
   --normal-text: var(--foreground);
+  /* 12%, mixed in oklab, matching how the callout backgrounds this borrows its
+     grammar from are mixed. */
+  --success-bg: color-mix(
+    in oklab,
+    var(--success) 12%,
+    var(--background-elevated)
+  );
+  --success-text: var(--success);
+  --error-bg: color-mix(in oklab, var(--error) 12%, var(--background-elevated));
+  --error-text: var(--error);
+  /* The four sides other than the spine stay neutral; the hue is carried by the
+     spine and the surface tint, so a full hue-tinted outline would triple it. */
+  --success-border: var(--background-border);
+  --error-border: var(--background-border);
+
+  /* Icon rhythm: sonner nudges the icon 3px into the padding to sit flush with
+     its own metrics. Against a 3px spine that reads as a misalignment. */
+  --toast-icon-margin-start: 0px;
+  --toast-icon-margin-end: 2px;
+  --toast-svg-margin-start: 0px;
+  --toast-svg-margin-end: 0px;
+}
+
+/* Dismiss belongs at the top right, the same corner it occupies on every other
+   dismissible surface in the app (SampleBanner, DetailPanel, tab close). Sonner
+   parks it half outside the top *left* corner, which is both foreign and where
+   the spine now lives. Retargeting the dir-aware custom properties — rather
+   than the physical left/right — keeps sonner's own logic intact.
+   Three attributes to beat sonner's `[data-sonner-toaster][dir='ltr']`. */
+[data-sonner-toaster][data-x-position][data-y-position] {
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 8px;
+  --toast-close-button-transform: none;
+}
+
+/* One hue per toast type. Neutral is the default; `--toast-on-hue` is the text
+   punched out of a hue-filled button.
+
+   `var(--background)` is the correct on-hue text in *both* themes without a
+   per-mode branch: in dark mode it is Iron Dark against light semantic hues
+   (#1f1f1f on #d4645a = 4.6:1, on #6ab187 = 6.6:1) and in light mode it is
+   Parchment against dark ones (#faf8f5 on #a02020 = 7.3:1, on #2e6e4a = 5.8:1).
+   The accent ships its own designed pair. */
+[data-sonner-toaster] [data-sonner-toast] {
+  --toast-hue: var(--primary);
+  --toast-on-hue: var(--primary-foreground);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type="success"] {
+  --toast-hue: var(--success);
+  --toast-on-hue: var(--background);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  --toast-hue: var(--error);
+  --toast-on-hue: var(--background);
 }
 
 /*
-  Shadowless Rule (DESIGN.md §4, absolute): svelte-sonner ships a drop-shadow on
-  every toast, but Grimoire chrome is flat — elevation reads from the raised
-  surface + border, never a shadow. Neutralise it. The extra specificity
-  (toaster › toast) beats sonner's own single-attribute rule without !important.
+  Shadowless Rule (DESIGN.md §4, absolute): sonner ships a drop-shadow on every
+  toast, but Grimoire chrome is flat — elevation reads from the raised surface
+  and its border, never a shadow.
+
+  The spine goes on here too. `:not([data-type])` covers neutral toasts, which
+  carry no `data-type` attribute at all; both selectors sit at four attributes
+  so they beat rich-colour's `border-color`. `padding-left` drops the 2px the
+  thicker border added, keeping the text 16px from the outer edge.
 */
-[data-sonner-toaster] [data-sonner-toast] {
+[data-sonner-toast][data-rich-colors][data-styled="true"][data-type],
+[data-sonner-toast][data-rich-colors][data-styled="true"]:not([data-type]) {
   box-shadow: none;
+  border-left: 3px solid var(--toast-hue);
+  padding-left: 13px;
+}
+
+/* Two voices are not in play here — a toast is the tool speaking, never GM
+   content — so this is all Nunito. Title takes the Label role (13px/500),
+   description sits under it in muted ash. Sonner hardcodes the dark-theme
+   description to a cold near-white, and under rich colours inherits the full
+   semantic hue, which puts a long paragraph (the migration report) in solid
+   red. Five attributes to beat that.
+
+   **The prose is neutral, and the hue rides on the icon, spine and surface** —
+   the rule SampleBanner already states in as many words. It is also the only
+   readable option: Ember Error as 13px text measures 3.6:1 on its own tinted
+   surface and 4.2:1 even on untinted Iron Raised, both short of the 4.5:1 a
+   message this size needs. Neutral title on the tint is 12.9:1, and the toast is
+   still unmistakably an error from the circle-x, the spine and the red cast. The
+   status was never carried by the text colour anyway — DESIGN.md §6 pairs every
+   error and success with an icon precisely because colour alone is not a cue. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-title] {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-description] {
+  color: var(--foreground-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Action button: hue fill, the app's primary-button geometry, height tracking
+   the density row so a dense ledger gets a dense toast. Type size is fixed —
+   density changes space, not scale (DESIGN.md, The Fixed Scale Rule) — which is
+   why the height has a floor: at dense, `--row-h - 8px` is 20px and a 13px
+   label at 1.4 line-height has under a pixel of air above and below it. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button] {
+  height: max(24px, calc(var(--row-h) - 8px));
+  padding: 0 10px;
+  border-radius: var(--radius-structural);
+  background: var(--toast-hue);
+  color: var(--toast-on-hue);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+/* The hue at 80% over its own surface, which is how every other primary button
+   in the app hovers (`bg-primary/80` in button.svelte) — it settles toward the
+   surface rather than toward black, so it behaves in light mode too. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button]:hover {
+  background: color-mix(in oklab, var(--toast-hue) 80%, transparent);
+}
+
+/* Sonner gives *every* button `margin-left: auto`, so a cancel/action pair ends
+   up with the free space split between them instead of sitting together. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button]
+  + [data-button] {
+  margin-left: 0;
+}
+
+/* Cancel is a ghost button — transparent, muted label, hover overlay — exactly
+   as DESIGN.md §5 specifies for cancel. Sonner's is a flat 30%-white slab.
+   Six attributes: sonner's own dark-theme cancel rule sits at five. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button][data-cancel] {
+  background: transparent;
+  border: 1px solid var(--background-border);
+  color: var(--foreground-muted);
+}
+
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button][data-cancel]:hover {
+  background: var(--hover-overlay);
+  color: var(--foreground);
+}
+
+/* A toast offering a choice (the external-move prompt: "Leave as-is" / "Update")
+   gets its buttons on their own row. Inline, two buttons plus a sentence in a
+   356px toast squeezes the sentence to three cramped lines and reads as a
+   crowded row of equals; stacked, the question is a question and the answers
+   are answers. The content claiming the full row is what forces the wrap. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-cancel]) {
+  flex-wrap: wrap;
+  row-gap: 12px;
+  align-items: flex-start;
+}
+
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-cancel])
+  [data-content] {
+  flex: 1 0 100%;
+}
+
+/* A status icon must sit on the line it marks. Sonner centres the whole row, so
+   on a toast with a description the icon drifts to the middle of the paragraph
+   and stops reading as the title's mark. 1px is half the difference between the
+   16px icon and the title's 18.2px line box. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has(
+    [data-description]
+  ) {
+  align-items: flex-start;
+}
+
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has(
+    [data-description]
+  )
+  [data-icon] {
+  margin-top: 1px;
+}
+
+/* Close button: a ghost icon button, square with structural radius, the same
+   affordance SampleBanner's dismiss uses. Sonner's is a bordered circle filled
+   with the toast background — a chip, not a control the app owns.
+
+   Muted, not faint: Ember Faint is sub-AA and DESIGN.md §2 prohibits it on
+   interactive elements, which this is. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-close-button] {
+  top: 8px;
+  height: 24px;
+  width: 24px;
+  border: none;
+  border-radius: var(--radius-structural);
+  background: transparent;
+  color: var(--foreground-muted);
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:hover
+  [data-close-button]:hover,
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-close-button]:hover {
+  background: var(--hover-overlay);
+  border-color: transparent;
+  color: var(--foreground);
+}
+
+/* The close button now sits inside the toast, so the text needs to clear it. */
+[data-sonner-toaster]
+  [data-sonner-toast][data-styled="true"]:has([data-close-button]) {
+  padding-right: 40px;
+}
+
+/* Focus is a 2px accent outline at 2px offset everywhere in Grimoire. Sonner
+   draws focus rings as black box-shadows, which both fails on Iron surfaces and
+   breaks the Shadowless Rule. (The report link inside a description needs no arm
+   here — the base layer's `:focus-visible` rule already gives it this exact ring.
+   It only had to stop transitioning its own outline-colour; see
+   MigrationReportBody.) */
+[data-sonner-toaster] [data-sonner-toast]:focus-visible,
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-button]:focus-visible,
+[data-sonner-toaster]
+  [data-sonner-toast][data-rich-colors][data-styled="true"]
+  [data-close-button]:focus-visible {
+  box-shadow: none;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
