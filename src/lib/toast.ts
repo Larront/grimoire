@@ -143,10 +143,24 @@ export function toastMigrationReport(report: {
   });
 }
 
-/** Show an undo toast. `onConfirm` is called after the toast duration if the user does not click Undo. */
+/**
+ * Show an undo toast. `onConfirm` runs after the toast's duration unless Undo is clicked.
+ *
+ * NOTHING IS DELETED UNTIL THE WINDOW ELAPSES — the destructive call is what gets
+ * deferred, so Undo is a cancelled timer rather than a restore. That is what makes undo
+ * lossless here: a pin's tags and id survive because the delete never happened, and no
+ * caller has to know how to rebuild the thing it just removed.
+ *
+ * `onUndo` is for callers that hid the thing OPTIMISTICALLY, which is the right move
+ * wherever the deletion is visual — a pin the GM is looking at should leave the map on
+ * click, not sit there for five seconds looking like the button failed. Those callers
+ * put it back here. Callers that leave their UI alone until the timer fires (the file
+ * tree) pass nothing and are unaffected.
+ */
 export function toastUndo(
   message: string,
   onConfirm: () => void,
+  onUndo?: () => void,
   duration = 5000,
 ) {
   const timerId = setTimeout(onConfirm, duration);
@@ -155,7 +169,10 @@ export function toastUndo(
     duration,
     action: {
       label: "Undo",
-      onClick: () => clearTimeout(timerId),
+      onClick: () => {
+        clearTimeout(timerId);
+        onUndo?.();
+      },
     },
   });
 }

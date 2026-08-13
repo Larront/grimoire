@@ -7,7 +7,7 @@
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
+  import { CURATED_ICON_COMPONENTS, DEFAULT_PIN_COLOR } from "./pinAppearance";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
@@ -25,7 +25,9 @@
     onTagsChange?: (tags: string[]) => void;
     onToggleLock?: () => void;
     onUpdate: (pin: Pin) => Promise<void>;
-    onDelete: (id: number) => Promise<void>;
+    /** Not awaited, and not a promise: the delete is deferred behind an undo window, so
+        there is nothing for the caller to wait on. See `handlePinDelete` in MapPane. */
+    onDelete: (id: number) => void;
     onOpenNote?: (id: number, title: string) => void;
   }
 
@@ -79,12 +81,13 @@
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
 
+  // The default leads the row, so the swatch a pin starts on is the swatch it returns to.
   const PRESET_COLORS = [
-    "#4a90c4", "#6a9b87", "#b89a5e", "#8b3a3a",
+    DEFAULT_PIN_COLOR, "#6a9b87", "#4a90c4", "#8b3a3a",
     "#6b4e8a", "#5a6b7a", "#c4b8a0", "#3d4a52",
   ];
 
-  const resolvedColor = $derived(pin.color ?? "#4a90c4");
+  const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
 </script>
 
 <!-- Title row -->

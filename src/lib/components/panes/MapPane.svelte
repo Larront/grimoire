@@ -21,6 +21,7 @@
   import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import { toastUndo } from "$lib/toast";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
@@ -213,15 +214,48 @@
     }
   }
 
-  async function handlePinDelete(id: number) {
-    try {
-      await api.deletePin(id);
-      pins = pins.filter((p) => p.id !== id);
-      if (selectedPin?.id === id) selectedPin = null;
-      if (_unlockedPinId === id) _unlockedPinId = null;
-    } catch (e) {
-      console.error("delete pin failed:", e);
-    }
+  /*
+    Deleting a pin is undoable; deleting a shape is not, and the difference is what each
+    one costs to rebuild. A rectangle is redrawn in a second. A pin carries a title, a
+    description, tags and a link to a note — minutes of work behind two clicks and no
+    confirmation step, which is the case DESIGN.md's undo toast exists for. (It refuses a
+    modal here, and rightly: a dialog on every pin would tax the common path to protect
+    the rare one.)
+
+    The pin leaves the map immediately and `deletePin` is what waits. That ordering is the
+    whole reason undo is lossless: the row is still in the database during the window, so
+    its tags and its id come back untouched rather than being rebuilt from what this
+    component happened to be holding. It also means the map reads as it should the instant
+    the GM clicks — a pin that lingered for five seconds would look like a failed click.
+
+    Restored at its own index rather than pushed to the front, so undo leaves the list
+    exactly as it found it.
+  */
+  function handlePinDelete(id: number) {
+    const index = pins.findIndex((p) => p.id === id);
+    if (index === -1) return;
+    const removed = pins[index];
+
+    pins = pins.filter((p) => p.id !== id);
+    if (selectedPin?.id === id) selectedPin = null;
+    if (_unlockedPinId === id) _unlockedPinId = null;
+
+    toastUndo(
+      `"${removed.title}" deleted`,
+      async () => {
+        try {
+          await api.deletePin(id);
+        } catch (e) {
+          // The window elapsed but the delete failed, so the pin still exists on disk
+          // and the map is the thing that is now wrong. Put it back.
+          console.error("delete pin failed:", e);
+          pins = [...pins.slice(0, index), removed, ...pins.slice(index)];
+        }
+      },
+      () => {
+        pins = [...pins.slice(0, index), removed, ...pins.slice(index)];
+      },
+    );
   }
 
   async function handlePinMove(pin: Pin, x: number, y: number) {

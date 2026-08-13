@@ -24,6 +24,16 @@ colors:
   # Feedback
   ember-error: "#d4645a"
   verdant-confirm: "#6ab187"
+  # Graph categorical ramp — dark values; see The Dataviz Exception. The Graph pane is
+  # the only consumer, and these are deliberately NOT the accent presets.
+  viz-cat-1: "#3987e5"
+  viz-cat-2: "#d95926"
+  viz-cat-3: "#199e70"
+  viz-cat-4: "#c98500"
+  viz-cat-5: "#d55181"
+  viz-cat-6: "#008300"
+  viz-cat-7: "#9085e9"
+  viz-cat-8: "#e66767"
 typography:
   display:
     fontFamily: "Metamorphous, Georgia, serif"

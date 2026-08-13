@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-05-09T00:00:00.000Z",
+  "generatedAt": "2026-08-13T22:54:26.269Z",
   "title": "Design System: Grimoire",
   "extensions": {
     "colorMeta": {
@@ -168,6 +168,142 @@
           "#c0bbb6",
           "#faf8f5"
         ]
+      },
+      "viz-cat-1": {
+        "role": "categorical",
+        "displayName": "Signal Blue",
+        "canonical": "#3987e5",
+        "lightStep": "#2a78d6",
+        "tonalRamp": [
+          "oklch(0.15 0.14 250)",
+          "oklch(0.26 0.14 250)",
+          "oklch(0.37 0.14 250)",
+          "oklch(0.48 0.14 250)",
+          "oklch(0.58 0.14 250)",
+          "oklch(0.68 0.14 250)",
+          "oklch(0.79 0.14 250)",
+          "oklch(0.93 0.14 250)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-2": {
+        "role": "categorical",
+        "displayName": "Kiln Orange",
+        "canonical": "#d95926",
+        "lightStep": "#eb6834",
+        "tonalRamp": [
+          "oklch(0.15 0.14 40)",
+          "oklch(0.26 0.14 40)",
+          "oklch(0.37 0.14 40)",
+          "oklch(0.48 0.14 40)",
+          "oklch(0.58 0.14 40)",
+          "oklch(0.68 0.14 40)",
+          "oklch(0.79 0.14 40)",
+          "oklch(0.93 0.14 40)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-3": {
+        "role": "categorical",
+        "displayName": "Verdigris",
+        "canonical": "#199e70",
+        "lightStep": "#1baf7a",
+        "tonalRamp": [
+          "oklch(0.15 0.14 160)",
+          "oklch(0.26 0.14 160)",
+          "oklch(0.37 0.14 160)",
+          "oklch(0.48 0.14 160)",
+          "oklch(0.58 0.14 160)",
+          "oklch(0.68 0.14 160)",
+          "oklch(0.79 0.14 160)",
+          "oklch(0.93 0.14 160)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-4": {
+        "role": "categorical",
+        "displayName": "Old Gold",
+        "canonical": "#c98500",
+        "lightStep": "#eda100",
+        "tonalRamp": [
+          "oklch(0.15 0.14 75)",
+          "oklch(0.26 0.14 75)",
+          "oklch(0.37 0.14 75)",
+          "oklch(0.48 0.14 75)",
+          "oklch(0.58 0.14 75)",
+          "oklch(0.68 0.14 75)",
+          "oklch(0.79 0.14 75)",
+          "oklch(0.93 0.14 75)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-5": {
+        "role": "categorical",
+        "displayName": "Dusk Magenta",
+        "canonical": "#d55181",
+        "lightStep": "#e87ba4",
+        "tonalRamp": [
+          "oklch(0.15 0.14 355)",
+          "oklch(0.26 0.14 355)",
+          "oklch(0.37 0.14 355)",
+          "oklch(0.48 0.14 355)",
+          "oklch(0.58 0.14 355)",
+          "oklch(0.68 0.14 355)",
+          "oklch(0.79 0.14 355)",
+          "oklch(0.93 0.14 355)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-6": {
+        "role": "categorical",
+        "displayName": "Deep Fern",
+        "canonical": "#008300",
+        "lightStep": "#008300",
+        "tonalRamp": [
+          "oklch(0.15 0.14 145)",
+          "oklch(0.26 0.14 145)",
+          "oklch(0.37 0.14 145)",
+          "oklch(0.48 0.14 145)",
+          "oklch(0.58 0.14 145)",
+          "oklch(0.68 0.14 145)",
+          "oklch(0.79 0.14 145)",
+          "oklch(0.93 0.14 145)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-7": {
+        "role": "categorical",
+        "displayName": "Wisteria",
+        "canonical": "#9085e9",
+        "lightStep": "#4a3aa7",
+        "tonalRamp": [
+          "oklch(0.15 0.14 285)",
+          "oklch(0.26 0.14 285)",
+          "oklch(0.37 0.14 285)",
+          "oklch(0.48 0.14 285)",
+          "oklch(0.58 0.14 285)",
+          "oklch(0.68 0.14 285)",
+          "oklch(0.79 0.14 285)",
+          "oklch(0.93 0.14 285)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
+      },
+      "viz-cat-8": {
+        "role": "categorical",
+        "displayName": "Ember Red",
+        "canonical": "#e66767",
+        "lightStep": "#e34948",
+        "tonalRamp": [
+          "oklch(0.15 0.14 25)",
+          "oklch(0.26 0.14 25)",
+          "oklch(0.37 0.14 25)",
+          "oklch(0.48 0.14 25)",
+          "oklch(0.58 0.14 25)",
+          "oklch(0.68 0.14 25)",
+          "oklch(0.79 0.14 25)",
+          "oklch(0.93 0.14 25)"
+        ],
+        "notes": "Graph pane only (The Dataviz Exception). Assigned by slot over the ledger's sorted tag list, never cycled."
       }
     },
     "typographyMeta": {
@@ -196,7 +332,13 @@
         "purpose": "Tags (pill labels), right rail metadata (type, folder, date), inline code, sidebar section header caps. JetBrains Mono only."
       }
     },
-    "shadows": [],
+    "shadows": [
+      {
+        "name": "over-world",
+        "value": "0 4px 12px rgba(0, 0, 0, 0.5)",
+        "purpose": "The only shadow in the system. Panels floating over GM-supplied imagery — map toolbars and pin tooltips, the PDF page, the image lightbox — where the background is unknown and Iron Border alone can disappear into it. Never on chrome over the app's own surfaces."
+      }
+    ],
     "motion": [
       {
         "name": "swift",
@@ -216,24 +358,19 @@
     ],
     "breakpoints": [
       {
-        "name": "tablet-portrait",
-        "value": "600px",
-        "notes": "Minimum supported viewport. All features accessible, denser layout, sidebar starts closed."
+        "name": "window-floor",
+        "value": "920px",
+        "notes": "Enforced by minWidth in tauri.conf.json, not by CSS. Derived from icon rail + sidebar minimum + block gutter + readable prose + trailing inset + the docked detail panel, which is shrink-0. Below it the shell would clip, since html carries overflow-x: hidden."
       },
       {
-        "name": "tablet-landscape",
-        "value": "768px",
-        "notes": "Full feature parity. Sidebar and right rail are overlays, mutually exclusive."
+        "name": "infobox-float",
+        "value": "640px",
+        "notes": "Container query on the prose column, not the window. An Infobox floats beside the text only while ~45 characters still fit next to it: 300 panel + 24 gap + 320 prose. Splitting a pane legitimately stops panels floating."
       },
       {
-        "name": "laptop",
-        "value": "1024px",
-        "notes": "Sidebar and right rail dock. Pointer input primary."
-      },
-      {
-        "name": "desktop",
-        "value": "1280px",
-        "notes": "Full layout. Sidebar docked open by default."
+        "name": "note-column-wide",
+        "value": "64rem",
+        "notes": "Container query. The note column's inset opens from 24px to 40px, and the block gutter tracks it."
       }
     ]
   },
@@ -318,6 +455,11 @@
         "section": "colors"
       },
       {
+        "name": "The Dataviz Exception",
+        "section": "colors",
+        "body": "A node-link graph plots category rather than decorating one, so the Graph pane — and only the Graph pane — may use a categorical ramp. The distinction is whether colour is data being drawn or chrome being dressed up. Two conditions: the ramp is its own eight tokens (--viz-cat-1 … --viz-cat-8), never the accent presets, which are the GM's choice about the app rather than a palette to spend on their data; and slots are assigned in fixed order over the ledger's sorted tag list and never cycled, falling back to Ember Muted past the eighth tag rather than giving two tags one identity. The exception has no redundant channel: a per-tag node shape was built and rejected as illegible at node size, so colour alone encodes the tag and only the first three ramp steps stay separable under red/green colour-blindness. Labels, the filter panel, hover dimming and search carry identity instead; past three tags the answer is faceting, not a ninth hue."
+      },
+      {
         "name": "The Sub-AA Exception",
         "body": "Ember Faint (42% opacity) is intentionally below AA contrast. Reserved strictly for non-essential decorative labels, section headers, and placeholders. Prohibited for body text, interactive elements, or any content that conveys meaning.",
         "section": "colors"
@@ -334,7 +476,7 @@
       },
       {
         "name": "The Shadowless Rule",
-        "body": "No box-shadow or drop-shadow on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border.",
+        "body": "No box-shadow or drop-shadow on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border. Where the line falls: the test is what the surface floats over, not what kind of component it is. A panel over the app's own surfaces separates on a tonal step plus Iron Border and takes no shadow — dropdowns, popovers, tooltips, pickers, toggle knobs, editor toolbars. A panel over the GM's own imagery keeps one, because a map is whatever picture they dropped in and a border can vanish against it. If you are adding a shadow, name the image it sits on; if you cannot, it does not get one.",
         "section": "elevation"
       }
     ],
