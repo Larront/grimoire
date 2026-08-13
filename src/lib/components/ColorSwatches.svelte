@@ -16,7 +16,7 @@
       type="button"
       onclick={() => onchange(color)}
       title={color}
-      class="w-6 h-6 rounded-full border-2 transition-all cursor-pointer
+      class="w-6 h-6 rounded-full border-2 transition-[border-color,transform] cursor-pointer
              {value === color ? 'border-primary scale-110' : 'border-transparent hover:border-background-border'}"
       style="background-color:{color}"
     ></button>

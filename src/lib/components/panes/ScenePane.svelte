@@ -797,33 +797,42 @@
                       />
                     </div>
 
-                    <!-- Loop toggle -->
+                    <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
+                         which measures about 1.6:1 on Iron Dark — under the 3:1 that
+                         WCAG 1.4.11 asks of a control's own graphics, and reading as
+                         disabled when the control is live and one click from changing
+                         what the table hears. Ember Muted is the resting state for an
+                         enabled-but-inactive control everywhere else in the app.
+
+                         `aria-pressed` because these are toggles and were announcing
+                         state only through a label that changed underneath. -->
                     <Button
                       variant="ghost"
                       size="icon"
                       class="size-7 shrink-0"
-                      aria-label={slot.loop ? "Disable loop" : "Enable loop"}
+                      aria-label="Loop"
+                      aria-pressed={!!slot.loop}
                       onclick={() => toggleLoop(slot)}
                     >
                       <Repeat
                         class="size-3.5 {slot.loop
                           ? 'text-primary'
-                          : 'text-muted-foreground/30'}"
+                          : 'text-muted-foreground'}"
                       />
                     </Button>
 
-                    <!-- Shuffle toggle -->
                     <Button
                       variant="ghost"
                       size="icon"
                       class="size-7 shrink-0"
-                      aria-label={!!slot.shuffle ? "Disable shuffle" : "Enable shuffle"}
+                      aria-label="Shuffle"
+                      aria-pressed={!!slot.shuffle}
                       onclick={() => toggleShuffle(slot)}
                     >
                       <Shuffle
                         class="size-3.5 {!!slot.shuffle
                           ? 'text-primary'
-                          : 'text-muted-foreground/30'}"
+                          : 'text-muted-foreground'}"
                       />
                     </Button>
 
@@ -872,7 +881,7 @@
           <button
             data-color-swatch={preset.name}
             aria-label={preset.label}
-            class="size-9 rounded-lg border-2 border-transparent transition-all hover:scale-110 hover:border-foreground/30"
+            class="size-9 rounded-lg border-2 border-transparent transition-[transform,border-color] hover:scale-110 hover:border-foreground/30"
             style="background: {preset.swatch}"
             onclick={() => applyColor(preset.bg)}
           ></button>
@@ -897,7 +906,7 @@
           <button
             data-icon-btn={name}
             aria-label={name}
-            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-all hover:border-primary/30 hover:bg-muted"
+            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
             onclick={() => applyIcon(name)}
           >
             <Icon class="size-5 text-foreground/70" />

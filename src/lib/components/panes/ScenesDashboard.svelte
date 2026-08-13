@@ -192,7 +192,7 @@
                 data-playing={isPlaying || undefined}
                 role="button"
                 tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-all hover:ring-1 hover:ring-border {isPlaying ? 'ring-2 ring-primary' : ''}"
+                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:ring-1 hover:ring-border {isPlaying ? 'ring-2 ring-primary' : ''}"
                 onclick={() => openScene(scene)}
                 onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
               >
@@ -315,7 +315,7 @@
           <button
             data-color-swatch={preset.name}
             aria-label={preset.label}
-            class="size-9 rounded-lg border-2 border-transparent transition-all hover:scale-110 hover:border-foreground/30"
+            class="size-9 rounded-lg border-2 border-transparent transition-[transform,border-color] hover:scale-110 hover:border-foreground/30"
             style="background: {preset.swatch}"
             onclick={() => applyColor(colorPickerScene, preset.bg)}
           ></button>
@@ -342,7 +342,7 @@
           <button
             data-icon-btn={name}
             aria-label={name}
-            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-all hover:border-primary/30 hover:bg-muted"
+            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
             onclick={() => applyIcon(iconPickerScene, name)}
           >
             <Icon class="size-5 text-foreground/70" />

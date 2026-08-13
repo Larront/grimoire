@@ -117,7 +117,7 @@
             class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
                    flex items-center gap-2 text-left w-full min-w-0
                    hover:bg-(--background-elevated) transition-colors duration-150
-                   disabled:opacity-50 cursor-default"
+                   disabled:opacity-50 cursor-pointer disabled:cursor-default"
           >
             <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
             {#if parent}
@@ -125,7 +125,7 @@
                 {parent}
               </span>
             {:else}
-              <span class="font-sans text-[12px] text-foreground/30 italic">
+              <span class="font-sans text-[12px] text-muted-foreground italic">
                 Choose location...
               </span>
             {/if}
