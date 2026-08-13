@@ -9,7 +9,44 @@ permissions:
   contents: write
 
 jobs:
+  # The draft is created ONCE, here, before any platform builds.
+  #
+  # Left to itself, tauri-action creates-or-finds the release from inside each
+  # matrix job, and four jobs starting at the same moment all look, all find
+  # nothing, and more than one creates. That is not theoretical: 0.3.0 shipped
+  # TWO drafts of the same tag, created in the same second, with the 17 artifacts
+  # split across them — and, worse, a `latest.json` in each carrying only the
+  # platforms that happened to land beside it. Publishing either one would have
+  # offered no update at all to half the platforms, and `gh release view v0.3.0`
+  # could not say which release it meant.
+  #
+  # The merge itself was never broken: two jobs sharing one draft merged their
+  # platforms into a single latest.json correctly. Only the *finding* raced. So
+  # this job creates the draft, every build job is handed its id, and there is
+  # nothing left to race over.
+  create-release:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/github-script@v7
+        id: create
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Grimoire ${tag}`,
+              draft: true,
+              prerelease: false,
+            });
+            core.info(`Created draft release ${data.id} for ${tag}`);
+            return data.id;
+
   build:
+    needs: create-release
     environment: release
     strategy:
       fail-fast: false
@@ -71,10 +108,11 @@ jobs:
           # Add SPOTIFY_CLIENT_ID to the `release` environment in repo settings.
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Grimoire ${{ github.ref_name }}"
-          releaseDraft: true
-          prerelease: false
+          # Upload into the draft create-release already made, rather than
+          # creating-or-finding one per job. This is the whole race guard:
+          # releaseId replaces tagName/releaseName/releaseDraft, which are the
+          # inputs that made every job go looking for a release of its own.
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           # Emit latest.json (the updater manifest) and attach it to the release.
           includeUpdaterJson: true
           args: ${{ matrix.args }}

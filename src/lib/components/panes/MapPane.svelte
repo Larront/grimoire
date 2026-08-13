@@ -21,6 +21,7 @@
   import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import { toastUndo } from "$lib/toast";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
@@ -213,6 +214,50 @@
     }
   }
 
+  /*
+    Deleting a pin is undoable; deleting a shape is not, and the difference is what each
+    one costs to rebuild. A rectangle is redrawn in a second. A pin carries a title, a
+    description, tags and a link to a note — minutes of work behind two clicks and no
+    confirmation step, which is the case DESIGN.md's undo toast exists for. (It refuses a
+    modal here, and rightly: a dialog on every pin would tax the common path to protect
+    the rare one.)
+
+    The pin leaves the map immediately and `deletePin` is what waits. That ordering is the
+    whole reason undo is lossless: the row is still in the database during the window, so
+    its tags and its id come back untouched rather than being rebuilt from what this
+    component happened to be holding. It also means the map reads as it should the instant
+    the GM clicks — a pin that lingered for five seconds would look like a failed click.
+
+    Restored at its own index rather than pushed to the front, so undo leaves the list
+    exactly as it found it.
+  */
+  function handlePinDelete(id: number) {
+    const index = pins.findIndex((p) => p.id === id);
+    if (index === -1) return;
+    const removed = pins[index];
+
+    pins = pins.filter((p) => p.id !== id);
+    if (selectedPin?.id === id) selectedPin = null;
+    if (_unlockedPinId === id) _unlockedPinId = null;
+
+    toastUndo(
+      `"${removed.title}" deleted`,
+      async () => {
+        try {
+          await api.deletePin(id);
+        } catch (e) {
+          // The window elapsed but the delete failed, so the pin still exists on disk
+          // and the map is the thing that is now wrong. Put it back.
+          console.error("delete pin failed:", e);
+          pins = [...pins.slice(0, index), removed, ...pins.slice(index)];
+        }
+      },
+      () => {
+        pins = [...pins.slice(0, index), removed, ...pins.slice(index)];
+      },
+    );
+  }
+
   async function handlePinMove(pin: Pin, x: number, y: number) {
     try {
       const result = await api.updatePin({ ...pin, x, y }) as Pin;
@@ -298,7 +343,69 @@
     }
   }
 
+  /*
+    Delete the selected shape from the keyboard.
+
+    The panel's button is the discoverable route; this is the one a GM reaches for without
+    thinking, and its absence was most of why deleting a shape felt impossible — you draw
+    a rectangle, it is selected, you press Delete, and nothing happens.
+
+    Guarded on the event target, because this listens at the window: a `Backspace` while
+    renaming the map title, editing a label, or typing anywhere else must delete a
+    character, not a rectangle. Escape clears the selection, which is the other half of
+    the same reflex.
+  */
+  function isTypingIn(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName;
+    return (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      el.isContentEditable
+    );
+  }
+
+  function onMapKeydown(e: KeyboardEvent) {
+    if (isTypingIn(e.target)) return;
+
+    if (e.key === "Escape") {
+      if (placingMode || annotationMode) {
+        placingMode = false;
+        annotationMode = null;
+      } else if (selectedAnnotation || selectedPin) {
+        selectedAnnotation = null;
+        selectedPin = null;
+      }
+      return;
+    }
+
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    // Only ever one of the two is selected — every path that sets one clears the other —
+    // so the order here is a formality rather than a precedence rule.
+    if (selectedAnnotation) {
+      e.preventDefault();
+      void handleAnnotationDelete(selectedAnnotation.id);
+    } else if (selectedPin) {
+      e.preventDefault();
+      void handlePinDelete(selectedPin.id);
+    }
+  }
+
   // ── Tool helpers ───────────────────────────────────────────────────────────
+  /* Arming the pin tool disarms everything else and drops any selection, so the pane is
+     only ever in one mode. Lifted out of the button's markup when the toolbar became a
+     snippet — the other five tools already called a named function. */
+  function togglePlacing() {
+    placingMode = !placingMode;
+    if (placingMode) {
+      selectedPin = null;
+      selectedAnnotation = null;
+      annotationMode = null;
+    }
+  }
+
   function setAnnotationMode(mode: AnnotationKind) {
     if (annotationMode === mode) {
       annotationMode = null;
@@ -311,16 +418,60 @@
   }
 </script>
 
+<!--
+  One tool button, stated once. Six of them used to carry the same class string inline,
+  which is how all six came to share the same two defects at once.
+
+  ARMED IS A SOLID FILL. The armed state was `bg-accent`, which is not the brand accent
+  at all — shadcn's `--accent` is a 12%-alpha hover surface (see the note in app.css) —
+  so an armed tool was a wash a shade off its own hover, and the hover beneath it,
+  `bg-accent/10`, composed that 12% down to about 1.2% and vanished outright. A GM could
+  not see which tool was live, which on this pane decides what the next click on the map
+  does. Solid `--primary` because arming a tool is a *mode*: it changes the meaning of
+  every subsequent click until it is cancelled, and DESIGN.md spends the accent exactly
+  on states like that. The sidebar's quieter tint is for a resting selection, not a mode.
+
+  ARMED IS ALSO `aria-pressed`. The buttons carried a `title` and nothing else, so the
+  state a screen reader got was whatever the tooltip happened to say. `armed === null`
+  marks the momentary buttons (zoom), which are not toggles and take no pressed state.
+-->
+{#snippet tool(
+  Icon: typeof MapPinPlus,
+  label: string,
+  armed: boolean | null,
+  onclick: () => void,
+  ArmedIcon?: typeof MapPinPlus,
+  armedLabel?: string,
+)}
+  {@const on = armed === true}
+  {@const Rendered = on && ArmedIcon ? ArmedIcon : Icon}
+  <button
+    type="button"
+    {onclick}
+    aria-label={on && armedLabel ? armedLabel : label}
+    aria-pressed={armed === null ? undefined : on}
+    title={on && armedLabel ? armedLabel : label}
+    class="size-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer
+           {on
+      ? 'bg-primary text-primary-foreground'
+      : 'text-muted-foreground hover:text-foreground hover:bg-surface-hover'}"
+  >
+    <Rendered class="size-4" />
+  </button>
+{/snippet}
+
+<svelte:window onkeydown={onMapKeydown} />
+
 {#if maps.isLoading || isLoadingData}
   <div class="flex h-full items-center justify-center">
-    <LoaderCircle class="w-5 h-5 animate-spin text-accent" />
+    <LoaderCircle class="w-5 h-5 animate-spin text-primary" />
   </div>
 {:else if !mapData}
   <div class="flex h-full items-center justify-center">
     <div class="flex flex-col items-center gap-4 text-center max-w-xs">
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
-      <p class="font-display text-lg font-semibold">Map not found</p>
-      <a href="/" class="text-sm text-accent hover:underline">← Back to ledger</a>
+      <p class="font-sans text-base font-semibold">Map not found</p>
+      <a href="/" class="text-sm text-primary hover:underline">← Back to ledger</a>
     </div>
   </div>
 {:else if loadError}
@@ -328,7 +479,7 @@
   <div class="flex h-full items-center justify-center" data-testid="map-load-error">
     <div class="flex flex-col items-center gap-4 text-center max-w-xs">
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
-      <p class="font-display text-lg font-semibold">Can't display this map</p>
+      <p class="font-sans text-base font-semibold">Can't display this map</p>
       <p class="text-sm text-muted-foreground leading-relaxed">
         Its image couldn't be read — the file may have been moved or deleted
         outside Grimoire.
@@ -339,11 +490,14 @@
   <!-- Empty state: no image assigned yet -->
   <div class="flex h-full items-center justify-center">
     <div class="flex flex-col items-center gap-6 text-center max-w-xs">
-      <div class="flex size-14 items-center justify-center rounded-2xl bg-accent/10 border border-accent/20">
-        <ImagePlus class="size-7 text-accent" strokeWidth={1.5} />
+      <div class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted">
+        <ImagePlus class="size-7 text-primary" strokeWidth={1.5} />
       </div>
       <div class="space-y-1.5">
-        <p class="font-display text-xl font-semibold">{mapData.title}</p>
+        <!-- The GM's name for this map, so it speaks in the world's voice — Metamorphous
+             at 400, never bolded (DESIGN.md §3). It was asking for `font-display`, which
+             is not a class Tailwind compiles, so it has been rendering in Nunito. -->
+        <p class="font-heading text-xl">{mapData.title}</p>
         <p class="text-sm text-muted-foreground leading-relaxed">
           Add a background image to start placing pins.
         </p>
@@ -351,8 +505,8 @@
       <button
         onclick={handleAssignImage}
         disabled={isAssigningImage}
-        class="px-5 py-2.5 rounded-lg bg-accent text-accent-foreground text-sm font-semibold
-               hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        class="px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium
+               hover:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         {isAssigningImage ? "Copying image…" : "Choose background image"}
       </button>
@@ -412,17 +566,19 @@
             if (e.key === "Enter") { e.preventDefault(); commitTitleRename(); }
             if (e.key === "Escape") renamingTitle = false;
           }}
+          aria-label="Map name"
           class="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5
-                 font-display text-sm font-semibold outline-none focus:border-accent shadow-sm"
+                 font-heading text-sm shadow-sm"
         />
       {:else}
         <button
           onclick={startTitleRename}
           title="Click to rename"
+          aria-label="Rename map"
           class="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border/60
-                 rounded-lg px-3 py-1.5 hover:border-accent/60 transition-colors cursor-pointer shadow-sm"
+                 rounded-lg px-3 py-1.5 hover:border-primary/60 transition-colors cursor-pointer shadow-sm"
         >
-          <span class="font-display text-sm font-semibold tracking-wide whitespace-nowrap">
+          <span class="font-heading text-sm tracking-wide whitespace-nowrap">
             {mapData.title}
           </span>
         </button>
@@ -433,89 +589,22 @@
     <div
       class="absolute left-3 top-1/2 -translate-y-1/2 z-1000 flex flex-col items-center
              bg-background/90 backdrop-blur-sm border border-border/60 rounded-xl shadow-md p-1 gap-0.5"
+      role="toolbar"
+      aria-orientation="vertical"
+      aria-label="Map tools"
     >
-      <!-- Place pin -->
-      <button
-        onclick={() => {
-          placingMode = !placingMode;
-          if (placingMode) { selectedPin = null; selectedAnnotation = null; annotationMode = null; }
-        }}
-        title={placingMode ? "Cancel placing" : "Place pin"}
-        class="size-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer
-               {placingMode
-          ? 'bg-accent text-accent-foreground'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}"
-      >
-        {#if placingMode}
-          <X class="size-4" />
-        {:else}
-          <MapPinPlus class="size-4" />
-        {/if}
-      </button>
+      {@render tool(MapPinPlus, "Place pin", placingMode, togglePlacing, X, "Cancel placing")}
 
-      <!-- Divider -->
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
-      <!-- Text label -->
-      <button
-        onclick={() => setAnnotationMode('text')}
-        title={annotationMode === 'text' ? "Cancel text label" : "Place text label"}
-        class="size-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer
-               {annotationMode === 'text'
-          ? 'bg-accent text-accent-foreground'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}"
-      >
-        <Type class="size-4" />
-      </button>
+      {@render tool(Type, "Place text label", annotationMode === 'text', () => setAnnotationMode('text'))}
+      {@render tool(RectangleHorizontal, "Draw rectangle", annotationMode === 'rect', () => setAnnotationMode('rect'))}
+      {@render tool(Circle, "Draw circle", annotationMode === 'circle', () => setAnnotationMode('circle'))}
 
-      <!-- Rectangle -->
-      <button
-        onclick={() => setAnnotationMode('rect')}
-        title={annotationMode === 'rect' ? "Cancel rectangle" : "Draw rectangle"}
-        class="size-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer
-               {annotationMode === 'rect'
-          ? 'bg-accent text-accent-foreground'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}"
-      >
-        <RectangleHorizontal class="size-4" />
-      </button>
-
-      <!-- Circle -->
-      <button
-        onclick={() => setAnnotationMode('circle')}
-        title={annotationMode === 'circle' ? "Cancel circle" : "Draw circle"}
-        class="size-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer
-               {annotationMode === 'circle'
-          ? 'bg-accent text-accent-foreground'
-          : 'text-muted-foreground hover:text-foreground hover:bg-accent/10'}"
-      >
-        <Circle class="size-4" />
-      </button>
-
-      <!-- Divider -->
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
-      <!-- Zoom in -->
-      <button
-        onclick={() => leafletMap?.zoomIn()}
-        title="Zoom in"
-        class="size-9 flex items-center justify-center rounded-lg
-               text-muted-foreground hover:text-foreground hover:bg-accent/10
-               transition-colors cursor-pointer"
-      >
-        <ZoomIn class="size-4" />
-      </button>
-
-      <!-- Zoom out -->
-      <button
-        onclick={() => leafletMap?.zoomOut()}
-        title="Zoom out"
-        class="size-9 flex items-center justify-center rounded-lg
-               text-muted-foreground hover:text-foreground hover:bg-accent/10
-               transition-colors cursor-pointer"
-      >
-        <ZoomOut class="size-4" />
-      </button>
+      {@render tool(ZoomIn, "Zoom in", null, () => leafletMap?.zoomIn())}
+      {@render tool(ZoomOut, "Zoom out", null, () => leafletMap?.zoomOut())}
     </div>
 
     <!-- Mode hint -->
@@ -564,6 +653,7 @@
               pins = pins.map((p) => (p.id === saved.id ? saved : p));
               selectedPin = saved;
             }}
+            onDelete={handlePinDelete}
             onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
           />
         </DetailPanel>

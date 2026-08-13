@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { mount, unmount } from "svelte";
-  import type { Map as LedgerMap, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
+  import type { Map as LedgerMap, Pin, PinCategory, MapAnnotation, AnnotationKind, PinShape } from "$lib/types/ledger";
   import type { Map as LeafletMap, Marker } from "leaflet";
   import {
     CURATED_ICON_COMPONENTS,
     resolvedAppearance,
+    defaultAppearance,
     buildDivIcon,
     tooltipOffset,
   } from "./pinAppearance";
@@ -102,6 +103,98 @@
     previewLayer: import("leaflet").Rectangle | import("leaflet").Circle | null;
   };
   let drawingState: DrawingState | null = null;
+
+  /*
+    THE PLACEMENT GHOST — a translucent pin riding the cursor while the place-pin tool is
+    armed, so the answer to "where will this land, and what will it look like?" is on
+    screen before the click rather than after it.
+
+    A crosshair cursor alone marks the point but says nothing about the pin, and the pin's
+    anchor is not its centre — a teardrop's tip is at the bottom, a banner's near its top
+    — so "where the cursor is" and "where the pin ends up" are genuinely different
+    questions for every shape but the circle. Rendering the real icon at the real anchor
+    answers both at once, because it IS the marker: same `buildDivIcon`, same appearance
+    the pin will be created with, only dimmed.
+
+    `defaultAppearance()` rather than a hardcoded triple, because `handlePinPlace` creates
+    the pin with null shape/colour/icon and lets `resolvedAppearance` decide. A ghost that
+    restated those defaults would be a promise that drifts.
+
+    Non-interactive and below nothing: `interactive: false` keeps it out of the way of the
+    click it is previewing, which would otherwise land on the ghost instead of the map.
+  */
+  let ghostMarker: Marker | null = null;
+
+  function removeGhost() {
+    ghostMarker?.remove();
+    ghostMarker = null;
+  }
+
+  function moveGhostTo(latlng: import("leaflet").LatLng) {
+    if (!L || !leafletMap) return;
+    if (ghostMarker) {
+      ghostMarker.setLatLng(latlng);
+      return;
+    }
+    const app = defaultAppearance();
+    const iconHtml = iconHtmlCache?.get(app.icon) ?? "";
+    ghostMarker = L.marker(latlng, {
+      icon: buildDivIcon(app.shape, app.color, iconHtml, L, false, "pin-ghost"),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 2000,
+    }).addTo(leafletMap);
+  }
+
+  $effect(() => {
+    const armed = placingMode ?? false;
+    const m = leafletMap;
+    if (!m || !L) return;
+    if (!armed) {
+      removeGhost();
+      return;
+    }
+
+    const onMove = (e: import("leaflet").LeafletMouseEvent) => moveGhostTo(e.latlng);
+    // Off the canvas entirely — otherwise the ghost is left stranded at the edge,
+    // still claiming a placement the GM has moved away from.
+    const onOut = () => removeGhost();
+
+    m.on("mousemove", onMove);
+    m.on("mouseout", onOut);
+    return () => {
+      m.off("mousemove", onMove);
+      m.off("mouseout", onOut);
+      removeGhost();
+    };
+  });
+
+  /** A pin's name, below the pin, clear of whichever shape it is. */
+  function pinTooltipOptions(shape: PinShape): import("leaflet").TooltipOptions {
+    return {
+      permanent: false,
+      direction: "bottom",
+      offset: tooltipOffset(shape),
+      opacity: 1,
+      className: "grimoire-tooltip",
+    } as import("leaflet").TooltipOptions;
+  }
+
+  /**
+   * A design token, resolved to a concrete value.
+   *
+   * Leaflet writes these onto SVG presentation attributes (`stroke`, `fill`), where a
+   * `var()` does not resolve — so unlike the stylesheet at the bottom of this file, the
+   * drawing code cannot simply name the token and has to hand over the value. That is
+   * why the preview colours were literals in the first place; the literals it reached
+   * for were Tailwind's slate ramp, which DESIGN.md §2 rules out ("never cold grey").
+   */
+  function token(name: string, fallback: string): string {
+    return (
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+      fallback
+    );
+  }
 
   function escapeHtml(s: string): string {
     return s
@@ -342,8 +435,8 @@
             (drawingState.previewLayer as import("leaflet").Rectangle).setBounds(bds);
           } else {
             drawingState.previewLayer = leaflet.rectangle(bds, {
-              color: '#94a3b8',
-              fillColor: '#e2e8f0',
+              color: token('--foreground-muted', '#a39e99'),
+              fillColor: token('--foreground', '#f0ece8'),
               fillOpacity: 0.15,
               weight: 2,
               dashArray: '6 4',
@@ -361,8 +454,8 @@
           } else {
             drawingState.previewLayer = leaflet.circle(center, {
               radius,
-              color: '#94a3b8',
-              fillColor: '#e2e8f0',
+              color: token('--foreground-muted', '#a39e99'),
+              fillColor: token('--foreground', '#f0ece8'),
               fillOpacity: 0.15,
               weight: 2,
               dashArray: '6 4',
@@ -493,13 +586,7 @@
           pin.x * map.image_width!,
         ]);
         existing.unbindTooltip();
-        existing.bindTooltip(pin.title || "Pin", {
-          permanent: false,
-          direction: "bottom",
-          offset: tooltipOffset(app.shape),
-          opacity: 1,
-          className: "grimoire-tooltip",
-        } as import("leaflet").TooltipOptions);
+        existing.bindTooltip(pin.title || "Pin", pinTooltipOptions(app.shape));
         existing.off("click");
         existing.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
@@ -525,13 +612,7 @@
           { icon, draggable: pin.id === unlockedPinId },
         );
         marker.addTo(leafletMap!);
-        marker.bindTooltip(pin.title || "Pin", {
-          permanent: false,
-          direction: "bottom",
-          offset: tooltipOffset(app.shape),
-          opacity: 1,
-          className: "grimoire-tooltip",
-        } as import("leaflet").TooltipOptions);
+        marker.bindTooltip(pin.title || "Pin", pinTooltipOptions(app.shape));
         marker.on("click", (e: import("leaflet").LeafletMouseEvent) => {
           e.originalEvent.stopPropagation();
           onpinclick(pin);
@@ -627,12 +708,20 @@
 <div bind:this={mapEl} class="w-full h-full"></div>
 
 <style>
+  /* Tokens, not the cold slate this arrived wearing. `rgba(10,14,20,.92)` is a
+     blue-black and `#e2e8f0` is slate-200 — Tailwind defaults that DESIGN.md §2 rules
+     out in as many words ("warm dark neutrals … never cold grey"). Against Iron Dark the
+     difference is visible: the tooltip read as a notification from a different program.
+
+     The shadow stays. This floats over whatever image the GM dropped in, which is the
+     one case DESIGN.md's Shadowless Rule leaves open — a border alone can disappear into
+     an arbitrary picture. */
   :global(.grimoire-tooltip) {
-    background: rgba(10, 14, 20, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
+    background: var(--background-elevated);
+    border: 1px solid var(--background-border);
+    border-radius: var(--radius-structural);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    color: #e2e8f0;
+    color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 12px;
     padding: 4px 8px;
@@ -644,6 +733,15 @@
   }
   :global(.placing-pin) {
     cursor: crosshair !important;
+  }
+
+  /* The placement ghost. Translucent enough to read as a preview rather than a placed
+     pin, opaque enough to show its shape and icon against a busy map. `pointer-events`
+     off as well as `interactive: false` on the marker, because the icon's own inner
+     divs are what would otherwise swallow the click. */
+  :global(.pin-ghost) {
+    opacity: 0.45;
+    pointer-events: none !important;
   }
   :global(.annotation-mode-text) {
     cursor: text !important;

@@ -454,7 +454,16 @@
         {/if}
       </button>
 
-      <!-- Master volume: visual track + transparent input + visible thumb -->
+      <!-- Master volume: visual track + transparent input + visible thumb.
+
+           `width` and `left` here are a deliberate exception to DESIGN.md's rule against
+           animating layout properties, and the reason is that both alternatives are
+           worse. `scaleX` on the fill squashes the pill's rounded ends as it grows —
+           a visible defect traded for an invisible saving. Driving the thumb by
+           `transform` needs the offset in pixels, which means measuring a 20px track
+           every frame to avoid animating `left`. The rule is about panels and drawers
+           sweeping across the pane; this is a 4px-tall bar inside its own containing
+           block, animating for 75ms while a GM drags a slider. -->
       <div class="relative flex h-3 w-20 shrink-0 items-center">
         <div class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40">
           <div

@@ -10,7 +10,7 @@
 
 <script lang="ts">
   import type { MapAnnotation } from "$lib/types/ledger";
-  import { Lock, LockOpen } from "@lucide/svelte";
+  import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
 
@@ -129,13 +129,29 @@
   />
 </DetailSection>
 
-<!-- Actions -->
+<!--
+  Actions.
+
+  This was `font-mono text-[10px] text-foreground-faint` — the smallest, faintest text in
+  the app, at roughly 2.8:1, which is the treatment DESIGN.md's Sub-AA Exception reserves
+  for decorative labels and explicitly forbids on interactive elements. It was the only
+  way to remove a shape from a map and it read as a caption, so it was reported as a
+  missing feature rather than a hard-to-see one. Ember Error, at label size, with the
+  icon DESIGN.md pairs with every destructive state.
+
+  Still one click and no confirmation dialog, which is deliberate: DESIGN.md refuses a
+  modal for this, and a mis-deleted rectangle is redrawn in a second. The keyboard route
+  (Delete / Backspace on a selected shape) is wired in MapPane and is the reason a
+  discoverable button here is not the only way in.
+-->
 <DetailSection label="Actions" sectionKey="actions">
   <button
     type="button"
     onclick={() => onDelete(annotation.id)}
-    class="font-mono text-[10px] text-foreground-faint hover:text-error transition-colors cursor-pointer"
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+           text-error hover:bg-error/10 transition-colors cursor-pointer"
   >
-    Delete annotation
+    <Trash2 class="size-3.5 shrink-0" />
+    Delete {KIND_LABELS[annotation.kind].toLowerCase()}
   </button>
 </DetailSection>

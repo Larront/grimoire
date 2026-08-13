@@ -31,7 +31,7 @@
   });
 </script>
 
-<div class="w-64 rounded-lg border border-border bg-popover p-1.5 shadow-lg select-none">
+<div class="w-64 rounded-lg border border-border bg-popover p-1.5 select-none">
   <div class="relative mb-1.5">
     <Search
       class="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"

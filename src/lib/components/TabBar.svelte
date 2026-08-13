@@ -240,7 +240,7 @@
 			</button>
 			{#if dropdownOpen}
 				<div
-					class="absolute right-0 top-full z-50 min-w-[180px] rounded-lg border border-sidebar-border bg-popover text-popover-foreground shadow-md p-1"
+					class="absolute right-0 top-full z-50 min-w-[180px] rounded-lg border border-sidebar-border bg-popover text-popover-foreground p-1"
 				>
 					{#each tabList as tab, i (tab.id + tab.type)}
 						{@const Icon = getIcon(tab.type)}
@@ -271,7 +271,7 @@
 {#if isDragging && dragSrcIdx >= 0 && dragSrcIdx < tabList.length}
 	{@const GhostIcon = getIcon(tabList[dragSrcIdx].type)}
 	<div
-		class="fixed pointer-events-none z-9999 flex items-center gap-1.5 px-3 py-1 rounded border border-primary/40 bg-background/95 shadow-lg text-sm text-foreground -translate-x-1/2"
+		class="fixed pointer-events-none z-9999 flex items-center gap-1.5 px-3 py-1 rounded border border-primary/40 bg-background/95 text-sm text-foreground -translate-x-1/2"
 		style="left: {ghostX}px; top: {ghostY - 36}px"
 	>
 		<GhostIcon class="size-3.5 shrink-0" />

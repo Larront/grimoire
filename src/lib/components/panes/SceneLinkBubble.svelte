@@ -57,7 +57,7 @@
 
 <div class="relative">
   <div
-    class="flex items-center gap-1.5 rounded-lg border border-border bg-popover px-1.5 py-1 shadow-md"
+    class="flex items-center gap-1.5 rounded-lg border border-border bg-popover px-1.5 py-1"
     role="toolbar"
     aria-label="Scene-link controls"
   >

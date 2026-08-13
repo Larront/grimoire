@@ -351,6 +351,12 @@ pub fn write_note_content(
     let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
     let full_path = validate_parent_path(&ledger_path, &note_path)?;
 
+    // `content` is the note's *body* — the editor is handed a buffer with the
+    // frontmatter already split off, so writing it as-is would erase the block
+    // on every autosave (tags, aliases, and the foreign keys the portability
+    // contract promises to keep). Restore it from the file as it stands now.
+    let content = frontmatter::body_save_content(&full_path, &content);
+
     // Borrow connection and search_index as separate fields of *state so the
     // borrow checker allows both to be live when calling the mutation envelope.
     let state_ref = &mut *state;

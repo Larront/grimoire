@@ -24,6 +24,16 @@ colors:
   # Feedback
   ember-error: "#d4645a"
   verdant-confirm: "#6ab187"
+  # Graph categorical ramp — dark values; see The Dataviz Exception. The Graph pane is
+  # the only consumer, and these are deliberately NOT the accent presets.
+  viz-cat-1: "#3987e5"
+  viz-cat-2: "#d95926"
+  viz-cat-3: "#199e70"
+  viz-cat-4: "#c98500"
+  viz-cat-5: "#d55181"
+  viz-cat-6: "#008300"
+  viz-cat-7: "#9085e9"
+  viz-cat-8: "#e66767"
 typography:
   display:
     fontFamily: "Metamorphous, Georgia, serif"
@@ -159,6 +169,12 @@ _Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), I
 
 **The Sub-AA Exception.** Ember Faint (42% opacity) is intentionally below AA contrast. Reserved strictly for non-essential decorative labels, section headers, and placeholders. Prohibited for body text, interactive elements, or any content that conveys meaning.
 
+**The Dataviz Exception.** A node-link graph plots category rather than decorating one, so the Graph pane — and only the Graph pane — may use a categorical ramp. The distinction is whether colour is *data being drawn* or *chrome being dressed up*: a tag colouring a node in the graph is the former; a tag colouring its own chip in the sidebar is the latter, and stays refused.
+
+The exception is narrow and carries two conditions. **The ramp is its own eight tokens** (`--viz-cat-1` … `--viz-cat-8`, defined in `app.css` with a stepped light-mode set), never the accent presets — those are the GM's choice about the app, not a palette to spend on their data. **Slots are assigned in fixed order over the ledger's sorted tag list and never cycled**; past the eighth tag, colour falls back to Ember Muted rather than wrapping round and giving two tags one identity. The assignment lives in `graph-palette.ts` so that every surface showing a tag's colour — the graph, the filter panel, the Tag Manager — resolves it from one place.
+
+_The channel this exception does not have._ A per-tag node shape was built as the redundant channel and rejected: eight silhouettes at a 16px node read as smudges and cost more legibility than they bought. So in the graph, **colour is the only thing encoding which tag a node carries**, and a node-link diagram is an all-pairs form in which only the first three ramp steps stay separable under red/green colour-blindness. From the fourth tag on, some readers cannot tell two nodes apart by colour. That is accepted, not overlooked: every node is labelled, the filter panel names each tag beside its swatch and can isolate one at a time, hover dims everything but a node's neighbours, and search finds by name. If the graph ever needs to be honest about more than three tags at once, the answer is faceting or folding to "Other" — not a ninth hue, and not a shape channel returning by the back door.
+
 ## 3. Typography: Two Voices
 
 **Tool Font:** Nunito (sans-serif, fallback: system-ui, sans-serif)
@@ -197,6 +213,8 @@ This is a direct expression of "the tool disappears." Shadows would make the chr
 ### Named Rules
 
 **The Shadowless Rule.** No `box-shadow` or `drop-shadow` on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border. Shadows exist in the GM's world — in scene art, map overlays, atmospheric imagery — not in the tool surrounding them.
+
+_Where the line falls._ "Chrome" was doing unstated work in that sentence, and the ambiguity cost: a dozen popovers and dropdowns grew shadows while the toast stylesheet was busy stripping sonner's, both citing this rule. **The test is what the surface floats over, not what kind of component it is.** A panel over the app's own surfaces knows what is behind it — Iron Deep, Iron Dark, or Iron Raised — and separates on a tonal step plus Iron Border, so it takes no shadow: dropdowns, popovers, tooltips, pickers, toggle knobs, editor toolbars. A panel over the GM's own imagery does not: a map is whatever picture they dropped in, a PDF page is white, scene art is arbitrary, and against an unknown background a border alone can vanish. Those keep a shadow, and it is the one place in the app that has one. If you are adding a shadow, name the image it sits on; if you cannot, it does not get one.
 
 ## 5. Components
 

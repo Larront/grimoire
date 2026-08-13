@@ -1,4 +1,5 @@
 import { toast } from "svelte-sonner";
+import MigrationReportBody from "$lib/components/toasts/MigrationReportBody.svelte";
 
 // Errors auto-expire like every other toast: the tool must never pin a
 // permanent surface to the corner during live play (DESIGN.md — "the tool
@@ -103,6 +104,20 @@ export function toastMigrationReport(report: {
   const failed = report.failed.length;
   if (done === 0 && failed === 0) return;
 
+  // The report is a place on disk, so both descriptions render it as a link that
+  // reveals the file rather than as a path the GM has to read and retype. See
+  // MigrationReportBody for why revealing beats opening.
+  const body = (prose: string) => ({
+    description: MigrationReportBody,
+    componentProps: {
+      prose,
+      reportPath: report.report_path,
+      // Passed in rather than imported by the component, which would make
+      // toast.ts and the component import each other.
+      onError: () => toastError("Couldn't show the report — it may have moved"),
+    },
+  });
+
   if (failed > 0) {
     toast.error(
       `${failed} note${failed === 1 ? "" : "s"} couldn't be updated`,
@@ -110,7 +125,9 @@ export function toastMigrationReport(report: {
         id: "format-migration",
         duration: Infinity,
         closeButton: true,
-        description: `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them: ${report.report_path}`,
+        ...body(
+          `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them:`,
+        ),
       },
     );
     return;
@@ -120,14 +137,30 @@ export function toastMigrationReport(report: {
     id: "format-migration",
     duration: ERROR_DURATION,
     closeButton: true,
-    description: `Copies of them from before the change, and a report of what changed, are here: ${report.report_path}`,
+    ...body(
+      "Copies of them from before the change, and a report of what changed, are here:",
+    ),
   });
 }
 
-/** Show an undo toast. `onConfirm` is called after the toast duration if the user does not click Undo. */
+/**
+ * Show an undo toast. `onConfirm` runs after the toast's duration unless Undo is clicked.
+ *
+ * NOTHING IS DELETED UNTIL THE WINDOW ELAPSES — the destructive call is what gets
+ * deferred, so Undo is a cancelled timer rather than a restore. That is what makes undo
+ * lossless here: a pin's tags and id survive because the delete never happened, and no
+ * caller has to know how to rebuild the thing it just removed.
+ *
+ * `onUndo` is for callers that hid the thing OPTIMISTICALLY, which is the right move
+ * wherever the deletion is visual — a pin the GM is looking at should leave the map on
+ * click, not sit there for five seconds looking like the button failed. Those callers
+ * put it back here. Callers that leave their UI alone until the timer fires (the file
+ * tree) pass nothing and are unaffected.
+ */
 export function toastUndo(
   message: string,
   onConfirm: () => void,
+  onUndo?: () => void,
   duration = 5000,
 ) {
   const timerId = setTimeout(onConfirm, duration);
@@ -136,7 +169,10 @@ export function toastUndo(
     duration,
     action: {
       label: "Undo",
-      onClick: () => clearTimeout(timerId),
+      onClick: () => {
+        clearTimeout(timerId);
+        onUndo?.();
+      },
     },
   });
 }

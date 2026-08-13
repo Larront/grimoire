@@ -69,19 +69,40 @@ describe("ThemeWatcher — data-density attribute", () => {
 
 // ── ThemeWatcher — accent (dark mode default) ────────────────────
 
+/*
+  The contract these assert is "the accent is a class, in both modes, and never an inline
+  style". It used to be a class in light and four inline properties in dark, which meant
+  the preset values existed both in `app.css` and in a table inside ThemeWatcher with
+  nothing holding the two in step.
+
+  So the dark-mode cases below deliberately do NOT assert a hex. Asserting `#5c9e6e` here
+  is what made the old duplication look tested: the test read the same table the
+  component did, and would have gone on passing while the stylesheet said something else
+  entirely. The class is the whole of the component's job; what the class resolves to is
+  the stylesheet's, and `expect(style).toBe("")` is the assertion that keeps it there.
+*/
 describe("ThemeWatcher — dark mode (default)", () => {
-  it("applies crimson --primary inline style on root", () => {
+  it("applies the accent as a class, not an inline style", () => {
     render(ThemeWatcher);
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
+      true,
+    );
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#c2483d",
+      "",
     );
   });
 
-  it("updates --primary immediately when preset switches", () => {
+  it("swaps class immediately when preset switches", () => {
     render(ThemeWatcher);
     flushSync(() => ledger.setAccent("accent-verdant"));
+    expect(document.documentElement.classList.contains("accent-verdant")).toBe(
+      true,
+    );
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
+      false,
+    );
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#5c9e6e",
+      "",
     );
   });
 });
@@ -112,6 +133,15 @@ describe("ThemeWatcher — light mode", () => {
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
       "",
     );
+  });
+
+  it("leaves exactly one accent class on the root", () => {
+    render(ThemeWatcher);
+    flushSync(() => ledger.setAccent("accent-ice"));
+    const applied = [...document.documentElement.classList].filter((c) =>
+      c.startsWith("accent-"),
+    );
+    expect(applied).toEqual(["accent-ice"]);
   });
 });
 

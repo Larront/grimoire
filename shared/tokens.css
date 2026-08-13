@@ -100,6 +100,15 @@
    value in at build time. */
 
 @theme inline {
+  /* THE TWO VOICES ARE `font-sans` AND `font-heading`. There is no third, and there is
+     no `font-display` — a class Tailwind compiles to nothing at all, so a block that
+     asks for one renders in Nunito and looks merely unstyled rather than broken. Five
+     places in the map pane did exactly that, which meant the one pane whose title is a
+     name the GM wrote never spoke in the world's voice.
+
+     `heading` and not `display` because that is what the utility is called; renaming it
+     to match DESIGN.md's role name would leave both spellings live, which is the same
+     trap wearing the other label. If you want Metamorphous, you want `font-heading`. */
   --font-sans: "Nunito Variable", sans-serif;
   --font-heading: "Metamorphous", serif;
   --font-mono: "JetBrains Mono Variable", monospace;

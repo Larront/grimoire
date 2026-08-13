@@ -121,12 +121,53 @@ describe("toastUndo", () => {
     const onConfirm = vi.fn();
     toastUndo("Note deleted", onConfirm);
 
-    const options = vi.mocked(sonner).mock.calls[0][1] as unknown as {
-      action: { onClick: (e: MouseEvent) => void };
-    };
-    options.action.onClick(new MouseEvent("click"));
+    clickUndo();
 
     vi.advanceTimersByTime(5000);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  /*
+    `onUndo` is for callers that removed the thing from the UI on click rather than
+    waiting out the window — a pin has to leave the map immediately or the button looks
+    broken. Those callers need somewhere to put it back.
+  */
+  it("calls onUndo when undo is clicked", () => {
+    const onConfirm = vi.fn();
+    const onUndo = vi.fn();
+    toastUndo("Pin deleted", onConfirm, onUndo);
+
+    clickUndo();
+
+    expect(onUndo).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(5000);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("does not call onUndo when the window simply elapses", () => {
+    const onConfirm = vi.fn();
+    const onUndo = vi.fn();
+    toastUndo("Pin deleted", onConfirm, onUndo);
+
+    vi.advanceTimersByTime(5000);
+
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  /* The file tree and template list pass two arguments and must stay unaffected. */
+  it("is safe to call without onUndo", () => {
+    const onConfirm = vi.fn();
+    toastUndo("Note deleted", onConfirm);
+    expect(() => clickUndo()).not.toThrow();
+    vi.advanceTimersByTime(5000);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  function clickUndo() {
+    const options = vi.mocked(sonner).mock.calls.at(-1)![1] as unknown as {
+      action: { onClick: (e: MouseEvent) => void };
+    };
+    options.action.onClick(new MouseEvent("click"));
+  }
 });

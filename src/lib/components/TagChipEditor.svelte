@@ -168,7 +168,7 @@
   {#if draft.trim() && (matchingSuggestions.length > 0 || showCreateNew)}
     <div
       data-slot="tag-chip-dropdown"
-      class="absolute left-0 right-0 top-full mt-1 z-10 max-h-48 overflow-y-auto rounded-md border border-input bg-popover text-popover-foreground shadow-md"
+      class="absolute left-0 right-0 top-full mt-1 z-10 max-h-48 overflow-y-auto rounded-md border border-input bg-popover text-popover-foreground"
     >
       {#each matchingSuggestions as suggestion (suggestion)}
         <button

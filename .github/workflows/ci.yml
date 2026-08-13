@@ -8,9 +8,17 @@ name: ci
 #
 # (The two path lists below are duplicated rather than shared with a YAML
 # anchor because the GitHub Actions workflow parser does not support anchors.)
+#
+# `next` is built as well as `main`. It is the integration branch, and work lands
+# on it by direct push as often as by PR — so between 0.2.0 and 0.3.0 nothing
+# built it at all, and THREE separate breakages reached the release untouched by
+# CI: `bun run tauri build` failing on a hoisted `cookie`, a browser test project
+# that had never once run, and a site build that needed the app's codegen. Each
+# was found by hand during the release. A branch this one accumulates a release on
+# has to be a branch CI builds.
 on:
   push:
-    branches: [main]
+    branches: [main, next]
     paths-ignore:
       - "site/**"
       - ".github/workflows/pages.yml"

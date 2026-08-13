@@ -74,8 +74,52 @@
     right: "flex-end",
   };
 
+  /*
+    The lightbox is the app's one hand-rolled modal — everything else routes through the
+    shadcn dialog, which brings its own focus handling. This is that handling, written
+    out, because `role="dialog"` and `aria-modal` are claims about behaviour rather than
+    behaviour: without them Tab walked straight out of the viewer into the note behind
+    it, and closing dropped focus on `<body>`, which on this editor means the caret is
+    gone and the next keystroke goes nowhere.
+
+    WHAT GETS FOCUS BACK IS WHATEVER HAD IT, not the button that opened this. The trigger
+    calls `preventDefault` on mousedown precisely so it never takes focus — that is what
+    keeps the ProseMirror selection alive while the toolbar is used — so the element to
+    return to is the editor the GM was typing in, and restoring "the trigger" would be
+    restoring something that was deliberately never focused.
+  */
+  let lightboxEl: HTMLDivElement | undefined = $state();
+  let returnFocusTo: HTMLElement | null = null;
+
+  function openLightbox() {
+    returnFocusTo = document.activeElement as HTMLElement | null;
+    _lightboxOpen = true;
+  }
+
   function closeLightbox() {
     _lightboxOpen = false;
+    returnFocusTo?.focus?.();
+    returnFocusTo = null;
+  }
+
+  /** Tab-cycle within the open viewer. */
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== "Tab" || !lightboxEl) return;
+    const focusable = lightboxEl.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    // The viewer holds a single control today, so both edges of the cycle are the same
+    // element and the wrap is a no-op that still has to happen: without it Tab leaves.
+    const first = focusable[0] ?? lightboxEl;
+    const last = focusable[focusable.length - 1] ?? lightboxEl;
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === lightboxEl)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   async function replaceImage() {
@@ -94,11 +138,47 @@
       if (e.key === "Escape") {
         e.preventDefault();
         closeLightbox();
+      } else if (e.key === "Tab") {
+        trapTab(e);
       }
     }
     window.addEventListener("keydown", onKey);
+    // Into the viewer rather than left behind it. `tick`-free: the portalled node is in
+    // the document by the time this effect runs, since the effect depends on the same
+    // flag that renders it.
+    (
+      lightboxEl?.querySelector<HTMLElement>("[data-lightbox-close]") ?? lightboxEl
+    )?.focus();
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  /** The floor the drag already enforced in pixels, restated as the percentage the
+      keyboard path works in. Below roughly this the caption input outgrows its image. */
+  const MIN_WIDTH_PCT = 10;
+  const STEP_PCT = 5;
+
+  /**
+   * The keyboard half of the resize handle. Arrows step, Home/End take the ends, and
+   * every branch commits through the same `onUpdate` the drag's mouseup uses, so a
+   * keyboard resize is one undo step in ProseMirror exactly as a drag is.
+   */
+  function resizeByKey(e: KeyboardEvent) {
+    const current = parseFloat(_width) || 100;
+    let next = current;
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") next = current + STEP_PCT;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowDown")
+      next = current - STEP_PCT;
+    else if (e.key === "Home") next = MIN_WIDTH_PCT;
+    else if (e.key === "End") next = 100;
+    else return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    next = Math.round(Math.min(100, Math.max(MIN_WIDTH_PCT, next)));
+    if (next === current) return;
+    _width = `${next}%`;
+    onUpdate({ align: _align, width: _width });
+  }
 
   // Resize state — tracked here AND in the extension's stopEvent closure
   // via a 'resizing' data attribute on the dom root
@@ -155,7 +235,7 @@
       <!-- Floating toolbar — bottom-center, overlaying the image -->
       <div
         class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5
-               rounded border border-border bg-card/90 backdrop-blur-sm shadow-md px-1 py-0.5"
+               rounded border border-border bg-card/90 backdrop-blur-sm px-1 py-0.5"
         transition:fade={{ duration: 120 }}
       >
         <button
@@ -204,9 +284,7 @@
           aria-label="View full size"
           data-lightbox-btn
           onmousedown={(e) => e.preventDefault()}
-          onclick={() => {
-            _lightboxOpen = true;
-          }}
+          onclick={openLightbox}
         >
           <Maximize2 size={14} />
         </button>
@@ -259,14 +337,25 @@
     {/if}
 
     {#if _selected}
-      <!-- Bottom-right resize handle -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <!-- Bottom-right resize handle.
+
+           A `slider`, not a `separator`, and focusable. It was mouse-only: `role`
+           described what it looked like rather than what it does, and a GM working from
+           the keyboard could select an image but never resize one — the width attribute
+           had no other route in the UI at all. Arrow keys step it, Home and End take the
+           two ends, and `aria-valuenow` reports the percentage the drag also writes. -->
       <div
-        role="separator"
+        role="slider"
+        tabindex="0"
+        aria-label="Image width"
+        aria-valuemin={MIN_WIDTH_PCT}
+        aria-valuemax={100}
+        aria-valuenow={parseFloat(_width) || 100}
+        aria-valuetext="{Math.round(parseFloat(_width) || 100)}%"
         class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize
                bg-card border border-border rounded-tl z-10"
-        aria-label="Resize image"
         onmousedown={startResize}
+        onkeydown={resizeByKey}
       ></div>
     {/if}
   </div>
@@ -307,6 +396,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
+    bind:this={lightboxEl}
     use:portal
     role="dialog"
     aria-modal="true"

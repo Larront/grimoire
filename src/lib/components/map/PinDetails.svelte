@@ -1,13 +1,13 @@
 <script lang="ts">
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
-  import { ExternalLink, Lock, LockOpen, ChevronDown } from "@lucide/svelte";
+  import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
   import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
+  import { CURATED_ICON_COMPONENTS, DEFAULT_PIN_COLOR } from "./pinAppearance";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
@@ -25,6 +25,9 @@
     onTagsChange?: (tags: string[]) => void;
     onToggleLock?: () => void;
     onUpdate: (pin: Pin) => Promise<void>;
+    /** Not awaited, and not a promise: the delete is deferred behind an undo window, so
+        there is nothing for the caller to wait on. See `handlePinDelete` in MapPane. */
+    onDelete: (id: number) => void;
     onOpenNote?: (id: number, title: string) => void;
   }
 
@@ -39,6 +42,7 @@
     onTagsChange,
     onToggleLock,
     onUpdate,
+    onDelete,
     onOpenNote,
   }: Props = $props();
 
@@ -77,12 +81,13 @@
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
 
+  // The default leads the row, so the swatch a pin starts on is the swatch it returns to.
   const PRESET_COLORS = [
-    "#4a90c4", "#6a9b87", "#b89a5e", "#8b3a3a",
+    DEFAULT_PIN_COLOR, "#6a9b87", "#4a90c4", "#8b3a3a",
     "#6b4e8a", "#5a6b7a", "#c4b8a0", "#3d4a52",
   ];
 
-  const resolvedColor = $derived(pin.color ?? "#4a90c4");
+  const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
 </script>
 
 <!-- Title row -->
@@ -278,7 +283,8 @@
           />
         </div>
 
-        <!-- Reset -->
+        <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
+             directly above it and nothing else, so its scope is the section it sits in. -->
         <button
           type="button"
           onclick={() => save({ shape: null, icon: null, color: null })}
@@ -289,4 +295,29 @@
       </div>
     </CollapsibleContent>
   </Collapsible>
+</DetailSection>
+
+<!--
+  Actions.
+
+  There was no way to delete a pin. `delete_pin` has existed in the backend and in the
+  generated bindings the whole time; nothing on this side ever called it, so a pin placed
+  by accident was permanent. That is a harder failure than the annotation delete being
+  hard to see, and it went unnoticed for the same reason — the panel reads as complete.
+
+  Outside the Appearance collapsible on purpose. Deleting is not an appearance setting,
+  and burying the only destructive action behind a closed section is what made the
+  equivalent control on annotations undiscoverable.
+-->
+<DetailSection label="Actions" sectionKey="actions">
+  <button
+    type="button"
+    data-testid="pin-delete"
+    onclick={() => onDelete(pin.id)}
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+           text-error hover:bg-error/10 transition-colors cursor-pointer"
+  >
+    <Trash2 class="size-3.5 shrink-0" />
+    Delete pin
+  </button>
 </DetailSection>
