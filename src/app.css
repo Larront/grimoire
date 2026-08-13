@@ -205,6 +205,70 @@
   scroll-behavior: auto !important;
 }
 
+[data-reduce-motion="true"] .animate-spin,
+[data-reduce-motion="true"] [data-motion-essential] {
+  animation-duration: 1.6s !important;
+  animation-iteration-count: infinite !important;
+}
+
+/* ── Graph categorical ramp ───────────────────────────────────── */
+/*
+  THE ONE PLACE COLOUR IS ALLOWED TO CATEGORISE. DESIGN.md's No Decorative Color Rule
+  forbids colour that sorts files, tags or folders, and the callout system refused a
+  per-type hue on exactly that ground. The graph is the documented exception, and it is
+  narrow: a node-link diagram *encodes* category rather than decorating one, so the tag a
+  note carries is data being plotted, not chrome being dressed up. Nothing outside
+  GraphPane may read these.
+
+  NOT THE ACCENT PRESETS. This ramp used to be the five accent hexes cycled — which broke
+  three things at once. Cycling means the sixth tag repeats the first tag's colour, so
+  identity silently collides. The literals ignored `.light`, so the graph stayed at its
+  dark values on a parchment surface. And spending the five presets here meant a GM on
+  Verdant still saw a crimson-and-purple graph: the accent is *their* choice about the
+  app, and it was being read back to them as somebody else's data.
+
+  These eight are a validated categorical palette, stepped separately for each surface —
+  the dark column is the same eight hues re-stepped for Iron Dark, not a flip. Checked
+  with the dataviz validator against both surfaces (OKLab ΔE ×100, Machado 2009 at
+  severity 1.0):
+
+    dark  #1f1f1f — worst adjacent CVD ΔE 8.4, normal-vision 19.3, all eight ≥ 3:1
+    light #faf8f5 — worst adjacent CVD ΔE 9.1, normal-vision 19.6
+
+  A graph is an all-pairs form — any two nodes can end up touching — and under that
+  harder test only the FIRST THREE slots clear the floors (CVD ΔE 9.4 dark / 9.2 light).
+  That is not a palette to fix; it is the honest ceiling on how many categories colour
+  alone can carry, and in this graph colour IS alone — the node-shape channel that would
+  have lifted it was built and rejected as illegible at node size. The consequence is
+  written up under the Dataviz Exception in DESIGN.md along with what carries identity
+  instead (labels, the filter panel, hover dimming, search). Past slot 8, tags fold to
+  the muted "other" step rather than wrapping round to slot 1.
+
+  Three light steps sit under 3:1 on parchment (aqua 2.66, yellow 2.04, magenta 2.54).
+  The validator's relief rule covers it: every node carries a visible text label.
+*/
+:root {
+  --viz-cat-1: #3987e5;
+  --viz-cat-2: #d95926;
+  --viz-cat-3: #199e70;
+  --viz-cat-4: #c98500;
+  --viz-cat-5: #d55181;
+  --viz-cat-6: #008300;
+  --viz-cat-7: #9085e9;
+  --viz-cat-8: #e66767;
+}
+
+.light {
+  --viz-cat-1: #2a78d6;
+  --viz-cat-2: #eb6834;
+  --viz-cat-3: #1baf7a;
+  --viz-cat-4: #eda100;
+  --viz-cat-5: #e87ba4;
+  --viz-cat-6: #008300;
+  --viz-cat-7: #4a3aa7;
+  --viz-cat-8: #e34948;
+}
+
 /* ── Statblock widths ─────────────────────────────────────────── */
 /*
   The two widths a GM can put a statblock at. They live here rather than in the block

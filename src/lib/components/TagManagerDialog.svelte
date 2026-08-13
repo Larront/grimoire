@@ -5,6 +5,7 @@
   import { LoaderCircle } from '@lucide/svelte';
   import type { TagUsageEntry } from '$lib/bindings.gen';
   import { toastSuccess } from '$lib/toast';
+  import { assignTagSlots, resolveTagColor } from '$lib/graph-palette';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -52,6 +53,29 @@
 
   function isTagVisible(tag: string): boolean {
     return !(tagStyles[tag]?.hidden ?? false);
+  }
+
+  /*
+    The colour the graph will actually draw this tag in.
+
+    The picker used to fall back to a flat `#888888` for any tag with no explicit colour,
+    which is most of them — so the Tag Manager showed a grey list while the graph beside
+    it was fully coloured, and the swatch was describing a colour that existed nowhere.
+    Both sides now derive from `graph-palette.ts` over the same sorted tag list, so
+    agreeing is not something either of them has to remember to do.
+
+    `$derived` and not a one-off: retagging or clearing a colour changes the assignment
+    for every tag after it alphabetically, and the list has to move with it.
+  */
+  const slotAssignments = $derived(
+    assignTagSlots(
+      tags.map((t) => t.tag),
+      (tag) => !!tagStyles[tag]?.color,
+    ),
+  );
+
+  function effectiveTagColor(tag: string): string {
+    return resolveTagColor(tag, tagStyles[tag]?.color, slotAssignments);
   }
 
   function updateTagStyle(tag: string, patch: Partial<{ color: string | null; hidden: boolean }>) {
@@ -210,7 +234,7 @@
                       type="color"
                       aria-label="Graph color for {entry.tag}"
                       data-testid="tag-color-{entry.tag}"
-                      value={tagStyles[entry.tag]?.color ?? '#888888'}
+                      value={effectiveTagColor(entry.tag)}
                       onchange={(e) => setTagColor(entry.tag, (e.target as HTMLInputElement).value)}
                       class="size-6 rounded cursor-pointer border border-border bg-transparent p-0"
                     />
@@ -236,7 +260,7 @@
                     class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {isTagVisible(entry.tag) ? 'bg-primary' : 'bg-input'}"
                   >
                     <span
-                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform {isTagVisible(entry.tag) ? 'translate-x-4' : 'translate-x-0'}"
+                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 transition-transform {isTagVisible(entry.tag) ? 'translate-x-4' : 'translate-x-0'}"
                     ></span>
                   </button>
 
@@ -253,7 +277,7 @@
                     {#if menuOpenFor === entry.tag}
                       <!-- svelte-ignore a11y_no_static_element_interactions -->
                       <div
-                        class="absolute right-0 top-7 z-50 min-w-[140px] rounded-md border border-border bg-background shadow-lg py-1 flex flex-col"
+                        class="absolute right-0 top-7 z-50 min-w-[140px] rounded-md border border-border bg-background py-1 flex flex-col"
                         onmouseleave={() => { menuOpenFor = null; }}
                       >
                         <button

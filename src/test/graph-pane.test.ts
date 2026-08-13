@@ -274,10 +274,22 @@ const mockAllTags = ["npc", "quest"];
 /** CSS stub: --foreground-muted returns a known test value */
 const MUTED_COLOR = "#a39e99";
 
+/*
+  The categorical ramp, stubbed by slot rather than by literal. jsdom loads no stylesheet,
+  so `--viz-cat-n` would resolve to "" and every tagged node would fall back to muted —
+  which is exactly the state that would hide a regression in the assignment. The values
+  are deliberately NOT the real hexes: what these tests pin down is "slot 1 of the ramp",
+  and copying the shipped hexes here would mean a test that keeps passing while `app.css`
+  says something else, which is the failure the old accent table taught.
+*/
+const VIZ_STUB = (slot: number) => `#viz${slot}`;
+
 function mockComputedStyle() {
   vi.spyOn(window, "getComputedStyle").mockReturnValue({
     getPropertyValue: (prop: string) => {
       if (prop === "--foreground-muted") return MUTED_COLOR;
+      const viz = prop.match(/^--viz-cat-(\d)$/);
+      if (viz) return VIZ_STUB(Number(viz[1]));
       return "";
     },
   } as unknown as CSSStyleDeclaration);
@@ -437,15 +449,37 @@ describe("GraphPane – node tag coloring", () => {
     });
   });
 
-  it("note with null-color tag receives the first accent cycle hex", async () => {
+  it("note with null-color tag receives the first ramp slot", async () => {
     render(GraphPane);
     await waitFor(() => {
       const opts = cytoscapeOptions as {
         elements: { nodes: Array<{ data: Record<string, unknown> }> };
       };
       const note2 = opts.elements.nodes.find((n) => n.data.id === "note-2");
-      // "quest" tag has null color → gets first accent cycle color: #c2483d
-      expect(note2?.data.color).toBe("#c2483d");
+      // "quest" is the only tag without an explicit colour, so it takes slot 1.
+      expect(note2?.data.color).toBe(VIZ_STUB(1));
+    });
+  });
+
+  /*
+    SHAPE ENCODES KIND, NOT TAG. A per-tag silhouette was built and rejected as illegible
+    at node size, so notes are circles whatever they are tagged and colour is the only
+    thing separating two tags. This pins that down in both directions, because the
+    tempting "fix" for the colour-blindness ceiling is to quietly bring shape back — and
+    DESIGN.md's Dataviz Exception now says in as many words that the answer is faceting
+    instead.
+  */
+  it("differently-tagged notes are the same shape — colour is the only tag channel", async () => {
+    render(GraphPane);
+    await waitFor(() => {
+      const opts = cytoscapeOptions as {
+        elements: { nodes: Array<{ data: Record<string, unknown> }> };
+      };
+      const npc = opts.elements.nodes.find((n) => n.data.id === "note-1");
+      const quest = opts.elements.nodes.find((n) => n.data.id === "note-2");
+      expect(npc?.data.shape).toBe("ellipse");
+      expect(quest?.data.shape).toBe("ellipse");
+      expect(npc?.data.color).not.toBe(quest?.data.color);
     });
   });
 
@@ -460,16 +494,32 @@ describe("GraphPane – node tag coloring", () => {
     });
   });
 
-  it("map node receives fixed neutral color (not the muted foreground)", async () => {
+  /*
+    A map used to be told apart by a hardcoded teal — a ninth hue outside the ramp, off
+    DESIGN.md's palette, and fixed against light mode. Kind is a SHAPE now, which frees
+    colour to mean the tag and nothing else, so the assertion moved with it: an untagged
+    map is muted like any untagged node, and `round-rectangle` is what distinguishes it.
+  */
+  it("map node is told apart by shape, not by a colour of its own", async () => {
     render(GraphPane);
     await waitFor(() => {
       const opts = cytoscapeOptions as {
         elements: { nodes: Array<{ data: Record<string, unknown> }> };
       };
       const map = opts.elements.nodes.find((n) => n.data.id === "map-10");
-      expect(map?.data.color).toBeDefined();
-      expect(map?.data.color).not.toBe(MUTED_COLOR);
-      expect(typeof map?.data.color).toBe("string");
+      expect(map?.data.shape).toBe("round-rectangle");
+      expect(map?.data.color).toBe(MUTED_COLOR);
+    });
+  });
+
+  it("cytoscape node base style uses data(shape) for shape", async () => {
+    render(GraphPane);
+    await waitFor(() => {
+      const opts = cytoscapeOptions as {
+        style: Array<{ selector: string; style: Record<string, unknown> }>;
+      };
+      const nodeStyle = opts.style.find((s) => s.selector === "node");
+      expect(nodeStyle?.style.shape).toBe("data(shape)");
     });
   });
 

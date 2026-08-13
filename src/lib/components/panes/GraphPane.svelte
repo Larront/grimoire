@@ -16,16 +16,34 @@
   import Filter from "@lucide/svelte/icons/filter";
   import Search from "@lucide/svelte/icons/search";
 
-  // The five accent preset swatch hex values, in cycle order:
-  // crimson → arcane → verdant → ice → amber
-  const ACCENT_CYCLE = ["#c2483d", "#9b6bbf", "#5c9e6e", "#5b9ec9", "#c49a3c"];
+  import {
+    assignTagSlots,
+    resolveTagColor,
+    mutedColor,
+  } from "$lib/graph-palette";
+
+  /*
+    Tags are told apart by COLOUR ALONE, and that is a decision rather than an oversight.
+
+    A per-tag node shape was built and rejected on sight: eight silhouettes at a 16px node
+    read as eight smudges, and the graph stopped looking like a graph. Reviewed and called
+    by the product owner.
+
+    The cost is real and worth stating where the code is. This is an all-pairs form — any
+    two nodes can drift into contact — and under that test only the first three ramp steps
+    stay separable for a red/green-blind reader. From the fourth tag on, some GMs will not
+    be able to tell two node colours apart. What carries them instead is everything the
+    graph already has that is not colour: every node is labelled, hovering dims all but a
+    node's neighbours, the filter panel names each tag beside its swatch and can isolate
+    one at a time, and search highlights by name. Colour is the fast channel here, not the
+    only one — but it IS the only channel that encodes the tag itself, and if this ever
+    needs to be honest for more than three tags, the answer is faceting or folding to
+    "Other", not a ninth hue.
+  */
 
   // Node sizing: radius in px (diameter = 2 × radius)
   const MIN_RADIUS = 8;
   const MAX_RADIUS = 28;
-
-  // Map nodes use a fixed neutral teal (not tag-colored, not muted)
-  const MAP_COLOR = "#6b9e8d";
 
   // Fade duration (ms) for the hover neighbor-dimming transition.
   const DIM_FADE_MS = 150;
@@ -75,62 +93,38 @@
   // Stored in closure so reapplyStyles() can reference them
   // tagStylesMap is $state so the filter panel template reacts to changes
   let tagStylesMap = $state(new Map<string, TagStyle>());
-  let accentAssignments = new Map<string, string>();
+  let slotAssignments = new Map<string, number>();
 
   let observer: MutationObserver | null = null;
 
   // Undirected adjacency built from edges, used for neighbor-dimming on hover.
   let adjacency = new Map<string, Set<string>>();
 
-  /** Read --foreground-muted from computed CSS at call time (light/dark aware). */
-  function getMutedColor(): string {
-    return (
-      getComputedStyle(document.documentElement)
-        .getPropertyValue("--foreground-muted")
-        .trim() || "#888"
-    );
+  /** The colour a tag is drawn in — shared with the Tag Manager so the two agree. */
+  function tagColor(tag: string): string {
+    return resolveTagColor(tag, tagStylesMap.get(tag)?.color, slotAssignments);
   }
 
   /**
-   * Build the accent cycle assignments for tags with no explicit color.
-   * Tags are visited in node encounter order; each unique null-color tag
-   * gets the next slot in ACCENT_CYCLE (wrapping at 5).
+   * Compute the colour for a single node.
+   *
+   * A map keeps a shape of its own (`round-rectangle`) rather than the `#6b9e8d` teal it
+   * used to carry — a ninth hue that had never been through the ramp's checks, sat
+   * outside DESIGN.md's palette, and stayed put under `.light`. KIND is a silhouette,
+   * which is one distinction rather than eight and survives at node size; TAG is colour.
+   * That split is what leaves colour meaning exactly one thing.
    */
-  function buildAccentAssignments(
-    nodes: GraphNodeData[],
-    styles: Map<string, TagStyle>,
-  ): Map<string, string> {
-    const assignments = new Map<string, string>();
-    let cycleIdx = 0;
-    for (const node of nodes) {
-      if (node.primary_tag && !assignments.has(node.primary_tag)) {
-        const style = styles.get(node.primary_tag);
-        if (!style?.color) {
-          assignments.set(
-            node.primary_tag,
-            ACCENT_CYCLE[cycleIdx % ACCENT_CYCLE.length],
-          );
-          cycleIdx++;
-        }
-      }
-    }
-    return assignments;
-  }
-
-  /** Resolve the display color for a tag: explicit color → accent cycle → muted foreground. */
-  function tagColor(tag: string): string {
-    const style = tagStylesMap.get(tag);
-    return style?.color ?? accentAssignments.get(tag) ?? getMutedColor();
-  }
-
-  /** Compute the background color for a single node. */
   function computeNodeColor(
     kind: "note" | "map" | "stub",
     primaryTag: string | null | undefined,
   ): string {
-    if (kind === "map") return MAP_COLOR;
-    if (kind === "stub") return getMutedColor();
-    return primaryTag ? tagColor(primaryTag) : getMutedColor();
+    if (kind === "stub") return mutedColor();
+    return primaryTag ? tagColor(primaryTag) : mutedColor();
+  }
+
+  /** Kind, and only kind. Notes and stubs are circles whatever they are tagged. */
+  function computeNodeShape(kind: "note" | "map" | "stub"): string {
+    return kind === "map" ? "round-rectangle" : "ellipse";
   }
 
   /**
@@ -153,12 +147,17 @@
    * CSS at build time so reapplyStyles() picks up theme changes.
    */
   function buildStyleArray(): StylesheetJson {
-    const muted = getMutedColor();
+    const muted = mutedColor();
     return [
       {
         selector: "node",
         style: {
           label: "data(label)",
+          // `data()` mappers are valid for `shape` at runtime — the same form the two
+          // lines below use — but cytoscape's typings narrow this one to a literal shape
+          // union and reject the mapper string, and the union itself (`NodeShape`) sits
+          // inside a namespace the package does not export, so it cannot be named here.
+          shape: "data(shape)" as unknown as "ellipse",
           "background-color": "data(color)",
           "background-opacity": 0.25,
           "border-color": "data(color)",
@@ -216,13 +215,19 @@
   }
 
   /**
-   * Re-read muted color from CSS and update every node's stored color.
-   * Called when the theme or accent class changes on <html>.
+   * Re-read every node's colour from CSS. Called when the theme or accent class changes
+   * on <html>.
+   *
+   * This now does something it only appeared to do before. The old comment noted that
+   * "accent cycle colors are fixed hex values and don't change with theme" — which was
+   * true, and was the bug: switching to Parchment repainted the muted nodes and left
+   * every tagged one at its dark-surface hue. The ramp is read from custom properties at
+   * call time, so the same walk that always ran now actually re-resolves them.
+   *
+   * Shape is not re-read: a silhouette does not depend on the surface.
    */
   function reapplyStyles() {
     if (!cy) return;
-    // Update only the color (muted color may have changed; accent cycle colors
-    // are fixed hex values and don't change with theme)
     cy.nodes().forEach((n: unknown) => {
       const node = n as {
         data(key: string): unknown;
@@ -426,11 +431,18 @@
       // Store ledger tags for the filter panel
       allTags = tags ?? [];
 
-      // Build accent cycle assignments (encounter order across nodes)
+      // Slots come from the LEDGER'S tag list, not from the nodes on screen, so the
+      // colour a tag wears here is the colour the Tag Manager shows for it — see
+      // `graph-palette.ts`. `allTags` is already resolved above, which is what makes
+      // this orderable rather than a race.
+      //
       // Generated node `kind` is `string`; the local GraphNodeData refines it to
       // a "map"|"note"|"stub" union. The backend only ever emits those values.
       const graphNodes = rawData.nodes as GraphNodeData[];
-      accentAssignments = buildAccentAssignments(graphNodes, tagStylesMap);
+      slotAssignments = assignTagSlots(
+        allTags,
+        (tag) => !!tagStylesMap.get(tag)?.color,
+      );
 
       // Compute max backlink count for proportional sizing
       const maxBacklinks = rawData.nodes.reduce(
@@ -498,6 +510,7 @@
             data: {
               ...n,
               color: computeNodeColor(n.kind, n.primary_tag),
+              shape: computeNodeShape(n.kind),
               size: computeNodeSize(n, maxBacklinks),
             },
             position: {
@@ -615,7 +628,7 @@
         placeholder="Search nodes…"
         bind:value={searchQuery}
         onkeydown={handleSearchKeydown}
-        class="h-7 w-36 rounded border border-border bg-background/80 pl-6 pr-2 text-xs text-foreground placeholder:text-foreground-muted shadow focus:outline-none focus:ring-1 focus:ring-ring"
+        class="h-7 w-36 rounded border border-border bg-background/80 pl-6 pr-2 text-xs text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-1 focus:ring-ring"
       />
     </div>
 
@@ -626,7 +639,7 @@
       aria-pressed={filterOpen}
       type="button"
       onclick={() => (filterOpen = !filterOpen)}
-      class="flex size-7 items-center justify-center rounded bg-background/80 text-foreground-muted hover:text-foreground shadow border border-border transition-colors {filterOpen
+      class="flex size-7 items-center justify-center rounded bg-background/80 text-foreground-muted hover:text-foreground border border-border transition-colors {filterOpen
         ? 'bg-primary/10 text-primary'
         : ''}"
     >
@@ -638,7 +651,7 @@
   {#if filterOpen}
     <div
       data-testid="filter-panel"
-      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border shadow-lg p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
+      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
     >
       <p
         class="text-xs font-semibold text-foreground-muted uppercase tracking-wider"
@@ -648,10 +661,9 @@
 
       {#each allTags as tag (tag)}
         <div class="flex items-center gap-2 min-w-0">
-          <!-- Color swatch -->
           <span
             data-testid="filter-swatch-{tag}"
-            class="size-3 rounded-full shrink-0 border border-border/40"
+            class="size-3 rounded-full shrink-0"
             style="background-color: {tagColor(tag)}"
           ></span>
 
@@ -685,7 +697,7 @@
               : 'bg-input'}"
           >
             <span
-              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(
+              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background ring-0 transition-transform {!isFilterTagHidden(
                 tag,
               )
                 ? 'translate-x-3'
@@ -699,11 +711,12 @@
       <div
         class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1"
       >
-        <!-- Swatch uses muted color -->
+        <!-- Untagged: the muted step and the plain circle, which is what the canvas
+             draws for a note with no tag. -->
         <span
           data-testid="filter-swatch-__untagged__"
-          class="size-3 rounded-full shrink-0 border border-border/40"
-          style="background-color: {getMutedColor()}"
+          class="size-3 rounded-full shrink-0"
+          style="background-color: {mutedColor()}"
         ></span>
 
         <span class="flex-1 text-sm text-foreground-muted truncate"
@@ -725,7 +738,7 @@
             : 'bg-input'}"
         >
           <span
-            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow ring-0 transition-transform {!isFilterTagHidden(
+            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background ring-0 transition-transform {!isFilterTagHidden(
               '',
             )
               ? 'translate-x-3'
