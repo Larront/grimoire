@@ -123,22 +123,74 @@ const FALLBACK: Platform[] = [
   },
 ];
 
+/*
+  WHICH RELEASE THIS BUILD IS SUPPOSED TO BE ADVERTISING, when anything knows.
+
+  `/releases/latest` is CACHED, and a release-triggered build outruns that cache. The
+  numbers from 0.3.1: the release published at 00:36:40, the pages run started three
+  seconds later, and the whole build took twenty-one — so it asked what the latest
+  release was about twenty seconds after publishing, and GitHub still said v0.3.0. The
+  build passed every check it had (a real release, all its assets present, links that
+  resolve) and shipped a download page for the previous version. Nothing was broken
+  enough to notice; it was simply a release behind.
+
+  The tag is therefore passed in from the workflow on `release: published`, where the
+  event payload already knows it, and left empty everywhere else. That distinction is
+  load-bearing: a plain push to `main` after a promotion PR merges legitimately has a
+  `package.json` version ahead of the newest release — 0.3.1 was in the tree an hour
+  before the tag existed — so comparing against the tree's version would fail every
+  merge build. Only a release run knows what it is waiting for.
+*/
+const EXPECTED_TAG = process.env.EXPECTED_RELEASE_TAG?.trim() || null;
+
+/** Retry budget for the cache catching up: ~45s across five attempts. */
+const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchLatest(token: string | undefined): Promise<GithubRelease> {
+  const res = await fetch(
+    `https://api.github.com/repos/${REPO}/releases/latest`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        // Ask the CDN for a fresh answer rather than whatever it last stored.
+        // On its own this is not enough — hence the retry — but it costs nothing.
+        "Cache-Control": "no-cache",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    },
+  );
+  if (!res.ok) throw new Error(`GitHub API ${res.status} ${res.statusText}`);
+  return (await res.json()) as GithubRelease;
+}
+
 export async function getLatestRelease(): Promise<ReleaseInfo> {
   const token = process.env.GITHUB_TOKEN;
   const strict = process.env.REQUIRE_RELEASE_ASSETS === "1";
 
   try {
-    const res = await fetch(
-      `https://api.github.com/repos/${REPO}/releases/latest`,
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      },
-    );
-    if (!res.ok) throw new Error(`GitHub API ${res.status} ${res.statusText}`);
-    const release = (await res.json()) as GithubRelease;
+    let release = await fetchLatest(token);
+
+    // Wait for the cache to agree, when we know what it should be agreeing with.
+    for (const delay of RETRY_DELAYS_MS) {
+      if (!EXPECTED_TAG || release.tag_name === EXPECTED_TAG) break;
+      console.warn(
+        `[releases] Expected ${EXPECTED_TAG} but the API still reports ` +
+          `${release.tag_name}; retrying in ${delay}ms.`,
+      );
+      await sleep(delay);
+      release = await fetchLatest(token);
+    }
+
+    // Loud rather than a version behind. This is the one failure the old code could
+    // not see: everything below it would have passed.
+    if (EXPECTED_TAG && release.tag_name !== EXPECTED_TAG) {
+      throw new Error(
+        `expected release ${EXPECTED_TAG} but the API kept reporting ` +
+          `${release.tag_name} after ${RETRY_DELAYS_MS.length} retries`,
+      );
+    }
 
     const platforms = resolvePlatforms(release.assets ?? []);
     if (!platforms.length) throw new Error("no installable assets resolved");

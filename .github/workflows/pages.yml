@@ -14,19 +14,35 @@ name: pages
 # site/src/lib/releases.ts), so without this the site would keep advertising
 # the previous version's installers until something else touched site/.
 #
-# ⚠️ THAT TRIGGER CANNOT DEPLOY UNTIL THE ENVIRONMENT ALLOWS THE TAG. A
-# release-published run has `github.ref` = the tag (refs/tags/v0.3.0), and the
-# `github-pages` environment is restricted to the branch `main` alone. So the
-# build passes, the deploy is REJECTED — "Tag v0.3.0 is not allowed to deploy to
-# github-pages due to environment protection rules" — and the site keeps serving
-# the old installers, which is exactly what this trigger exists to prevent. It
-# failed that way on 0.3.0, its first real outing.
+# That trigger has now failed in two different ways, one release each. Both are
+# fixed; they are recorded because the second only became visible once the first
+# was out of the way, and a third would be found the same slow manual way.
 #
-# Fixing it is a repo setting, not a workflow change: add a `v*` TAG policy to the
-# github-pages environment's deployment branch policies. Until that exists, a
-# published release needs a manual `gh workflow run pages.yml --ref main` — which
-# is what recovered 0.3.0. (GITHUB_TOKEN cannot do that dispatch from inside this
-# workflow: events it triggers deliberately do not start new runs.)
+# 0.3.0 — THE ENVIRONMENT REJECTED THE TAG. A release-published run has
+# `github.ref` = the tag (refs/tags/v0.3.0), and `github-pages` was restricted to
+# the branch `main` alone, so the build passed and the deploy was refused: "Tag
+# v0.3.0 is not allowed to deploy to github-pages due to environment protection
+# rules". Fixed in repo settings, not here — the environment's deployment branch
+# policies now carry a `v*` tag rule. The v0.3.1 run deployed cleanly, which is
+# how we know.
+#
+# 0.3.1 — THE BUILD OUTRAN GITHUB'S CACHE. With the deploy no longer blocked, the
+# site published a page for the PREVIOUS release. `/releases/latest` is cached:
+# the release published at 00:36:40, this workflow started at 00:36:43, the build
+# took twenty-one seconds, and the API was still answering v0.3.0 when it was
+# asked. Every check passed — a real release, every asset present, links that
+# resolve — and the result was simply one version behind.
+#
+# The guard is EXPECTED_RELEASE_TAG below, passed only on `release: published`,
+# where the event payload knows the tag. `site/src/lib/releases.ts` retries until
+# the API agrees and fails the build if it never does. It is deliberately not set
+# on other events: a push to `main` after a promotion PR merges has a version in
+# the tree that no release carries yet, and that is correct rather than a fault.
+#
+# If a release ever does deploy the wrong version again, recover with a manual
+# `gh workflow run pages.yml --ref main` — by then the cache has long agreed.
+# (GITHUB_TOKEN cannot make that dispatch from inside this workflow: events it
+# triggers deliberately do not start new runs.)
 #
 # `next` builds but never deploys. The site is checked on the integration branch
 # for the reason ci.yml now builds it too — three breakages reached 0.3.0 because
@@ -116,6 +132,11 @@ jobs:
           # publishing a download page whose buttons all point at the generic
           # releases page. See the comment in site/src/lib/releases.ts.
           REQUIRE_RELEASE_ASSETS: "1"
+          # The release this build is for, on a release-published run only —
+          # empty on every other event, which is what stops a post-merge push to
+          # `main` failing for being ahead of the newest tag. See the 0.3.1 note
+          # in this file's header for what it guards against.
+          EXPECTED_RELEASE_TAG: ${{ github.event.release.tag_name }}
 
       - uses: actions/upload-pages-artifact@v5
         if: env.DEPLOYING == 'true'
