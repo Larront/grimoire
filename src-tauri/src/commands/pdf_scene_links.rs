@@ -121,12 +121,20 @@ pub fn rewrite_pdf_path_prefix(
     // SQLite SUBSTR is 1-based; +1 starts just past the matched prefix. Binding
     // the prefix length as a literal i32 keeps it parameterised.
     let prefix_len = old_prefix.chars().count() as i32;
+    // `LIKE` alone is too generous to anchor a positional rewrite on: it matches
+    // case-insensitively over ASCII and reads `_` as a single-character wildcard, so
+    // a sibling folder `session-notes` is selected when `session_notes` was asked
+    // for — and cutting `prefix_len` characters off a path that never carried the
+    // prefix corrupts it. The `SUBSTR(..) = ?` guard is the exact test.
     diesel::sql_query(
-        "UPDATE pdf_scene_links SET pdf_path = ? || SUBSTR(pdf_path, ?) WHERE pdf_path LIKE ?",
+        "UPDATE pdf_scene_links SET pdf_path = ? || SUBSTR(pdf_path, ?) \
+         WHERE pdf_path LIKE ? AND SUBSTR(pdf_path, 1, ?) = ?",
     )
     .bind::<diesel::sql_types::Text, _>(new_prefix)
     .bind::<diesel::sql_types::Integer, _>(prefix_len + 1)
     .bind::<diesel::sql_types::Text, _>(&like_pattern)
+    .bind::<diesel::sql_types::Integer, _>(prefix_len)
+    .bind::<diesel::sql_types::Text, _>(old_prefix)
     .execute(conn)
 }
 
@@ -364,6 +372,37 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert_eq!(sibling.len(), 1, "the name-prefix sibling folder is untouched");
+    }
+
+    /// `creatures-extra` above is refused by `LIKE` itself. These two are not:
+    /// `LIKE 'session_notes/%'` matches `session-notes/…` because `_` is a
+    /// single-character wildcard, and it matches `SESSION_NOTES/…` because SQLite
+    /// compares ASCII case-insensitively. A positional rewrite would cut the prefix
+    /// length off both and leave paths pointing at files that were never moved.
+    #[test]
+    fn test_rewrite_pdf_path_prefix_leaves_folders_only_like_matches() {
+        let mut conn = setup_db();
+        let scene = make_scene(&mut conn, "Scene");
+        make_link(&mut conn, "session_notes/one.pdf", 1, scene.id);
+        make_link(&mut conn, "session-notes/two.pdf", 1, scene.id);
+        make_link(&mut conn, "SESSION_NOTES/three.pdf", 1, scene.id);
+
+        let rewritten = rewrite_pdf_path_prefix(&mut conn, "session_notes/", "archive/").unwrap();
+        assert_eq!(rewritten, 1, "only the exact prefix is re-keyed");
+
+        let mut paths: Vec<String> = pdf_scene_links::table
+            .select(pdf_scene_links::pdf_path)
+            .load(&mut conn)
+            .unwrap();
+        paths.sort();
+        assert_eq!(
+            paths,
+            vec![
+                "SESSION_NOTES/three.pdf",
+                "archive/one.pdf",
+                "session-notes/two.pdf",
+            ],
+        );
     }
 
     #[test]

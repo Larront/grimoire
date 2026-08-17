@@ -453,8 +453,36 @@ pub fn index_notes_batch(
     Ok(())
 }
 
+/// Batch-remove multiple docs: one IndexWriter opened once, one commit — the
+/// removal mirror of [`index_notes_batch`], and for the same reason. `remove_doc`
+/// acquires a writer and commits per call, so removing a folder's worth of notes
+/// one at a time is N writer allocations and N commits with the ledger mutex held.
+pub fn remove_docs_batch(index: &Index, doc_keys: &[String]) -> Result<(), String> {
+    if doc_keys.is_empty() {
+        return Ok(());
+    }
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
+    for key in doc_keys {
+        writer.delete_term(tantivy::Term::from_field_text(doc_key_f, key));
+    }
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     remove_doc(index, &format!("note:{}", entity_id))
+}
+
+pub fn remove_notes_batch(index: &Index, entity_ids: &[i32]) -> Result<(), String> {
+    let keys: Vec<String> = entity_ids.iter().map(|id| format!("note:{}", id)).collect();
+    remove_docs_batch(index, &keys)
+}
+
+pub fn remove_maps_batch(index: &Index, map_ids: &[i32]) -> Result<(), String> {
+    let keys: Vec<String> = map_ids.iter().map(|id| format!("map:{}", id)).collect();
+    remove_docs_batch(index, &keys)
 }
 
 pub fn index_map(index: &Index, map: &Map) -> Result<(), String> {

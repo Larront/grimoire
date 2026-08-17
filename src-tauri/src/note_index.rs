@@ -363,6 +363,43 @@ pub fn remove(
     Ok(ReconcileOutcome { search_stale })
 }
 
+/// The bulk form of [`remove`]: clear the Derived Index for many notes at once —
+/// one SQLite transaction for all three tables, one Tantivy commit for all the
+/// documents. Same ordering obligation as [`remove`]: call it while the `notes`
+/// rows still exist.
+///
+/// A folder delete is the caller this exists for. Going through [`remove`] per note
+/// costs a writer acquisition and a commit each (`search::remove_doc`), which for a
+/// folder of a few hundred notes is a long stall with the ledger mutex held —
+/// the same cost `index_notes_batch` exists to avoid on the write side.
+pub fn remove_many(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    doomed: &[(i32, String)],
+) -> Result<ReconcileOutcome, String> {
+    if doomed.is_empty() {
+        return Ok(ReconcileOutcome { search_stale: false });
+    }
+
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        for (note_id, note_path) in doomed {
+            diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path))).execute(c)?;
+            diesel::delete(nl::note_links.filter(nl::source_id.eq(note_id))).execute(c)?;
+            diesel::delete(na::note_aliases.filter(na::note_id.eq(note_id))).execute(c)?;
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let ids: Vec<i32> = doomed.iter().map(|(id, _)| *id).collect();
+    let search_stale = match index {
+        Some(idx) => crate::search::remove_notes_batch(idx, &ids).is_err(),
+        None => true,
+    };
+
+    Ok(ReconcileOutcome { search_stale })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,6 +635,63 @@ mod tests {
 
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
         assert_eq!(tags, vec!["new"]);
+    }
+
+    // ── remove_many ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn remove_many_clears_every_named_note_and_leaves_the_rest() {
+        let mut conn = test_conn();
+        let doomed = make_note(1, "creatures/dragon.md");
+        let doomed_two = make_note(2, "creatures/wyvern.md");
+        let bystander = make_note(3, "top-level.md");
+        for note in [&doomed, &doomed_two, &bystander] {
+            insert_note(&mut conn, note);
+            reconcile(
+                &mut conn,
+                None,
+                note,
+                "---\ntags: [beast]\naliases: [Scaly]\n---\n[[somewhere.md]]",
+                None,
+            )
+            .unwrap();
+        }
+
+        remove_many(
+            &mut conn,
+            None,
+            &[
+                (doomed.id, doomed.path.clone()),
+                (doomed_two.id, doomed_two.path.clone()),
+            ],
+        )
+        .unwrap();
+
+        let tag_paths: Vec<String> = nt::note_tags.select(nt::note_path).load(&mut conn).unwrap();
+        assert_eq!(tag_paths, vec!["top-level.md"]);
+        let link_sources: Vec<i32> = nl::note_links.select(nl::source_id).load(&mut conn).unwrap();
+        assert_eq!(link_sources, vec![3]);
+        let alias_ids: Vec<i32> = na::note_aliases.select(na::note_id).load(&mut conn).unwrap();
+        assert_eq!(alias_ids, vec![3]);
+    }
+
+    #[test]
+    fn remove_many_of_nothing_reports_no_staleness() {
+        let mut conn = test_conn();
+        // No index and nothing to remove: there is no Tantivy write to have failed,
+        // so the caller must not be told the index is behind.
+        let outcome = remove_many(&mut conn, None, &[]).unwrap();
+        assert!(!outcome.search_stale);
+    }
+
+    #[test]
+    fn remove_many_without_an_index_reports_search_stale() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+
+        let outcome = remove_many(&mut conn, None, &[(note.id, note.path.clone())]).unwrap();
+        assert!(outcome.search_stale);
     }
 
     // ── reconcile — Tantivy best-effort ──────────────────────────────────────
