@@ -53,7 +53,7 @@
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
-  import type { RowChange } from "$lib/editor/row-list";
+  import { settleRowChange, type RowChange } from "$lib/editor/row-list";
   import { blankLabelledRow, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
   import {
     applyArithmetic,
@@ -178,19 +178,17 @@
     commit();
   }
 
-  // Order changes come from the Row List, which owns the controls and the arithmetic.
-  // What is decided here is which of them reaches the document: a move and a delete at
-  // once, but a freshly inserted row is empty and serializes to nothing at all, so it
-  // waits — it becomes a document write when the GM types into it. The same rule holds
-  // one and two levels down, for a section and for an entry.
+  // Order changes come from the Row List, which owns the controls and the splicing.
+  // Whether one of them reaches the document is `settleRowChange`'s rule, stated once
+  // there and the same at all three depths; what differs here is only which level of the
+  // creature the focus names.
   function handleRowChange(next: LabelledRow[], change: RowChange) {
     _rows = next;
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "row", index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "row", index }),
+      commit,
+    });
   }
 
   // ── Play ────────────────────────────────────────────────────────────────────
@@ -252,11 +250,10 @@
   function handleSectionChange(next: StatblockSection[], change: RowChange) {
     _sections = next;
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "section", index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "section", index }),
+      commit,
+    });
   }
 
   // ── Entries ─────────────────────────────────────────────────────────────────
@@ -272,11 +269,10 @@
   function handleEntryChange(section: number, next: StatblockEntry[], change: RowChange) {
     _sections[section] = { ..._sections[section], entries: next };
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "entry", section, index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "entry", section, index }),
+      commit,
+    });
   }
 
   // ── Saving the shape ────────────────────────────────────────────────────────

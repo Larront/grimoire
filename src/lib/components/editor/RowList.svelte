@@ -8,18 +8,12 @@
   // all, which is the point: the labelled-row *format* is a separate primitive.
   //
   // Deliberately controlled rather than stateful: every control hands the new
-  // array back through `onChange` and the consumer writes it. A block decides for
-  // itself which order changes become a document write (Timeline commits a move
-  // and a delete immediately, but leaves a freshly inserted blank row uncommitted
-  // until the GM finishes typing in it), and that decision cannot live here.
+  // array back through `onChange` and the consumer writes it. Whether a change
+  // becomes a document write is not this list's call — it is `settleRowChange`'s
+  // rule, and each block spells the focus half of it its own way.
   import type { Snippet } from "svelte";
   import { ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
-  import {
-    moveRow,
-    insertRowAt,
-    deleteRowAt,
-    type RowChange,
-  } from "$lib/editor/row-list";
+  import type { RowChange } from "$lib/editor/row-list";
 
   let {
     rows,
@@ -95,18 +89,33 @@
       hoveredIndex === rows.length - 1,
   );
 
+  // The three splices, and nothing between them and the array. They lived behind a
+  // module seam and had one caller each — this one — which bought a seam and no
+  // decision, and left the move's "nothing happened" answer to be read back out here as
+  // reference equality across it (#218). The rows are the consumer's, so each builds a
+  // new array rather than touching theirs.
+
   function move(from: number, to: number) {
-    const next = moveRow(rows, from, to);
-    if (next === rows) return; // off either end: nothing moved, nothing to report
+    // Off either end: nothing moved, nothing to report. The two controls are disabled at
+    // the ends, so this is the guard behind them rather than the one a GM meets.
+    if (to < 0 || to >= rows.length) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     onChange(next, { kind: "move", from, to });
   }
 
   function remove(index: number) {
-    onChange(deleteRowAt(rows, index), { kind: "delete", index });
+    onChange(
+      rows.filter((_, i) => i !== index),
+      { kind: "delete", index },
+    );
   }
 
   function insert(index: number) {
-    onChange(insertRowAt(rows, index, createRow()), { kind: "insert", index });
+    const next = [...rows];
+    next.splice(index, 0, createRow());
+    onChange(next, { kind: "insert", index });
   }
 </script>
 

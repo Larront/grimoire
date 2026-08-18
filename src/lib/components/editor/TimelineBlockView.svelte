@@ -23,7 +23,11 @@
   import { createBlankEvent, type TimelineEvent } from "$lib/editor/timeline-block";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
-  import { remapRowIndices, type RowChange } from "$lib/editor/row-list";
+  import {
+    remapRowIndices,
+    settleRowChange,
+    type RowChange,
+  } from "$lib/editor/row-list";
   import { oneLine } from "$lib/editor/labelled-row";
   import { ChevronDown } from "@lucide/svelte";
 
@@ -59,21 +63,23 @@
     expandedSet = s;
   }
 
-  // Order changes come from the Row List, which owns the controls and the arithmetic;
+  // Order changes come from the Row List, which owns the controls and the splicing;
   // what is left here is Timeline's own business — carrying the expanded set along with
-  // the rows, and deciding which changes commit. A move and a delete commit at once; a
-  // freshly inserted event is blank, so it opens for typing and becomes a document write
-  // when the GM types into it.
+  // the rows, and what it means for this block to open an event. Whether the change
+  // reaches the document is `settleRowChange`'s rule, stated once there.
   function handleRowChange(next: TimelineEvent[], change: RowChange) {
     _events = next;
     expandedSet = remapRowIndices(expandedSet, change);
-    if (change.kind === "insert") {
-      expandedSet = new Set([...expandedSet, change.index]); // description visible
-      focusedRow = change.index;
-      return;
-    }
-    focusedRow = null;
-    commit();
+    settleRowChange(change, {
+      focus: (index) => {
+        expandedSet = new Set([...expandedSet, index]); // description visible
+        focusedRow = index;
+      },
+      commit: () => {
+        focusedRow = null;
+        commit();
+      },
+    });
   }
 
   export function setAttrs(attrs: { events: TimelineEvent[] }) {

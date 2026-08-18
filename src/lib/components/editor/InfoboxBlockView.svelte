@@ -20,7 +20,7 @@
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
-  import type { RowChange } from "$lib/editor/row-list";
+  import { settleRowChange, type RowChange } from "$lib/editor/row-list";
   import {
     blankLabelledRow,
     labelText,
@@ -104,18 +104,18 @@
     commit();
   }
 
-  // Order changes come from the Row List, which owns the controls and the arithmetic.
-  // What is decided here is which of them reaches the document: a move and a delete at
-  // once, but a freshly inserted row is empty and serializes to nothing at all, so it
-  // waits — it becomes a document write when the GM types into it.
+  // Order changes come from the Row List, which owns the controls and the splicing.
+  // Whether one of them reaches the document is `settleRowChange`'s rule, stated once
+  // there; what is left here is what this block means by focusing a row.
   function handleRowChange(next: LabelledRow[], change: RowChange) {
     _rows = next;
-    if (change.kind === "insert") {
-      focusedRow = change.index;
-      return;
-    }
-    focusedRow = null;
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focusedRow = index),
+      commit: () => {
+        focusedRow = null;
+        commit();
+      },
+    });
   }
 
   export function setAttrs(attrs: Infobox) {

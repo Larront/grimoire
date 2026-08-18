@@ -1,105 +1,61 @@
 // Tests for the Row List (ADR-0016 §4, #173) — the shared machinery for an
 // ordered list of rows inside a Note Block, extracted from Timeline.
 //
-// Two seams. The order arithmetic is pure and tested directly. The controls are
-// tested through a fixture consumer whose rows are plain strings — deliberately
-// not `Label: value`, because the primitive's whole claim is that it knows
-// nothing about what a row contains, and a fixture that looked like an Infobox
-// row would not prove it.
+// Two seams. What a change *means* — where per-row view state goes, and whether the
+// change reaches the document — is pure and tested directly. The controls, splicing
+// included, are tested through a fixture consumer whose rows are plain strings:
+// deliberately not `Label: value`, because the primitive's whole claim is that it knows
+// nothing about what a row contains, and a fixture that looked like an Infobox row would
+// not prove it.
+//
+// The three array helpers that used to be tested here on their own are gone (#218). They
+// had one caller each and no decision in them, and every claim those eighty lines made is
+// made again below through the control that performs it — which is the seam a GM reaches.
 import { render, fireEvent, cleanup } from "@testing-library/svelte";
-import { describe, it, expect, afterEach } from "vitest";
-import {
-  insertRowAt,
-  deleteRowAt,
-  moveRow,
-  remapRowIndices,
-} from "$lib/editor/row-list";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { remapRowIndices, settleRowChange } from "$lib/editor/row-list";
 import RowListFixture from "./fixtures/RowListFixture.svelte";
 
 afterEach(cleanup);
 
-// ─── insertRowAt ──────────────────────────────────────────────────────────────
+// ─── The commit rule ──────────────────────────────────────────────────────────
+//
+// The decision that used to be copied into five blocks with a comment each and no test
+// at all, which is the wrong way round: the splicing was trivially correct and heavily
+// covered, and this is the half that can lose a GM's row.
 
-describe("insertRowAt", () => {
-  it("inserts at the top", () => {
-    expect(insertRowAt(["a", "b"], 0, "new")).toEqual(["new", "a", "b"]);
+describe("settleRowChange", () => {
+  /** The two things a block does about a change, recorded rather than performed. */
+  function block() {
+    return { focus: vi.fn(), commit: vi.fn() };
+  }
+
+  it("focuses a freshly inserted row and does not write it", () => {
+    // A blank row serializes to nothing, so committing it would write the fence that is
+    // already on disk — an undo step that takes nothing back, on a note marked dirty for
+    // a change the GM cannot see.
+    const b = block();
+    settleRowChange({ kind: "insert", index: 2 }, b);
+
+    expect(b.focus).toHaveBeenCalledWith(2);
+    expect(b.commit).not.toHaveBeenCalled();
   });
 
-  it("inserts in the middle", () => {
-    expect(insertRowAt(["a", "c"], 1, "b")).toEqual(["a", "b", "c"]);
+  it("writes a delete at once, and focuses nothing", () => {
+    const b = block();
+    settleRowChange({ kind: "delete", index: 1 }, b);
+
+    expect(b.commit).toHaveBeenCalledTimes(1);
+    expect(b.focus).not.toHaveBeenCalled();
   });
 
-  it("inserts at the end (index === length)", () => {
-    expect(insertRowAt(["a", "b"], 2, "c")).toEqual(["a", "b", "c"]);
-  });
+  it("writes a move at once, and focuses nothing", () => {
+    // What the GM asked for is already fully expressed by the rows in front of them.
+    const b = block();
+    settleRowChange({ kind: "move", from: 2, to: 1 }, b);
 
-  it("inserts into an empty list", () => {
-    expect(insertRowAt([], 0, "a")).toEqual(["a"]);
-  });
-
-  it("does not mutate the original", () => {
-    const original = ["a", "b"];
-    insertRowAt(original, 1, "x");
-    expect(original).toEqual(["a", "b"]);
-  });
-});
-
-// ─── deleteRowAt ──────────────────────────────────────────────────────────────
-
-describe("deleteRowAt", () => {
-  it("removes the row at the index", () => {
-    expect(deleteRowAt(["a", "b", "c"], 1)).toEqual(["a", "c"]);
-  });
-
-  it("removes the only row", () => {
-    expect(deleteRowAt(["a"], 0)).toEqual([]);
-  });
-
-  it("is a no-op for an index out of range", () => {
-    expect(deleteRowAt(["a", "b"], 2)).toEqual(["a", "b"]);
-    expect(deleteRowAt(["a", "b"], -1)).toEqual(["a", "b"]);
-  });
-
-  it("does not mutate the original", () => {
-    const original = ["a", "b"];
-    deleteRowAt(original, 0);
-    expect(original).toEqual(["a", "b"]);
-  });
-});
-
-// ─── moveRow ──────────────────────────────────────────────────────────────────
-
-describe("moveRow", () => {
-  it("moves a row up one position (the move-up control)", () => {
-    expect(moveRow(["a", "b", "c"], 1, 0)).toEqual(["b", "a", "c"]);
-  });
-
-  it("moves a row down one position (the move-down control)", () => {
-    expect(moveRow(["a", "b", "c"], 1, 2)).toEqual(["a", "c", "b"]);
-  });
-
-  it("moves across more than one position", () => {
-    expect(moveRow(["a", "b", "c", "d"], 0, 2)).toEqual(["b", "c", "a", "d"]);
-  });
-
-  it("is a no-op moving off either end", () => {
-    expect(moveRow(["a", "b"], 0, -1)).toEqual(["a", "b"]);
-    expect(moveRow(["a", "b"], 1, 2)).toEqual(["a", "b"]);
-  });
-
-  it("is a no-op when from === to", () => {
-    expect(moveRow(["a", "b"], 1, 1)).toEqual(["a", "b"]);
-  });
-
-  it("down then up returns the original order", () => {
-    const rows = ["a", "b", "c"];
-    expect(moveRow(moveRow(rows, 1, 2), 2, 1)).toEqual(rows);
-  });
-
-  it("does not mutate the original", () => {
-    const original = ["a", "b"];
-    moveRow(original, 0, 1);
-    expect(original).toEqual(["a", "b"]);
+    expect(b.commit).toHaveBeenCalledTimes(1);
+    expect(b.focus).not.toHaveBeenCalled();
   });
 });
 
