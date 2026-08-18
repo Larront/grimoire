@@ -51,7 +51,6 @@ function statblock(
   } = {},
 ) {
   const onCommit = vi.fn();
-  const onRemove = vi.fn();
   const rendered = render(StatblockBlockView, {
     props: {
       name: "Goblin Scout",
@@ -59,13 +58,12 @@ function statblock(
       sections: ACTIONS,
       width: DEFAULT_STATBLOCK_WIDTH,
       onCommit,
-      onRemove,
       ...props,
     },
   });
   /** Opens the structure, the way the GM does: the pencil in the block's chrome. */
   const edit = () => fireEvent.click(rendered.getByLabelText("Edit statblock structure"));
-  return { ...rendered, onCommit, onRemove, edit };
+  return { ...rendered, onCommit, edit };
 }
 
 /** The statblock as the block last handed it to the document. */
@@ -677,18 +675,17 @@ describe("the mode is scoped to structure", () => {
     );
   });
 
-  it("keeps removal behind the pencil, out of reach of a mis-click mid-fight", async () => {
-    // The largest version of the slip the mode exists to prevent: in view mode there is
-    // no trash to hit at all, so deleting the creature takes the same deliberate gesture
-    // as editing its maximum (#175 review).
-    const { queryByLabelText, getByLabelText, onRemove, edit } = statblock(creature);
+  it("draws no delete control of its own, in either mode", async () => {
+    // Removal used to sit behind the pencil, which was the safest place for a trash can
+    // a block drew itself. The gutter handle's menu deletes anything now (#194), so the
+    // statblock draws none at all — the last block that still did (#219).
+    const { queryByLabelText, edit } = statblock(creature);
 
     expect(queryByLabelText("Remove statblock")).toBeNull();
 
     await edit();
-    await fireEvent.click(getByLabelText("Remove statblock"));
 
-    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(queryByLabelText("Remove statblock")).toBeNull();
   });
 
   it("opens labels, maximums, headings and entry prose behind the pencil", async () => {

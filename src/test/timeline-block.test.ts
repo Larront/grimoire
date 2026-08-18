@@ -6,7 +6,6 @@ import {
   parseTimelineBody,
   serializeTimelineEvents,
   createBlankEvent,
-  renderTimelineText,
   TimelineBlock,
   type TimelineEvent,
 } from "$lib/editor/timeline-block";
@@ -452,104 +451,5 @@ describe("createBlankEvent", () => {
     const b = createBlankEvent();
     a.title = "mutated";
     expect(b.title).toBe("");
-  });
-});
-
-
-// ─── renderTimelineText ───────────────────────────────────────────────────────
-
-describe("renderTimelineText", () => {
-  it("plain text passes through unchanged", () => {
-    expect(renderTimelineText("The Shattering")).toBe("The Shattering");
-  });
-
-  it("empty string returns empty string", () => {
-    expect(renderTimelineText("")).toBe("");
-  });
-
-  it("[[Path]] becomes a data-wiki-link span with correct data attributes", () => {
-    const result = renderTimelineText("[[The Shattering]]");
-    expect(result).toContain("data-wiki-link");
-    expect(result).toContain('data-path="The Shattering"');
-    expect(result).toContain('data-title="The Shattering"');
-  });
-
-  it("path with .md extension strips extension from display title", () => {
-    const result = renderTimelineText("[[Characters/Aldric.md]]");
-    expect(result).toContain('data-path="Characters/Aldric.md"');
-    expect(result).toContain('data-title="Aldric"');
-  });
-
-  it("nested path — title is the last segment without extension", () => {
-    const result = renderTimelineText("[[World/Events/The Shattering.md]]");
-    expect(result).toContain('data-path="World/Events/The Shattering.md"');
-    expect(result).toContain('data-title="The Shattering"');
-  });
-
-  it("plain text before and after link is preserved", () => {
-    const result = renderTimelineText("See [[Aldric]] for details");
-    expect(result).toContain("See ");
-    expect(result).toContain("data-wiki-link");
-    expect(result).toContain(" for details");
-  });
-
-  it("multiple links in one string produces multiple spans", () => {
-    const result = renderTimelineText("[[Alpha]] and [[Beta]]");
-    expect((result.match(/data-wiki-link/g) ?? []).length).toBe(2);
-    expect(result).toContain('data-path="Alpha"');
-    expect(result).toContain('data-path="Beta"');
-  });
-
-  it("HTML special chars in plain text segments are escaped", () => {
-    const result = renderTimelineText("A <b> title & more");
-    expect(result).not.toContain("<b>");
-    expect(result).toContain("&lt;b&gt;");
-    expect(result).toContain("&amp;");
-  });
-
-  it("pipe-separated display text uses the display alias as title", () => {
-    const result = renderTimelineText("[[Characters/Aldric.md|Aldric the Great]]");
-    expect(result).toContain('data-path="Characters/Aldric.md"');
-    expect(result).toContain('data-title="Aldric the Great"');
-    expect(result).toContain("Aldric the Great");
-  });
-
-  it("no [[...]] means no span elements", () => {
-    const result = renderTimelineText("Just a plain description.");
-    expect(result).not.toContain("<span");
-    expect(result).not.toContain("data-wiki-link");
-  });
-
-  it("no resolver: links are never marked broken", () => {
-    expect(renderTimelineText("[[Aldric]]")).not.toContain("data-broken");
-  });
-
-  it("resolver: unresolved path gets data-broken (faded-accent stub)", () => {
-    const result = renderTimelineText("[[Ghost]]", () => false);
-    expect(result).toContain("data-wiki-link data-broken");
-    expect(result).toContain('data-path="Ghost"');
-  });
-
-  it("resolver: resolved path has no data-broken (full accent)", () => {
-    const result = renderTimelineText("[[Aldric]]", () => true);
-    expect(result).toContain("data-wiki-link");
-    expect(result).not.toContain("data-broken");
-  });
-
-  it("resolver receives the path, not the display title", () => {
-    const seen: string[] = [];
-    renderTimelineText("[[Characters/Aldric.md|Aldric the Great]]", (p) => {
-      seen.push(p);
-      return true;
-    });
-    expect(seen).toEqual(["Characters/Aldric.md"]);
-  });
-
-  it("resolver: mixed resolved and broken links in one string", () => {
-    const known = new Set(["Alpha"]);
-    const result = renderTimelineText("[[Alpha]] then [[Beta]]", (p) => known.has(p));
-    // Alpha resolved (no marker), Beta broken (one marker)
-    expect((result.match(/data-broken/g) ?? []).length).toBe(1);
-    expect(result).toMatch(/data-path="Beta"[^>]*/);
   });
 });

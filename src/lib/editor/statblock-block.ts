@@ -475,7 +475,7 @@ export const StatblockBlock = Node.create({
         sections: [],
         width: DEFAULT_STATBLOCK_WIDTH,
       },
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes }) => ({
         onCommit: (block: Statblock) =>
           updateAttributes({
             name: block.name,
@@ -483,7 +483,6 @@ export const StatblockBlock = Node.create({
             sections: block.sections,
             width: block.width,
           }),
-        onRemove: deleteNode,
       }),
       mounted: (view, attrs) => {
         // A fresh `/statblock`: one empty header row, opened for typing straight away.

@@ -313,3 +313,50 @@ reading §7 should know the guarantee is echo-suppression, not exclusion.
 **Image was left alone.** The `atom` flag question above was answered by not needing an answer: a
 childless node is already an atom, so setting the flag would change no behaviour, and Image's
 on-disk form is unchanged.
+
+### 2026-08-18 — The last three pieces of drift, closed
+
+Three tickets, none of them changing a decision above: each is the ADR's own text finally
+being true of the code. Recorded because two of them read, from the outside, like the ADR
+being contradicted.
+
+**One table now declares each block's word and icon**
+([#220](https://github.com/Larront/grimoire/issues/220)). The slash menu, the gutter
+handle's "Turn into" section and the handle's accessible label named the same blocks
+separately, with a comment in the second *asserting* they agreed and nothing keeping it.
+`BLOCK_VOCABULARY` (`block-vocabulary.ts`) is that comment as data, and `BLOCK_WORDS` is
+derived from it.
+
+This is **not** the registry §3 rejects, and the distinction is the reason it is worth
+recording. §3's argument is about node specs, markdown claims, slash entries and node
+views — a collector for those would tidy the *cheap* part of a new block while hiding the
+expensive one. Fourteen display strings are not that: nothing about a block's behaviour
+goes through this table, and the failure it prevents — a GM meeting one block under two
+names — is not a failure a checklist can catch. The icon names are typed against the icon
+map, so a typo is now a build error rather than a menu item drawn with no glyph.
+
+It does cross §3's *"One directory. Everything block-specific lives in it"*, and knowingly:
+a word and an icon are not block-specific in the sense that clause protects. That clause
+keeps a block's **implementation** in one place so a new one can be read and deleted whole;
+these strings belong to the *menus*, which are editor chrome no block owns, and neither
+menu could read them from fourteen directories without a collector of exactly the kind §3
+refuses. A block's directory still holds everything that makes it work.
+
+**No block draws its own delete control**
+([#219](https://github.com/Larront/grimoire/issues/219)). The gutter handle's menu deletes
+anything, and Infobox and Timeline dropped their trash cans when it landed; Statblock and
+Image kept theirs, which is §8's drift at the level of a single control. Both are gone, and
+the statblock's control row is one button shorter in both modes.
+
+**Timeline's values are Linked Text Fields** ([#214](https://github.com/Larront/grimoire/issues/214)).
+§8's sentence — *a block's free-text values are Linked Text Fields; a block never renders
+or resolves a wikilink itself* — was true of Infobox, Statblock and Callout and false of
+Timeline, which built `data-wiki-link` spans as an HTML string for `{@html}` and asked the
+Link Resolver itself. `renderTimelineText` and its escaper are deleted, so the sentence now
+holds without exception.
+
+It cost Timeline its **mode**, which §6 says it should never have had: a row swapped its
+three values for three inputs because pre-rendered markup cannot be typed into, and a field
+is its own way in. A timeline holds no play values, so there was nothing for a mode to
+protect. `RowList`'s `onRowFocusOut` went with it — that mode was its only caller, and a
+field commits its own edit on blur.

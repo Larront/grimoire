@@ -63,25 +63,24 @@ describe("Timeline rows", () => {
     expect(committedTitles(onCommit, 0)).toEqual(["Beta"]);
   });
 
-  it("inserting between two events opens the new one for editing without committing", async () => {
+  it("inserting between two events opens the new one for typing without committing", async () => {
     const onCommit = vi.fn();
-    const { getByLabelText, getAllByLabelText, getByPlaceholderText } = render(
-      TimelineBlockView,
-      {
-        props: {
-          events: [
-            { date: "", title: "Alpha", description: "" },
-            { date: "", title: "Beta", description: "" },
-          ],
-          onCommit,
-        },
+    const { getByLabelText, getAllByLabelText } = render(TimelineBlockView, {
+      props: {
+        events: [
+          { date: "", title: "Alpha", description: "" },
+          { date: "", title: "Beta", description: "" },
+        ],
+        onCommit,
       },
-    );
+    });
     await fireEvent.click(getByLabelText("Insert event after position 1"));
     expect(getAllByLabelText("Delete event")).toHaveLength(3);
     // A blank event is not worth writing to the note until the GM types in it.
     expect(onCommit).not.toHaveBeenCalled();
-    expect(getByPlaceholderText("Title")).toBeTruthy();
+    // The new event's title is the field that took the caret — an input rather than the
+    // button a drawn value is.
+    expect(getByLabelText("Event 2 title").tagName).toBe("INPUT");
   });
 
   it("the insertion points between events stay hidden until an event is hovered", async () => {

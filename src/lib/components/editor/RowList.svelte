@@ -28,7 +28,6 @@
     onChange,
     noun = "row",
     insertionPointClass = "",
-    onRowFocusOut,
   }: {
     /** The rows, in order. The consumer owns them; this never mutates them. */
     rows: T[];
@@ -52,12 +51,13 @@
      * own content column — Timeline indents them past its spine.
      */
     insertionPointClass?: string;
-    /**
-     * Focus left somewhere inside a row. The row's own element comes with it, so a
-     * consumer can ask where focus actually landed before committing an edit.
-     */
-    onRowFocusOut?: (index: number, rowEl: HTMLElement) => void;
   } = $props();
+
+  // There was an `onRowFocusOut` here, reporting focus leaving a row so a consumer could
+  // commit an edit once it had settled. Timeline was its only caller, for the mode it no
+  // longer has (#214): every value in every block is a Linked Text Field now, and a field
+  // commits its own edit on blur. A row-level hook for the same thing is a second answer
+  // to a question one already has.
 
   let hoveredIndex = $state<number | null>(null);
   /**
@@ -157,7 +157,6 @@
     class="row-list-row group relative flex items-start gap-2"
     role="group"
     aria-label={`${groupNoun} ${i + 1}`}
-    onfocusout={(e) => onRowFocusOut?.(i, e.currentTarget as HTMLElement)}
     onmouseenter={() => (hoveredIndex = i)}
     onmouseleave={() => (hoveredIndex = null)}
   >

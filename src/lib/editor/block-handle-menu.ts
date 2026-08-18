@@ -21,6 +21,8 @@
 //     browser and without a global stub.
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { BlockIconName } from "$lib/components/editor/block-icons";
+import { nameAndIcon } from "./block-vocabulary";
 import {
   blockLabel,
   blockMarkdownAt,
@@ -56,8 +58,12 @@ export interface BlockHandleMenuItem {
    * and "Turn paragraph into Heading 2" read seven times is noise.
    */
   label: string;
-  /** A Lucide icon *name*, resolved through `BLOCK_ICONS` the way the slash menu's are. */
-  icon: string;
+  /**
+   * A Lucide icon *name*, resolved through `BLOCK_ICONS` the way the slash menu's are.
+   * Typed as a name that exists, so a typo is a build error rather than a menu item
+   * silently drawn with no glyph (#220).
+   */
+  icon: BlockIconName;
   /** For a transformation: whether the block is already this. Never true of the three. */
   current?: boolean;
 }
@@ -69,22 +75,25 @@ export interface BlockHandleMenuSection {
 }
 
 /**
- * What a text block can become, in the order the GM reads it — the same words and icons
- * the slash menu uses for these seven, because they are the same seven things and a GM
- * who learned them there should not have to learn them twice.
+ * What a text block can become, in the order the GM reads it.
+ *
+ * Order only. The words and icons are the slash menu's — literally, through the same
+ * `nameAndIcon` that menu spreads into its own entries — because they are the same seven
+ * things and a GM who learned them there should not have to learn them twice (#220). This
+ * used to restate them, with a comment claiming the agreement and nothing keeping it.
  *
  * Quote is the *ordinary* quote and not a typed callout. A GM turning a paragraph into a
  * quote is asking for a quote; picking "encounter" or "warning" for them would be
  * inventing an intent they did not express.
  */
-const TURN_INTO: { into: TurnIntoKind; label: string; icon: string }[] = [
-  { into: "paragraph", label: "Paragraph", icon: "Pilcrow" },
-  { into: "heading1", label: "Heading 1", icon: "Heading1" },
-  { into: "heading2", label: "Heading 2", icon: "Heading2" },
-  { into: "heading3", label: "Heading 3", icon: "Heading3" },
-  { into: "bulletList", label: "Bullet List", icon: "List" },
-  { into: "orderedList", label: "Numbered List", icon: "ListOrdered" },
-  { into: "quote", label: "Quote", icon: "Quote" },
+const TURN_INTO: TurnIntoKind[] = [
+  "paragraph",
+  "heading1",
+  "heading2",
+  "heading3",
+  "bulletList",
+  "orderedList",
+  "quote",
 ];
 
 /**
@@ -114,10 +123,9 @@ export function blockHandleMenuSections(
     const current = turnIntoKindAt(doc, target.pos);
     sections.push({
       title: "Turn into",
-      items: TURN_INTO.map(({ into, label, icon }) => ({
+      items: TURN_INTO.map((into) => ({
         command: { turnInto: into },
-        label,
-        icon,
+        ...nameAndIcon(into),
         current: into === current,
       })),
     });

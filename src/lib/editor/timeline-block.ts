@@ -17,7 +17,7 @@ export interface TimelineEvent {
 
 /** A freshly inserted timeline opens its one blank event, so its view must let it. */
 interface TimelineBlockViewExports extends BlockView {
-  openEdit: (index: number) => void;
+  focusRow: (index: number) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -33,55 +33,11 @@ function isBlankEvent(e: TimelineEvent): boolean {
 // Order — inserting, moving and deleting events — is the Row List's (#173), which
 // the view reaches directly. Nothing about ordering lives here any more.
 
-// ─── Display rendering ───────────────────────────────────────────────────────
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/**
- * Converts `[[...]]` wikilinks in a plain text string to `data-wiki-link` spans
- * suitable for rendering with {@html} in display mode. Plain-text segments are
- * HTML-escaped; the generated spans match the shape that Editor.svelte's delegated
- * handleClick / handleMouseover handlers expect.
- *
- * `isKnownPath` resolves whether a link points at an existing note. Links it
- * rejects get a `data-broken` marker so they can be styled as faded-accent stubs
- * (full-accent for resolved links). When omitted, no link is marked broken.
- */
-export function renderTimelineText(
-  text: string,
-  isKnownPath?: (path: string) => boolean,
-): string {
-  const re = /\[\[([^\]]+)\]\]/g;
-  const parts: string[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(text)) !== null) {
-    parts.push(escapeHtml(text.slice(lastIndex, match.index)));
-
-    const rawInner = match[1].trim();
-    const pipeIdx = rawInner.indexOf("|");
-    const path = pipeIdx >= 0 ? rawInner.slice(0, pipeIdx).trim() : rawInner;
-    const title =
-      pipeIdx >= 0
-        ? rawInner.slice(pipeIdx + 1).trim()
-        : (path.split("/").pop()?.replace(/\.md$/, "") ?? path);
-
-    const escapedPath = path.replace(/"/g, "&quot;");
-    const escapedTitle = title.replace(/"/g, "&quot;");
-    const brokenAttr = isKnownPath && !isKnownPath(path) ? " data-broken" : "";
-    parts.push(
-      `<span data-wiki-link${brokenAttr} data-path="${escapedPath}" data-title="${escapedTitle}">${escapeHtml(title)}</span>`,
-    );
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  parts.push(escapeHtml(text.slice(lastIndex)));
-  return parts.join("");
-}
+// Display rendering used to be here: an HTML-escaper and a function building
+// `data-wiki-link` spans as a string for `{@html}`. Both are gone (#214) — the view's
+// values are Linked Text Fields, which split a value into segments Svelte draws, so the
+// escaping problem is deleted rather than kept in a second escaper. Nothing about how a
+// timeline *looks* lives in this file any more.
 
 // ─── Grammar ──────────────────────────────────────────────────────────────────
 //
@@ -258,9 +214,10 @@ export const TimelineBlock = Node.create({
         onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
       }),
       mounted: (view, attrs) => {
-        // Fresh /timeline insert: one blank event → open it in edit mode immediately
+        // Fresh /timeline insert: one blank event → its title opens for typing, the way
+        // a fresh infobox's first row does.
         const events = attrs.events as TimelineEvent[];
-        if (events.length === 1 && isBlankEvent(events[0])) view.openEdit(0);
+        if (events.length === 1 && isBlankEvent(events[0])) view.focusRow(0);
       },
     });
   },

@@ -4,9 +4,9 @@
 // A field renders by splitting its string into **text and link segments Svelte draws
 // normally**, never by building an HTML string. That is the whole reason this returns
 // records rather than markup: the escaping problem is *deleted* rather than
-// consolidated into two escapers that will eventually disagree. `renderTimelineText`
-// is the escaper this replaces, and Timeline moves onto this path when its own ticket
-// rewrites its rows.
+// consolidated into two escapers that will eventually disagree. `renderTimelineText` was
+// the escaper this replaced, and it is gone: Timeline's own ticket moved its rows onto
+// this path (#214), so every free-text value in every block now draws through here.
 //
 // Deliberately free of TipTap, ProseMirror and Svelte: the field draws these, the
 // Link Resolver answers whether each one resolves, and neither concern is here.

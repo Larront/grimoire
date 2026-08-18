@@ -138,11 +138,10 @@ export const ImageBlock = Image.extend({
       domAttrs: { "data-image-block": "", "data-note-block": "image" },
       defaults: { src: "", alt: "", align: "center", width: "100%" },
       drawsOwnSelection: true,
-      props: ({ updateAttributes, deleteNode }) => ({
+      props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
         onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
         onSrcReplace: (src: string) => updateAttributes({ src }),
-        onRemove: deleteNode,
       }),
 
       // Image's use of the connector's event hole: a mousedown must reach

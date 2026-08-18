@@ -291,14 +291,5 @@ describe("RowList controls", () => {
     expect(component.marked()).toEqual([0]);
   });
 
-  it("focus leaving a row reaches the consumer with the row's element", async () => {
-    const { getAllByRole, getByText, component } = render(RowListFixture, {
-      rows: ["alpha", "beta"],
-    });
-    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
-    await fireEvent.focusOut(getByText("beta"));
-    expect(component.focusOuts()).toHaveLength(1);
-    expect(component.focusOuts()[0].index).toBe(1);
-    expect(component.focusOuts()[0].contained).toBe(rows[1]);
-  });
+  // The case for `onRowFocusOut` went with the prop itself (#214) — see `RowList.svelte`.
 });

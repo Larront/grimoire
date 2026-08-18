@@ -47,7 +47,6 @@
     ChevronDown,
     FoldHorizontal,
     Pencil,
-    Trash2,
     UnfoldHorizontal,
   } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
@@ -82,15 +81,12 @@
     sections,
     width,
     onCommit,
-    onRemove,
   }: {
     name: string;
     rows: LabelledRow[];
     sections: StatblockSection[];
     width: StatblockWidth;
     onCommit: (block: Statblock) => void;
-    /** Takes the whole block out of the note. Offered in edit mode only — see below. */
-    onRemove?: () => void;
   } = $props();
 
   // svelte-ignore state_referenced_locally
@@ -544,6 +540,11 @@
   contenteditable="false"
   onkeydown={handleKeydown}
 >
+  <!-- The block's own controls: collapse, width, preset, and the way into and out of the
+       mode. Everything here is the *statblock's* business and nothing else's — a delete
+       is not, so there is no trash can, the way there is none on an infobox or a
+       timeline. The gutter handle's menu deletes anything (#194), and a block drawing
+       chrome its siblings deleted is the drift ADR-0016 §8 exists to prevent (#219). -->
   <div
     class="absolute top-1 right-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity
            duration-150 motion-reduce:transition-none group-hover/block:opacity-100
@@ -591,17 +592,6 @@
       <Bookmark size={13} />
     </button>
     {#if editing}
-      {#if onRemove}
-        <button
-          type="button"
-          class="rounded p-0.5 text-muted-foreground hover:text-destructive cursor-pointer
-                 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          aria-label="Remove statblock"
-          onclick={onRemove}
-        >
-          <Trash2 size={13} />
-        </button>
-      {/if}
       <button
         type="button"
         class="rounded p-0.5 text-primary hover:text-foreground cursor-pointer
@@ -625,11 +615,11 @@
   </div>
 
   <!-- The name, with the gutter the control row above sits in reserved on its right so a
-       long name never runs under the icons. One step tighter in each mode since the grip
-       moved out to the gutter (#193) and left the row a button shorter. The numbers are
-       the same ones the row already used at each length rather than a fresh guess: edit
-       mode's five buttons are exactly what view mode held at `pr-24` before this change,
-       and view mode is now four. -->
+       long name never runs under the icons. One number rather than one per mode, because
+       the two modes now draw the same *count*: the trash the mode used to add went with
+       the rest of the per-block delete chrome (#219), so edit mode's collapse, width,
+       preset and tick are four buttons against view mode's collapse, width, preset and
+       pencil. `pr-20` is the width four already had, not a fresh guess. -->
   <LinkedTextField
     value={_name}
     onCommit={setName}
@@ -637,8 +627,7 @@
     readonly={!editing}
     ariaLabel="Statblock name"
     placeholder="Unnamed statblock"
-    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1
-           {editing ? 'pr-24' : 'pr-20'}"
+    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-20"
   />
 
   {#if !collapsed && _rows.length === 0}

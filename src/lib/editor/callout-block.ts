@@ -38,6 +38,7 @@ import type { Editor, JSONContent, MarkdownToken } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { ResolvedPos } from "@tiptap/pm/model";
+import type { BlockIconName } from "$lib/components/editor/block-icons";
 import CalloutBlockView from "$lib/components/editor/CalloutBlockView.svelte";
 import { createBlockNodeView } from "$lib/editor/node-view-connector";
 
@@ -56,8 +57,11 @@ export interface CalloutTypeSpec {
   type: string;
   /** How the type is named in the `/callout` picker. */
   label: string;
-  /** Lucide icon name, resolved to a component by SlashCommandMenu. */
-  icon: string;
+  /**
+   * Lucide icon name, resolved to a component by SlashCommandMenu. A name that exists,
+   * so a typo is a build error rather than a type drawn with no glyph (#220).
+   */
+  icon: BlockIconName;
   /** Extra search terms for the slash-command filter. Lower case. */
   keywords: string[];
 }

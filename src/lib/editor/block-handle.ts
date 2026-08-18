@@ -49,6 +49,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import { BLOCK_WORDS } from "$lib/editor/block-vocabulary";
 
 /** A block the handle can act on, and where it starts. */
 export interface BlockTarget {
@@ -687,22 +688,6 @@ export function endBlockDrag(editor: Editor): void {
 
 // ─── What to call it ──────────────────────────────────────────────────────────
 
-/** The GM's word for each node the handle can hold. A name with no entry is "block". */
-const BLOCK_WORDS: Record<string, string> = {
-  paragraph: "paragraph",
-  heading: "heading",
-  bulletList: "list",
-  orderedList: "numbered list",
-  listItem: "list item",
-  codeBlock: "code block",
-  horizontalRule: "divider",
-  statblockBlock: "statblock",
-  infoboxBlock: "infobox",
-  timelineBlock: "timeline",
-  sceneBlock: "scene",
-  image: "image",
-};
-
 /**
  * What the handle announces itself as holding — "Move statblock", "Move encounter
  * callout".
@@ -711,15 +696,17 @@ const BLOCK_WORDS: Record<string, string> = {
  * screen reader announcing "button" has told the GM nothing: which of the forty blocks in
  * this note it would move is the only fact about it. The words are the GM's own, taken
  * from the slash menu's vocabulary rather than from the schema — nobody typed
- * `statblockBlock`.
+ * `statblockBlock`. Literally the same words since #220: `BLOCK_WORDS` is derived from the
+ * one table both menus name their blocks from. A node with no entry there is a "block".
  *
  * A callout is named by its type, because "encounter" and "warning" are how the GM thinks
- * of the two boxes and both are `blockquote` underneath.
+ * of the two boxes and both are `blockquote` underneath. An untyped one falls through to
+ * the word the menus use for it, which is "quote".
  */
 export function blockLabel(node: ProseMirrorNode): string {
   if (node.type.name === "blockquote") {
     const type = node.attrs.calloutType as string | null;
-    return type ? `${type} callout` : "quote";
+    if (type) return `${type} callout`;
   }
   return BLOCK_WORDS[node.type.name] ?? "block";
 }

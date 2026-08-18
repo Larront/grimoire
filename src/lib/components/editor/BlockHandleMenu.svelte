@@ -194,9 +194,9 @@
           onclick={() => onSelect(item.command)}
           onmouseenter={() => (active = index)}
         >
-          {#if Icon}
-            <Icon size={14} class="shrink-0 opacity-70" />
-          {/if}
+          <!-- Unguarded, like the slash menu's: an item's icon name is typed as one that
+               exists (#220), so a typo is a build error rather than a missing glyph. -->
+          <Icon size={14} class="shrink-0 opacity-70" />
           <span class="flex-1">{item.label}</span>
           <!-- What the block already is, said twice on purpose: `aria-checked` for a
                screen reader, and a tick for everyone reading the menu with their eyes. -->
