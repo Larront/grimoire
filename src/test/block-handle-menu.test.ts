@@ -28,12 +28,11 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 
 import {
   blockHandleMenuSections,
-  blockStillThere,
   runBlockHandleAction,
   type BlockHandleMenuSection,
   type ClipboardWriter,
 } from "$lib/editor/block-handle-menu";
-import { deleteBlockAt } from "$lib/editor/block-handle";
+import { blockStillThere, deleteBlock } from "$lib/editor/block-handle";
 import {
   closeNote,
   note,
@@ -272,7 +271,7 @@ describe("choosing what the block becomes", () => {
   it("does nothing when the block went while the menu was open", async () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
 
     expect(
       await runBlockHandleAction(editor, bravo, { turnInto: "heading1" }),
@@ -448,7 +447,7 @@ describe("acting on a block that is no longer where the menu found it", () => {
     // describing the wrong block, which is the shape of the failure.
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
 
     expect(editor.state.doc.nodeAt(bravo.pos)?.textContent).toBe("Delta.");
     for (const action of ["duplicate", "copy", "delete"] as const) {
@@ -472,7 +471,7 @@ describe("acting on a block that is no longer where the menu found it", () => {
     const editor = note("A sentence.\n\nSecond.");
     const target = targetOf(editor, "paragraph");
     const { clipboard, written } = fakeClipboard();
-    deleteBlockAt(editor, target.pos);
+    deleteBlock(editor, target);
     await runBlockHandleAction(editor, target, "copy", clipboard);
 
     expect(written).toEqual([]);
@@ -483,10 +482,10 @@ describe("acting on a block that is no longer where the menu found it", () => {
     // resolves is not the same claim as the block the GM was looking at.
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    expect(blockStillThere(editor, bravo)).toBe(true);
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(true);
 
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     expect(editor.state.doc.nodeAt(bravo.pos)).not.toBeNull();
-    expect(blockStillThere(editor, bravo)).toBe(false);
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(false);
   });
 });

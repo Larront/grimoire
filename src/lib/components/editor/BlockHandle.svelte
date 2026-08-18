@@ -18,12 +18,10 @@
   import {
     blockElementAt,
     blockLabel,
-    blockTargetAt,
-    endBlockDrag,
-    focusProse,
-    moveBlockAt,
+    moveBlock,
     placeHandle,
-    selectBlockAt,
+    releaseBlock,
+    selectBlock,
     startBlockDrag,
     type BlockTarget,
   } from "$lib/editor/block-handle";
@@ -133,11 +131,6 @@
   /**
    * One menu item, on the block the menu was opened on.
    *
-   * The handle comes down afterwards whatever happened, and focus goes back to the prose.
-   * Every position it holds describes the document as it was before the write — after a
-   * Delete there is no block there at all — so a grip left on screen is a grip pointing at
-   * whichever block has moved into that spot.
-   *
    * The `catch` is not tidiness: Copy awaits a clipboard, and a clipboard *rejects* — a
    * denied permission, a webview that will not hand one over. Closing the menu has
    * already taken focus off the item that held it, so a throw on the way past would leave
@@ -150,9 +143,8 @@
    * taken when the menu opened — and telling a GM whose Delete failed that their clipboard
    * is broken sends them looking in the wrong place for a gesture that also did nothing.
    *
-   * `focusProse` and not `editor.commands.focus()`, here and on Escape, because the grip
-   * sets a whole-block selection on `mousedown` and `moveBlockAt` leaves one behind:
-   * focusing with one still set hands the GM a block their next character replaces.
+   * It ends in `release` like every other way out of the grip — see there for why the
+   * grip cannot simply hand focus back.
    */
   async function runMenuAction(command: BlockHandleCommand) {
     const acting = menuTarget;
@@ -164,9 +156,23 @@
         actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"),
       );
     } finally {
-      onRelease();
-      focusProse(editor);
+      release();
     }
+  }
+
+  /**
+   * The one way this gesture ends, whichever gesture it was: a menu item, a drag, Escape.
+   *
+   * The handle comes down and `releaseBlock` puts the prose back the way it found it.
+   * Both halves matter and neither is optional at any of the three: every position the
+   * handle holds describes the document as it was *before* the write — after a Delete
+   * there is no block there at all — so a grip left on screen points at whatever has
+   * moved into that spot, and a whole-block selection left set is a block the GM's next
+   * character replaces.
+   */
+  function release() {
+    onRelease();
+    releaseBlock(editor);
   }
 
   // Re-placed whenever the target changes — every pointer move that lands on a different
@@ -217,20 +223,19 @@
     // The block's own element as the drag image: without it the GM drags an 18px icon
     // and sees no ghost of the thing they are moving.
     const ghost = blockElementAt(editor.view, target.pos) ?? undefined;
-    if (!startBlockDrag(editor, target.pos, event.dataTransfer, ghost)) {
+    if (!startBlockDrag(editor, target, event.dataTransfer, ghost)) {
       event.preventDefault();
     }
   }
 
   /**
    * Every way a drag can end, including the ways that change nothing: dropped somewhere
-   * that took it, dropped on nothing, Escaped, dragged out of the window. The handle comes
-   * down for all of them, and the editor is told the drag is over for all of them — see
-   * `endBlockDrag` for what a drag that quietly stayed "in progress" does to the next one.
+   * that took it, dropped on nothing, Escaped, dragged out of the window. All of them are
+   * the same ending — see `endBlockDrag` for what a drag that quietly stayed "in
+   * progress" does to the next one, and `releaseBlock` for the selection it carried.
    */
   function handleDragEnd() {
-    endBlockDrag(editor);
-    onRelease();
+    release();
   }
 
   /**
@@ -240,10 +245,9 @@
    * not take it away.
    */
   async function move(direction: -1 | 1) {
-    const landed = moveBlockAt(editor, target.pos, direction);
-    if (landed === null) return;
-    const moved = blockTargetAt(editor.state.doc, landed);
-    if (moved) onRetarget(moved);
+    const moved = moveBlock(editor, target, direction);
+    if (!moved) return;
+    onRetarget(moved);
     await tick();
     place();
   }
@@ -313,8 +317,7 @@
         // with the moved block still selected — an Escape after `↑` would otherwise leave
         // the GM's next character standing in for the block they just reordered.
         event.preventDefault();
-        onRelease();
-        focusProse(editor);
+        release();
         break;
     }
   }
@@ -340,7 +343,7 @@
   onmouseleave={() => ((hovered = false), reportHold())}
   onfocus={() => ((focused = true), reportHold())}
   onblur={() => ((focused = false), reportHold())}
-  onmousedown={() => selectBlockAt(editor, target.pos)}
+  onmousedown={() => selectBlock(editor, target)}
   ondragstart={handleDragStart}
   ondragend={handleDragEnd}
   onkeydown={handleKeydown}

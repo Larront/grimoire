@@ -22,16 +22,24 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 
 import {
   blockTargetAt,
-  blockMarkdownAt,
+  blockMarkdown,
   canTurnInto,
-  deleteBlockAt,
-  duplicateBlockAt,
+  deleteBlock,
+  duplicateBlock,
   hoverProbeAt,
-  selectBlockAt,
-  turnIntoAt,
-  turnIntoKindAt,
+  selectBlock,
+  turnInto,
+  turnIntoKindOf,
 } from "$lib/editor/block-handle";
-import { closeNote, note, saved } from "./fixtures/note-editor";
+import { closeNote, note, saved, targetOf } from "./fixtures/note-editor";
+
+/**
+ * A target the document no longer holds — the shape a menu left open across an undo, a
+ * live-reload or a note swapped underneath ends up carrying.
+ */
+function gone(editor: ReturnType<typeof note>, type: string) {
+  return { pos: 9999, node: targetOf(editor, type).node };
+}
 
 afterEach(closeNote);
 
@@ -164,16 +172,16 @@ describe("the pointer's hover zone", () => {
 describe("selecting a block", () => {
   it("makes the block the selection, which is what a drag carries", () => {
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
-    expect(selectBlockAt(editor, posOf(editor, "statblockBlock"))).toBe(true);
+    expect(selectBlock(editor, targetOf(editor, "statblockBlock"))).toBe(true);
 
     const { selection } = editor.state;
     expect(selection).toBeInstanceOf(NodeSelection);
     expect((selection as NodeSelection).node.type.name).toBe("statblockBlock");
   });
 
-  it("declines a position that no longer holds a block", () => {
+  it("declines a target the document no longer holds", () => {
     const editor = note("A sentence.");
-    expect(selectBlockAt(editor, 9999)).toBe(false);
+    expect(selectBlock(editor, gone(editor, "paragraph"))).toBe(false);
   });
 });
 
@@ -184,7 +192,7 @@ describe("deleting a block", () => {
     const editor = note(
       ["Before.", "", "```statblock", "# Kobold A", "HP: 5/5", "```", "", "After."].join("\n"),
     );
-    deleteBlockAt(editor, posOf(editor, "statblockBlock"));
+    deleteBlock(editor, targetOf(editor, "statblockBlock"));
 
     expect(saved(editor)).toBe("Before.\n\nAfter.");
   });
@@ -195,7 +203,7 @@ describe("deleting a block", () => {
     const editor = note(
       ["Before.", "", "> [!encounter] The Ambush", "> Something waits.", "", "After."].join("\n"),
     );
-    deleteBlockAt(editor, posOf(editor, "blockquote"));
+    deleteBlock(editor, targetOf(editor, "blockquote"));
 
     const out = saved(editor);
     expect(out).toBe("Before.\n\nAfter.");
@@ -216,7 +224,7 @@ describe("deleting a block", () => {
     ["a scene block", "```scene\n# The Tavern\nId: 7\n```", "sceneBlock"],
   ])("takes %s, which has no removal control of its own", (_what, md, type) => {
     const editor = note(["Before.", "", md, "", "After."].join("\n"));
-    deleteBlockAt(editor, posOf(editor, type));
+    deleteBlock(editor, targetOf(editor, type));
 
     expect(saved(editor)).toBe("Before.\n\nAfter.");
 
@@ -227,7 +235,7 @@ describe("deleting a block", () => {
   it("is one undo step, like every other write in the pattern", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
-    deleteBlockAt(editor, posOf(editor, "statblockBlock"));
+    deleteBlock(editor, targetOf(editor, "statblockBlock"));
     editor.commands.undo();
 
     expect(saved(editor)).toBe(md);
@@ -240,7 +248,7 @@ describe("duplicating a block", () => {
   it("puts a copy directly after the original", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
-    duplicateBlockAt(editor, posOf(editor, "statblockBlock"));
+    duplicateBlock(editor, targetOf(editor, "statblockBlock"));
 
     expect(saved(editor)).toBe(`${md}\n\n${md}`);
   });
@@ -250,7 +258,7 @@ describe("duplicating a block", () => {
       "\n",
     );
     const editor = note(md);
-    duplicateBlockAt(editor, posOf(editor, "blockquote"));
+    duplicateBlock(editor, targetOf(editor, "blockquote"));
 
     const out = saved(editor);
     expect(out.match(/Kobold A/g)).toHaveLength(2);
@@ -260,7 +268,7 @@ describe("duplicating a block", () => {
   it("is one undo step", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
-    duplicateBlockAt(editor, posOf(editor, "statblockBlock"));
+    duplicateBlock(editor, targetOf(editor, "statblockBlock"));
     editor.commands.undo();
 
     expect(saved(editor)).toBe(md);
@@ -276,19 +284,19 @@ describe("copying a block", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
 
-    expect(blockMarkdownAt(editor, posOf(editor, "statblockBlock"))).toBe(md);
+    expect(blockMarkdown(editor, targetOf(editor, "statblockBlock"))).toBe(md);
   });
 
   it("yields a paragraph's own text", () => {
     const editor = note("A sentence.");
-    expect(blockMarkdownAt(editor, posOf(editor, "paragraph"))).toBe("A sentence.");
+    expect(blockMarkdown(editor, targetOf(editor, "paragraph"))).toBe("A sentence.");
   });
 
   it("yields a callout with its contents quoted", () => {
     const md = ["> [!encounter] The Ambush", "> Something waits."].join("\n");
     const editor = note(md);
 
-    expect(blockMarkdownAt(editor, posOf(editor, "blockquote"))).toBe(md);
+    expect(blockMarkdown(editor, targetOf(editor, "blockquote"))).toBe(md);
   });
 });
 
@@ -308,28 +316,28 @@ describe("turning one block into another", () => {
 
   it("makes a paragraph a heading", () => {
     const editor = note("The Lower Halls");
-    turnIntoAt(editor, posOf(editor, "paragraph"), "heading2");
+    turnInto(editor, targetOf(editor, "paragraph"), "heading2");
 
     expect(saved(editor)).toBe("## The Lower Halls");
   });
 
   it("makes a heading a paragraph again", () => {
     const editor = note("## The Lower Halls");
-    turnIntoAt(editor, posOf(editor, "heading"), "paragraph");
+    turnInto(editor, targetOf(editor, "heading"), "paragraph");
 
     expect(saved(editor)).toBe("The Lower Halls");
   });
 
   it("makes a paragraph a list item", () => {
     const editor = note("the one with the sling");
-    turnIntoAt(editor, posOf(editor, "paragraph"), "bulletList");
+    turnInto(editor, targetOf(editor, "paragraph"), "bulletList");
 
     expect(saved(editor)).toBe("- the one with the sling");
   });
 
   it("makes a paragraph a quote", () => {
     const editor = note("Something waits.");
-    turnIntoAt(editor, posOf(editor, "paragraph"), "quote");
+    turnInto(editor, targetOf(editor, "paragraph"), "quote");
 
     expect(saved(editor)).toBe("> Something waits.");
   });
@@ -338,7 +346,7 @@ describe("turning one block into another", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
 
-    expect(turnIntoAt(editor, posOf(editor, "statblockBlock"), "heading1")).toBe(false);
+    expect(turnInto(editor, targetOf(editor, "statblockBlock"), "heading1")).toBe(false);
     expect(saved(editor)).toBe(md);
   });
 
@@ -348,14 +356,14 @@ describe("turning one block into another", () => {
     // be one a GM can click and watch not happen. The lift is not a workaround either:
     // the block they asked to quote is no longer a bullet.
     const editor = note("- the one with the sling\n- and the other");
-    turnIntoAt(editor, posOf(editor, "paragraph"), "quote");
+    turnInto(editor, targetOf(editor, "paragraph"), "quote");
 
     expect(saved(editor)).toBe("> the one with the sling\n\n- and the other");
   });
 
   it("lifts a list item out on the way to a heading, taking only that item", () => {
     const editor = note("- the one with the sling\n- and the other");
-    turnIntoAt(editor, posOf(editor, "paragraph"), "heading2");
+    turnInto(editor, targetOf(editor, "paragraph"), "heading2");
 
     expect(saved(editor)).toBe("## the one with the sling\n\n- and the other");
   });
@@ -365,7 +373,7 @@ describe("turning one block into another", () => {
     // quote — so a chain's own answer says "nothing happened" about a write that plainly
     // did. The caller uses this to tell an ordinary no-op from a stale menu.
     const editor = note("> Something waits.");
-    const done = turnIntoAt(editor, posOf(editor, "paragraph"), "paragraph");
+    const done = turnInto(editor, targetOf(editor, "paragraph"), "paragraph");
 
     expect(saved(editor)).toBe("Something waits.");
     expect(done).toBe(true);
@@ -378,7 +386,9 @@ describe("turning one block into another", () => {
     const editor = note("The Lower");
     const pos = posOf(editor, "paragraph");
     editor.commands.insertContentAt(pos + 1 + "The Lower".length, " Halls");
-    turnIntoAt(editor, pos, "heading2");
+    // Re-taken after the typing: the edit rebuilt the paragraph, so the target from
+    // before it names a node the document no longer holds.
+    turnInto(editor, targetOf(editor, "paragraph"), "heading2");
     editor.commands.undo();
 
     expect(saved(editor)).toBe("The Lower Halls");
@@ -391,21 +401,21 @@ describe("naming the kind a block already is", () => {
   it("reads a paragraph, and a heading at its own level", () => {
     const editor = note("A sentence.\n\n## The Lower Halls");
 
-    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "paragraph"))).toBe("paragraph");
-    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "heading"))).toBe("heading2");
+    expect(turnIntoKindOf(editor.state.doc, targetOf(editor, "paragraph"))).toBe("paragraph");
+    expect(turnIntoKindOf(editor.state.doc, targetOf(editor, "heading"))).toBe("heading2");
   });
 
   it("reads the list a list item is in, not the paragraph inside it", () => {
     // The handle targets the *innermost* block, which for a list item is the paragraph
     // its text lives in — so the answer is only in the ancestry above it.
     const bullets = note("- the one with the sling");
-    expect(turnIntoKindAt(bullets.state.doc, posOf(bullets, "paragraph"))).toBe(
+    expect(turnIntoKindOf(bullets.state.doc, targetOf(bullets, "paragraph"))).toBe(
       "bulletList",
     );
     closeNote();
 
     const numbered = note("1. first light");
-    expect(turnIntoKindAt(numbered.state.doc, posOf(numbered, "paragraph"))).toBe(
+    expect(turnIntoKindOf(numbered.state.doc, targetOf(numbered, "paragraph"))).toBe(
       "orderedList",
     );
   });
@@ -416,11 +426,11 @@ describe("naming the kind a block already is", () => {
     // container — so what is inside it is a paragraph, which is both true and the thing
     // that stops "Paragraph" tearing that prose out of the box.
     const quote = note("> Something waits.");
-    expect(turnIntoKindAt(quote.state.doc, posOf(quote, "paragraph"))).toBe("quote");
+    expect(turnIntoKindOf(quote.state.doc, targetOf(quote, "paragraph"))).toBe("quote");
     closeNote();
 
     const callout = note("> [!encounter] The Ambush\n> Two kobolds.");
-    expect(turnIntoKindAt(callout.state.doc, posOf(callout, "paragraph"))).toBe(
+    expect(turnIntoKindOf(callout.state.doc, targetOf(callout, "paragraph"))).toBe(
       "paragraph",
     );
   });
@@ -428,12 +438,12 @@ describe("naming the kind a block already is", () => {
   it("has no answer for a block that cannot be turned into anything", () => {
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
 
-    expect(turnIntoKindAt(editor.state.doc, posOf(editor, "statblockBlock"))).toBeNull();
+    expect(turnIntoKindOf(editor.state.doc, targetOf(editor, "statblockBlock"))).toBeNull();
   });
 
-  it("declines a position past the end of the document", () => {
+  it("declines a target past the end of the document", () => {
     const editor = note("A sentence.");
 
-    expect(turnIntoKindAt(editor.state.doc, 9999)).toBeNull();
+    expect(turnIntoKindOf(editor.state.doc, gone(editor, "paragraph"))).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ vi.mock("$lib/toast", () => ({ toastError: vi.fn() }));
 
 import { toastError } from "$lib/toast";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
-import { deleteBlockAt } from "$lib/editor/block-handle";
+import { deleteBlock, type BlockTarget } from "$lib/editor/block-handle";
 import { NodeSelection } from "@tiptap/pm/state";
 import { closeNote, note, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
@@ -46,22 +46,28 @@ afterEach(() => {
 
 /** The grip, drawn on one block of a note, with the handle's own callbacks recorded. */
 function grip(editor: Editor, type = "paragraph", index = 0) {
+  return gripOn(editor, targetOfNth(editor, type, index));
+}
+
+/** The grip drawn on a target the caller chose — including one the document has lost. */
+function gripOn(editor: Editor, target: BlockTarget) {
   const pinned: boolean[] = [];
   const held: boolean[] = [];
   const released: true[] = [];
+  const retargeted: BlockTarget[] = [];
   render(BlockHandle, {
     props: {
       editor,
-      target: targetOfNth(editor, type, index),
+      target,
       onHold: (h: boolean) => held.push(h),
       onPin: (p: boolean) => pinned.push(p),
-      onRetarget: () => {},
+      onRetarget: (t: BlockTarget) => retargeted.push(t),
       onRelease: () => released.push(true),
     },
   });
   const el = document.querySelector<HTMLButtonElement>("[data-block-handle]")!;
   expect(el, "the grip is drawn").not.toBeNull();
-  return { el, pinned, held, released };
+  return { el, pinned, held, released, retargeted };
 }
 
 const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]");
@@ -453,7 +459,7 @@ describe("dragging from the grip", () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const { el } = grip(editor, "paragraph", 1);
     await fireEvent.click(el);
-    deleteBlockAt(editor, targetOf(editor, "paragraph").pos);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     await fireEvent.click(item("Heading 1"));
 
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
@@ -465,7 +471,7 @@ describe("dragging from the grip", () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const { el } = grip(editor, "paragraph", 1);
     await fireEvent.click(el);
-    deleteBlockAt(editor, targetOf(editor, "paragraph").pos);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     await fireEvent.click(item("Delete"));
 
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
@@ -604,7 +610,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
 // ─── What the next keystroke lands on ─────────────────────────────────────────
 //
 // Three parts of this gesture set a whole-block `NodeSelection` on purpose — the grip's own
-// `mousedown` and `startBlockDrag`, so a drag has something to carry, and `moveBlockAt`, so
+// `mousedown` and `startBlockDrag`, so a drag has something to carry, and `moveBlock`, so
 // a second `↑` moves the same block. A node selection is *replaced* by the next character
 // typed, so every route that hands focus back to the prose has to collapse it first or the
 // GM's next letter stands in for the block they just acted on.
@@ -652,7 +658,7 @@ describe("handing focus back to the prose", () => {
   });
 
   it("leaves a caret when Escape follows a keyboard reorder", async () => {
-    // The route that survives fixing the mouse one: `moveBlockAt` leaves the block it
+    // The route that survives fixing the mouse one: `moveBlock` leaves the block it
     // moved selected by design, and Escape is the way out of a grip raised by `Mod-Shift-h`
     // — so the exit from a reorder handed the prose a node selection with no press involved.
     const editor = note("First.\n\nSecond.\n\nThird.");
@@ -665,5 +671,55 @@ describe("handing focus back to the prose", () => {
 
     typeNext(editor);
     expect(saved(editor)).toContain("Third.");
+  });
+});
+
+// ─── A grip still holding a block that has gone ───────────────────────────────
+//
+// The grip is drawn from a hover and then *stays* — through a live-reload, an undo, the
+// GM's own last keystroke in another pane. Its three direct gestures are the ones that
+// used to get the weakest check of the three in the codebase: "is *a* block there", which
+// a position that has gone stale answers yes to, because a bystander has slid into it.
+//
+// The note is three paragraphs of the same length on purpose. The grip is put on "Bravo.",
+// "Alpha." goes, and the position the grip holds now lands exactly on "Delta." — a
+// position that still resolves, to the wrong block. Nothing below may touch it.
+
+describe("a grip left holding a block the document no longer has", () => {
+  /** A note with the grip on the middle paragraph, and the one above it since deleted. */
+  function staleGrip() {
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    const bravo = targetOfNth(editor, "paragraph", 1);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
+    // The failure this guards is only reachable because the position is still good.
+    expect(editor.state.doc.nodeAt(bravo.pos)?.textContent).toBe("Delta.");
+    return { editor, ...gripOn(editor, bravo) };
+  }
+
+  it("reorders nothing when the arrow keys reach a stale target", async () => {
+    const { editor, el, retargeted } = staleGrip();
+
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    await fireEvent.keyDown(el, { key: "ArrowDown" });
+
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+    expect(retargeted).toEqual([]);
+  });
+
+  it("selects nothing on mousedown, so Delete does not find a bystander selected", async () => {
+    const { editor, el } = staleGrip();
+
+    await fireEvent.mouseDown(el);
+
+    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+  });
+
+  it("starts no drag, so nothing can be dropped from a block that has gone", async () => {
+    const { editor, el } = staleGrip();
+
+    await fireEvent.dragStart(el);
+
+    expect(editor.view.dragging).toBeNull();
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
   });
 });

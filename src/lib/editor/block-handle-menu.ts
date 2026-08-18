@@ -3,19 +3,18 @@
 // The grip could be dragged before this and did nothing when clicked, so the three things
 // that apply to *every* block — duplicate, copy, delete — had no gesture anywhere in a
 // note. They are the same three because they are the ones that need no knowledge of what
-// the block is: "turn into" is a text block's alone (see `turnIntoAt`), and a statblock's
+// the block is: "turn into" is a text block's alone (see `turnInto`), and a statblock's
 // own controls belong to the statblock.
 //
 // The writes themselves already exist in `block-handle.ts`, tested there. This module is
 // deliberately only the seam between a menu item and one of them, and it exists as its own
 // file for two reasons:
 //
-//   - A menu is open **across time**. The position it was opened with describes the
-//     document as it was then, and an undo, a live-reload or the GM's own last keystroke
-//     can happen while it is up. Every action re-reads the node at the position before
-//     writing and declines if it is not there, which is the same rule the node-view
-//     connector states for its own writes — and the only thing standing between a stale
-//     menu and a deleted bystander.
+//   - A menu is open **across time**. The block it was opened on describes the document
+//     as it was then, and an undo, a live-reload or the GM's own last keystroke can happen
+//     while it is up. What it carries forward is therefore the whole `BlockTarget`, never
+//     a bare position — `blockStillThere` is what turns a stale one into a no-op, and it
+//     is applied by the writes themselves rather than by this seam.
 //   - Copy needs a clipboard, and a clipboard is the one part of this that is neither the
 //     document nor the component. Passing it in keeps the action assertable without a
 //     browser and without a global stub.
@@ -25,12 +24,12 @@ import type { BlockIconName } from "$lib/components/editor/block-icons";
 import { nameAndIcon } from "./block-vocabulary";
 import {
   blockLabel,
-  blockMarkdownAt,
+  blockMarkdown,
   canTurnInto,
-  deleteBlockAt,
-  duplicateBlockAt,
-  turnIntoAt,
-  turnIntoKindAt,
+  deleteBlock,
+  duplicateBlock,
+  turnInto,
+  turnIntoKindOf,
   type BlockTarget,
   type TurnIntoKind,
 } from "./block-handle";
@@ -120,7 +119,7 @@ export function blockHandleMenuSections(
   const sections: BlockHandleMenuSection[] = [];
 
   if (canTurnInto(target.node)) {
-    const current = turnIntoKindAt(doc, target.pos);
+    const current = turnIntoKindOf(doc, target);
     sections.push({
       title: "Turn into",
       items: TURN_INTO.map((into) => ({
@@ -180,29 +179,6 @@ export function systemClipboard(): ClipboardWriter | undefined {
 }
 
 /**
- * Whether the block the menu was opened on is still the block at that position.
- *
- * **Identity**, not "is a block there" — that is the whole of this function, and the
- * difference between the two is the failure the ticket names. A position alone goes stale
- * *silently*: delete a paragraph above the one the menu is open on and the position still
- * resolves, to the block that has since slid into it, so Delete takes a bystander and the
- * GM's own note is the only place that records it happened.
- *
- * Node identity answers that. ProseMirror's nodes are immutable and an edit rebuilds only
- * the ancestors of what changed, so an untouched block is the *same object* across a
- * transaction however far its position moved — and a different block at that position is,
- * necessarily, a different object.
- */
-export function blockStillThere(editor: Editor, target: BlockTarget): boolean {
-  const { doc } = editor.state;
-  // Bounds first, and not merely for tidiness: `nodeAt` *throws* past the end of the
-  // document, and a note that live-reloaded to something shorter is exactly the case
-  // this function exists for.
-  if (target.pos < 0 || target.pos > doc.content.size) return false;
-  return doc.nodeAt(target.pos) === target.node;
-}
-
-/**
  * Runs one menu item against the block the menu was opened on, and answers whether
  * anything happened.
  *
@@ -210,7 +186,8 @@ export function blockStillThere(editor: Editor, target: BlockTarget): boolean {
  * time** — the GM opens it, reads it, and clicks, and an undo, an external live-reload or
  * a note swapped under it can all land in between. `false` for a target that has gone is
  * not an error; it is the ordinary end of a menu left open, and it must be a no-op rather
- * than a write to whatever is there now.
+ * than a write to whatever is there now. Every write below applies `blockStillThere`
+ * itself, so this seam carries the target through and adds no guard of its own.
  *
  * Async only because the clipboard is. Duplicate and delete land synchronously inside it,
  * each closing its own history group, so each remains a single Ctrl+Z (ADR-0016 §6).
@@ -221,24 +198,21 @@ export async function runBlockHandleAction(
   command: BlockHandleCommand,
   clipboard: ClipboardWriter | undefined = systemClipboard(),
 ): Promise<boolean> {
-  if (!blockStillThere(editor, target)) return false;
-  const { pos } = target;
-
   if (typeof command !== "string") {
     // Already this kind: nothing to do, and emphatically not the toggle the underlying
     // command would perform — `toggleBulletList` on a bullet list lifts it back out, so
     // choosing the item that names what the block already is would un-list it.
-    if (turnIntoKindAt(editor.state.doc, pos) === command.turnInto) return false;
-    return turnIntoAt(editor, pos, command.turnInto);
+    if (turnIntoKindOf(editor.state.doc, target) === command.turnInto) return false;
+    return turnInto(editor, target, command.turnInto);
   }
 
   switch (command) {
     case "duplicate":
-      return duplicateBlockAt(editor, pos);
+      return duplicateBlock(editor, target);
     case "delete":
-      return deleteBlockAt(editor, pos);
+      return deleteBlock(editor, target);
     case "copy": {
-      const markdown = blockMarkdownAt(editor, pos);
+      const markdown = blockMarkdown(editor, target);
       if (markdown === null || !clipboard) return false;
       await clipboard.writeText(markdown);
       return true;
