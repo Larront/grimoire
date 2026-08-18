@@ -14,6 +14,7 @@
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
   import { createBlockHandleHover } from "$lib/editor/block-handle-hover.svelte";
+  import { blockTargetAt } from "$lib/editor/block-handle";
 
   import SlashCommandMenu from "./SlashCommandMenu.svelte";
   import BlockHandle from "./BlockHandle.svelte";
@@ -118,9 +119,19 @@
       }),
       content: initialContent,
       contentType: "markdown",
-      onUpdate: () => {
+      onUpdate: ({ transaction }) => {
         docVersion++;
         dirty = true;
+        // A grip the GM is holding is mid-gesture and `invalidate` leaves it alone, so it
+        // is walked through the change instead: the block keeps its identity across an
+        // edit only if the edit did not rebuild it, and pressing the grip commits the
+        // field it just blurred. `mapResult` says where the block went; a deletion, or a
+        // position the change swallowed, answers null and leaves the target as it was.
+        blockHover.follow((held) => {
+          const mapped = transaction.mapping.mapResult(held.pos);
+          if (mapped.deleted) return null;
+          return blockTargetAt(transaction.doc, mapped.pos);
+        });
         // The positions in the grip's target are the old document's, and the pointer has
         // not moved to re-answer them.
         blockHover.invalidate();

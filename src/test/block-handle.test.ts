@@ -23,6 +23,7 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 import {
   blockTargetAt,
   blockMarkdown,
+  blockStillThere,
   canTurnInto,
   deleteBlock,
   duplicateBlock,
@@ -30,15 +31,33 @@ import {
   selectBlock,
   turnInto,
   turnIntoKindOf,
+  type BlockTarget,
 } from "$lib/editor/block-handle";
-import { closeNote, note, saved, targetOf } from "./fixtures/note-editor";
+import {
+  closeNote,
+  note,
+  saved,
+  targetOf,
+  targetOfNth,
+} from "./fixtures/note-editor";
 
 /**
- * A target the document no longer holds — the shape a menu left open across an undo, a
- * live-reload or a note swapped underneath ends up carrying.
+ * A target the document no longer holds, in the shape a gesture held across an edit, an
+ * undo or a live-reload actually ends up carrying: the position still **resolves**, and
+ * to a block of the same kind — it is the node that has gone.
+ *
+ * A position past the end would answer the same question through the bounds check alone,
+ * which is the branch that is easy to pass and the one that proves least: it would still
+ * be refused with the identity comparison deleted outright.
+ *
+ * Three blocks of the same length, so that removing the first leaves the second targets
+ * position holding the third rather than nothing at all.
  */
-function gone(editor: ReturnType<typeof note>, type: string) {
-  return { pos: 9999, node: targetOf(editor, type).node };
+function gone(editor: ReturnType<typeof note>, type: string): BlockTarget {
+  const target = targetOfNth(editor, type, 1);
+  deleteBlock(editor, targetOf(editor, type));
+  expect(editor.state.doc.nodeAt(target.pos), "a block still starts there").toBeTruthy();
+  return target;
 }
 
 afterEach(closeNote);
@@ -167,6 +186,50 @@ describe("the pointer's hover zone", () => {
   });
 });
 
+// ─── Is it still there ────────────────────────────────────────────────────────
+
+describe("recognising the block a target was taken from", () => {
+  it("refuses a block of the same kind that has slid into the position", () => {
+    // The distinction every write behind it rests on: a position that still resolves is
+    // not the same claim as the block the GM was looking at.
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    const bravo = targetOfNth(editor, "paragraph", 1);
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(true);
+
+    deleteBlock(editor, targetOf(editor, "paragraph"));
+    expect(editor.state.doc.nodeAt(bravo.pos)?.textContent).toBe("Delta.");
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(false);
+  });
+
+  it("refuses a target holding something that is not a block", () => {
+    // `BlockTarget` is a bare pair and every write behind this takes a node's whole
+    // range, so an inline node reaching one would delete across a text range under a menu
+    // item that said "Delete paragraph".
+    const editor = note("A sentence.");
+    const pos = posOf(editor, "paragraph") + 1;
+    const text = editor.state.doc.nodeAt(pos)!;
+
+    expect(text.isBlock).toBe(false);
+    expect(blockStillThere(editor.state.doc, { pos, node: text })).toBe(false);
+  });
+
+  it("cannot tell two copies of one node apart, which is the limit of an address like this", () => {
+    // `duplicateBlock` inserts the very object it copied, so both paragraphs are one
+    // node. Worth pinning as a known edge rather than discovering it in a note: what the
+    // guard narrows a bystander to is a block indistinguishable from the original.
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    duplicateBlock(editor, targetOf(editor, "paragraph"));
+    const [first, second] = [
+      targetOf(editor, "paragraph"),
+      targetOfNth(editor, "paragraph", 1),
+    ];
+
+    expect(first.node).toBe(second.node);
+    deleteBlock(editor, first);
+    expect(blockStillThere(editor.state.doc, first)).toBe(true);
+  });
+});
+
 // ─── Select ───────────────────────────────────────────────────────────────────
 
 describe("selecting a block", () => {
@@ -180,7 +243,7 @@ describe("selecting a block", () => {
   });
 
   it("declines a target the document no longer holds", () => {
-    const editor = note("A sentence.");
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     expect(selectBlock(editor, gone(editor, "paragraph"))).toBe(false);
   });
 });
@@ -441,9 +504,25 @@ describe("naming the kind a block already is", () => {
     expect(turnIntoKindOf(editor.state.doc, targetOf(editor, "statblockBlock"))).toBeNull();
   });
 
-  it("declines a target past the end of the document", () => {
-    const editor = note("A sentence.");
+  it("has no answer for a target the document no longer holds", () => {
+    // It used to read whatever was at the position and tick *that* block's kind, so the
+    // menu opened over a bystander with one of the seven already marked as current.
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    // `gone` is what changes the document, so it runs before the doc is read: passing
+    // `editor.state.doc` alongside it hands over the document it was still valid in.
+    const stale = gone(editor, "paragraph");
 
-    expect(turnIntoKindOf(editor.state.doc, gone(editor, "paragraph"))).toBeNull();
+    expect(turnIntoKindOf(editor.state.doc, stale)).toBeNull();
+  });
+
+  it("declines a target past the end of a note that shrank under it", () => {
+    // The other half of the guard, and the reason it is bounds-first: `nodeAt` throws out
+    // here rather than answering.
+    const editor = note("A sentence.");
+    const target = targetOf(editor, "paragraph");
+
+    expect(
+      turnIntoKindOf(editor.state.doc, { pos: 9999, node: target.node }),
+    ).toBeNull();
   });
 });

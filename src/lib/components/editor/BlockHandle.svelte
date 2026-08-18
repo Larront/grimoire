@@ -18,6 +18,8 @@
   import {
     blockElementAt,
     blockLabel,
+    blockStillThere,
+    endBlockDrag,
     moveBlock,
     placeHandle,
     releaseBlock,
@@ -100,6 +102,13 @@
 
   function openMenu() {
     if (!el) return;
+    // A menu built on a block the document has lost is ten confident items that are all
+    // silent no-ops — every write behind them refuses, and nothing on screen says why. The
+    // grip goes instead, which is what a target that has gone means everywhere else.
+    if (!blockStillThere(editor.state.doc, target)) {
+      release();
+      return;
+    }
     const box = el.getBoundingClientRect();
     // Off the grip's own box: below it where there is room, above it where there is not.
     menuAnchor = { x: box.left, y: box.bottom + 4, anchorTop: box.top - 4 };
@@ -161,14 +170,19 @@
   }
 
   /**
-   * The one way this gesture ends, whichever gesture it was: a menu item, a drag, Escape.
+   * The end of a gesture that hands the prose back: a menu item, Escape, a menu opened on
+   * a block that has gone.
    *
-   * The handle comes down and `releaseBlock` puts the prose back the way it found it.
-   * Both halves matter and neither is optional at any of the three: every position the
-   * handle holds describes the document as it was *before* the write — after a Delete
-   * there is no block there at all — so a grip left on screen points at whatever has
-   * moved into that spot, and a whole-block selection left set is a block the GM's next
-   * character replaces.
+   * The handle comes down and `releaseBlock` puts the caret back. Both halves matter and
+   * neither is optional at either route: every position the handle holds describes the
+   * document as it was *before* the write — after a Delete there is no block there at all
+   * — so a grip left on screen points at whatever has moved into that spot, and a
+   * whole-block selection left set is a block the GM's next character replaces.
+   *
+   * Not every ending is this one. A drag ends in `handleDragEnd`, which takes the handle
+   * down without touching focus — see `releaseBlock` for why a drop must keep it. And
+   * dismissing the menu without choosing is not an ending at all: the grip takes its own
+   * focus back and stays up, still holding the block, still able to be dragged.
    */
   function release() {
     onRelease();
@@ -230,12 +244,17 @@
 
   /**
    * Every way a drag can end, including the ways that change nothing: dropped somewhere
-   * that took it, dropped on nothing, Escaped, dragged out of the window. All of them are
-   * the same ending — see `endBlockDrag` for what a drag that quietly stayed "in
-   * progress" does to the next one, and `releaseBlock` for the selection it carried.
+   * that took it, dropped on nothing, Escaped, dragged out of the window. The handle comes
+   * down for all of them, and the editor is told the drag is over for all of them — see
+   * `endBlockDrag` for what a drag that quietly stayed "in progress" does to the next one.
+   *
+   * Focus is deliberately untouched, which is why this is not `release()`: a drop that
+   * landed has already been focused by whoever took it, and that is often not this editor
+   * — the other pane's note, the sidebar, Obsidian. See `releaseBlock`.
    */
   function handleDragEnd() {
-    release();
+    endBlockDrag(editor);
+    onRelease();
   }
 
   /**

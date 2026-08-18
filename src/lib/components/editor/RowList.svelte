@@ -96,9 +96,15 @@
   // new array rather than touching theirs.
 
   function move(from: number, to: number) {
-    // Off either end: nothing moved, nothing to report. The two controls are disabled at
-    // the ends, so this is the guard behind them rather than the one a GM meets.
+    // Nothing moved, so nothing to report. Both ends of the range and the standing-still
+    // case, because `onChange` is a document write: an index off the end splices a hole
+    // into the consumer's rows, and a move to where the row already is commits a fence
+    // identical to the one on disk and spends an undo step on it. The two controls are
+    // disabled at the ends, so this is the guard behind them rather than one a GM meets —
+    // and it is what the next caller (a drag reorder, a shortcut) will arrive at.
+    if (from < 0 || from >= rows.length) return;
     if (to < 0 || to >= rows.length) return;
+    if (from === to) return;
     const next = [...rows];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);

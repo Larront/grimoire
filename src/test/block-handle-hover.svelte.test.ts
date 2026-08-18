@@ -194,6 +194,68 @@ describe("the grip's hover", () => {
 // menu names one block and every one of its items acts on that block, so a pointer
 // wandering back across the prose underneath must not change which one it is.
 
+describe("a held grip whose block was rewritten under it", () => {
+  // `invalidate` exempts a held grip, because a keyboard reorder is a document change of
+  // the gesture's own and dropping the handle on it would take the grip out from under the
+  // GM mid-press. What that exemption used to leave behind was a stale target: every write
+  // addresses its block by node identity, and an edit rebuilds the node — so pressing the
+  // grip, which blurs and commits whatever field the GM was in, made the grip beside that
+  // block refuse every gesture while still looking live.
+
+  /** The same paragraph after an edit rebuilt it: same position, different object. */
+  const rebuilt = {
+    pos: paragraph.pos,
+    node: { type: { name: "paragraph" } },
+  } as unknown as BlockTarget;
+
+  it("carries the target through the change rather than keeping the old node", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+
+    hover.follow(() => rebuilt);
+
+    expect(hover.target).toBe(rebuilt);
+  });
+
+  it("keeps what it has where the change cannot be followed", () => {
+    // A keyboard reorder deletes the block and puts it back elsewhere, so there is no
+    // position to carry it to — and its landing is reported a moment later by `retarget`.
+    // Dropping the target here would unmount the grip the GM still has under their finger.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+
+    hover.follow(() => null);
+
+    expect(hover.target).toBe(paragraph);
+  });
+
+  it("leaves a grip nobody is holding to invalidate, which takes it down", () => {
+    // The unheld case is not this function's: the handle goes, and the next mousemove
+    // raises it again on a target read from the document as it now is.
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+
+    hover.follow(() => rebuilt);
+
+    expect(hover.target).toBe(paragraph);
+    hover.invalidate();
+    expect(hover.target).toBeNull();
+  });
+
+  it("leaves an open menu alone, because the menu owns its target outright", () => {
+    const hover = createBlockHandleHover();
+    hover.point(paragraph);
+    hover.hold(true);
+    hover.pin(true);
+
+    hover.follow(() => rebuilt);
+
+    expect(hover.target).toBe(paragraph);
+  });
+});
+
 describe("the grip while its menu is open", () => {
   it("stays up when the pointer leaves the grip for the menu", () => {
     const hover = createBlockHandleHover();

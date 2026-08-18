@@ -14,7 +14,11 @@
 // is a `splice` with a seam in front of it; `moveRow`'s "returns the same array when
 // nothing moved" had even become reference equality read for control flow *across* that
 // seam. They are inline in `RowList.svelte` now, and what stands here in their place is
-// the rule that was copied into five blocks with a comment each and no test at all (#218).
+// the rule that was copied to five call sites across three blocks, under a comment each
+// (#218). Not untested — `statblock-block-view`, `infobox-block-view` and
+// `timeline-block-view` each pin it end to end through the control that performs it — but
+// stated five times and asserted nowhere on its own, which is what a rule that decides
+// whether a GM's row reaches their note should not be.
 
 /**
  * What one control did to the order, handed to a consumer alongside the new rows.

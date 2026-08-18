@@ -27,11 +27,11 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 
 import { NodeSelection } from "@tiptap/pm/state";
 import {
-  blockTargetAt,
   endBlockDrag,
   handlePlacement,
   moveBlock,
   startBlockDrag,
+  deleteBlock,
   type BlockTarget,
   type HandleGeometry,
 } from "$lib/editor/block-handle";
@@ -49,11 +49,22 @@ import {
 afterEach(closeNote);
 
 /**
- * A target the document no longer holds — what a gesture that was held across an edit,
- * an undo or a live-reload ends up carrying.
+ * A target the document no longer holds, in the shape a gesture held across an edit, an
+ * undo or a live-reload actually ends up carrying: the position still **resolves**, and
+ * to a block of the same kind — it is the node that has gone.
+ *
+ * A position past the end would answer the same question through the bounds check alone,
+ * which is the branch that is easy to pass and the one that proves least: it would still
+ * be refused with the identity comparison deleted outright.
+ *
+ * Three blocks of the same length, so that removing the first leaves the second targets
+ * position holding the third rather than nothing at all.
  */
-function gone(editor: ReturnType<typeof note>, type: string) {
-  return { pos: 9999, node: targetOf(editor, type).node };
+function gone(editor: ReturnType<typeof note>, type: string): BlockTarget {
+  const target = targetOfNth(editor, type, 1);
+  deleteBlock(editor, targetOf(editor, type));
+  expect(editor.state.doc.nodeAt(target.pos), "a block still starts there").toBeTruthy();
+  return target;
 }
 
 // jsdom has no `DataTransfer`, and the one thing under test about it is what was written
@@ -172,8 +183,21 @@ describe("moving a block one place", () => {
   });
 
   it("declines a target the document no longer holds", () => {
-    const editor = note("A sentence.");
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     expect(moveBlock(editor, gone(editor, "paragraph"), 1)).toBeNull();
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+  });
+
+  it("changes nothing where the block will not fit beside its neighbour", () => {
+    // `tr.insert` is silent when the schema refuses the position, which used to leave a
+    // dispatched transaction holding the delete alone — the block gone from the note —
+    // and throw out of `NodeSelection.create` on the way past, into a `void move()`.
+    const editor = note(["- one", "", "  > quoted", "", "- two"].join("\n"));
+    const before = saved(editor);
+    const inner = targetOfNth(editor, "paragraph", 0);
+
+    expect(moveBlock(editor, inner, 1)).toBeNull();
+    expect(saved(editor)).toBe(before);
   });
 });
 
@@ -223,8 +247,10 @@ describe("starting a drag from the grip", () => {
   });
 
   it("declines a target the document no longer holds, and starts nothing", () => {
-    const editor = note("A sentence.");
-    expect(startBlockDrag(editor, gone(editor, "paragraph"), fakeDataTransfer().transfer)).toBe(false);
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    expect(
+      startBlockDrag(editor, gone(editor, "paragraph"), fakeDataTransfer().transfer),
+    ).toBe(false);
     expect(editor.view.dragging).toBeNull();
   });
 

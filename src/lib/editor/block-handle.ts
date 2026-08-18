@@ -352,13 +352,22 @@ export function targetFromPointer(
  * transaction however far its position moved — and a different block at that position
  * is, necessarily, a different object. "Is a block there" answers true for the bystander;
  * identity is what tells the two apart.
+ *
+ * Not *proof* of the same block, and the limit is worth naming: ProseMirror shares nodes
+ * freely, and `duplicateBlock` in particular inserts the very object it copied — so two
+ * identical siblings can be one object, and a target for one of them survives the other
+ * sliding into its place. Identity narrows the bystander to a block indistinguishable from
+ * the one the GM was looking at, which is as far as an address of this kind reaches.
+ *
+ * `isBlock` because every write behind this takes a node's whole range: it was the
+ * deleted `nodeAt` helper's check, and a `BlockTarget` is a bare pair anyone can build.
  */
 export function blockStillThere(doc: ProseMirrorNode, target: BlockTarget): boolean {
   // Bounds first, and not merely for tidiness: `nodeAt` *throws* past the end of the
   // document, and a note that live-reloaded to something shorter is exactly the case this
   // guard exists for.
   if (target.pos < 0 || target.pos > doc.content.size) return false;
-  return doc.nodeAt(target.pos) === target.node;
+  return doc.nodeAt(target.pos) === target.node && target.node.isBlock;
 }
 
 /**
@@ -387,13 +396,17 @@ export function selectBlock(editor: Editor, target: BlockTarget): boolean {
  * block they were holding: a whole paragraph gone, one Ctrl+Z away but with nothing on
  * screen saying why.
  *
- * So ending the gesture is the gesture's own job, and this is the one place it is done.
- * Every way out of the grip — a menu item, Escape, a drag that ended however it ended —
- * comes through here, which is what stops a selection outliving the gesture that set it
- * without any caller having to know that it might.
+ * So handing the prose back is one function rather than a rule each write's caller has
+ * to remember, and every route that returns focus to the document — a menu item, Escape —
+ * is this one.
  *
- * The drag latch goes with it, for the reason `endBlockDrag` gives: it is cleared on
- * every ending, because ProseMirror hears only some of them.
+ * A drag is **not** one of them, and that is not an omission. Once a drop has landed,
+ * ProseMirror owns the selection and has set its own over what arrived, and the drag may
+ * have ended in another pane or another application entirely — so a grip pulling focus
+ * back to its own editor on `dragend` takes the caret out of the note the GM just dropped
+ * into. `endBlockDrag` is the drag's own ending, and the latch it clears must be cleared
+ * from there and nowhere else: folded in here, a slow Copy's `finally` resolving mid-drag
+ * would unlatch a drag that had only just started.
  *
  * `TextSelection.between` and not `Selection.near`: `near` answers with another
  * `NodeSelection` for a selectable leaf, which is the case that has to be got rid of.
@@ -402,7 +415,6 @@ export function selectBlock(editor: Editor, target: BlockTarget): boolean {
  * paragraph's start.
  */
 export function releaseBlock(editor: Editor): void {
-  endBlockDrag(editor);
   const { selection } = editor.state;
   if (selection instanceof NodeSelection) {
     const tr = editor.state.tr;
@@ -658,6 +670,14 @@ export function moveBlock(
   closeHistory(tr);
   tr.delete(pos, pos + node.nodeSize);
   tr.insert(landing, node);
+  // `insert` is *silent* when the schema will not take the node there — a paragraph past
+  // a blockquote inside a list item, where the parent's content expression stops matching
+  // — and what is left in the transaction is then a delete with nothing put back. Left
+  // alone that dispatches a note missing the block the GM was moving, and
+  // `NodeSelection.create` throws on the way past, out of a `void move()` where nothing
+  // catches it. Checking that the block actually landed turns both into the "nothing
+  // moved" this already answers for the ends of a list.
+  if (tr.doc.nodeAt(landing) !== node) return null;
   tr.setSelection(NodeSelection.create(tr.doc, landing));
   editor.view.dispatch(tr);
   return { pos: landing, node };

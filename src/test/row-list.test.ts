@@ -236,6 +236,24 @@ describe("RowList controls", () => {
     expect(getByLabelText("Add thing")).toBeTruthy();
   });
 
+  it("adding to an empty list gives it its first row", async () => {
+    // The gesture the permanently-drawn trailing control exists for: with no row to
+    // hover, this is the only way a list ever gains one.
+    const { getByLabelText, component } = render(RowListFixture, { rows: [] });
+    await fireEvent.click(getByLabelText("Add thing"));
+
+    expect(component.rowsNow()).toEqual(["fresh"]);
+    expect(component.changes()).toEqual([{ kind: "insert", index: 0 }]);
+  });
+
+  it("deleting the only row empties the list rather than leaving a husk", async () => {
+    const { getByLabelText, component } = render(RowListFixture, { rows: ["alpha"] });
+    await fireEvent.click(getByLabelText("Delete thing"));
+
+    expect(component.rowsNow()).toEqual([]);
+    expect(component.changes()).toEqual([{ kind: "delete", index: 0 }]);
+  });
+
   it("a consumer's per-row view state follows its row through a move", async () => {
     const { getByText, getAllByLabelText, component } = render(RowListFixture, {
       rows: ["alpha", "beta"],

@@ -75,6 +75,22 @@ export interface BlockHandleHover {
    * not; see the note on the implementation.
    */
   invalidate: () => void;
+  /**
+   * The document changed under a grip the GM is **holding**, which is the one case
+   * `invalidate` exempts — so without this the target it exempted simply goes stale.
+   *
+   * That matters because a write addresses its block by node identity, and an edit
+   * rebuilds the node: pressing the grip blurs whatever field the GM was in, the field
+   * commits, and the block under the pointer is a new object before the mouse comes back
+   * up. The grip is still beside it and still looks live; every gesture behind it would
+   * refuse.
+   *
+   * `carry` is given the old target and answers with the same block seen through the
+   * change, or null where it cannot say. Null **keeps** what is there rather than dropping
+   * it: a keyboard reorder is a document change of the gesture's own, and its landing
+   * position is reported a moment later through `retarget`.
+   */
+  follow: (carry: (target: BlockTarget) => BlockTarget | null) => void;
   destroy: () => void;
 }
 
@@ -164,6 +180,11 @@ export function createBlockHandleHover(hideDelay = HANDLE_HIDE_MS): BlockHandleH
     retarget(next) {
       clearTimeout(timer);
       target = next;
+    },
+    follow(carry) {
+      if (!target || !held || pinned) return;
+      const fresh = carry(target);
+      if (fresh) target = fresh;
     },
     invalidate() {
       // An open menu is emphatically NOT exempt, and the `!pinned` is what says so —
