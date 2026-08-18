@@ -5,7 +5,6 @@
 // ledger scan; see ADR-0005 and CONTEXT.md §Link Index / §Note Alias.
 
 use crate::commands::frontmatter;
-use crate::note_write::write_note_file;
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::notes::dsl as n;
@@ -13,7 +12,7 @@ use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 use tauri::State;
@@ -237,19 +236,14 @@ fn rewrite_wikilinks_with(
 }
 
 /// For every note whose links reached the renamed note — written as the full
-/// path (with or without `.md`) or as a bare filename stem — reads the
-/// markdown file, rewrites those links to the equivalent new form, saves the
-/// file, and re-indexes the note's outbound links in the DB.
-/// Returns the number of notes whose files were actually modified.
+/// path (with or without `.md`) or as a bare filename stem — returns a
+/// `(Note, rewritten_content)` pair, computed but **not** written. Performs no
+/// disk writes and touches no derived indexes, so a caller can either apply the
+/// rewrites (phase B of `note_mutation::rename`) or just report the affected
+/// sources (the deferred plan for the external-move prompt).
 ///
 /// Must run while the `notes` row still holds `old_path`: the stem-ownership
 /// check below resolves against the pre-rename state.
-/// Returns a list of `(Note, rewritten_content)` pairs for every source note
-/// whose text would change — computed but **not** written. Performs no disk
-/// writes and touches no derived indexes, so a caller can either apply the
-/// rewrites (phase B) or just report the affected sources (the deferred plan
-/// for the external-move prompt). [`rewrite_backlinks_on_rename_on_conn`] is the
-/// applying wrapper.
 pub fn collect_backlink_rewrites_on_conn(
     ledger_path: &Path,
     conn: &mut SqliteConnection,
@@ -271,7 +265,7 @@ pub fn collect_backlink_rewrites_on_conn(
             .resolve(old_stem)
             .is_some_and(|r| r.path == old_path);
 
-    let map_target = |target: &str| -> Option<String> {
+    collect_rewrites_with(ledger_path, conn, |target| {
         if target.eq_ignore_ascii_case(old_path) {
             Some(new_path.to_string())
         } else if target.eq_ignore_ascii_case(old_no_ext) {
@@ -281,8 +275,51 @@ pub fn collect_backlink_rewrites_on_conn(
         } else {
             None
         }
-    };
+    })
+}
 
+/// The set form of [`collect_backlink_rewrites_on_conn`]: the rewrites implied by
+/// moving *many* notes at once, where `moves` holds `(old path, new path)` pairs.
+/// Same contract — computed, never written.
+///
+/// This exists for the folder relocate, and one pass is not merely cheaper than a
+/// pass per moved note: it is the only correct shape. Each source file is read
+/// once and rewritten once for every moved note it links to, so a note holding
+/// links to two notes in the same folder gets both — where a pass per moved note
+/// would read the same unwritten file twice and the second rewrite would be
+/// computed from text that never carried the first.
+///
+/// No stem clause here, and none is missing: a folder move keeps every filename,
+/// so `[[The Spark]]` still resolves to the note it always did.
+pub fn collect_backlink_rewrites_for_moves(
+    ledger_path: &Path,
+    conn: &mut SqliteConnection,
+    moves: &[(String, String)],
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
+    // Both written forms of every moved note, keyed lowercase because link
+    // matching is case-insensitive over ASCII — the map lookup is what the
+    // single-note form spells as `eq_ignore_ascii_case`.
+    let mut targets: HashMap<String, String> = HashMap::with_capacity(moves.len() * 2);
+    for (old_path, new_path) in moves {
+        let old_no_ext = old_path.strip_suffix(".md").unwrap_or(old_path);
+        let new_no_ext = new_path.strip_suffix(".md").unwrap_or(new_path);
+        targets.insert(old_path.to_ascii_lowercase(), new_path.clone());
+        targets.insert(old_no_ext.to_ascii_lowercase(), new_no_ext.to_string());
+    }
+
+    collect_rewrites_with(ledger_path, conn, |target| {
+        targets.get(&target.to_ascii_lowercase()).cloned()
+    })
+}
+
+/// The half both collectors share: find every note whose outbound links include a
+/// target `map_target` renames, read it, and rewrite it. Returns the sources whose
+/// text actually changed, paired with their new content — nothing is written here.
+fn collect_rewrites_with(
+    ledger_path: &Path,
+    conn: &mut SqliteConnection,
+    map_target: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
     let link_rows: Vec<(i32, String)> = nl::note_links
         .select((nl::source_id, nl::target_path))
         .load(conn)
@@ -305,31 +342,10 @@ pub fn collect_backlink_rewrites_on_conn(
             Ok(c) => c,
             Err(_) => continue,
         };
-        let (new_content, changed) = rewrite_wikilinks_with(&content, map_target);
+        let (new_content, changed) = rewrite_wikilinks_with(&content, &map_target);
         if changed {
             rewrites.push((source, new_content));
         }
-    }
-    Ok(rewrites)
-}
-
-/// Apply the backlink rewrites a rename implies: like
-/// [`collect_backlink_rewrites_on_conn`] but writes each rewritten source file
-/// through the [`write_note_file`] Write Chokepoint before returning it. The
-/// caller reconciles the returned sources' derived indexes itself.
-///
-/// Used by the folder-rename path. The single-note rename routes through
-/// `note_mutation::rename`, which applies phase B via `commit_many` (one batched
-/// write-and-reconcile) instead.
-pub fn rewrite_backlinks_on_rename_on_conn(
-    ledger_path: &Path,
-    conn: &mut SqliteConnection,
-    old_path: &str,
-    new_path: &str,
-) -> Result<Vec<(crate::db::models::Note, String)>, String> {
-    let rewrites = collect_backlink_rewrites_on_conn(ledger_path, conn, old_path, new_path)?;
-    for (source, new_content) in &rewrites {
-        write_note_file(&ledger_path.join(&source.path), new_content.as_bytes())?;
     }
     Ok(rewrites)
 }
@@ -930,10 +946,10 @@ mod tests {
         assert!(!changed);
     }
 
-    // ── rewrite_backlinks_on_rename_on_conn ──────────────────────────────────
+    // ── collect_backlink_rewrites_on_conn ──────────────────────────────────
 
     #[test]
-    fn rewrite_backlinks_updates_files_and_link_rows() {
+    fn collect_backlink_rewrites_returns_the_new_text_without_writing_it() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "See [[b.md]].").unwrap();
         fs::write(dir.path().join("b.md"), "Body.").unwrap();
@@ -944,22 +960,24 @@ mod tests {
         seed_note_links(&mut conn, 1, &["b.md".to_string()]).unwrap();
 
         let rewrites =
-            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "b.md", "b-renamed.md")
+            collect_backlink_rewrites_on_conn(dir.path(), &mut conn, "b.md", "b-renamed.md")
                 .unwrap();
 
         assert_eq!(rewrites.len(), 1, "one note should have been rewritten");
 
-        // File content should have been updated
-        let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
-        assert_eq!(updated, "See [[b-renamed.md]].");
-
-        // Returned item is (Note, new_content) — index update is caller's responsibility
+        // Returned item is (Note, new_content) — writing it and reconciling the
+        // index are the caller's, so the file on disk is still as it was.
         assert_eq!(rewrites[0].0.path, "a.md");
-        assert!(rewrites[0].1.contains("b-renamed.md"));
+        assert_eq!(rewrites[0].1, "See [[b-renamed.md]].");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("a.md")).unwrap(),
+            "See [[b.md]].",
+            "collecting writes nothing",
+        );
     }
 
     #[test]
-    fn rewrite_backlinks_returns_zero_when_no_backlinks() {
+    fn collect_backlink_rewrites_returns_nothing_when_there_are_no_backlinks() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "No links.").unwrap();
 
@@ -967,13 +985,13 @@ mod tests {
         insert_note(&mut conn, 1, "a.md", "A");
 
         let rewrites =
-            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "missing.md", "new.md")
+            collect_backlink_rewrites_on_conn(dir.path(), &mut conn, "missing.md", "new.md")
                 .unwrap();
         assert!(rewrites.is_empty());
     }
 
     #[test]
-    fn rewrite_backlinks_multiple_sources() {
+    fn collect_backlink_rewrites_covers_every_source() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("a.md"), "[[target.md]]").unwrap();
         fs::write(dir.path().join("c.md"), "Also [[target.md|display]].").unwrap();
@@ -986,7 +1004,7 @@ mod tests {
         seed_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
         seed_note_links(&mut conn, 3, &["target.md".to_string()]).unwrap();
 
-        let rewrites = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = collect_backlink_rewrites_on_conn(
             dir.path(),
             &mut conn,
             "target.md",
@@ -994,15 +1012,40 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(rewrites.len(), 2);
-        assert_eq!(
-            fs::read_to_string(dir.path().join("a.md")).unwrap(),
-            "[[renamed.md]]"
-        );
-        assert_eq!(
-            fs::read_to_string(dir.path().join("c.md")).unwrap(),
-            "Also [[renamed.md|display]]."
-        );
+        let by_path: std::collections::HashMap<String, String> = rewrites
+            .into_iter()
+            .map(|(note, content)| (note.path, content))
+            .collect();
+        assert_eq!(by_path.len(), 2);
+        assert_eq!(by_path["a.md"], "[[renamed.md]]");
+        assert_eq!(by_path["c.md"], "Also [[renamed.md|display]].");
+    }
+
+    #[test]
+    fn collect_backlink_rewrites_for_moves_follows_every_target_in_one_pass() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("index.md"), "[[old/a.md]] and [[old/b]].").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "index.md", "Index");
+        insert_note(&mut conn, 2, "old/a.md", "A");
+        insert_note(&mut conn, 3, "old/b.md", "B");
+        seed_note_links(&mut conn, 1, &["old/a.md".to_string(), "old/b".to_string()]).unwrap();
+
+        let rewrites = collect_backlink_rewrites_for_moves(
+            dir.path(),
+            &mut conn,
+            &[
+                ("old/a.md".to_string(), "new/a.md".to_string()),
+                ("old/b.md".to_string(), "new/b.md".to_string()),
+            ],
+        )
+        .unwrap();
+
+        // One source, one rewrite, both links followed — the property a pass per
+        // moved note cannot have, since each pass reads the unwritten file back.
+        assert_eq!(rewrites.len(), 1);
+        assert_eq!(rewrites[0].1, "[[new/a.md]] and [[new/b]].");
     }
 
     // ── timeline fence — extract and rewrite ────────────────────────────────
@@ -1026,7 +1069,7 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_backlinks_rewrites_inside_timeline_fence() {
+    fn collect_backlink_rewrites_reaches_inside_a_timeline_fence() {
         let dir = TempDir::new().unwrap();
         let content = "```timeline\nDate: Year 1\nTitle: [[target.md]]\nSee also [[target.md|display]].\n```";
         fs::write(dir.path().join("note.md"), content).unwrap();
@@ -1038,11 +1081,11 @@ mod tests {
         seed_note_links(&mut conn, 1, &["target.md".to_string()]).unwrap();
 
         let rewrites =
-            rewrite_backlinks_on_rename_on_conn(dir.path(), &mut conn, "target.md", "renamed.md")
+            collect_backlink_rewrites_on_conn(dir.path(), &mut conn, "target.md", "renamed.md")
                 .unwrap();
 
         assert_eq!(rewrites.len(), 1, "note.md should have been rewritten");
-        let updated = fs::read_to_string(dir.path().join("note.md")).unwrap();
+        let updated = &rewrites[0].1;
         assert!(
             updated.contains("[[renamed.md]]"),
             "bare link should be rewritten: {updated}"
@@ -1384,7 +1427,7 @@ mod tests {
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
         seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
-        let rewrites = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = collect_backlink_rewrites_on_conn(
             dir.path(),
             &mut conn,
             "Atlas/The Spark.md",
@@ -1393,8 +1436,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(rewrites.len(), 1);
-        let updated = fs::read_to_string(dir.path().join("a.md")).unwrap();
-        assert_eq!(updated, "See [[The Ember]] today.");
+        assert_eq!(rewrites[0].1, "See [[The Ember]] today.");
     }
 
     #[test]
@@ -1407,7 +1449,7 @@ mod tests {
         insert_note(&mut conn, 2, "Atlas/The Spark.md", "The Spark");
         seed_note_links(&mut conn, 1, &["The Spark".to_string()]).unwrap();
 
-        let rewrites = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = collect_backlink_rewrites_on_conn(
             dir.path(),
             &mut conn,
             "Atlas/The Spark.md",
@@ -1432,7 +1474,7 @@ mod tests {
         insert_note(&mut conn, 3, "deep/Plan.md", "Plan (deep)");
         seed_note_links(&mut conn, 1, &["Plan".to_string()]).unwrap();
 
-        let rewrites = rewrite_backlinks_on_rename_on_conn(
+        let rewrites = collect_backlink_rewrites_on_conn(
             dir.path(),
             &mut conn,
             "deep/Plan.md",

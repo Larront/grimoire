@@ -23,6 +23,12 @@
 //! move, so the two can never diverge in how they treat backlinks. `delete` (a
 //! removal, not a write) is deliberately **not** here — see the parent spec
 //! (#131).
+//!
+//! `relocate_folder` is the set form of that rename, and the one place where
+//! this module touches something other than note bytes: a folder move is one
+//! `fs::rename` of a directory, so the moment the files arrive is a step in the
+//! envelope's own ordering rather than a precondition a caller can satisfy
+//! first (#206).
 
 use crate::db::models::Note;
 use crate::db::schema::notes::dsl as nd;
@@ -30,6 +36,8 @@ use crate::note_index::{self, ReconcileManyItem};
 use crate::note_write::write_note_file;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Write `content` to `full_path` through the Write Chokepoint, then reconcile
@@ -253,6 +261,155 @@ pub fn rename(
         note: persisted,
         backlinks,
     })
+}
+
+/// Carry a folder from `old_path` to `new_path` with every note under it — the
+/// set form of [`rename`], and the one place a folder relocation's ordering is
+/// written down.
+///
+/// It cannot be composed out of [`rename`] calls: that verb's precondition is
+/// that the file has already arrived at its new location, and here they all
+/// arrive at once, in a single `fs::rename` of the directory. So the move itself
+/// happens *inside* this function — between the collect and the write, which is
+/// the whole reason the verb exists:
+///
+/// 1. Read every descendant row and compute where it lands. Every new path is
+///    computed here and nowhere else, and a destination another note already
+///    holds is refused now, while refusing still costs nothing.
+/// 2. Collect the wikilink rewrites the move implies, while every source file is
+///    still readable at the path its row names. Computed, not written.
+/// 3. `fs::rename` the directory — one atomic operation on one volume, and the
+///    only fallible step left once the paths agree. There is deliberately no
+///    transaction around this: it could not cover the filesystem half, so it
+///    cannot deliver the guarantee that would justify being the only transaction
+///    in the write path.
+/// 4. Write the rewritten sources through the Write Chokepoint, re-key the moved
+///    rows, and reconcile the whole set in one batch — `prev_path` on each moved
+///    note is what clears its old path's `note_tags`.
+///
+/// Steps 1 and 2 write nothing, so a relocation that cannot be completed leaves
+/// disk and database exactly as they were.
+///
+/// Callers resolve **and refuse** their destination first — a folder name a
+/// sibling already holds, a move into the folder's own descendant — because
+/// those refusals are about the folder, not its notes. `old_path == new_path` is
+/// a no-op here rather than a caller's obligation. Returns the number of notes
+/// whose wikilinks were rewritten, for the "N notes updated" toast.
+pub fn relocate_folder(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    old_path: &str,
+    new_path: &str,
+) -> Result<usize, String> {
+    // Nothing was asked for: a rename to the name it already has, or a move into
+    // the folder it already sits in. Leaving the filesystem alone is the whole
+    // job — `fs::rename` of a directory onto itself is not portable.
+    if old_path == new_path {
+        return Ok(0);
+    }
+
+    let old_prefix = format!("{old_path}/");
+    let new_prefix = format!("{new_path}/");
+
+    // 1. Every descendant and where it lands. The `starts_with` is not
+    //    belt-and-braces: `LIKE` matches case-insensitively over ASCII and reads
+    //    `_` as a wildcard, so a sibling `session-notes` arrives here when
+    //    `session_notes` was asked for — and cutting a fixed prefix off a path
+    //    that never carried it corrupts the path.
+    let like_pattern = format!("{old_prefix}%");
+    let moves: Vec<(Note, String)> = nd::notes
+        .filter(nd::path.like(&like_pattern))
+        .load::<Note>(conn)
+        .map_err(|e| format!("query descendants: {e}"))?
+        .into_iter()
+        .filter(|note| note.path.starts_with(&old_prefix))
+        .map(|note| {
+            let landing = format!("{new_prefix}{}", &note.path[old_prefix.len()..]);
+            (note, landing)
+        })
+        .collect();
+
+    // A path another note already holds would fail the `notes.path` unique index
+    // partway through step 4, with the directory already moved.
+    let destinations: Vec<&String> = moves.iter().map(|(_, landing)| landing).collect();
+    let taken: Vec<String> = nd::notes
+        .filter(nd::path.eq_any(&destinations))
+        .select(nd::path)
+        .load(conn)
+        .map_err(|e| format!("check destinations: {e}"))?;
+    if let Some(occupied) = taken.first() {
+        return Err(format!("ERR_PATH_TAKEN: A note already exists at {occupied}"));
+    }
+
+    // 2. What the move does to other notes' links. One pass over the whole set,
+    //    not one per moved note: a note linking to two notes in this folder must
+    //    end up with both rewrites, and a second pass would read its file back
+    //    before the first was written.
+    let renames: Vec<(String, String)> = moves
+        .iter()
+        .map(|(note, landing)| (note.path.clone(), landing.clone()))
+        .collect();
+    let rewrites =
+        crate::commands::links::collect_backlink_rewrites_for_moves(ledger_path, conn, &renames)?;
+    let rewritten_count = rewrites.len();
+    let mut rewritten: HashMap<i32, (Note, String)> = rewrites
+        .into_iter()
+        .map(|(note, content)| (note.id, (note, content)))
+        .collect();
+
+    // 3. The move. Individual files travel with the directory — no per-file
+    //    renames are needed, and none would be correct.
+    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
+        .map_err(|e| format!("rename dir: {e}"))?;
+
+    // 4. Re-key each moved row and pair it with its content: the rewritten text
+    //    when this note's own links pointed into the folder, otherwise what is
+    //    now at its new location.
+    let mut items: Vec<ReconcileManyItem> = Vec::with_capacity(moves.len() + rewritten.len());
+    for (note, landing) in moves {
+        let full_path = ledger_path.join(&landing);
+        let content = match rewritten.remove(&note.id) {
+            Some((_, new_content)) => {
+                write_note_file(&full_path, new_content.as_bytes())?;
+                new_content
+            }
+            None => fs::read_to_string(&full_path).unwrap_or_default(),
+        };
+
+        // A descendant's parent is always a folder inside the one that moved, so
+        // it follows from the landing path — the direct children whose
+        // `parent_path` is the folder itself are not a separate case here.
+        let parent = landing.rsplit_once('/').map(|(above, _)| above.to_string());
+        let persisted: Note = diesel::update(nd::notes.find(note.id))
+            .set((
+                nd::path.eq(&landing),
+                nd::parent_path.eq(parent.as_deref()),
+            ))
+            .returning(Note::as_returning())
+            .get_result(conn)
+            .map_err(|e| format!("re-key '{landing}': {e}"))?;
+
+        items.push(ReconcileManyItem {
+            note: persisted,
+            content,
+            prev_path: Some(note.path),
+        });
+    }
+
+    // The rewritten sources that stayed where they were.
+    for (note, content) in rewritten.into_values() {
+        write_note_file(&ledger_path.join(&note.path), content.as_bytes())?;
+        items.push(ReconcileManyItem {
+            note,
+            content,
+            prev_path: None,
+        });
+    }
+
+    note_index::reconcile_many(conn, index, &items)?;
+
+    Ok(rewritten_count)
 }
 
 #[cfg(test)]
@@ -736,5 +893,132 @@ mod tests {
         assert_eq!(result.note.parent_path, None);
         let row: Note = nd::notes.find(1).first(&mut conn).unwrap();
         assert_eq!(row.parent_path, None, "a move to root must null parent_path");
+    }
+
+    // ── relocate_folder ───────────────────────────────────────────────────────
+
+    #[test]
+    fn relocate_folder_carries_its_notes_and_the_links_that_reach_them() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+        fs::create_dir_all(dir.path().join("creatures")).unwrap();
+
+        let dragon = make_note(1, "creatures/dragon.md");
+        let wyvern = make_note(2, "creatures/wyvern.md");
+        let story = make_note(3, "Story.md");
+        for note in [&dragon, &wyvern, &story] {
+            insert_note(&mut conn, note);
+        }
+        // The dragon carries a tag (so the re-key is provable) and links to a
+        // neighbour that moves with it.
+        create(
+            &mut conn,
+            Some(&index),
+            &dir.path().join("creatures/dragon.md"),
+            &dragon,
+            "---\ntags: [beast]\n---\nSee [[creatures/wyvern.md]].",
+        )
+        .unwrap();
+        create(
+            &mut conn,
+            Some(&index),
+            &dir.path().join("creatures/wyvern.md"),
+            &wyvern,
+            "A wyvern.",
+        )
+        .unwrap();
+        // One note outside the folder holding a link to *both* moved notes: the
+        // case a pass per moved note gets wrong, because the second pass would
+        // read this file back before the first pass's rewrite was written.
+        create(
+            &mut conn,
+            Some(&index),
+            &dir.path().join("Story.md"),
+            &story,
+            "Both [[creatures/dragon.md]] and [[creatures/wyvern.md]].",
+        )
+        .unwrap();
+
+        let rewritten =
+            relocate_folder(&mut conn, Some(&index), dir.path(), "creatures", "beasts").unwrap();
+
+        assert_eq!(
+            rewritten, 2,
+            "the outside note, and the moved note that linked to its neighbour",
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("Story.md")).unwrap(),
+            "Both [[beasts/dragon.md]] and [[beasts/wyvern.md]].",
+            "both links in one file follow the move",
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("beasts/dragon.md")).unwrap(),
+            "---\ntags: [beast]\n---\nSee [[beasts/wyvern.md]].",
+            "a moved note that is also a link source is written at where it landed",
+        );
+        assert!(!dir.path().join("creatures").exists());
+
+        let rows: Vec<(String, Option<String>)> = nd::notes
+            .filter(nd::id.ne(3))
+            .select((nd::path, nd::parent_path))
+            .order(nd::id)
+            .load(&mut conn)
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                ("beasts/dragon.md".to_string(), Some("beasts".to_string())),
+                ("beasts/wyvern.md".to_string(), Some("beasts".to_string())),
+            ],
+        );
+
+        let tag_paths: Vec<String> = nt::note_tags.select(nt::note_path).load(&mut conn).unwrap();
+        assert_eq!(
+            tag_paths,
+            vec!["beasts/dragon.md"],
+            "the old path's note_tags are cleared by prev_path",
+        );
+
+        let mut targets: Vec<String> = nl::note_links
+            .select(nl::target_path)
+            .load(&mut conn)
+            .unwrap();
+        targets.sort();
+        assert_eq!(
+            targets,
+            vec![
+                "beasts/dragon.md",
+                "beasts/wyvern.md",
+                "beasts/wyvern.md",
+            ],
+            "every link row is re-derived from the rewritten text",
+        );
+    }
+
+    #[test]
+    fn relocate_folder_refuses_a_destination_a_note_holds_before_moving_anything() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        fs::create_dir_all(dir.path().join("creatures")).unwrap();
+        fs::create_dir_all(dir.path().join("beasts")).unwrap();
+
+        let moving = make_note(1, "creatures/dragon.md");
+        let sitting = make_note(2, "beasts/dragon.md");
+        for note in [&moving, &sitting] {
+            insert_note(&mut conn, note);
+            create(&mut conn, None, &dir.path().join(&note.path), note, "Body.").unwrap();
+        }
+
+        let err = relocate_folder(&mut conn, None, dir.path(), "creatures", "beasts")
+            .expect_err("a landing path another note already holds is refused");
+        assert!(err.starts_with("ERR_PATH_TAKEN"), "got: {err}");
+
+        assert!(
+            dir.path().join("creatures/dragon.md").is_file(),
+            "the refusal lands before the directory moves",
+        );
+        let row: Note = nd::notes.find(1).first(&mut conn).unwrap();
+        assert_eq!(row.path, "creatures/dragon.md", "and before any row is re-keyed");
     }
 }

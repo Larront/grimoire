@@ -1,4 +1,3 @@
-use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
@@ -400,16 +399,14 @@ pub fn move_folder_inner(
 
 /// Re-key `table.column` from `old_prefix` onto `new_prefix`, for the rows whose
 /// value actually starts with `old_prefix`. `table` and `column` are interpolated
-/// into the statement and so must stay literals — the three call sites in
-/// [`relocate_folder_inner`] are the only ones, and none of them takes GM input.
+/// into the statement and so must stay literals — the one call site in
+/// [`relocate_folder_inner`] is the only one, and it takes no GM input.
 ///
 /// The rewrite is anchored to the *leading* prefix, the same form and for the same
 /// reason as [`crate::commands::pdf_scene_links::rewrite_pdf_path_prefix`]: a blanket
 /// `REPLACE` rewrites every occurrence, so a folder whose name repeats inside its own
-/// subtree (`a/a/x.md`) has its interior segment rewritten too, and the row lands at
-/// `b/b/x.md` where the Rust half of this function — `replacen(.., 1)` — expects
-/// `b/a/x.md`. The two then disagree, and the disagreement surfaces after the
-/// directory has already moved.
+/// subtree (`a/a/world.jpg`) has its interior segment rewritten too and the row lands
+/// at `b/b/world.jpg`, where the file is at `b/a/world.jpg`.
 ///
 /// The `SUBSTR(col, 1, ?) = ?` guard is what makes that anchoring safe. `LIKE` is
 /// case-insensitive over ASCII and reads `_` as a single-character wildcard, so
@@ -441,16 +438,19 @@ fn rekey_leading_prefix(
 }
 
 /// Carry a folder from `old_path` to `new_path` along with everything keyed by a
-/// path underneath it: descendant note `path`/`parent_path`, map `image_path`,
-/// PDF Scene-links, note_tags, the search index, and the full-path wikilinks
-/// pointing into it. Returns the number of notes whose links were rewritten, for
-/// the "N notes updated" toast.
+/// path underneath it. Returns the number of notes whose links were rewritten,
+/// for the "N notes updated" toast.
+///
+/// The notes are [`crate::note_mutation::relocate_folder`]'s: their rows, their
+/// files, the wikilinks pointing into them, and the directory move itself, in the
+/// order the Write-and-Reconcile Envelope states once for every set-shaped
+/// write. What is left here is the two path-keyed things that are not notes and
+/// so have no envelope to join — map images and PDF Scene-links, both of which
+/// travelled with the directory and would otherwise be orphaned.
 ///
 /// A rename and a move both land here — they differ only in which half of the
 /// destination path their caller changed — so the re-keying story is written
-/// once. Callers resolve *and refuse* their destination before calling: step 2
-/// below points links at the new path, so a relocation that failed at step 3
-/// would leave every link aimed at a folder that never appeared.
+/// once. Callers resolve *and refuse* their destination first.
 pub fn relocate_folder_inner(
     ledger_path: &Path,
     old_path: &str,
@@ -458,110 +458,19 @@ pub fn relocate_folder_inner(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
 ) -> Result<usize, String> {
-    // Nothing was asked for: a rename to the name it already has, or a move into
-    // the folder it already sits in. Leaving the filesystem alone is the whole
-    // job — `fs::rename` of a directory onto itself is not portable.
-    if old_path == new_path {
-        return Ok(0);
-    }
+    let updated_count =
+        crate::note_mutation::relocate_folder(conn, index, ledger_path, old_path, new_path)?;
 
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
-    let like_pattern = format!("{}%", old_prefix);
 
-    // 1. Collect descendant note paths before touching disk so we can compute
-    //    (old_path, new_path) pairs for the link rewrite step below.
-    // The `starts_with` is not belt-and-braces: `LIKE` matches case-insensitively
-    // and treats `_` as a wildcard, so a sibling `session-notes` arrives here when
-    // `session_notes` was asked for. Left in, step 7 would look it up under a name
-    // the rewrite never gave it and fail after the directory had already moved.
-    let descendant_paths: Vec<String> = notes
-        .filter(path.like(&like_pattern))
-        .select(path)
-        .load::<String>(conn)
-        .map_err(|e| format!("query descendants: {}", e))?
-        .into_iter()
-        .filter(|p| p.starts_with(&old_prefix))
-        .collect();
-
-    // 2. Rewrite full-path wikilinks pointing at each moved note BEFORE the
-    //    filesystem rename so that source files are still readable at their DB
-    //    paths. Bare-stem links are left untouched by rewrite_backlinks_on_rename_on_conn
-    //    (stem doesn't change on a folder move, so owns_stem is always false).
-    let mut all_backlink_rewrites: Vec<crate::note_index::ReconcileManyItem> = Vec::new();
-    for old_note_path in &descendant_paths {
-        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
-        let rewrites =
-            rewrite_backlinks_on_rename_on_conn(ledger_path, conn, old_note_path, &new_note_path)?;
-        for (note, content) in rewrites {
-            all_backlink_rewrites.push(crate::note_index::ReconcileManyItem {
-                note,
-                content,
-                prev_path: None,
-            });
-        }
-    }
-    let updated_count = all_backlink_rewrites.len();
-
-    // 3. Rename directory on disk. Individual .md files move atomically with
-    //    the folder — no per-file renames are needed.
-    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
-        .map_err(|e| format!("rename dir: {}", e))?;
-
-    // 4. Update `path` for all descendant notes.
-    rekey_leading_prefix(conn, "notes", "path", &old_prefix, &new_prefix)
-        .map_err(|e| format!("update paths: {}", e))?;
-
-    // 5a. Update `parent_path` — exact match (direct children: parent_path = old_path).
-    //     These rows' parent_path is "creatures" (no slash), not matched by LIKE "creatures/%",
-    //     so must be handled separately.
-    sql_query("UPDATE notes SET parent_path = ? WHERE parent_path = ?")
-        .bind::<Text, _>(new_path)
-        .bind::<Text, _>(old_path)
-        .execute(conn)
-        .map_err(|e| format!("update parent exact: {}", e))?;
-
-    // 5b. Update `parent_path` — prefix match (deeper nesting: parent_path LIKE old_path/%).
-    rekey_leading_prefix(conn, "notes", "parent_path", &old_prefix, &new_prefix)
-        .map_err(|e| format!("update parent prefix: {}", e))?;
-
-    // 6. Update image_path for maps inside the renamed folder.
     rekey_leading_prefix(conn, "maps", "image_path", &old_prefix, &new_prefix)
         .map_err(|e| format!("update map paths: {}", e))?;
 
-    // 6b. Re-key Scene-links for PDFs inside the renamed folder. PDFs are
-    //     path-addressed (ADR-0011), so a folder move relocates them on disk with
-    //     the atomic dir rename above; their links must follow or be orphaned.
+    // PDFs are path-addressed (ADR-0011), so the atomic dir rename above has
+    // already relocated them on disk; their Scene-links must follow.
     crate::commands::pdf_scene_links::rewrite_pdf_path_prefix(conn, &old_prefix, &new_prefix)
         .map_err(|e| format!("update pdf scene-link paths: {}", e))?;
-
-    // 7. Load moved notes (now at new paths) and build reconcile items so their
-    //    note_tags are re-keyed and Tantivy is updated. prev_path triggers the
-    //    old-path note_tags clear in write_facets.
-    let mut moved_items: Vec<crate::note_index::ReconcileManyItem> =
-        Vec::with_capacity(descendant_paths.len());
-    for old_note_path in &descendant_paths {
-        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
-        let note: Note = notes
-            .filter(path.eq(&new_note_path))
-            .first(conn)
-            .map_err(|e| format!("load moved note '{new_note_path}': {e}"))?;
-        let content = fs::read_to_string(ledger_path.join(&new_note_path))
-            .unwrap_or_default();
-        moved_items.push(crate::note_index::ReconcileManyItem {
-            note,
-            content,
-            prev_path: Some(old_note_path.clone()),
-        });
-    }
-
-    // 8. Route all index writes through reconcile_many — one atomic SQLite tx,
-    //    one Tantivy commit for backlink sources + moved notes.
-    let mut all_items = all_backlink_rewrites;
-    all_items.extend(moved_items);
-    if !all_items.is_empty() {
-        crate::note_index::reconcile_many(conn, index, &all_items)?;
-    }
 
     Ok(updated_count)
 }
@@ -1506,9 +1415,11 @@ mod tests {
     // ── prefix re-keying ──────────────────────────────────────────────────
     //
     // A folder whose name repeats inside its own subtree is where a blanket
-    // REPLACE and a leading-prefix `replacen` disagree, and the Rust half is the
-    // one that is right: renaming `a` to `b` makes `a/a/x.md` into `b/a/x.md`,
-    // not `b/b/x.md`.
+    // REPLACE goes wrong and only the *leading* prefix is right: renaming `a` to
+    // `b` makes `a/a/x.md` into `b/a/x.md`, not `b/b/x.md`. Notes are re-keyed
+    // one at a time inside the envelope now, so there is only one computation
+    // left to be right; the map rows below still cross the seam these tests
+    // guard, where a path is computed by SQL and read back by Rust.
 
     #[test]
     fn rename_folder_re_keys_a_repeated_name_by_leading_prefix_only() {
@@ -1526,9 +1437,10 @@ mod tests {
         assert_eq!(row.parent_path.as_deref(), Some("b/a"));
     }
 
-    /// `parent_path` needs one more level of nesting than `path` does before the
-    /// two forms diverge, because a direct child's parent is re-keyed by the exact
-    /// match in step 5a rather than the prefix rewrite in 5b.
+    /// `parent_path` needs one more level of nesting than `path` does before a
+    /// repeated folder name can be got wrong, so it is worth its own case: the
+    /// envelope derives a moved note's parent from where the note landed, which
+    /// is the same computation the path itself got.
     #[test]
     fn rename_folder_re_keys_a_deeper_repeated_parent_path_by_prefix_only() {
         let dir = TempDir::new().unwrap();
