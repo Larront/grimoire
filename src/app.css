@@ -92,6 +92,18 @@
   paint with `var(--primary)` instead of restating a hex — the swatch shows the value the
   GM will actually get, in the mode they are actually in, because it is the same
   declaration doing both jobs.
+
+  The one deliberate copy is `src/lib/entity-colors.ts`, and it is a copy because it is a
+  different kind of thing: those five hexes are written into SQLite rows when a GM picks
+  a pin, annotation or scene-thumbnail colour, so they must be frozen literals that do NOT
+  re-resolve when the accent or mode changes. `src/test/entity-colors.test.ts` fails if
+  they drift from this table — or from Crimson's values in `shared/tokens.css`, which
+  ships as the default `--primary` and is a fourth statement of that one preset.
+
+  Settings' accent list builds its five entries from that file too, so the NAMES exist
+  once as well: `accent-${name}` types itself into the store's `AccentPreset` union, and a
+  sixth preset added below without a name there is a compile error rather than a swatch
+  quietly missing from Settings.
 */
 
 .accent-crimson {

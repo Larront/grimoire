@@ -1,15 +1,20 @@
 import { Skull, Flame, Shield, Wand2, Swords, Moon, Crown, Eye, ScrollText, BookOpen } from "@lucide/svelte";
+import { ACCENT_PRESETS } from "$lib/entity-colors";
 
-export const COLOR_PRESETS = [
-  { name: "crimson", label: "Crimson", bg: "rgba(194,72,61,0.18)", swatch: "#c2483d" },
-  { name: "arcane", label: "Arcane", bg: "rgba(155,107,191,0.18)", swatch: "#9b6bbf" },
-  { name: "verdant", label: "Verdant", bg: "rgba(92,158,110,0.18)", swatch: "#5c9e6e" },
-  { name: "ice", label: "Ice", bg: "rgba(91,158,201,0.18)", swatch: "#5b9ec9" },
-  { name: "amber", label: "Amber", bg: "rgba(196,154,60,0.18)", swatch: "#c49a3c" },
-];
+/*
+  A scene thumbnail's colour layer is the accent presets and nothing else. This file used
+  to state the five of them a second time, under a name of its own, which is how the
+  pickers in one app came to disagree about what colour "crimson" is (#222). They live in
+  `$lib/entity-colors` now, with the pin and annotation rows drawn from the same table,
+  and the scene pickers iterate `ACCENT_PRESETS` directly rather than through an alias
+  here — one name for one thing.
 
-export const ACCENT_BG = COLOR_PRESETS.map((p) => p.bg);
-export const ACCENT_FG = COLOR_PRESETS.map((p) => p.swatch);
+  What stays is the two CYCLES below, which are this file's own and belong to scenes:
+  a scene with no colour chosen wears the preset its id lands on, so an unstyled ledger
+  is still a legible grid rather than five hundred identical cards.
+*/
+export const ACCENT_BG = ACCENT_PRESETS.map((p) => p.bg);
+export const ACCENT_FG = ACCENT_PRESETS.map((p) => p.swatch);
 
 export const ICON_OPTIONS = [
   { name: "Skull", icon: Skull },

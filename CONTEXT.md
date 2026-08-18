@@ -28,13 +28,15 @@ Five named presets drive `--primary`. All are evocative, never generic — no ne
 
 | Preset    | Dark hex  | Light hex |
 | --------- | --------- | --------- |
-| `crimson` | `#c4685e` | `#8a2e26` |
-| `arcane`  | `#a48dd8` | `#5a3fa0` |
-| `verdant` | `#7fb38a` | `#2f6b48` |
-| `ice`     | `#7faec7` | `#2c6896` |
-| `amber`   | `#d3a14a` | `#8a6418` |
+| `crimson` | `#c2483d` | `#a83228` |
+| `arcane`  | `#9b6bbf` | `#7b4da0` |
+| `verdant` | `#5c9e6e` | `#3d7a52` |
+| `ice`     | `#5b9ec9` | `#3a7fa8` |
+| `amber`   | `#c49a3c` | `#a07a20` |
 
-`--primary-subtle` (16% opacity) and `--primary-muted` (40% opacity) are derived from `--primary`. There is no separate `--accent` token — `--primary` is the single accent family.
+`--primary-subtle` (12% opacity) and `--primary-muted` (24% opacity) are derived from `--primary`. There is no separate `--accent` token — `--primary` is the single accent family.
+
+The preset table lives in `src/app.css` under `.accent-*`; `shared/tokens.css` additionally ships Crimson's two values as the default `--primary`, which is what a GM who has never opened Settings is looking at. One deliberate third copy: `src/lib/entity-colors.ts` holds the five dark hexes frozen as **data**, because a colour a GM picks for a pin, an annotation or a scene thumbnail is written into their ledger and must not re-resolve when they change accent or mode. That file is the only source of a colour-picker row anywhere in the app — the entity pickers, the scene thumbnails and Settings' own accent list all build from it — and `src/test/entity-colors.test.ts` fails if the copies drift.
 
 ### Color Families
 

@@ -6,6 +6,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Tabs } from 'bits-ui';
   import { ledger, type AccentPreset, type DensityLevel } from '$lib/stores/ledger.svelte';
+  import { ACCENT_PRESETS } from '$lib/entity-colors';
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
   import { templates } from '$lib/stores/templates.svelte';
   import { toastSuccess, toastError } from '$lib/toast';
@@ -105,14 +106,14 @@
     values here never had. They were the third copy of this table (app.css and a since-
     deleted one in ThemeWatcher were the others), and a swatch that lies about what you
     are choosing is the exact failure that duplication produces.
+
+    The NAMES were the copy left standing, and they came out too (#222): the five are
+    built from `ACCENT_PRESETS` now, and `accent-${p.name}` types itself into the store's
+    `AccentPreset` union — so a preset added there and forgotten here no longer compiles.
   */
-  const ACCENT_PRESETS: { value: AccentPreset; label: string }[] = [
-    { value: 'accent-crimson', label: 'Crimson' },
-    { value: 'accent-arcane',  label: 'Arcane'  },
-    { value: 'accent-verdant', label: 'Verdant' },
-    { value: 'accent-ice',     label: 'Ice'     },
-    { value: 'accent-amber',   label: 'Amber'   },
-  ];
+  const ACCENT_OPTIONS: { value: AccentPreset; label: string }[] = ACCENT_PRESETS.map(
+    (p) => ({ value: `accent-${p.name}`, label: p.label }),
+  );
 
   const THEME_MODES: { value: 'dark' | 'light' | 'system'; label: string }[] = [
     { value: 'dark',   label: 'Dark'   },
@@ -204,7 +205,7 @@
             <div class="flex items-center justify-between gap-4 py-3">
               {@render field('Accent', 'Choose a colour preset')}
               <div class="flex items-center gap-2 shrink-0">
-                {#each ACCENT_PRESETS as preset (preset.value)}
+                {#each ACCENT_OPTIONS as preset (preset.value)}
                   <button
                     type="button"
                     data-testid="accent-{preset.value}"

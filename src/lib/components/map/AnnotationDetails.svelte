@@ -14,6 +14,7 @@
   import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
+  import { ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
 
   interface Props {
     annotation: MapAnnotation;
@@ -54,11 +55,6 @@
 
   onDestroy(commitLabel);
 
-  const PRESET_COLORS = [
-    '#e2e8f0', '#94a3b8', '#f8fafc',
-    '#2dd4bf', '#38bdf8', '#a78bfa',
-    '#f97316', '#fb7185', '#4ade80',
-  ];
 </script>
 
 <!-- Kind row -->
@@ -131,7 +127,7 @@
   <DetailSection label="Stroke" sectionKey="stroke">
     <ColorSwatches
       value={annotation.stroke_color}
-      presets={PRESET_COLORS}
+      presets={ENTITY_COLOR_PRESETS}
       onchange={(color) => save({ stroke_color: color })}
     />
   </DetailSection>
@@ -141,7 +137,7 @@
 <DetailSection label={annotation.kind === 'text' ? 'Text Color' : 'Fill Color'} sectionKey="color">
   <ColorSwatches
     value={annotation.color}
-    presets={PRESET_COLORS}
+    presets={ENTITY_COLOR_PRESETS}
     onchange={(color) => save({ color })}
   />
 </DetailSection>

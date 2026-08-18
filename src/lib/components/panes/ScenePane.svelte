@@ -36,7 +36,8 @@
     connectSpotify,
   } from "$lib/utils/spotify-auth";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
-  import { COLOR_PRESETS, ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { open } from "@tauri-apps/plugin-dialog";
 
   interface Props {
@@ -877,7 +878,7 @@
     </Dialog.Header>
     <div data-color-picker class="flex flex-col gap-3">
       <div class="grid grid-cols-5 gap-2">
-        {#each COLOR_PRESETS as preset (preset.name)}
+        {#each ACCENT_PRESETS as preset (preset.name)}
           <button
             data-color-swatch={preset.name}
             aria-label={preset.label}

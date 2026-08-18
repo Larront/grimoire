@@ -10,6 +10,18 @@
     buildDivIcon,
     tooltipOffset,
   } from "./pinAppearance";
+  /*
+    Leaflet writes colours onto SVG presentation attributes (`stroke`, `fill`), where a
+    `var()` does not resolve — so unlike the stylesheet at the bottom of this file, the
+    drawing code cannot simply name the token and has to hand over the value. That is why
+    the draw-preview colours were literals in the first place; the literals it reached for
+    were Tailwind's slate ramp, which DESIGN.md §2 rules out ("never cold grey").
+
+    The reader itself used to be written out again here, with the Graph pane holding the
+    other copy (#222). Same need, same two lines, one home now — `$lib/design-tokens`
+    carries the rule about what its `fallback` argument is for.
+  */
+  import { readToken } from "$lib/design-tokens";
 
   let {
     map,
@@ -178,22 +190,6 @@
       opacity: 1,
       className: "grimoire-tooltip",
     } as import("leaflet").TooltipOptions;
-  }
-
-  /**
-   * A design token, resolved to a concrete value.
-   *
-   * Leaflet writes these onto SVG presentation attributes (`stroke`, `fill`), where a
-   * `var()` does not resolve — so unlike the stylesheet at the bottom of this file, the
-   * drawing code cannot simply name the token and has to hand over the value. That is
-   * why the preview colours were literals in the first place; the literals it reached
-   * for were Tailwind's slate ramp, which DESIGN.md §2 rules out ("never cold grey").
-   */
-  function token(name: string, fallback: string): string {
-    return (
-      getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
-      fallback
-    );
   }
 
   function escapeHtml(s: string): string {
@@ -435,8 +431,8 @@
             (drawingState.previewLayer as import("leaflet").Rectangle).setBounds(bds);
           } else {
             drawingState.previewLayer = leaflet.rectangle(bds, {
-              color: token('--foreground-muted', '#a39e99'),
-              fillColor: token('--foreground', '#f0ece8'),
+              color: readToken('--foreground-muted', '#a39e99'),
+              fillColor: readToken('--foreground', '#f0ece8'),
               fillOpacity: 0.15,
               weight: 2,
               dashArray: '6 4',
@@ -454,8 +450,8 @@
           } else {
             drawingState.previewLayer = leaflet.circle(center, {
               radius,
-              color: token('--foreground-muted', '#a39e99'),
-              fillColor: token('--foreground', '#f0ece8'),
+              color: readToken('--foreground-muted', '#a39e99'),
+              fillColor: readToken('--foreground', '#f0ece8'),
               fillOpacity: 0.15,
               weight: 2,
               dashArray: '6 4',

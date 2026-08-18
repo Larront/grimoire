@@ -17,6 +17,8 @@
   validator output and the reasoning for the eight steps live.
 */
 
+import { readToken } from "$lib/design-tokens";
+
 /** How many tags can be told apart by colour before the ramp runs out. */
 export const VIZ_SLOTS = 8;
 
@@ -40,15 +42,6 @@ export function assignTagSlots(
       if (i < VIZ_SLOTS) assignments.set(tag, i);
     });
   return assignments;
-}
-
-/** Read a custom property off <html> at call time, so it follows light/dark. */
-export function readToken(name: string, fallback: string): string {
-  if (typeof document === "undefined") return fallback;
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
-    fallback
-  );
 }
 
 /** The muted step — untagged notes, stubs, and any tag past the eighth. */

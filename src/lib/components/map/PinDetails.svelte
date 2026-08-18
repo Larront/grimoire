@@ -8,7 +8,8 @@
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS, DEFAULT_PIN_COLOR } from "./pinAppearance";
+  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
+  import { DEFAULT_PIN_COLOR, ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
@@ -124,12 +125,6 @@
     shield: `<path d="M8 2 L14 4 V10 Q14 15 8 16 Q2 15 2 10 V4 Z" fill="currentColor"/>`,
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
-
-  // The default leads the row, so the swatch a pin starts on is the swatch it returns to.
-  const PRESET_COLORS = [
-    DEFAULT_PIN_COLOR, "#6a9b87", "#4a90c4", "#8b3a3a",
-    "#6b4e8a", "#5a6b7a", "#c4b8a0", "#3d4a52",
-  ];
 
   const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
 </script>
@@ -316,7 +311,7 @@
           <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Color</span>
           <ColorSwatches
             value={pin.color}
-            presets={PRESET_COLORS}
+            presets={ENTITY_COLOR_PRESETS}
             onchange={(color) => save({ color })}
           />
         </div>

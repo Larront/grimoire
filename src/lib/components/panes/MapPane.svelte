@@ -17,6 +17,7 @@
     Circle,
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
+  import { DEFAULT_ANNOTATION_COLOR, DEFAULT_ANNOTATION_STROKE } from "$lib/entity-colors";
   import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
   import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
@@ -310,8 +311,8 @@
         y2: data.y2 ?? null,
         radius: data.radius ?? null,
         label: data.label ?? null,
-        color: '#e2e8f0',
-        strokeColor: '#94a3b8',
+        color: DEFAULT_ANNOTATION_COLOR,
+        strokeColor: DEFAULT_ANNOTATION_STROKE,
         strokeWidth: 2,
         fontSize: 16,
         opacity: 0.2,
