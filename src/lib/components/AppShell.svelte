@@ -4,6 +4,7 @@
   import SettingsDialog from "./SettingsDialog.svelte";
   import TagManagerDialog from "./TagManagerDialog.svelte";
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
+  import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
@@ -13,7 +14,7 @@
   import { RightRailState } from "$lib/stores/right-rail.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-  import { failedImportsModal } from "$lib/stores/ledger.svelte";
+  import { failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
@@ -75,6 +76,10 @@
     <FailedImportsDialog
       bind:open={failedImportsModal.open}
       failures={failedImportsModal.failures}
+    />
+    <UnlinkedPinsDialog
+      bind:open={unlinkedPinsModal.open}
+      pins={unlinkedPinsModal.pins}
     />
     <SearchPalette />
     <SampleEffects />

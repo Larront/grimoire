@@ -144,6 +144,46 @@ export function toastMigrationReport(report: {
 }
 
 /**
+ * What a ledger repair that re-created notes leaves on screen (#224).
+ *
+ * Opening a vault brings the ledger's bookkeeping back into agreement with the
+ * files on disk. Almost always it finds nothing to do. When it does act — after a
+ * crash mid-operation, or a folder reorganised outside Grimoire — the notes come
+ * through untouched, but pins the GM placed on their maps lose hold of them and
+ * stop opening anything. Nothing else in the app connects that symptom to its
+ * cause, so this is the only place the GM can learn it happened.
+ *
+ * **The third sanctioned permanent toast**, on the terms `toastMigrationReport`
+ * set: the state outlives the session (a pin stays unlinked until someone
+ * re-links it), the GM is the only one who can resolve it, and ignoring it is
+ * non-destructive. It is also why *Show pins* is not optional decoration — a
+ * message about "some pins" the GM cannot act on would be worse than silence.
+ *
+ * No paths, no ids, no counts of database rows: what happened, and what they may
+ * want to do about it.
+ */
+export function toastUnlinkedPins(count: number, onShowPins: () => void) {
+  // A permanent toast belongs to the ledger that raised it. Opening another one
+  // with nothing to repair has to take it down, or a message about vault A's pins
+  // hangs over vault B and its "Show pins" opens an empty list.
+  if (count === 0) {
+    toast.dismiss("unlinked-pins");
+    return;
+  }
+  toast(
+    `${count} pin${count === 1 ? "" : "s"} lost ${count === 1 ? "its" : "their"} note`,
+    {
+      id: "unlinked-pins",
+      duration: Infinity,
+      closeButton: true,
+      description:
+        "Some of this ledger's bookkeeping was repaired when it opened. Your notes are intact, but these pins need linking to them again.",
+      action: { label: "Show pins", onClick: onShowPins },
+    },
+  );
+}
+
+/**
  * Show an undo toast. `onConfirm` runs after the toast's duration unless Undo is clicked.
  *
  * NOTHING IS DELETED UNTIL THE WINDOW ELAPSES — the destructive call is what gets

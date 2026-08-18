@@ -95,14 +95,20 @@ pub fn move_map(map_id: i32, dest_folder: String, ledger: State<AppLedger>) -> R
     }
 
     let modified_at = Utc::now().to_rfc3339();
-    diesel::update(maps::table.find(map_id))
+    let moved: Map = diesel::update(maps::table.find(map_id))
         .set((
             maps::image_path.eq(&new_image_path),
             maps::modified_at.eq(&modified_at),
         ))
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // The title did not move but `modified_at` did, and the map's document holds
+    // it — see the rule above `index_map` in `search.rs`.
+    crate::search::map_indexed(state.search_index.as_ref(), &moved);
+
+    Ok(moved)
 }
 
 // ── Map commands ─────────────────────────────────────────────────────────────
@@ -155,9 +161,7 @@ pub fn create_map(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &created);
-    }
+    crate::search::map_indexed(state.search_index.as_ref(), &created);
 
     Ok(created)
 }
@@ -181,9 +185,7 @@ pub fn create_map_empty(title: String, ledger: State<AppLedger>) -> Result<Map, 
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &created);
-    }
+    crate::search::map_indexed(state.search_index.as_ref(), &created);
 
     Ok(created)
 }
@@ -246,11 +248,17 @@ pub fn assign_map_image(
         modified_at: &modified_at,
     };
 
-    diesel::update(maps::table.find(map_id))
+    let assigned: Map = diesel::update(maps::table.find(map_id))
         .set(&changeset)
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // An image is not searchable text, but the stamp beside it is part of the
+    // map's document — see the rule above `index_map` in `search.rs`.
+    crate::search::map_indexed(state.search_index.as_ref(), &assigned);
+
+    Ok(assigned)
 }
 
 #[tauri::command]
@@ -272,9 +280,7 @@ pub fn update_map(map: Map, ledger: State<AppLedger>) -> Result<Map, String> {
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &updated);
-    }
+    crate::search::map_indexed(state.search_index.as_ref(), &updated);
 
     Ok(updated)
 }
@@ -297,9 +303,7 @@ pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<u32, String> 
         .execute(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::remove_map(index, map_id);
-    }
+    crate::search::map_unindexed(state.search_index.as_ref(), &m);
 
     Ok(deleted as u32)
 }

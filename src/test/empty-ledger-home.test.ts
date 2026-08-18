@@ -31,6 +31,7 @@ function mockOpenLedger(noteList: typeof NOTE[] = []) {
         scene_count: 0,
         map_count: 0,
         failed_imports: [],
+        unlinked_pins: [],
       };
     if (cmd === "get_notes") return noteList;
     if (cmd === "get_recent_ledgers") return [];

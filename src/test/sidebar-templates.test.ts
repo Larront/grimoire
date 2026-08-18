@@ -15,6 +15,7 @@ vi.mock("../lib/stores/ledger.svelte", () => ({
     checkExistingLedger: vi.fn(),
   },
   failedImportsModal: { open: false, failures: [] },
+  unlinkedPinsModal: { open: false, pins: [] },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({

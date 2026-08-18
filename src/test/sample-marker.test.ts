@@ -26,7 +26,7 @@ function mockSampleInvoke(noteList = [START_HERE_NOTE]) {
   vi.mocked(invoke).mockImplementation(async (cmd: string) => {
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: SAMPLE_PATH, note_count: noteList.length, scene_count: 0, map_count: 0, failed_imports: [] };
+      return { path: SAMPLE_PATH, note_count: noteList.length, scene_count: 0, map_count: 0, failed_imports: [], unlinked_pins: [] };
     if (cmd === "get_notes") return noteList;
     if (cmd === "close_ledger") return null;
     return null;

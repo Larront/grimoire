@@ -479,6 +479,12 @@ export type OpenLedgerResult = {
 	map_count: number,
 	failed_imports: FailedImport[],
 	/**
+	 *  Pins the open-time notes repair left pointing at nothing (#224). Empty on
+	 *  every ordinary open; non-empty is the GM being told that links they placed
+	 *  by hand need re-making.
+	 */
+	unlinked_pins: UnlinkedPin[],
+	/**
 	 *  Set when the database was auto-restored from the `.grimoire/backups`
 	 *  snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
 	 *  so the frontend can toast "scenes and pins reflect <date>".
@@ -641,5 +647,19 @@ export type TagUsageEntry = {
 export type TemplateEntry = {
 	display_name: string,
 	path: string,
+};
+
+/**
+ *  A pin whose note the repair deleted out from under it, named the way the GM
+ *  placed it: the pin's own title and the map it sits on.
+ * 
+ *  Carries no note path and no row id the GM ever sees — those went with the row,
+ *  and the pin is the thing they have to go and re-link.
+ */
+export type UnlinkedPin = {
+	pin_id: number,
+	pin_title: string,
+	map_id: number,
+	map_title: string,
 };
 

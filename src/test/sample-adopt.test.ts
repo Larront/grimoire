@@ -19,6 +19,7 @@ function mockSampleInvoke() {
         scene_count: 0,
         map_count: 1,
         failed_imports: [],
+        unlinked_pins: [],
       };
     return null;
   });
@@ -36,6 +37,7 @@ function mockAdoptInvoke() {
         scene_count: 0,
         map_count: 1,
         failed_imports: [],
+        unlinked_pins: [],
       };
     if (cmd === "add_recent_ledger") return null;
     return null;

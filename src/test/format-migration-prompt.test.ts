@@ -20,7 +20,7 @@ import FormatMigrationDialog from "../lib/components/FormatMigrationDialog.svelt
 import { ledger } from "../lib/stores/ledger.svelte";
 
 vi.mock("svelte-sonner", () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }),
   Toaster: vi.fn(),
 }));
 
@@ -45,6 +45,7 @@ const OPENED = {
   scene_count: 0,
   map_count: 0,
   failed_imports: [],
+  unlinked_pins: [],
   recovered_from_backup: null,
 };
 

@@ -608,7 +608,7 @@ pub fn set_note_aliases(
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let new_content = frontmatter::apply_aliases(&content, &aliases);
 
-    crate::note_mutation::commit(conn, index, &ledger_path, &full_path, &note, &new_content)?;
+    crate::note_mutation::commit(conn, index, &full_path, &note, &new_content)?;
     Ok(())
 }
 

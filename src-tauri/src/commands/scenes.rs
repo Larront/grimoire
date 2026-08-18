@@ -47,9 +47,7 @@ pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, Str
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_scene(index, &created);
-    }
+    crate::search::scene_indexed(state.search_index.as_ref(), &created);
 
     Ok(created)
 }
@@ -85,9 +83,7 @@ pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<S
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = search_index.as_ref() {
-        let _ = crate::search::index_scene(index, &updated);
-    }
+    crate::search::scene_indexed(search_index.as_ref(), &updated);
 
     match crate::scene_fence::propagate_rename(
         conn,
@@ -109,13 +105,17 @@ pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<S
 pub fn delete_scene(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
     let mut state = ledger.lock().map_err(|e| e.to_string())?;
     let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    // Read the scene before it goes, the way `delete_map` does: a log line naming
+    // the scene that fell out of search is worth one query the GM never notices.
+    let doomed: Scene = scenes::table
+        .find(id)
+        .first(conn)
+        .map_err(|e| e.to_string())?;
     diesel::delete(scenes::table.find(id))
         .execute(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::remove_scene(index, id);
-    }
+    crate::search::scene_unindexed(state.search_index.as_ref(), &doomed);
 
     Ok(())
 }

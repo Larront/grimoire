@@ -1,7 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
 import { api, friendlyMessage } from "$lib/api";
-import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
+import {
+  toastError,
+  toastImportFailures,
+  toastMigrationReport,
+  toastUnlinkedPins,
+} from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import type { MigrationPlan } from "$lib/bindings.gen";
 
@@ -19,12 +24,23 @@ export interface FailedImport {
   reason: string;
 }
 
+/** A pin the open-time ledger repair left pointing at nothing (#224). */
+export interface UnlinkedPin {
+  pin_id: number;
+  pin_title: string;
+  map_id: number;
+  map_title: string;
+}
+
 interface OpenLedgerResult {
   path: string;
   note_count: number;
   scene_count: number;
   map_count: number;
   failed_imports: FailedImport[];
+  /** Pins the open-time notes repair unlinked (issue #224). Empty on every
+   *  ordinary open. */
+  unlinked_pins: UnlinkedPin[];
   /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
   recovered_from_backup: string | null;
 }
@@ -43,6 +59,14 @@ export interface RecentLedger {
 export const failedImportsModal = $state({
   open: false,
   failures: [] as FailedImport[],
+});
+
+/** The pins an open-time repair unlinked, and the dialog that lists them (#224).
+ *  `pins` outlives the toast on purpose: the toast is how the GM learns, this is
+ *  where they go on finding out, and closing one must not lose the other. */
+export const unlinkedPinsModal = $state({
+  open: false,
+  pins: [] as UnlinkedPin[],
 });
 
 function createLedgerStore() {
@@ -77,6 +101,14 @@ function createLedgerStore() {
         failedImportsModal.open = true;
       });
     }
+
+    // A repair that changed nothing says nothing — the common case, and the
+    // silence there is correct. When it did act, the pins it cost the GM are
+    // named rather than counted (issue #224).
+    unlinkedPinsModal.pins = result.unlinked_pins;
+    toastUnlinkedPins(result.unlinked_pins.length, () => {
+      unlinkedPinsModal.open = true;
+    });
 
     // Invisible background recovery → informational toast (issue #116).
     if (result.recovered_from_backup) {

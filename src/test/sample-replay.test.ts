@@ -22,7 +22,7 @@ function mockSampleInvoke(recents: (typeof RECENT_LEDGER)[] = []) {
     if (cmd === "get_recent_ledgers") return recents;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: SAMPLE_PATH, note_count: 3, scene_count: 0, map_count: 0, failed_imports: [] };
+      return { path: SAMPLE_PATH, note_count: 3, scene_count: 0, map_count: 0, failed_imports: [], unlinked_pins: [] };
     if (cmd === "get_notes") return [];
     return null;
   });

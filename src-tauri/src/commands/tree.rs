@@ -222,11 +222,13 @@ pub fn delete_folder_inner(
     let reconcile = crate::note_index::remove_many(conn, index, &note_keys);
 
     let map_ids: Vec<i32> = doomed_maps.iter().map(|m| m.id).collect();
-    let maps_stale = match (index, map_ids.is_empty()) {
-        (_, true) => false,
-        (Some(idx), false) => crate::search::remove_maps_batch(idx, &map_ids).is_err(),
-        (None, false) => true,
-    };
+    // An empty folder holds no maps, so it must not report a miss it did not have.
+    if !map_ids.is_empty() {
+        let what = format!("removal of {} map(s)", map_ids.len());
+        crate::search::best_effort(index, &what, |idx| {
+            crate::search::remove_maps_batch(idx, &map_ids)
+        });
+    }
 
     // The rows go regardless of how the reconcile fared. Returning early here would
     // leave the ledger in the state the ordering at the top of this function exists
@@ -239,14 +241,10 @@ pub fn delete_folder_inner(
         .execute(conn)
         .map_err(|e| format!("db delete maps: {}", e))?;
 
-    // An empty folder reconciles nothing, so it must not claim the index is behind.
-    let outcome = reconcile?;
-    crate::note_index::mark_stale_if_needed(
-        &crate::note_index::ReconcileOutcome {
-            search_stale: outcome.search_stale || maps_stale,
-        },
-        ledger_path,
-    );
+    // Only now is the reconcile's own failure — a SQLite error clearing the derived
+    // rows, never a Search Index miss, which `best_effort` has already swallowed and
+    // logged — allowed to end the command. Held until here for the reason above.
+    reconcile?;
 
     Ok(())
 }
@@ -562,8 +560,7 @@ pub fn relocate_folder_inner(
     let mut all_items = all_backlink_rewrites;
     all_items.extend(moved_items);
     if !all_items.is_empty() {
-        let outcome = crate::note_index::reconcile_many(conn, index, &all_items)?;
-        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+        crate::note_index::reconcile_many(conn, index, &all_items)?;
     }
 
     Ok(updated_count)
@@ -1006,43 +1003,14 @@ mod tests {
         assert_eq!(note_tag_paths(&mut conn), vec!["top-level.md".to_string()]);
     }
 
-    /// No index is available here, which is exactly the case `search_stale`
-    /// reports: the Tantivy document could not be removed, so the marker records
-    /// that the index is behind until the next rebuild. Same posture as
-    /// `delete_note`.
-    #[test]
-    fn delete_folder_marks_search_stale_when_no_index_available() {
-        let dir = TempDir::new().unwrap();
-        let folder = dir.path().join("creatures");
-        fs::create_dir(&folder).unwrap();
-        fs::write(folder.join("dragon.md"), "").unwrap();
-
-        let mut conn = test_conn();
-        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
-
-        delete_folder_inner(dir.path(), "creatures", &mut conn, None).unwrap();
-
-        assert!(crate::note_index::stale_marker_path(dir.path()).exists());
-    }
-
-    /// A folder holding no notes has nothing to reconcile, so it must not leave a
-    /// marker claiming the search index is behind.
-    #[test]
-    fn delete_folder_leaves_no_stale_marker_when_it_held_no_notes() {
-        let dir = TempDir::new().unwrap();
-        fs::create_dir(dir.path().join("empty")).unwrap();
-
-        let mut conn = test_conn();
-        delete_folder_inner(dir.path(), "empty", &mut conn, None).unwrap();
-
-        assert!(!crate::note_index::stale_marker_path(dir.path()).exists());
-    }
-
     /// A map carries a Search Index document of its own, so a folder holding a map
     /// image has to reconcile the index too — the note path is not the only one.
-    /// The empty schema makes the removal fail, which is what `search_stale` is for.
+    /// The empty schema makes that removal fail, and the point of the test is what
+    /// happens next: the rows still go. A search write is best-effort and healed by
+    /// the rebuild at the next open (#205), so letting it strand the delete
+    /// half-done would be the far worse outcome.
     #[test]
-    fn delete_folder_reports_a_failed_map_index_write_as_search_stale() {
+    fn a_failed_map_index_removal_does_not_strand_the_folder_delete() {
         let dir = TempDir::new().unwrap();
         let folder = dir.path().join("maps-folder");
         fs::create_dir(&folder).unwrap();
@@ -1055,10 +1023,9 @@ mod tests {
             tantivy::Index::create_in_ram(tantivy::schema::Schema::builder().build());
         delete_folder_inner(dir.path(), "maps-folder", &mut conn, Some(&bad_index)).unwrap();
 
-        assert!(
-            crate::note_index::stale_marker_path(dir.path()).exists(),
-            "a map's failed index removal must be recorded like a note's"
-        );
+        let remaining: i64 = maps::table.count().get_result(&mut conn).unwrap();
+        assert_eq!(remaining, 0, "the map row must go even when its index write failed");
+        assert!(!folder.exists(), "the folder must go even when its index write failed");
     }
 
     /// SQLite's `LIKE` is case-insensitive over ASCII and reads `_` as "any one

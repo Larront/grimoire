@@ -268,16 +268,40 @@ pub struct FailedFile {
 
 /// The scan and the migration, in one function.
 ///
-/// With `write` false nothing on disk changes and the answer is the plan. With
-/// `write` true the same walk backs up, rewrites, reports and stamps. There is
-/// no second implementation for the prompt to drift away from.
+/// With `write` `None` nothing on disk changes and the answer is the plan. With
+/// `write` `Some(..)` the same walk backs up, rewrites, reports and stamps. There
+/// is no second implementation for the prompt to drift away from.
+///
+/// **Writing costs a [`crate::ledger_watch::VaultUnwatched`], which is why the
+/// flag is an `Option` of a token rather than a `bool`** (issue #217). This is the
+/// largest bulk rewrite of a GM's notes in the codebase — every `.md` in the vault
+/// plus every template — and until that token existed its safety rested on an
+/// ordering fact recorded in a comment in a different file: that
+/// `migrate_ledger_format` runs before `finish_open`, which is where the [[Ledger
+/// Watcher]] starts. Get that ordering wrong and the watcher reads Grimoire's own
+/// rewrites back as external edits, note by note. Now the obligation is asked for
+/// at the point of the write, and it cannot be satisfied by remembering.
+///
+/// The writes themselves go through [`crate::note_write::write_note_file`], the
+/// [[Write Chokepoint]] ADR-0013 point 3 introduced, so the bytes are recorded as
+/// Grimoire's own on the way past. That is the belt to the token's braces: the
+/// token says no watcher should see these writes, and the chokepoint means one
+/// that somehow did would recognise them.
+///
+/// **What this function does not do is reconcile the [[Derived Index]] set.** The
+/// notes it rewrites have new tags, links and search text, and nothing here writes
+/// them. The one caller that passes a token — `migrate_ledger_format` — calls
+/// `finish_open` immediately after, which walks the whole vault and rebuilds all
+/// four indexes from what is now on disk. A second writing caller would owe the
+/// same walk; there is no token for that one, because a rewrite whose indexes are
+/// briefly behind is a stale search result, not a note read back as an edit.
 ///
 /// `Err` is reserved for the one all-or-nothing failure: a backup that did not
 /// land. Nothing has been rewritten at that point, so aborting costs nothing.
 pub fn run(
     ledger_path: &Path,
     ctx: &MigrationContext,
-    write: bool,
+    write: Option<&crate::ledger_watch::VaultUnwatched>,
 ) -> Result<(MigrationPlan, Option<MigrationReport>), String> {
     let from = crate::format_version::read_stamp(ledger_path)?;
     let to = target_version();
@@ -294,7 +318,7 @@ pub fn run(
     let affected = scan(ledger_path, from, ctx);
     let plan = plan_from(&affected, from, to);
 
-    if !write {
+    if write.is_none() {
         return Ok((plan, None));
     }
 
@@ -326,7 +350,7 @@ pub fn run(
     let mut migrated = Vec::new();
     let mut failed = Vec::new();
     for file in &affected {
-        match std::fs::write(&file.full, &file.new_text) {
+        match crate::note_write::write_note_file(&file.full, file.new_text.as_bytes()) {
             Ok(()) => migrated.push(file.rel.clone()),
             Err(e) => {
                 log::warn!("[format_migration] could not rewrite {}: {e}", file.rel);
@@ -384,7 +408,7 @@ pub fn has_work(ledger_path: &Path, from: u32, ctx: &MigrationContext) -> bool {
 
 /// The plan the prompt is built from.
 pub fn plan(ledger_path: &Path, ctx: &MigrationContext) -> Result<Option<MigrationPlan>, String> {
-    let (plan, _) = run(ledger_path, ctx, false)?;
+    let (plan, _) = run(ledger_path, ctx, None)?;
     Ok((plan.file_count > 0).then_some(plan))
 }
 
@@ -656,9 +680,13 @@ mod tests {
         MigrationContext::from_scene_names([(1, "Boss Battle")])
     }
 
-    /// `run` with the shipped context, which is what every call site does.
+    /// `run` with the shipped context, which is what every call site does. The
+    /// `VaultUnwatched` a write costs is minted directly here: no test arranges a
+    /// Tauri app, and the token the real caller earns is about the app's watcher,
+    /// not about anything these fixtures can be wrong about.
     fn run_with(ledger_path: &Path, write: bool) -> Result<(MigrationPlan, Option<MigrationReport>), String> {
-        run(ledger_path, &ctx(), write)
+        let unwatched = crate::ledger_watch::unwatched_for_test();
+        run(ledger_path, &ctx(), write.then_some(&unwatched))
     }
 
     fn plan_of(ledger_path: &Path) -> Result<Option<MigrationPlan>, String> {
@@ -896,7 +924,7 @@ mod tests {
         // fence still resolves — a missing name costs legibility, never the reference.
         let dir = vault();
         write(dir.path(), "Chronicle.md", OLD_SCENE);
-        run(dir.path(), &MigrationContext::empty(), true).unwrap();
+        run(dir.path(), &MigrationContext::empty(), Some(&crate::ledger_watch::unwatched_for_test())).unwrap();
         assert_eq!(read(dir.path(), "Chronicle.md"), "```scene\nId: 1\n```");
 
         let named = vault();
@@ -1205,5 +1233,42 @@ mod tests {
         let second = run_with(dir.path(), true).unwrap().1.unwrap();
         assert_eq!(second.migrated, vec!["Locked.md"]);
         assert!(second.stamped);
+    }
+
+    // ── The Write Chokepoint ──────────────────────────────────────────────────
+
+    /// The migration is the largest bulk rewrite of a GM's notes in the codebase,
+    /// and its bytes must leave through the same door as every other note write
+    /// (#217). The [[Ledger Watcher]] recognises Grimoire's own writes by content
+    /// hash, and only [`crate::note_write::write_note_file`] records one — a raw
+    /// `fs::write` here is a note the watcher would read back as an external edit.
+    #[test]
+    fn the_migrations_rewrites_are_recognisable_as_grimoires_own() {
+        let dir = vault();
+        write(dir.path(), "Chronicle.md", OLD);
+        crate::note_write::reset_recent_writes();
+
+        run_with(dir.path(), true).unwrap();
+
+        let full = dir.path().join("Chronicle.md");
+        let on_disk = std::fs::read(&full).unwrap();
+        assert!(
+            crate::note_write::is_recent_write(&full, &on_disk),
+            "the rewrite must be recorded at the Write Chokepoint, not written past it"
+        );
+    }
+
+    /// The plan is the migration with the write left off, and a token is what the
+    /// two are told apart by. Asking for the plan must leave the vault alone.
+    #[test]
+    fn a_run_with_no_token_changes_nothing_on_disk() {
+        let dir = vault();
+        write(dir.path(), "Chronicle.md", OLD);
+
+        let (plan, report) = run(dir.path(), &ctx(), None).unwrap();
+
+        assert!(plan.file_count > 0, "the scan must still find the work");
+        assert!(report.is_none(), "a run with no token reports nothing");
+        assert_eq!(read(dir.path(), "Chronicle.md"), OLD, "the note must be untouched");
     }
 }

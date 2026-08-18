@@ -1,4 +1,4 @@
-use crate::commands::import::{reconcile_notes_with_disk, FailedImport};
+use crate::commands::import::{reconcile_notes_with_disk, FailedImport, UnlinkedPin};
 use crate::commands::templates::inject_builtin_templates;
 use crate::db;
 use crate::format_migration::{MigrationPlan, MigrationReport};
@@ -62,6 +62,10 @@ pub struct OpenLedgerResult {
     #[specta(type = i32)]
     pub map_count: i64,
     pub failed_imports: Vec<FailedImport>,
+    /// Pins the open-time notes repair left pointing at nothing (#224). Empty on
+    /// every ordinary open; non-empty is the GM being told that links they placed
+    /// by hand need re-making.
+    pub unlinked_pins: Vec<UnlinkedPin>,
     /// Set when the database was auto-restored from the `.grimoire/backups`
     /// snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
     /// so the frontend can toast "scenes and pins reflect <date>".
@@ -165,11 +169,16 @@ pub fn migrate_ledger_format(
     // The database first, as on every other open: Grimoire's own store migrates
     // on its own silent terms, and the notes pass must not be the thing that
     // discovers the database is unopenable. Then the notes — before the reconcile
-    // and the index walk inside `finish_open` see them, and before the watcher it
-    // starts can read Grimoire's own rewrites back as external edits.
+    // and the index walk inside `finish_open` see them.
     let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
     let ctx = crate::format_migration::MigrationContext::load(&mut conn);
-    let (_, report) = crate::format_migration::run(&ledger_path, &ctx, true)?;
+
+    // The rewrite's other precondition, and the reason it is a value rather than
+    // an ordering to get right: no watcher may be live over this vault while its
+    // notes are rewritten, or Grimoire's own writes arrive back as external edits
+    // (#217). `run` will not write without it.
+    let unwatched = crate::ledger_watch::require_unwatched(&app, &ledger_path)?;
+    let (_, report) = crate::format_migration::run(&ledger_path, &ctx, Some(&unwatched))?;
     let report = report.ok_or("The migration reported nothing")?;
 
     // The notes pass has finished, so this open may proceed past the gate even
@@ -221,9 +230,16 @@ fn finish_open(
     // The [[Ledger Format Version]] gate (ADR-0017), as a value rather than a
     // call: every caller has to have satisfied it to reach here, so a future code
     // path that opens a ledger without asking does not compile. The notes pass it
-    // stands for therefore runs after the database opened, before the reconcile
-    // and index walk below, and before the watcher starts at the end — or
-    // Grimoire's own migration writes would arrive back as external edits.
+    // stands for therefore runs after the database opened and before the reconcile
+    // and index walk below — which is also the walk that reconciles the [[Derived
+    // Index]] set against whatever that pass rewrote, since the migration writes
+    // notes and does not index them.
+    //
+    // The other half of that ordering — that the pass runs before the watcher
+    // started at the end of this function — is no longer this comment's to keep:
+    // `format_migration::run` will not write without a
+    // `ledger_watch::VaultUnwatched`, which cannot be obtained while a watcher is
+    // live over the vault (#217).
     _format_cleared: crate::format_version::FormatCleared,
 ) -> Result<OpenLedgerResult, String> {
     inject_builtin_templates(&ledger_path)?;
@@ -260,10 +276,10 @@ fn finish_open(
         &all_maps,
         &all_scenes,
     )?;
-    // Per ADR-0004: a successful rebuild clears any persisted stale marker
-    // (written by reconcile/remove on a Tantivy failure); a failure leaves it
-    // in place so the next launch retries.
-    crate::note_index::clear_stale_marker_if_rebuilt(&ledger_path, search_index.is_some());
+    // This walk is what heals a Search Index that fell behind — a failed
+    // incremental write, or a vault edited while Grimoire was closed. It runs on
+    // every open and asks nothing about how the index got behind, which is why
+    // the `search.stale` marker that used to be reconciled here is gone (#205).
 
     // PDFs are loose, path-addressed files (ADR-0011) with no `notes` row, so they
     // are counted off disk and folded into the note count — the welcome screen's
@@ -312,6 +328,7 @@ fn finish_open(
         scene_count,
         map_count,
         failed_imports: import_report.failed,
+        unlinked_pins: import_report.unlinked_pins,
         recovered_from_backup,
     })
 }
@@ -352,39 +369,43 @@ mod tests {
         assert!(new_dir.exists());
     }
 
+    /// The `search.stale` marker is gone (#205), and the thing it was supposed to
+    /// stand in for is this: opening a vault rebuilds the Search Index from what is
+    /// on disk, whatever state it was left in. Deleting the index outright is the
+    /// harshest version of "behind" there is, so if an open heals that it heals a
+    /// failed incremental write too.
     #[test]
-    fn stale_marker_cleared_after_successful_rebuild_on_open() {
+    fn opening_a_ledger_rebuilds_a_search_index_that_was_deleted() {
+        use crate::db::models::Note;
+
         let tmp = tempdir().unwrap();
         let ledger_path = tmp.path();
-        std::fs::create_dir_all(ledger_path.join(".grimoire")).unwrap();
+        std::fs::write(ledger_path.join("Thay.md"), "The red wizards hold it.").unwrap();
 
-        // A previous session left a stale marker after a Tantivy write failure.
-        crate::note_index::write_search_stale_marker(ledger_path);
+        let note = Note {
+            id: 1,
+            path: "Thay.md".into(),
+            title: "Thay".into(),
+            icon: None,
+            cover_image: None,
+            parent_path: None,
+            archived: false,
+            modified_at: "2026-01-01T00:00:00Z".into(),
+        };
+        crate::search::rebuild_index(ledger_path, &[note], &[], &[]).unwrap();
 
-        // open_ledger's launch-time reconciliation, with a rebuild that succeeded.
-        crate::note_index::clear_stale_marker_if_rebuilt(ledger_path, true);
+        // However the index came to be missing — a failed write, a wiped
+        // `.grimoire/`, a vault copied without it — the open walk is the answer.
+        std::fs::remove_dir_all(ledger_path.join(".grimoire").join("search-index")).unwrap();
 
-        assert!(
-            !crate::note_index::stale_marker_path(ledger_path).exists(),
-            "marker must be cleared after a successful rebuild"
-        );
-    }
+        let mut conn = crate::db::open_validated_connection(ledger_path).unwrap();
+        crate::commands::import::reconcile_notes_with_disk(ledger_path, &mut conn).unwrap();
+        let rebuilt =
+            crate::note_index::rebuild_all_from_ledger(ledger_path, &mut conn, &[], &[]).unwrap();
 
-    #[test]
-    fn stale_marker_kept_after_failed_rebuild_on_open() {
-        let tmp = tempdir().unwrap();
-        let ledger_path = tmp.path();
-        std::fs::create_dir_all(ledger_path.join(".grimoire")).unwrap();
-
-        crate::note_index::write_search_stale_marker(ledger_path);
-
-        // open_ledger's launch-time reconciliation, with a rebuild that failed.
-        crate::note_index::clear_stale_marker_if_rebuilt(ledger_path, false);
-
-        assert!(
-            crate::note_index::stale_marker_path(ledger_path).exists(),
-            "marker must remain after a failed rebuild"
-        );
+        let index = rebuilt.expect("the open walk must rebuild the index");
+        let hits = crate::search::search_notes_in_index(&index, ledger_path, "wizards", 10).unwrap();
+        assert_eq!(hits.len(), 1, "the rebuilt index must find the note again");
     }
 
     /// The default pin categories name an icon and a shape the frontend has to recognise.

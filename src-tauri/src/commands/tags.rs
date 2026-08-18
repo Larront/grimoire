@@ -141,7 +141,7 @@ pub fn retag_tag_on_conn(
             items.push(CommitItem { full_path, note, content: new_content });
         }
 
-        crate::note_mutation::commit_many(conn, index, ledger_path, items)?;
+        crate::note_mutation::commit_many(conn, index, items)?;
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────

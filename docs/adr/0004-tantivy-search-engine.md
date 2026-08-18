@@ -33,7 +33,7 @@ A single Tantivy index (rather than splitting maps/scenes into SQLite `LIKE` que
 
 ## Consequences
 
-- **Two indexes to coordinate** — SQLite for entity rows and tag relationships, Tantivy for search. Note-write commands wrap both writes in a transaction-like sequence; on Tantivy write failure the index is marked stale and a rebuild is scheduled. Surfaced to the user as a non-blocking status when relevant.
+- **Two indexes to coordinate** — SQLite for entity rows and tag relationships, Tantivy for search. Note-write commands wrap both writes in a transaction-like sequence; a failed Tantivy write is logged and the operation still succeeds, because the index is rebuilt in full at the next ledger open (see the amendment below).
 - **Two rebuild paths from a ledger scan** — a single `rebuild_indexes` command rebuilds both in sequence. The Phase 5 recovery guarantee extends: *"Deleting `ledger/.grimoire/` and reopening the ledger recovers all tags and search."*
 - **Tantivy schema is code** — a schema change is a forced full reindex. Acceptable: schema changes are rare and the rebuild path already exists for recovery.
 - **+3–5MB binary size** — Tauri bundle already in the 10MB+ range; not a packaging concern.
@@ -55,3 +55,39 @@ A single Tantivy index (rather than splitting maps/scenes into SQLite `LIKE` que
 ## Tokenizer
 
 Tantivy default tokenizer with lowercasing, ASCII folding (diacritics removed for matching, preserved for display), no stemming, minimum token length 2. Stemming deferred because fantasy proper-noun behaviour under English stemmers is unpredictable.
+
+## Amendment — 2026-08-18: the stale marker is removed (issue #205)
+
+**Status:** Accepted
+
+The consequence above promised that a failed Tantivy write would mark the index
+stale, schedule a rebuild, and surface a non-blocking status. A marker was
+built — `.grimoire/search.stale`, written by the reconcile seam and cleared at
+open — and the scheduling and the surfacing were not. Nothing ever read the
+marker.
+
+Nothing ever could, either, and that is what settles this. `open_ledger`
+rebuilds the whole Search Index from a ledger walk on every open, marker or no
+marker, so its presence cannot change what the app does. The only way to make it
+matter would be to *skip* that rebuild when it is absent — and the rebuild is the
+one thing that picks up a vault edited while Grimoire was closed, which leaves no
+marker behind because no Grimoire was running to write one. Wiring the marker up
+would have traded a guarantee for a file.
+
+So the marker, its two writers, its two clear functions and its nine call sites
+are gone. In their place:
+
+- **A failed incremental write is logged, not reported.** Every incremental
+  Search Index write in the app goes through `search::best_effort`, which is the
+  single place a failure is recorded. Notes, maps and scenes all take that path,
+  so a miss reads the same wherever it happened (issue #216) — before this, the
+  seven map and scene writes discarded their errors outright.
+- **A miss costs a stale palette result until the next open, and never content.**
+  The operation the GM asked for — the save, the rename, the delete — succeeds
+  regardless. That was always the posture; it is now the whole of it.
+- **The recovery guarantee is unchanged and is now the only mechanism.**
+  *"Deleting `ledger/.grimoire/` and reopening the ledger recovers all tags and
+  search"* — and so does simply reopening.
+
+Nothing is surfaced to the GM. A stale palette entry that heals itself the next
+time they open the vault does not earn a place on screen during play.

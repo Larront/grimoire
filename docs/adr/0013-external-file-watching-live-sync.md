@@ -64,3 +64,30 @@ Because every app-internal artifact is under `.grimoire/` and the traversal conv
 - **Ledger portability reinforced.** With the watcher live, the app tracks the filesystem rather than assuming it owns it — the "delete `.grimoire/` and recover from a ledger scan" principle now holds *during* a session, not only across restarts.
 </content>
 </invoke>
+
+## Amendment — 2026-08-18: the chokepoint's mirror obligation gets a token (issue #217)
+
+**Status:** Accepted
+
+Point 3 gave the app one door for `.md` bytes so the watcher could recognise
+Grimoire's own writes. [[Format Migration]] — the largest bulk rewrite of a GM's
+notes in the codebase, every `.md` in the vault plus every template — was written
+past it with a raw `fs::write`, and was safe only because of an ordering fact
+recorded in a comment in a different file: the migration runs before
+`finish_open`, which is where the watcher starts.
+
+Two changes make that structural rather than remembered:
+
+- **The migration's writes go through `write_note_file`**, like every other note
+  write in the app.
+- **Writing costs a `ledger_watch::VaultUnwatched`.** `format_migration::run`
+  takes `Option<&VaultUnwatched>` where it took a `bool`, so the scan and the
+  rewrite are still one function and the rewrite cannot be reached without the
+  proof. `require_unwatched` checks the live watcher's canonical root against the
+  vault about to be rewritten and refuses rather than minting when they match; a
+  watcher over a *different* vault does not block, which is the ordinary case
+  when a migration is reached from a refused open with another ledger still up.
+
+This is the mirror of ADR-0017's `FormatCleared`: that token asks *"has the format
+gate been passed?"* of every ledger open, and this one asks *"is anything watching
+what you are about to rewrite?"* of every bulk note rewrite.

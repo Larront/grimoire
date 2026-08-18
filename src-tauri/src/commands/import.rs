@@ -4,9 +4,18 @@
 // `notes` table into agreement with what is actually present on disk.
 // Must run before `note_index::rebuild_all_from_ledger` so that pass sees
 // fully-populated notes rows.
+//
+// The repair is delete-and-reinsert, which keeps every note's *text* — that was
+// never touched — and loses its **identity**: a re-created row gets a new `id`,
+// and `pins.note_id` is `ON DELETE SET NULL`, so a pin pointing at the old row
+// goes blank. The pin stays on the map and stops opening anything (issue #224).
+// That is why this walk reports the pins it unlinked instead of finishing in
+// silence: normally it finds nothing to do and the silence is right, but the
+// times it *does* act are the times a GM loses work they placed by hand.
 
 use crate::db::models::NewNote;
 use crate::db::schema::notes::dsl as n;
+use crate::db::schema::{maps, pins};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -20,9 +29,25 @@ pub struct FailedImport {
     pub reason: String,
 }
 
+/// A pin whose note the repair deleted out from under it, named the way the GM
+/// placed it: the pin's own title and the map it sits on.
+///
+/// Carries no note path and no row id the GM ever sees — those went with the row,
+/// and the pin is the thing they have to go and re-link.
+#[derive(Serialize, specta::Type, Debug, Clone)]
+pub struct UnlinkedPin {
+    pub pin_id: i32,
+    pub pin_title: String,
+    pub map_id: i32,
+    pub map_title: String,
+}
+
 #[derive(Serialize, specta::Type, Debug)]
 pub struct ImportReport {
     pub failed: Vec<FailedImport>,
+    /// Empty on the ordinary open, where the repair finds nothing to do. Non-empty
+    /// only when rows were deleted and pins were pointing at them.
+    pub unlinked_pins: Vec<UnlinkedPin>,
 }
 
 /// Walk `ledger_path`, sync the `notes` table to match disk, and return
@@ -55,9 +80,32 @@ pub fn reconcile_notes_with_disk(
         .filter(|(p, _)| !existing_set.contains(p))
         .collect();
 
+    let mut unlinked_pins: Vec<UnlinkedPin> = Vec::new();
+
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         for batch in to_delete.chunks(100) {
             let paths: Vec<&str> = batch.iter().map(|s| s.as_str()).collect();
+            // Read the casualties *before* the delete: afterwards the pins hold
+            // NULL and there is no way back to which note they meant.
+            let doomed: Vec<i32> = n::notes
+                .filter(n::path.eq_any(&paths))
+                .select(n::id)
+                .load(c)?;
+            let mut hit: Vec<UnlinkedPin> = pins::table
+                .inner_join(maps::table)
+                .filter(pins::note_id.eq_any(&doomed))
+                .select((pins::id, pins::title, maps::id, maps::title))
+                .load::<(i32, String, i32, String)>(c)?
+                .into_iter()
+                .map(|(pin_id, pin_title, map_id, map_title)| UnlinkedPin {
+                    pin_id,
+                    pin_title,
+                    map_id,
+                    map_title,
+                })
+                .collect();
+            unlinked_pins.append(&mut hit);
+
             diesel::delete(n::notes.filter(n::path.eq_any(paths))).execute(c)?;
         }
 
@@ -77,7 +125,19 @@ pub fn reconcile_notes_with_disk(
     })
     .map_err(|e| e.to_string())?;
 
-    Ok(ImportReport { failed })
+    if !to_delete.is_empty() || !to_insert.is_empty() {
+        log::info!(
+            "[reconcile_notes_with_disk] repaired {} deleted / {} inserted note row(s); {} pin(s) unlinked",
+            to_delete.len(),
+            to_insert.len(),
+            unlinked_pins.len()
+        );
+    }
+
+    Ok(ImportReport {
+        failed,
+        unlinked_pins,
+    })
 }
 
 fn collect_md_files(
@@ -421,6 +481,89 @@ mod tests {
         assert_eq!(pin_note_id, None);
     }
 
+    /// The whole of #224 in one test: a folder moved outside the app leaves the
+    /// `notes` row keyed to a path that no longer exists and the file keyed to no
+    /// row, so the repair deletes one and inserts the other. The note's *text* is
+    /// fine. Its identity is not — and the pin the GM placed on a map, which held
+    /// the old id, is now pointing at nothing.
+    #[test]
+    fn a_repair_that_recreates_a_note_reports_the_pin_it_unlinked() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("Places")).unwrap();
+        fs::write(dir.path().join("Places/Waterdeep.md"), "The City of Splendours.").unwrap();
+
+        let mut conn = test_conn();
+        reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+        let note_id: i32 = n::notes.select(n::id).first(&mut conn).unwrap();
+
+        // The GM drops a pin on their world map and links it to that note.
+        conn.batch_execute(&format!(
+            "INSERT INTO maps (id, title) VALUES (1, 'Sword Coast');
+             INSERT INTO pins (id, map_id, x, y, title, note_id)
+             VALUES (1, 1, 0.5, 0.5, 'Waterdeep', {note_id});"
+        ))
+        .unwrap();
+
+        // The folder is renamed outside Grimoire. Same file, same words, new path.
+        fs::create_dir(dir.path().join("Cities")).unwrap();
+        fs::rename(
+            dir.path().join("Places/Waterdeep.md"),
+            dir.path().join("Cities/Waterdeep.md"),
+        )
+        .unwrap();
+        fs::remove_dir(dir.path().join("Places")).unwrap();
+
+        let report = reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+
+        // The pin unlinked...
+        let pin_note_id = diesel::sql_query("SELECT note_id as val FROM pins WHERE id = 1")
+            .load::<NullableIntRow>(&mut conn)
+            .unwrap()
+            .into_iter()
+            .next()
+            .and_then(|r| r.val);
+        assert_eq!(pin_note_id, None, "the re-created row leaves the pin pointing at nothing");
+
+        // ...and the repair says so, naming the pin and the map rather than a path,
+        // an id, or a count of database rows.
+        assert_eq!(report.unlinked_pins.len(), 1);
+        assert_eq!(report.unlinked_pins[0].pin_title, "Waterdeep");
+        assert_eq!(report.unlinked_pins[0].map_title, "Sword Coast");
+        assert_eq!(report.unlinked_pins[0].map_id, 1);
+    }
+
+    /// The common case, and the one that must stay quiet: the repair looks, finds
+    /// the table already agreeing with disk, and says nothing.
+    #[test]
+    fn a_repair_that_changes_nothing_reports_nothing() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("Waterdeep.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+
+        let report = reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+        assert!(report.unlinked_pins.is_empty());
+        assert!(report.failed.is_empty());
+    }
+
+    /// A note that never had a pin on it is repaired in silence too — the message
+    /// is owed for links the GM made, not for the bookkeeping underneath them.
+    #[test]
+    fn a_repair_with_no_pins_pointing_at_the_note_reports_nothing() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("A.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+
+        fs::rename(dir.path().join("A.md"), dir.path().join("B.md")).unwrap();
+        let report = reconcile_notes_with_disk(dir.path(), &mut conn).unwrap();
+
+        assert_eq!(note_paths(&mut conn), vec!["B.md".to_string()]);
+        assert!(report.unlinked_pins.is_empty());
+    }
+
     #[test]
     fn soft_failure_fields_are_populated() {
         let report = ImportReport {
@@ -428,6 +571,7 @@ mod tests {
                 path: "bad.md".to_string(),
                 reason: "permission denied".to_string(),
             }],
+            unlinked_pins: Vec::new(),
         };
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].path, "bad.md");

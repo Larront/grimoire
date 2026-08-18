@@ -15,8 +15,8 @@
 //! only the write+reconcile step lives here.
 //!
 //! Functions are free functions taking the already-field-split
-//! `(conn, index, ledger_path, …)`, matching `note_index`'s style, so a command
-//! splits its `LedgerState` borrow once and passes the refs in.
+//! `(conn, index, …)`, matching `note_index`'s style, so a command splits its
+//! `LedgerState` borrow once and passes the refs in.
 //!
 //! `rename` (path change + backlink rewrite) lives here too: it is the one
 //! implementation shared by the in-app rename and the Ledger Watcher's external
@@ -41,14 +41,12 @@ use std::path::{Path, PathBuf};
 pub fn commit(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     full_path: &Path,
     note: &Note,
     content: &str,
 ) -> Result<(), String> {
     write_note_file(full_path, content.as_bytes())?;
-    let outcome = note_index::reconcile(conn, index, note, content, None)?;
-    note_index::mark_stale_if_needed(&outcome, ledger_path);
+    note_index::reconcile(conn, index, note, content, None)?;
     Ok(())
 }
 
@@ -64,13 +62,12 @@ pub fn commit(
 pub fn commit_or_write(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     full_path: &Path,
     note: Option<&Note>,
     content: &str,
 ) -> Result<(), String> {
     match note {
-        Some(note) => commit(conn, index, ledger_path, full_path, note, content),
+        Some(note) => commit(conn, index, full_path, note, content),
         None => write_note_file(full_path, content.as_bytes()),
     }
 }
@@ -85,12 +82,11 @@ pub fn commit_or_write(
 pub fn create(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     full_path: &Path,
     note: &Note,
     content: &str,
 ) -> Result<(), String> {
-    commit(conn, index, ledger_path, full_path, note, content)
+    commit(conn, index, full_path, note, content)
 }
 
 /// One note in a [`commit_many`] batch: the bytes to write and the row to
@@ -113,7 +109,6 @@ pub struct CommitItem {
 pub fn commit_many(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     items: Vec<CommitItem>,
 ) -> Result<(), String> {
     for item in &items {
@@ -129,8 +124,7 @@ pub fn commit_many(
         })
         .collect();
 
-    let outcome = note_index::reconcile_many(conn, index, &reconcile_items)?;
-    note_index::mark_stale_if_needed(&outcome, ledger_path);
+    note_index::reconcile_many(conn, index, &reconcile_items)?;
     Ok(())
 }
 
@@ -167,7 +161,7 @@ pub fn commit_backlink_rewrites(
             content,
         })
         .collect();
-    commit_many(conn, index, ledger_path, items)?;
+    commit_many(conn, index, items)?;
     Ok(count)
 }
 
@@ -253,8 +247,7 @@ pub fn rename(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    let outcome = note_index::reconcile(conn, index, &persisted, content, Some(old_path))?;
-    note_index::mark_stale_if_needed(&outcome, ledger_path);
+    note_index::reconcile(conn, index, &persisted, content, Some(old_path))?;
 
     Ok(Renamed {
         note: persisted,
@@ -342,7 +335,7 @@ mod tests {
 
         let full_path = dir.path().join("ash.md");
         let content = "---\ntags: [npc]\naliases: [Ash]\n---\nSee [[dragon.md]].";
-        create(&mut conn, Some(&index), dir.path(), &full_path, &note, content).unwrap();
+        create(&mut conn, Some(&index), &full_path, &note, content).unwrap();
 
         // Bytes landed on disk...
         assert_eq!(std::fs::read_to_string(&full_path).unwrap(), content);
@@ -380,7 +373,7 @@ mod tests {
         insert_note(&mut conn, &note);
 
         let full_path = dir.path().join("blank.md");
-        create(&mut conn, None, dir.path(), &full_path, &note, "").unwrap();
+        create(&mut conn, None, &full_path, &note, "").unwrap();
 
         assert_eq!(std::fs::read_to_string(&full_path).unwrap(), "");
         assert!(nt::note_tags.load::<(String, String)>(&mut conn).unwrap().is_empty());
@@ -403,7 +396,6 @@ mod tests {
         commit(
             &mut conn,
             Some(&index),
-            dir.path(),
             &full_path,
             &note,
             "---\ntags: [old]\n---\n[[old.md]].",
@@ -412,7 +404,7 @@ mod tests {
 
         // Second state fully replaces the first.
         let new_content = "---\ntags: [new]\naliases: [Fresh]\n---\n[[new.md]].";
-        commit(&mut conn, Some(&index), dir.path(), &full_path, &note, new_content).unwrap();
+        commit(&mut conn, Some(&index), &full_path, &note, new_content).unwrap();
 
         assert_eq!(std::fs::read_to_string(&full_path).unwrap(), new_content);
         assert!(
@@ -434,8 +426,11 @@ mod tests {
         );
     }
 
+    /// With no index open there is nothing to write the Search document to, and
+    /// that must not cost the GM the save. The miss goes to the log (#205) and the
+    /// bytes reach disk, which is the half of the commit that cannot be rebuilt.
     #[test]
-    fn commit_marks_search_stale_when_no_index_available() {
+    fn commit_without_an_index_still_writes_the_note() {
         let dir = TempDir::new().unwrap();
         std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
         let mut conn = test_conn();
@@ -443,13 +438,9 @@ mod tests {
         insert_note(&mut conn, &note);
 
         let full_path = dir.path().join("ash.md");
-        // No index → reconcile reports search_stale → commit must persist the marker.
-        commit(&mut conn, None, dir.path(), &full_path, &note, "body").unwrap();
+        commit(&mut conn, None, &full_path, &note, "body").unwrap();
 
-        assert!(
-            note_index::stale_marker_path(dir.path()).exists(),
-            "commit must persist the stale marker when the Tantivy write is skipped"
-        );
+        assert_eq!(std::fs::read_to_string(&full_path).unwrap(), "body");
     }
 
     // ── commit_or_write (save path that may lack a notes row) ─────────────────
@@ -463,7 +454,7 @@ mod tests {
 
         let full_path = dir.path().join("ash.md");
         let content = "---\ntags: [npc]\n---\nBody.";
-        commit_or_write(&mut conn, None, dir.path(), &full_path, Some(&note), content).unwrap();
+        commit_or_write(&mut conn, None, &full_path, Some(&note), content).unwrap();
 
         assert_eq!(std::fs::read_to_string(&full_path).unwrap(), content);
         assert_eq!(
@@ -481,7 +472,7 @@ mod tests {
         // echo-suppressed, but nothing is reconciled.
         let full_path = dir.path().join("untracked.md");
         let content = "---\ntags: [npc]\n---\nBody.";
-        commit_or_write(&mut conn, None, dir.path(), &full_path, None, content).unwrap();
+        commit_or_write(&mut conn, None, &full_path, None, content).unwrap();
 
         assert_eq!(std::fs::read_to_string(&full_path).unwrap(), content);
         assert!(
@@ -515,7 +506,7 @@ mod tests {
             CommitItem { full_path: path1.clone(), note: note1, content: content1.to_string() },
             CommitItem { full_path: path2.clone(), note: note2, content: content2.to_string() },
         ];
-        commit_many(&mut conn, Some(&index), dir.path(), items).unwrap();
+        commit_many(&mut conn, Some(&index), items).unwrap();
 
         // Both files written, and both echo-suppressed — this is the retag fix:
         // a ledger-wide retag must not be re-read by the watcher as external edits.
@@ -547,9 +538,8 @@ mod tests {
 
     #[test]
     fn commit_many_empty_batch_is_a_noop() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
-        commit_many(&mut conn, None, dir.path(), vec![]).unwrap();
+        commit_many(&mut conn, None, vec![]).unwrap();
         assert!(nt::note_tags.load::<(String, String)>(&mut conn).unwrap().is_empty());
     }
 
@@ -573,7 +563,6 @@ mod tests {
         create(
             conn,
             Some(&index),
-            dir,
             &dir.join("Aldric.md"),
             &moved,
             "---\ntags: [npc]\n---\nAldric of the Keep.",
@@ -583,7 +572,6 @@ mod tests {
         create(
             conn,
             Some(&index),
-            dir,
             &dir.join("Story.md"),
             &source,
             "The tale of [[Aldric.md]] begins.",
@@ -727,7 +715,7 @@ mod tests {
              VALUES (1, 'People/Aldric.md', 'Aldric', 'People')",
         )
         .unwrap();
-        create(&mut conn, Some(&index), dir.path(), &dir.path().join("People/Aldric.md"), &moved, "body")
+        create(&mut conn, Some(&index), &dir.path().join("People/Aldric.md"), &moved, "body")
             .unwrap();
         // Precondition: the row really does start non-null.
         let before: Note = nd::notes.find(1).first(&mut conn).unwrap();

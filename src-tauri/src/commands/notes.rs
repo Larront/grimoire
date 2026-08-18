@@ -117,7 +117,7 @@ pub fn create_note(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    note_mutation::create(conn, index, &ledger_path, &full_path, &created, "")?;
+    note_mutation::create(conn, index, &full_path, &created, "")?;
 
     Ok(created)
 }
@@ -171,7 +171,7 @@ pub fn create_note_from_template(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    note_mutation::create(conn, index, &ledger_path, &full_path, &created, &content)?;
+    note_mutation::create(conn, index, &full_path, &created, &content)?;
 
     Ok(created)
 }
@@ -321,8 +321,7 @@ pub fn delete_note(note_id: i32, ledger: State<AppLedger>) -> Result<u32, String
         fs::remove_file(&full_path).map_err(|e| e.to_string())?;
     }
 
-    let outcome = note_index::remove(conn, index, note_id, &note.path)?;
-    note_index::mark_stale_if_needed(&outcome, &ledger_path);
+    note_index::remove(conn, index, note_id, &note.path)?;
 
     let deleted = diesel::delete(notes.find(note_id))
         .execute(conn)
@@ -368,7 +367,7 @@ pub fn write_note_content(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &content)?;
+    note_mutation::commit_or_write(conn, index, &full_path, maybe_note.as_ref(), &content)?;
 
     Ok(())
 }
@@ -406,7 +405,7 @@ pub fn write_note_tags(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
-    note_mutation::commit_or_write(conn, index, &ledger_path, &full_path, maybe_note.as_ref(), &new_content)?;
+    note_mutation::commit_or_write(conn, index, &full_path, maybe_note.as_ref(), &new_content)?;
     Ok(())
 }
 

@@ -16,6 +16,7 @@ function mockSampleInvoke() {
         scene_count: 0,
         map_count: 0,
         failed_imports: [],
+        unlinked_pins: [],
       };
     return null;
   });

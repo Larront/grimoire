@@ -15,7 +15,7 @@ function mockSampleInvoke() {
     const args = rawArgs as Record<string, unknown> | undefined;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: (args as { path?: string })?.path ?? SAMPLE_PATH, note_count: 10, scene_count: 0, map_count: 1, failed_imports: [] };
+      return { path: (args as { path?: string })?.path ?? SAMPLE_PATH, note_count: 10, scene_count: 0, map_count: 1, failed_imports: [], unlinked_pins: [] };
     if (cmd === "adopt_sample_ledger") return ADOPT_PATH;
     if (cmd === "add_recent_ledger") return null;
     if (cmd === "close_ledger") return null;
