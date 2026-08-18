@@ -62,7 +62,6 @@ SQLite at `<ledger_path>/.grimoire/grimoire.db`. Diesel ORM with migrations in `
 | `@tiptap/*`             | Rich text / Markdown editing                          |
 | `bits-ui`               | Headless UI primitives                                |
 | `shadcn-svelte`         | Pre-built UI components (in `src/lib/components/ui/`) |
-| `paneforge`             | Resizable panel layouts                               |
 | `mode-watcher`          | Dark/light mode                                       |
 | `@tauri-apps/plugin-fs` | File system access (with watch support)               |
 | `diesel` (Rust)         | SQLite ORM                                            |

@@ -9,7 +9,7 @@
   import { appPrefs } from '$lib/stores/app-prefs.svelte';
   import { templates } from '$lib/stores/templates.svelte';
   import { toastSuccess, toastError } from '$lib/toast';
-  import { searchPalette } from '$lib/stores/search.svelte';
+  import { dialogs } from '$lib/stores/overlay.svelte';
   import StatblockPresetsSettings from '$lib/components/StatblockPresetsSettings.svelte';
   import {
     getSpotifyStatus,
@@ -298,7 +298,7 @@
                 size="sm"
                 class="shrink-0"
                 data-testid="open-tag-manager-btn"
-                onclick={() => { open = false; searchPalette.tagManagerOpen = true; }}
+                onclick={() => { open = false; dialogs.tagManagerOpen = true; }}
               >Manage</Button>
             </div>
           </div>

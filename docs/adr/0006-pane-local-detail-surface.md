@@ -43,7 +43,8 @@ The detail surface becomes **pane-local, user-controlled, with width-based prese
      not regress.
    - Split on a typical laptop → panes fall below the threshold → note surfaces float.
    - Split on a wide monitor → panes may exceed the threshold → note surfaces stay docked.
-   - The mode is re-evaluated as the paneforge divider is dragged.
+   - The mode is re-evaluated as the paneforge divider is dragged. (No divider was built —
+     see *Amendments*.)
 3. **Per-pane, user-controlled visibility.** Each pane toggles its own surface independently
    (note: rail toggle in that pane's editor toolbar; map: selecting a pin/annotation opens the
    panel). 0, 1, or 2 surfaces may be visible at once. The user decides their information load
@@ -87,8 +88,37 @@ The detail surface becomes **pane-local, user-controlled, with width-based prese
   edit, so edits are neither lost nor leaked into a stale panel.
 - **A measured breakpoint enters layout.** The dock threshold (~820px, tunable) is evaluated
   per pane and re-evaluated on divider drag; the surface animates between docked and floating
-  modes. Reduced-motion snaps instead of animating.
+  modes. Reduced-motion snaps instead of animating. (The per-pane measurement shipped; the
+  divider did not — see *Amendments*.)
 - A floating note surface can overlap prose. It is user-opened, draggable/dismissible, and
   defaults to a pane corner — accepted, and validated by the prototype.
 - Spatial note: a docked surface still lives on its pane's right edge; for a left-pane note in
   a wide split that edge is mid-window. Inherent to docking; accepted.
+
+## Amendments
+
+### 2026-08-18 — There is no divider ([#223](https://github.com/Larront/grimoire/issues/223))
+
+The decision above is unchanged. One mechanism it names twice was never built, and the
+reasoning is left as written — it is the record of what was argued — so this section says
+what is no longer true rather than editing the argument.
+
+**Split is a fixed 50/50; there is no draggable divider.** §2's "the mode is re-evaluated as
+the paneforge divider is dragged", and the Consequences' "re-evaluated on divider drag", both
+describe a divider that does not exist: `AppShell.svelte` gives each pane `flex-1 min-w-0`
+and nothing else, and `paneforge` — the library named here — was a dependency imported
+nowhere. It has been removed from `package.json`. The design-system note that the divider "is
+draggable (paneforge)" is corrected to match.
+
+**What survives is the measurement, and it is the load-bearing half.** Pane width is still
+measured per pane, by a `ResizeObserver` on the pane's own container (`NotePane.svelte`), and
+the dock/float threshold is still evaluated from it. That is what makes the rule *pane width,
+not window width* — the clause that would otherwise have been got wrong (CONTEXT.md's Note
+block presentation row derives the same distinction independently). Drag was only ever one of
+the events that changes a pane's width; window resize, opening a split and closing one all
+still do, and the observer sees each of them. So no requirement is lost by the divider's
+absence — only a re-evaluation trigger that never fired.
+
+**A future divider needs no amendment to this ADR.** Should one be built, per-pane measurement
+already covers it: a `ResizeObserver` on the pane container fires on drag like any other width
+change. The paneforge dependency would come back with the feature, not before it.

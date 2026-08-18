@@ -14,13 +14,14 @@
   import { RightRailState } from "$lib/stores/right-rail.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import { failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 
-  const leftRail = new RightRailState();
-  const rightRail = new RightRailState();
+  const leftRail = new RightRailState("left");
+  const rightRail = new RightRailState("right");
 
   const leftPaneIsNote = $derived(tabs.left?.tabs[tabs.left?.activeIndex ?? 0]?.type === 'note');
   const rightPaneIsNote = $derived(
@@ -68,11 +69,11 @@
       onFilesClick={() => {}}
       onScenesClick={() => tabs.navigateOpen({ type: 'scenes', id: 0, title: 'All Scenes' })}
       onSearchClick={() => (searchPalette.open = true)}
-      onSettingsClick={() => (searchPalette.settingsOpen = true)}
+      onSettingsClick={() => (dialogs.settingsOpen = true)}
       onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
     />
-    <SettingsDialog bind:open={searchPalette.settingsOpen} />
-    <TagManagerDialog bind:open={searchPalette.tagManagerOpen} />
+    <SettingsDialog bind:open={dialogs.settingsOpen} />
+    <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
     <FailedImportsDialog
       bind:open={failedImportsModal.open}
       failures={failedImportsModal.failures}

@@ -6,6 +6,7 @@ import AppSearch from "$lib/components/SearchPalette.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { notes } from "$lib/stores/notes.svelte";
 import { searchPalette } from "$lib/stores/search.svelte";
+import { dialogs } from "$lib/stores/overlay.svelte";
 
 const testNote = {
   id: 1,
@@ -1089,7 +1090,7 @@ describe("command palette – Commands group ordering", () => {
 
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
     vi.useRealTimers();
   });
 
@@ -1157,7 +1158,7 @@ describe("command palette – Commands group ordering", () => {
 describe("command palette – Commands group visibility", () => {
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
   });
 
   it("shows up to 3 commands when query is empty", async () => {
@@ -1206,7 +1207,7 @@ describe("command palette – Commands group visibility", () => {
 describe("command palette – Commands group wiring", () => {
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
     resetMode();
   });
 
@@ -1282,7 +1283,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Open Settings sets searchPalette.settingsOpen and closes palette", async () => {
+  it("Open Settings sets dialogs.settingsOpen and closes palette", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -1295,7 +1296,7 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(searchPalette.settingsOpen).toBe(true);
+    expect(dialogs.settingsOpen).toBe(true);
     expect(searchPalette.open).toBe(false);
   });
 

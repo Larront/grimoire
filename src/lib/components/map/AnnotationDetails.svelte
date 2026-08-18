@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { MapAnnotation } from "$lib/types/ledger";
   import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
@@ -26,13 +27,32 @@
 
   let draftLabel = $state('');
 
+  // The row the draft was loaded from — see the same field on PinDetails: the
+  // `annotation` prop is null by the time teardown runs when the panel closes
+  // by deselection.
+  let editing: MapAnnotation | null = null;
+
   $effect(() => {
+    editing = annotation;
     draftLabel = annotation.label ?? '';
   });
 
+  // Patches `editing` rather than `annotation` — see the same note on PinDetails.
   async function save(patch: Partial<MapAnnotation>) {
-    await onUpdate({ ...annotation, ...patch });
+    if (!editing) return;
+    await onUpdate({ ...editing, ...patch });
   }
+
+  // Commits on teardown as well as on blur, for the reason and in the shape
+  // PinDetails does (#201) — the label is the same kind of free-text field on
+  // the same floating panel, destroyed by the same tab change.
+  function commitLabel() {
+    if (!editing) return;
+    if (draftLabel === (editing.label ?? '')) return;
+    save({ label: draftLabel || 'Label' });
+  }
+
+  onDestroy(commitLabel);
 
   const PRESET_COLORS = [
     '#e2e8f0', '#94a3b8', '#f8fafc',
@@ -69,10 +89,7 @@
       id="ann-label"
       autofocus
       bind:value={draftLabel}
-      onblur={() => {
-        if (draftLabel !== (annotation.label ?? ''))
-          save({ label: draftLabel || 'Label' });
-      }}
+      onblur={commitLabel}
       onkeydown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLElement).blur();
       }}

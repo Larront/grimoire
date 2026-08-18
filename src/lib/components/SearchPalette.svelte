@@ -29,6 +29,7 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -177,12 +178,12 @@
 
   function cmdOpenSettings() {
     searchPalette.open = false;
-    searchPalette.settingsOpen = true;
+    dialogs.settingsOpen = true;
   }
 
   function cmdOpenTagManager() {
     searchPalette.open = false;
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
   }
 
   function cmdToggleTheme() {

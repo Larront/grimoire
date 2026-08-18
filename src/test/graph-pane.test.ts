@@ -199,7 +199,7 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 }));
 
 vi.mock("../lib/stores/search.svelte", () => ({
-  searchPalette: { open: false, activeQuery: "", settingsOpen: false, tagManagerOpen: false },
+  searchPalette: { open: false, activeQuery: "", openToTemplatePicker: false },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({
@@ -1111,9 +1111,9 @@ describe("GraphPane – filter panel", () => {
     });
   });
 
-  it("clicking 'Edit color' link sets searchPalette.tagManagerOpen to true", async () => {
-    const { searchPalette } = await import("../lib/stores/search.svelte");
-    searchPalette.tagManagerOpen = false;
+  it("clicking 'Edit color' link sets dialogs.tagManagerOpen to true", async () => {
+    const { dialogs } = await import("../lib/stores/overlay.svelte");
+    dialogs.tagManagerOpen = false;
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
@@ -1132,7 +1132,7 @@ describe("GraphPane – filter panel", () => {
     ) as HTMLElement;
     await fireEvent.click(editLink);
 
-    expect(searchPalette.tagManagerOpen).toBe(true);
+    expect(dialogs.tagManagerOpen).toBe(true);
   });
 });
 

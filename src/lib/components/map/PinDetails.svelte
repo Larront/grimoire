@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
   import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
@@ -51,14 +52,57 @@
   let noteSearchQuery = $state("");
   let appearanceOpen = $state(false);
 
+  // The row the drafts were loaded from. The `pin` prop is read through the
+  // pane's `{#if selectedPin}`, so by teardown it can already be null —
+  // deselecting is one of the ways this panel closes — and a teardown commit
+  // still needs something to patch.
+  let editing: Pin | null = null;
+
   $effect(() => {
+    editing = pin;
     draftTitle = pin.title;
     draftDescription = pin.description ?? "";
   });
 
+  // Patches `editing`, not `pin`: the two are the same row for every edit made
+  // while the panel is up, and only `editing` survives the teardown commit below.
   async function save(patch: Partial<Pin>) {
-    await onUpdate({ ...pin, ...patch });
+    if (!editing) return;
+    await onUpdate({ ...editing, ...patch });
   }
+
+  // The two free-text fields commit on blur, and teardown fires no blur — so a
+  // title or description typed and left focused was silently discarded when the
+  // pane's tab changed and took MapPane with it (#201). ADR-0006's Consequences
+  // ask for commit-or-cancel here; this commits, matching what every other field
+  // on the panel does the moment it is touched.
+  //
+  // Each field yields a *patch fragment* rather than saving directly, because
+  // teardown has to send both fields in ONE write. `save` spreads `editing`, and
+  // `savePin` round-trips the whole row, so two writes off the same stale row
+  // would each carry the other field at its pre-edit value and the second would
+  // revert the first. On blur that cannot happen: the save applies back through
+  // the pane and `editing` is fresh before the next field is touched.
+  function titlePatch(): Partial<Pin> {
+    if (!editing) return {};
+    const next = draftTitle.trim();
+    if (next === editing.title) return {};
+    return { title: next || editing.title };
+  }
+
+  function descriptionPatch(): Partial<Pin> {
+    if (!editing) return {};
+    const next = draftDescription.trim() || null;
+    if (next === editing.description) return {};
+    return { description: next };
+  }
+
+  function commit(patch: Partial<Pin>) {
+    if (Object.keys(patch).length === 0) return;
+    save(patch);
+  }
+
+  onDestroy(() => commit({ ...titlePatch(), ...descriptionPatch() }));
 
   const filteredNotes = $derived(
     noteSearchQuery.trim()
@@ -96,10 +140,7 @@
   <input
     autofocus
     bind:value={draftTitle}
-    onblur={() => {
-      if (draftTitle.trim() !== pin.title)
-        save({ title: draftTitle.trim() || pin.title });
-    }}
+    onblur={() => commit(titlePatch())}
     onkeydown={(e) => {
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
@@ -206,10 +247,7 @@
   <textarea
     id="pin-description"
     bind:value={draftDescription}
-    onblur={() => {
-      const val = draftDescription.trim() || null;
-      if (val !== pin.description) save({ description: val });
-    }}
+    onblur={() => commit(descriptionPatch())}
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
            font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"

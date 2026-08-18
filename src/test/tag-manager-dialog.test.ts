@@ -4,12 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { waitFor } from "@testing-library/svelte";
 import AppShell from "../lib/components/AppShell.svelte";
 import { searchPalette } from "../lib/stores/search.svelte";
+import { dialogs } from "../lib/stores/overlay.svelte";
 
 afterEach(async () => {
   cleanup();
   searchPalette.open = false;
-  searchPalette.settingsOpen = false;
-  searchPalette.tagManagerOpen = false;
+  dialogs.settingsOpen = false;
+  dialogs.tagManagerOpen = false;
   vi.mocked(invoke).mockResolvedValue(null);
 });
 
@@ -31,7 +32,7 @@ describe("tag manager — usage count aggregate", () => {
   it("shows each tag with its total usage count (notes + pins)", async () => {
     mockTagUsage([{ tag: "npc", note_count: 3, pin_count: 2 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -47,7 +48,7 @@ describe("tag manager — usage count aggregate", () => {
   it("shows a count of note_count alone when pin_count is zero", async () => {
     mockTagUsage([{ tag: "creature", note_count: 4, pin_count: 0 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -65,7 +66,7 @@ describe("tag manager — usage count aggregate", () => {
       { tag: "location", note_count: 0, pin_count: 1 },
     ]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -78,7 +79,7 @@ describe("tag manager — usage count aggregate", () => {
   it("shows empty state when there are no tags", async () => {
     mockTagUsage([]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -120,12 +121,12 @@ describe("tag manager — settings entry point", () => {
 
   it("clicking 'Manage' in Settings closes Settings and opens Tag Manager", async () => {
     const { dialog } = await openContentTab();
-    expect(searchPalette.settingsOpen).toBe(true);
+    expect(dialogs.settingsOpen).toBe(true);
 
     await fireEvent.click(within(dialog).getByTestId("open-tag-manager-btn"));
 
-    expect(searchPalette.settingsOpen).toBe(false);
-    expect(searchPalette.tagManagerOpen).toBe(true);
+    expect(dialogs.settingsOpen).toBe(false);
+    expect(dialogs.tagManagerOpen).toBe(true);
   });
 });
 
@@ -160,7 +161,7 @@ describe("tag manager — command palette entry point", () => {
     ) as HTMLElement;
     await fireEvent.click(cmd);
     expect(searchPalette.open).toBe(false);
-    expect(searchPalette.tagManagerOpen).toBe(true);
+    expect(dialogs.tagManagerOpen).toBe(true);
   });
 });
 
@@ -172,7 +173,7 @@ async function openTagManager(
 ) {
   mockTagUsage(entries, styles);
   render(AppShell);
-  searchPalette.tagManagerOpen = true;
+  dialogs.tagManagerOpen = true;
   const dialog = await waitFor(() => {
     const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
     if (!el) throw new Error("dialog not found");
@@ -349,7 +350,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("each tag row has a ⋯ menu button", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -364,7 +365,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("⋯ menu contains Rename, Merge into…, Delete options", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -386,7 +387,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("clicking Rename opens an input for the new tag name", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -412,7 +413,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("clicking Delete opens a confirmation dialog with impact count", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 2 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -442,7 +443,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("confirming rename calls retag_tag with from and to", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 2, pin_count: 0 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -489,7 +490,7 @@ describe("tag manager — retag ⋯ menu", () => {
   it("confirming delete calls retag_tag with toTag null", async () => {
     mockTagUsageWithRetag([{ tag: "npc", note_count: 1, pin_count: 0 }]);
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
       if (!el) throw new Error("dialog not found");
@@ -534,7 +535,7 @@ describe("tag manager — retag ⋯ menu", () => {
       return null;
     });
     render(AppShell);
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
 
     const dialog = await waitFor(() => {
       const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');

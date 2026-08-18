@@ -12,7 +12,7 @@
   import type { Core, Layouts, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
-  import { searchPalette } from "$lib/stores/search.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import Filter from "@lucide/svelte/icons/filter";
   import Search from "@lucide/svelte/icons/search";
 
@@ -301,7 +301,7 @@
 
   /** Open the Tag Manager dialog (for per-tag graph color / visibility editing). */
   function openTagManager() {
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
   }
 
   /**
