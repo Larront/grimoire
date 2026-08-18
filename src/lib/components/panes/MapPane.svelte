@@ -25,6 +25,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
+  import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
   import { fly } from "svelte/transition";
 
   interface Props {
@@ -61,6 +62,26 @@
   const pinDetails = createPinDetailsSource(
     () => selectedPin,
     () => selectedLinkedNote,
+    (saved: Pin) => {
+      pins = pins.map((p) => (p.id === saved.id ? saved : p));
+      selectedPin = saved;
+    },
+  );
+
+  // The annotation Details Source is the annotation panel's save path and
+  // nothing else — an annotation has no auxiliary data to fetch. It is here so
+  // annotation edits report into the DetailPanel's status indicator instead of
+  // into console.error (see CONTEXT.md — "Details Source").
+  const annotationDetails = createAnnotationDetailsSource(
+    () => selectedAnnotation,
+    (saved: MapAnnotation) => {
+      annotations = annotations.map((a) => (a.id === saved.id ? saved : a));
+      selectedAnnotation = saved;
+    },
+    (id: number) => {
+      annotations = annotations.filter((a) => a.id !== id);
+      if (selectedAnnotation?.id === id) selectedAnnotation = null;
+    },
   );
 
   // Track whether initial map data has loaded; used to gate store writes so
@@ -323,26 +344,6 @@
     }
   }
 
-  async function handleAnnotationUpdate(updated: MapAnnotation) {
-    try {
-      const result = await api.updateAnnotation(updated) as MapAnnotation;
-      annotations = annotations.map((a) => (a.id === result.id ? result : a));
-      selectedAnnotation = result;
-    } catch (e) {
-      console.error("update annotation failed:", e);
-    }
-  }
-
-  async function handleAnnotationDelete(id: number) {
-    try {
-      await api.deleteAnnotation(id);
-      annotations = annotations.filter((a) => a.id !== id);
-      if (selectedAnnotation?.id === id) selectedAnnotation = null;
-    } catch (e) {
-      console.error("delete annotation failed:", e);
-    }
-  }
-
   /*
     Delete the selected shape from the keyboard.
 
@@ -386,7 +387,7 @@
     // so the order here is a formality rather than a precedence rule.
     if (selectedAnnotation) {
       e.preventDefault();
-      void handleAnnotationDelete(selectedAnnotation.id);
+      void annotationDetails.deleteAnnotation(selectedAnnotation.id);
     } else if (selectedPin) {
       e.preventDefault();
       void handlePinDelete(selectedPin.id);
@@ -648,11 +649,7 @@
             notePreview={pinDetails.notePreview}
             onTagsChange={pinDetails.savePinTags}
             onToggleLock={togglePinLock}
-            onUpdate={async (updated: Pin) => {
-              const saved: Pin = await api.updatePin(updated) as Pin;
-              pins = pins.map((p) => (p.id === saved.id ? saved : p));
-              selectedPin = saved;
-            }}
+            onUpdate={pinDetails.savePin}
             onDelete={handlePinDelete}
             onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
           />
@@ -669,14 +666,16 @@
       >
         <DetailPanel
           title={KIND_LABELS[selectedAnnotation.kind]}
+          saveStatus={annotationDetails.saveStatus}
+          onRetrySave={annotationDetails.retrySave}
           onclose={() => { selectedAnnotation = null; }}
         >
           <AnnotationDetails
             annotation={selectedAnnotation!}
             unlocked={unlockedAnnotationId !== null}
             onToggleLock={toggleAnnotationLock}
-            onUpdate={handleAnnotationUpdate}
-            onDelete={handleAnnotationDelete}
+            onUpdate={annotationDetails.saveAnnotation}
+            onDelete={annotationDetails.deleteAnnotation}
           />
         </DetailPanel>
       </div>

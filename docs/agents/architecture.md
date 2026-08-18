@@ -15,6 +15,11 @@ Key stores:
 - `scenes.svelte.ts` — scenes + per-scene slot cache
 - `audio-engine.svelte.ts` — complex playback state machine bridging Web Audio API (local files) and Spotify Web Playback SDK
 
+Two seams sit beside the stores rather than in them:
+
+- `src/lib/details/` — one [[Details Source]] per entity kind (note, pin, annotation) feeding a Details Pane body, plus the save-status machine and staleness guard they share. Instantiated per pane, not a singleton.
+- `src/lib/ledger/events.ts` — the [[Ledger Watcher]]'s frontend event contract: every backend event name, its payload, and one `onLedgerEvents` subscription helper. Nothing else should spell these event names.
+
 ## Routing
 
 SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fallback: 'index.html'`). Routes:

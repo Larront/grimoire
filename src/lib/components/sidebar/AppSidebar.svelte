@@ -6,7 +6,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { onMount, setContext, type ComponentProps } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
+  import { onLedgerEvents } from "$lib/ledger/events";
   import AppSearch from "../AppSearch.svelte";
   import {
     FilePlus,
@@ -23,7 +23,6 @@
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap, TemplateEntry } from "$lib/types/ledger";
   import { ledger, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
-  import type { UnlinkedPin } from "$lib/stores/ledger.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -89,49 +88,41 @@
     refresh();
   }
 
-  onMount(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const unlisten = Promise.all([
-      listen("ledger:tree-changed", () => syncFromDisk()),
-      listen("note:removed", () => syncFromDisk()),
+  onMount(() =>
+    onLedgerEvents({
+      "ledger:tree-changed": () => syncFromDisk(),
+      "note:removed": () => syncFromDisk(),
       // An external move re-keyed a note's row in place (same id, new path); refetch
       // so the tree shows it at its new location and open panes follow it there.
-      listen("note:moved", () => syncFromDisk()),
+      "note:moved": () => syncFromDisk(),
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger and emitted one coarse event — refetch notes + tree wholesale.
-      listen("ledger:rebuilt", () => syncFromDisk()),
+      "ledger:rebuilt": () => syncFromDisk(),
       // The same bulk change can re-create note rows, which costs them their id
       // and unlinks every pin holding it (#224). The open-time repair reports
       // this through `open_ledger`'s result; mid-session there is no result to
       // ride on, so it arrives as its own event.
-      listen<UnlinkedPin[]>("pins:unlinked", (event) => {
-        unlinkedPinsModal.pins = event.payload;
-        toastUnlinkedPins(event.payload.length, () => {
+      "pins:unlinked": (pins) => {
+        unlinkedPinsModal.pins = pins;
+        toastUnlinkedPins(pins.length, () => {
           unlinkedPinsModal.open = true;
         });
-      }),
+      },
       // A targeted external move left other notes linking to the old path. Offer
       // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
       // The count is display-only; the command recomputes the real set on Update.
-      listen<{ from: string; to: string; count: number }>(
-        "note:external-move-links-stale",
-        (event) => {
-          const { from, to, count } = event.payload;
-          const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
-          toastExternalMoveLinks(oldName, count, () => {
-            void api.applyBacklinkRewrite(from, to).then((n) => {
-              if (n > 0) {
-                toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
-              }
-            });
+      "note:external-move-links-stale": ({ from, to, count }) => {
+        const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
+        toastExternalMoveLinks(oldName, count, () => {
+          void api.applyBacklinkRewrite(from, to).then((n) => {
+            if (n > 0) {
+              toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
+            }
           });
-        },
-      ),
-    ]);
-    return () => {
-      void unlisten.then((fns) => fns.forEach((fn) => fn()));
-    };
-  });
+        });
+      },
+    }),
+  );
 
   $effect(() => {
     noteMap.clear();

@@ -1,7 +1,9 @@
 // Tests for the pin Details Source — the auxiliary-data fan-out behind the
 // PinDetails body: pin tags (keyed by pin id, so pin patches don't refetch),
-// per-map Pin Categories, the linked-note preview, and the tag save-status
-// machine (pin tag saves previously had no error handling at all).
+// per-map Pin Categories, the linked-note preview, and the save-status machine
+// now covering every edit the panel offers: tags (which previously had no error
+// handling at all) and the pin row itself (which was choreographed inline in
+// MapPane's template and could not report anything — #203).
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
@@ -59,13 +61,17 @@ async function flush() {
 
 let cleanup: (() => void) | null = null;
 
+/** Pins committed back to the "pane" — MapPane keeps the list for the canvas. */
+let applied: Pin[] = [];
+
 function mount(
   getPin: () => Pin | null,
   getLinkedNote: () => Note | null = () => null,
+  applyPin: (saved: Pin) => void = (saved) => { applied.push(saved); },
 ): PinDetailsSource {
   let source!: PinDetailsSource;
   cleanup = $effect.root(() => {
-    source = createPinDetailsSource(getPin, getLinkedNote);
+    source = createPinDetailsSource(getPin, getLinkedNote, applyPin);
   });
   flushSync();
   return source;
@@ -74,6 +80,7 @@ function mount(
 afterEach(() => {
   cleanup?.();
   cleanup = null;
+  applied = [];
   vi.useRealTimers();
   mocked.mockReset();
   mocked.mockResolvedValue(null);
@@ -184,5 +191,168 @@ describe("pin Details Source — save-status machine", () => {
     await source.retrySave();
     expect(source.saveStatus).toBe("saved");
     expect(callsFor("set_pin_tags").length).toBe(2); // failed attempt + retry
+  });
+});
+
+describe("pin Details Source — pin row saves (#203)", () => {
+  it("savePin commits the saved row back to the pane and flashes 'saved'", async () => {
+    const saved = { ...basePin, title: "The Drowned Bell" } as Pin;
+    mockCommands({ update_pin: saved });
+    const source = mount(() => basePin);
+    await flush();
+
+    await source.savePin({ ...basePin, title: "The Drowned Bell" } as Pin);
+    expect(callsFor("update_pin")).toHaveLength(1);
+    expect(applied).toEqual([saved]);
+    expect(source.saveStatus).toBe("saved");
+  });
+
+  it("a failed pin save reports 'error' instead of rejecting into a blur handler", async () => {
+    mockCommands({}, ["update_pin"]);
+    const source = mount(() => basePin);
+    await flush();
+
+    // PinDetails awaits this from a bare `onblur` with no catch. It used to go
+    // through the toasting surface and rethrow into nothing.
+    await expect(
+      source.savePin({ ...basePin, title: "Renamed" } as Pin),
+    ).resolves.toBeUndefined();
+    expect(source.saveStatus).toBe("error");
+    expect(applied).toEqual([]);
+  });
+
+  it("retrySave re-attempts a failed pin save", async () => {
+    mockCommands({}, ["update_pin"]);
+    const source = mount(() => basePin);
+    await flush();
+    await source.savePin({ ...basePin, title: "Renamed" } as Pin);
+    expect(source.saveStatus).toBe("error");
+
+    const saved = { ...basePin, title: "Renamed" } as Pin;
+    mockCommands({ update_pin: saved }); // backend recovers
+    await source.retrySave();
+    expect(source.saveStatus).toBe("saved");
+    expect(callsFor("update_pin")).toHaveLength(2);
+    expect(applied).toEqual([saved]);
+  });
+
+  it("a failed save is cleared when the selection is dropped entirely", async () => {
+    mockCommands({}, ["update_pin"]);
+    let pin = $state<Pin | null>(basePin);
+    const source = mount(() => pin);
+    await flush();
+    await source.savePin({ ...basePin, title: "Renamed" } as Pin);
+    expect(source.saveStatus).toBe("error");
+
+    pin = null;
+    flushSync();
+    expect(source.saveStatus).toBe("idle");
+  });
+
+  it("a failed save on one pin does not follow the selection to another", async () => {
+    mockCommands({}, ["update_pin"]);
+    let pin = $state<Pin | null>(basePin);
+    const source = mount(() => pin);
+    await flush();
+    await source.savePin({ ...basePin, title: "Renamed" } as Pin);
+    expect(source.saveStatus).toBe("error");
+
+    pin = { ...basePin, id: 2 } as Pin;
+    flushSync();
+    expect(source.saveStatus).toBe("idle");
+  });
+});
+
+describe("pin Details Source — stale guards on the failure path (#202)", () => {
+  it("a failed tag load for pin A leaves pin B's tags alone", async () => {
+    let rejectA!: (e: Error) => void;
+    mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
+      const args = rawArgs as Record<string, unknown> | undefined;
+      if (cmd === "get_pin_tags") {
+        if (args?.pinId === 1) return new Promise((_res, rej) => { rejectA = rej; });
+        return Promise.resolve(["quay"]);
+      }
+      return Promise.resolve(null);
+    });
+    let pin = $state<Pin | null>(basePin);
+    const source = mount(() => pin);
+    flushSync();
+
+    pin = { ...basePin, id: 2 } as Pin;
+    flushSync();
+    await flush();
+    expect(source.pinTags).toEqual(["quay"]);
+
+    rejectA(new Error("get_pin_tags failed"));
+    await flush();
+    expect(source.pinTags).toEqual(["quay"]);
+  });
+
+  it("a failed category load for map A leaves map B's categories alone", async () => {
+    let rejectA!: (e: Error) => void;
+    mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
+      const args = rawArgs as Record<string, unknown> | undefined;
+      if (cmd === "get_pin_categories_for_map") {
+        if (args?.mapId === 5) return new Promise((_res, rej) => { rejectA = rej; });
+        return Promise.resolve([{ id: 9, map_id: 6, name: "Ruin", icon: "house", color: "#fff" }]);
+      }
+      return Promise.resolve(null);
+    });
+    let pin = $state<Pin | null>(basePin);
+    const source = mount(() => pin);
+    flushSync();
+
+    pin = { ...basePin, id: 2, map_id: 6 } as Pin;
+    flushSync();
+    await flush();
+    expect(source.categories).toHaveLength(1);
+
+    rejectA(new Error("get_pin_categories_for_map failed"));
+    await flush();
+    expect(source.categories).toHaveLength(1);
+  });
+
+  it("a failed preview read for note A does not blank note B's preview", async () => {
+    let rejectA!: (e: Error) => void;
+    mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
+      const args = rawArgs as Record<string, unknown> | undefined;
+      if (cmd === "read_note_content") {
+        if (args?.notePath === linkedNote.path) {
+          return new Promise((_res, rej) => { rejectA = rej; });
+        }
+        return Promise.resolve("The harbour at night");
+      }
+      return Promise.resolve(null);
+    });
+    let linked = $state<Note | null>(linkedNote);
+    const source = mount(() => basePin, () => linked);
+    flushSync();
+
+    linked = { ...linkedNote, id: 43, path: "notes/harbor.md" } as Note;
+    flushSync();
+    await flush();
+    expect(source.notePreview).toBe("The harbour at night");
+
+    rejectA(new Error("read_note_content failed"));
+    await flush();
+    expect(source.notePreview).toBe("The harbour at night");
+  });
+});
+
+describe("pin Details Source — teardown (#210)", () => {
+  it("leaves no flash timer behind when torn down mid-flash", async () => {
+    vi.useFakeTimers();
+    mockCommands({});
+    const source = mount(() => basePin);
+    await flush();
+
+    await source.savePinTags(["harbor"]);
+    expect(source.saveStatus).toBe("saved");
+    const pending = vi.getTimerCount();
+    expect(pending).toBeGreaterThan(0);
+
+    cleanup!();
+    cleanup = null;
+    expect(vi.getTimerCount()).toBe(pending - 1);
   });
 });

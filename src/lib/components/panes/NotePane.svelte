@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
+  import { onLedgerEvents } from "$lib/ledger/events";
   import { api } from "$lib/api";
   import { MediaQuery } from "svelte/reactivity";
   import { fly } from "svelte/transition";
@@ -8,7 +8,6 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
-  import { linksTick } from "$lib/stores/links-tick.svelte";
   import { toastSuccess } from "$lib/toast";
   import { LoaderCircle, FileWarning } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
@@ -185,28 +184,21 @@
     }
   }
 
-  onMount(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const unlisten = Promise.all([
-      listen<{ path: string }>("note:content-changed", (event) =>
-        handleExternalChange(event.payload.path),
-      ),
-      listen<{ path: string }>("note:removed", (event) =>
-        handleExternalRemove(event.payload.path),
-      ),
+  onMount(() =>
+    onLedgerEvents({
+      "note:content-changed": ({ path }) => handleExternalChange(path),
+      "note:removed": ({ path }) => handleExternalRemove(path),
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger under one coarse event. This note's file may be among the
-      // rewritten ones, so reload its content (clean-buffer gated) and details.
-      listen("ledger:rebuilt", () => {
+      // rewritten ones, so reload its content (clean-buffer gated). The Details
+      // Source subscribes to the same event for its own refetch — the pane no
+      // longer relays it (#212).
+      "ledger:rebuilt": () => {
         if (!note) return;
         handleExternalChange(note.path);
-        details.reload();
-      }),
-    ]);
-    return () => {
-      void unlisten.then((fns) => fns.forEach((fn) => fn()));
-    };
-  });
+      },
+    }),
+  );
 
   // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
@@ -342,8 +334,10 @@
     const target = notes.notes.find((n) => n.id === editorNoteId);
     if (!target) return;
     try {
+      // No linksTick.bump() here: the bump belongs to the write path, and the
+      // Command Wrapper does it for every command that rewrites note bodies
+      // (#212). This one used to be the only caller that remembered.
       await api.writeNoteContent(target.path, markdown);
-      linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);
     }

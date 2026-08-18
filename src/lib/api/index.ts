@@ -15,6 +15,7 @@ import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
 import { logError } from "$lib/log";
+import { linksTick } from "$lib/stores/links-tick.svelte";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -72,6 +73,43 @@ export function friendlyMessage(error: unknown): string {
   return GENERIC_MESSAGE;
 }
 
+// ── Link-index freshness ─────────────────────────────────────────────────────
+// Commands that can change what links exist or what a wikilink resolves to.
+// Each one bumps [[linksTick]] on success, so the Backlinks and Outbound
+// sections of every open note reload without a caller remembering to say so
+// (#212). Two shapes qualify:
+//
+//   * a command that rewrites note *bytes* — the body is where links live, and
+//     `rename_note` / `apply_backlink_rewrite` / `update_scene` all reach
+//     `note_mutation::commit_backlink_rewrites` to rewrite other notes' bodies;
+//   * a command that adds or removes a note *row* — an unresolved wikilink
+//     resolves the moment its note is created, and breaks when it is deleted.
+//
+// Folder-level moves count because they re-key every note beneath them.
+// Deliberately absent: `write_note_tags` and the alias commands, which touch
+// frontmatter and the alias table, neither of which the link index reads.
+//
+// Typed against the generated bindings on purpose: `bindings.gen.ts` is
+// regenerated from Rust (ADR-0009), and a renamed command must fail the
+// type-check here rather than quietly stop refreshing anyone's backlinks.
+//
+// The wholesale paths (`rebuild_ledger_db`, format migration, and the [[Ledger
+// Watcher]]'s bulk fallback) are absent because they announce themselves: each
+// ends in a `ledger:rebuilt`, which every note [[Details Source]] subscribes to
+// for a full refetch — a stronger refresh than a tick.
+const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
+  "writeNoteContent",
+  "createNote",
+  "createNoteFromTemplate",
+  "deleteNote",
+  "deleteFolder",
+  "renameNote",
+  "renameFolder",
+  "moveFolder",
+  "applyBacklinkRewrite",
+  "updateScene",
+]);
+
 // ── Surface construction ─────────────────────────────────────────────────────
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
 
@@ -82,9 +120,14 @@ function wrap<C extends Record<string, AnyFn>>(
 ): C {
   const out = {} as Record<string, AnyFn>;
   for (const [name, fn] of Object.entries(source)) {
+    // `name` widens to string through Object.entries; the Set stays narrowly
+    // typed so the literals above are the thing being checked.
+    const bumpsLinks = LINK_WRITING_COMMANDS.has(name as keyof typeof commands);
     out[name] = async (...args: unknown[]) => {
       try {
-        return await fn(...args);
+        const result = await fn(...args);
+        if (bumpsLinks) linksTick.bump();
+        return result;
       } catch (error) {
         onError(error);
         throw error;
