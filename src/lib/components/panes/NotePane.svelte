@@ -2,8 +2,6 @@
   import { onMount, tick, untrack } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
   import { api } from "$lib/api";
-  import { MediaQuery } from "svelte/reactivity";
-  import { fly } from "svelte/transition";
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
@@ -14,12 +12,11 @@
   import { parseWikiTarget } from "$lib/editor/wiki-link";
   import Editor from "$lib/components/editor/Editor.svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
-  import type { RightRailState } from "$lib/stores/right-rail.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import DetailSurface from "$lib/components/DetailSurface.svelte";
   import NoteDetails from "$lib/components/NoteDetails.svelte";
   import { createNoteDetailsSource } from "$lib/details/note-details-source.svelte";
-  import { getDockMode, floatTransition } from "$lib/utils/dock-threshold";
+  import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import type { Note } from "$lib/types/ledger";
 
   interface Props {
@@ -27,9 +24,8 @@
     rename?: boolean;
     pane: 'left' | 'right';
     tabIndex: number;
-    rail?: RightRailState;
   }
-  let { noteId, rename, pane, tabIndex, rail }: Props = $props();
+  let { noteId, rename, pane, tabIndex }: Props = $props();
 
   let liveNote = $derived(notes.notes.find((n) => n.id === noteId) ?? null);
   // When this note's file is deleted externally the notes store drops its row —
@@ -343,21 +339,16 @@
     }
   }
 
-  // ── Pane width measurement (dock vs float decision) ─────────────────────
-  const reducedMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
+  // ── Detail surface ───────────────────────────────────────────────────────
+  // The surface belongs to the pane slot, not to this note: it is what keeps a
+  // rail the GM opened open as they navigate from note to note. A note's surface
+  // is user-toggled (so the pane's header row shows a trigger) and docks or
+  // floats on the pane's measured width (ADR-0006 §2, §3).
+  const surface = $derived(paneSurface(pane));
+  $effect(() => surface.claim({ toggleable: true, alwaysFloat: false }));
+
   let containerEl = $state<HTMLDivElement | undefined>(undefined);
-  let paneWidth = $state(0);
-
-  $effect(() => {
-    if (!containerEl) return;
-    const ro = new ResizeObserver((entries) => {
-      paneWidth = entries[0]?.contentRect.width ?? 0;
-    });
-    ro.observe(containerEl);
-    return () => ro.disconnect();
-  });
-
-  const isDocked = $derived(getDockMode(paneWidth) === "docked");
+  $effect(() => (containerEl ? surface.measure(containerEl) : undefined));
 
   // ── Detail panel state ───────────────────────────────────────────────────
   // The Details Source owns the fetch fan-out, refresh invariants, and the
@@ -376,8 +367,8 @@
   }
 </script>
 
-{#snippet detailPanel(onclose: () => void)}
-  <DetailPanel title="Details" {onclose} saveStatus={details.saveStatus} onRetrySave={details.retrySave}>
+{#snippet detailPanel()}
+  <DetailPanel title="Details" onclose={surface.toggle} saveStatus={details.saveStatus} onRetrySave={details.retrySave}>
     <NoteDetails
       {note}
       bind:tags={details.tags}
@@ -566,51 +557,9 @@
     {/if}
   </div>
 
-  <!-- Docked detail panel — visible when pane is wide enough (≥820px) -->
-  {#if rail && !rail.isMobile && isDocked}
-    <aside
-      data-slot="right-rail"
-      data-mobile="false"
-      data-state={rail.open ? 'open' : 'closed'}
-      class="flex w-0 shrink-0 flex-col overflow-hidden motion-reduce:transition-none transition-[width] duration-200 ease-linear data-[state=open]:w-[300px]"
-    >
-      <div class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle">
-        {@render detailPanel(rail.toggle)}
-      </div>
-    </aside>
-  {/if}
-
-  <!-- Floating detail panel — visible when pane is narrow (<820px, non-mobile).
-       Guard paneWidth > 0 avoids a brief flash before the ResizeObserver fires. -->
-  {#if rail?.open && !rail.isMobile && !isDocked && paneWidth > 0}
-    <div
-      data-float="true"
-      transition:fly={floatTransition(reducedMotion.current)}
-      class="absolute top-4 right-4 z-50 w-80 bg-background rounded-lg shadow-2xl
-             border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
-    >
-      {@render detailPanel(rail.toggle)}
-    </div>
-  {/if}
+  <!-- Docked rail, floating overlay or mobile sheet — the surface decides which
+       from the pane's measured width (ADR-0006 §2). -->
+  <DetailSurface {surface} open={surface.visible} onclose={surface.toggle}>
+    {@render detailPanel()}
+  </DetailSurface>
 </div>
-
-<!-- Mobile sheet overlay (always present when rail is mobile, regardless of note load state) -->
-{#if rail?.isMobile}
-  <Sheet.Root
-    bind:open={() => rail.openMobile, (v) => rail.setOpenMobile(v)}
-  >
-    <Sheet.Content
-      side="right"
-      data-slot="right-rail"
-      data-mobile="true"
-      class="w-[300px] p-0 [&>button]:hidden"
-      showCloseButton={false}
-    >
-      <Sheet.Header class="sr-only">
-        <Sheet.Title>Details panel</Sheet.Title>
-        <Sheet.Description>Document metadata and details.</Sheet.Description>
-      </Sheet.Header>
-      {@render detailPanel(() => rail?.setOpenMobile(false))}
-    </Sheet.Content>
-  </Sheet.Root>
-{/if}

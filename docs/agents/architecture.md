@@ -17,7 +17,7 @@ Key stores:
 
 Two seams sit beside the stores rather than in them:
 
-- `src/lib/details/` — one [[Details Source]] per entity kind (note, pin, annotation) feeding a Details Pane body, plus the save-status machine and staleness guard they share. Instantiated per pane, not a singleton.
+- `src/lib/details/` — one [[Details Source]] per entity kind (note, pin, annotation) feeding a Details Pane body, plus the save-status machine and staleness guard they share. Instantiated per pane, not a singleton. Beside them, `pane-detail-surface.svelte.ts` holds the other half of a pane's Details Pane: the pane's measured width, the dock/float/sheet decision it implies, the visibility latch and the mobile overlay token. One per pane slot (`paneSurface('left' | 'right')`), claimed by whatever content the pane is showing; `DetailSurface.svelte` is the chrome it chooses between.
 - `src/lib/ledger/events.ts` — the [[Ledger Watcher]]'s frontend event contract: every backend event name, its payload, and one `onLedgerEvents` subscription helper. Nothing else should spell these event names.
 
 ## Routing

@@ -11,7 +11,7 @@
   import SampleBanner from "./SampleBanner.svelte";
   import SampleEffects from "./SampleEffects.svelte";
   import * as Sidebar from "./ui/sidebar";
-  import { RightRailState } from "$lib/stores/right-rail.svelte";
+  import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
@@ -20,13 +20,12 @@
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 
-  const leftRail = new RightRailState("left");
-  const rightRail = new RightRailState("right");
-
-  const leftPaneIsNote = $derived(tabs.left?.tabs[tabs.left?.activeIndex ?? 0]?.type === 'note');
-  const rightPaneIsNote = $derived(
-    tabs.right !== null && (tabs.right?.tabs[tabs.right?.activeIndex ?? 0]?.type === 'note')
-  );
+  // Each pane owns its own detail surface (ADR-0006 §1); the shell only renders
+  // the trigger for it. Whether there is one to render is the surface's answer,
+  // not a tab-type test here: a pane's content claims a toggleable surface when
+  // it has one, so adding a pane type never means editing this file.
+  const leftSurface = paneSurface("left");
+  const rightSurface = paneSurface("right");
 </script>
 
 {#snippet navButtons(pane: 'left' | 'right')}
@@ -102,11 +101,11 @@
                 </div>
                 {@render navButtons('left')}
                 <TabBar pane="left" />
-                {#if leftPaneIsNote}
+                {#if leftSurface.toggleable}
                   <div class="ml-auto shrink-0 px-2">
                     <button
                       data-testid="left-rail-trigger"
-                      onclick={leftRail.toggle}
+                      onclick={leftSurface.toggle}
                       class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       aria-label="Toggle details panel"
                     >
@@ -115,7 +114,7 @@
                   </div>
                 {/if}
               </div>
-              <PaneContent pane="left" rail={leftRail} />
+              <PaneContent pane="left" />
 
               <!-- Full-height split drop zone at the right edge, always in DOM
                    so elementsFromPoint finds data-pane-content="right" even when
@@ -144,11 +143,11 @@
                 <div class="flex items-center border-b border-sidebar-border">
                   {@render navButtons('right')}
                   <TabBar pane="right" />
-                  {#if rightPaneIsNote}
+                  {#if rightSurface.toggleable}
                     <div class="ml-auto shrink-0 px-2">
                       <button
                         data-testid="right-rail-trigger"
-                        onclick={rightRail.toggle}
+                        onclick={rightSurface.toggle}
                         class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         aria-label="Toggle details panel"
                       >
@@ -157,7 +156,7 @@
                     </div>
                   {/if}
                 </div>
-                <PaneContent pane="right" rail={rightRail} />
+                <PaneContent pane="right" />
               </div>
             {/if}
           </div>

@@ -85,16 +85,6 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
   },
 }));
 
-vi.mock("../lib/stores/right-rail.svelte", () => ({
-  RightRailState: class {
-    open = false;
-    isMobile = false;
-    openMobile = false;
-    toggle() {}
-    setOpenMobile(_v: boolean) {}
-  },
-}));
-
 function makeScene(id: number, name: string, favorited: boolean): SceneWithCount {
   return {
     id,

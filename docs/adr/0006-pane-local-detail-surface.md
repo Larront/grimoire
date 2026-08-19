@@ -111,7 +111,8 @@ nowhere. It has been removed from `package.json`. The design-system note that th
 draggable (paneforge)" is corrected to match.
 
 **What survives is the measurement, and it is the load-bearing half.** Pane width is still
-measured per pane, by a `ResizeObserver` on the pane's own container (`NotePane.svelte`), and
+measured per pane, by a `ResizeObserver` on the pane's own container (owned by
+`pane-detail-surface.svelte.ts` since #208), and
 the dock/float threshold is still evaluated from it. That is what makes the rule *pane width,
 not window width* — the clause that would otherwise have been got wrong (CONTEXT.md's Note
 block presentation row derives the same distinction independently). Drag was only ever one of
@@ -122,3 +123,44 @@ absence — only a re-evaluation trigger that never fired.
 **A future divider needs no amendment to this ADR.** Should one be built, per-pane measurement
 already covers it: a `ResizeObserver` on the pane container fires on drag like any other width
 change. The paneforge dependency would come back with the feature, not before it.
+
+### 2026-08-19 — Where the surface's state lives, and where the toggle sits ([#208](https://github.com/Larront/grimoire/issues/208))
+
+The decision is unchanged; §1 is now implemented in state as well as in rendering.
+
+**The pane's surface is a module, not two hand-written copies.** `PaneDetailSurface`
+(`src/lib/details/pane-detail-surface.svelte.ts`) holds one pane's measured width, the
+dock/float/sheet mode that follows from it, the visibility latch, the mobile overlay token and
+the float transition; `DetailSurface.svelte` holds the three chrome variants. "Maps always
+float" (§2) is a policy argument that module takes, rather than a second implementation of the
+floating shell — which is what it had been, at a different z-index, a different width, and with
+a hardcoded `fly` that ignored `prefers-reduced-motion` despite the Consequences above
+requiring it. The absorbed `dock-threshold.ts` had extracted only the decision, leaving the
+mechanism behind in the panes.
+
+One consequence of the shared chrome is worth stating, because it is where two of this
+ADR's requirements pull against each other. The float's entry is global and its exit is
+local, so a host that opens the panel from its own block — the map panels, whose `{#if}`
+holds the selection their body reads — gets the animation, while its *close* removes the
+panel at once. That immediacy is the Consequences' "dismiss its floating panel cleanly and
+commit-or-cancel any in-flight pin title/description edit"
+([#201](https://github.com/Larront/grimoire/issues/201)): the commit runs on the body's
+teardown, and an exit animation would defer it past the tab switch that caused it. A note
+pane's own toggle is the surface's own business, so that close does animate, with the note
+still rendered under it.
+
+There is one surface **per pane slot**, above the content mounted in it: that is what keeps a
+rail the GM opened open as they navigate from note to note, and open again on the way back
+from a map. The content claims it on mount (`claim({ toggleable, alwaysFloat })`) and releases
+it on unmount.
+
+**The note toggle lives in the pane's header row, not an editor toolbar.** §3 says the rail
+toggle sits "in that pane's editor toolbar". There is no editor toolbar: a note pane is a
+title and a TipTap surface inside one scroll container, and the only per-pane chrome is the row
+above it — nav buttons, that pane's tab strip, and the toggle at its right end. That row *is*
+pane-local (each pane has its own), so §3's intent — the toggle belongs to the pane, not to the
+window — holds where it is. Rendering it into the note column would put a floating control over
+the prose that can collide with the floating panel it opens. What did change is who decides
+whether to render it: the shell asks the pane's surface whether it has a toggleable surface,
+and no longer tests the active tab's type — the superseded "hide on non-note focus" rule was
+being re-derived there on every render.

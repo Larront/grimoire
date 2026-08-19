@@ -86,16 +86,6 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
   },
 }));
 
-vi.mock("../lib/stores/right-rail.svelte", () => ({
-  RightRailState: class {
-    open = false;
-    isMobile = false;
-    openMobile = false;
-    toggle() {}
-    setOpenMobile(_v: boolean) {}
-  },
-}));
-
 vi.mock("$lib/toast", () => ({
   toastUndo: vi.fn(),
   toastSuccess: vi.fn(),

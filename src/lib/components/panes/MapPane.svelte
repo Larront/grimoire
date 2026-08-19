@@ -22,18 +22,26 @@
   import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import DetailSurface from "$lib/components/DetailSurface.svelte";
   import { toastUndo } from "$lib/toast";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
   import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
-  import { fly } from "svelte/transition";
+  import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
 
   interface Props {
     mapId: number;
     pane: 'left' | 'right';
   }
   let { mapId, pane }: Props = $props();
+
+  // A map's surface always floats, whatever the pane measures: docking would
+  // shrink the canvas and a sheet would swallow it (ADR-0006 §2). And it carries
+  // no toggle — selecting a pin or an annotation is what opens it (§3) — so the
+  // pane's header row shows none.
+  const surface = $derived(paneSurface(pane));
+  $effect(() => surface.claim({ toggleable: false, alwaysFloat: true }));
 
   let leafletMap = $state<import("leaflet").Map | null>(null);
 
@@ -627,15 +635,16 @@
       </div>
     {/if}
 
-    <!-- Selected pin panel -->
+    <!-- Selected pin panel. The `{#if}` sits outside the surface rather than
+         inside its body, so the body never renders without a pin and closing
+         destroys it at once — which is what commits an unblurred edit to the
+         right pin (#201). `open` is then constant for as long as the block
+         lives, and the surface flies the panel in but not out (see
+         `DetailSurface.svelte`). -->
     {#if selectedPin && !placingMode && !annotationMode}
-      <div
-        transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-lg shadow-2xl
-               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
-      >
+      <DetailSurface {surface} open={true} onclose={() => { selectedPin = null; }}>
         <DetailPanel
-          title={selectedPin.title || "Pin"}
+          title={selectedPin!.title || "Pin"}
           saveStatus={pinDetails.saveStatus}
           onRetrySave={pinDetails.retrySave}
           onclose={() => { selectedPin = null; }}
@@ -655,18 +664,14 @@
             onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
           />
         </DetailPanel>
-      </div>
+      </DetailSurface>
     {/if}
 
     <!-- Selected annotation panel -->
     {#if selectedAnnotation && !placingMode}
-      <div
-        transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-lg shadow-2xl
-               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
-      >
+      <DetailSurface {surface} open={true} onclose={() => { selectedAnnotation = null; }}>
         <DetailPanel
-          title={KIND_LABELS[selectedAnnotation.kind]}
+          title={KIND_LABELS[selectedAnnotation!.kind]}
           saveStatus={annotationDetails.saveStatus}
           onRetrySave={annotationDetails.retrySave}
           onclose={() => { selectedAnnotation = null; }}
@@ -679,7 +684,7 @@
             onDelete={annotationDetails.deleteAnnotation}
           />
         </DetailPanel>
-      </div>
+      </DetailSurface>
     {/if}
   </div>
 {/if}

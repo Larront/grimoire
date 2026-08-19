@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { tabs, type Tab } from '$lib/stores/tabs.svelte';
 	import { notes } from '$lib/stores/notes.svelte';
-	import type { RightRailState } from '$lib/stores/right-rail.svelte';
 	import LedgerHome from './panes/LedgerHome.svelte';
 	import NotePane from './panes/NotePane.svelte';
 	import MapPane from './panes/MapPane.svelte';
@@ -13,10 +12,9 @@
 
 	interface Props {
 		pane: 'left' | 'right';
-		rail?: RightRailState;
 	}
 
-	let { pane, rail }: Props = $props();
+	let { pane }: Props = $props();
 
 	const tabPane = $derived(pane === 'left' ? tabs.left : tabs.right);
 	const activeTab = $derived(tabPane?.tabs[tabPane?.activeIndex ?? 0] ?? null);
@@ -48,7 +46,6 @@
 				rename={activeTab.rename}
 				{pane}
 				tabIndex={activeIndex}
-				{rail}
 			/>
 		{/key}
 	{:else if activeTab.type === 'map'}
