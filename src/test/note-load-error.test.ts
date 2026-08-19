@@ -49,9 +49,7 @@ describe("NotePane — file deleted externally (issue #112)", () => {
     const { getByTestId } = render(AppShell);
 
     await waitFor(() => {
-      expect(getByTestId("note-load-error").textContent).toContain(
-        "couldn't be read",
-      );
+      expect(getByTestId("note-load-error").textContent).toContain("couldn't be read");
     });
     // No editor mounts in the error state, so no autosave can recreate the file.
     expect(document.querySelector(".tiptap")).toBeNull();

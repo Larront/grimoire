@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildPageIndex,
-  findMatches,
-  rangesForMatch,
-  type ItemRange,
-} from "../lib/pdf/pdf-find";
+import { buildPageIndex, findMatches, rangesForMatch, type ItemRange } from "../lib/pdf/pdf-find";
 
 describe("buildPageIndex", () => {
   it("concatenates items and records each item's start offset", () => {
@@ -57,9 +52,7 @@ describe("rangesForMatch", () => {
   it("maps a match inside a single item to one range", () => {
     const index = buildPageIndex(["The quick fox"]);
     const [match] = findMatches(index, "quick");
-    expect(rangesForMatch(index, match)).toEqual<ItemRange[]>([
-      { itemIndex: 0, from: 4, to: 9 },
-    ]);
+    expect(rangesForMatch(index, match)).toEqual<ItemRange[]>([{ itemIndex: 0, from: 4, to: 9 }]);
   });
 
   it("splits a match that spans two items into a range per item", () => {

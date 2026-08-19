@@ -35,9 +35,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 async function emitContentChanged(path: string) {
   await act(async () => {
-    (listeners["note:content-changed"] ?? []).forEach((cb) =>
-      cb({ payload: { path } }),
-    );
+    (listeners["note:content-changed"] ?? []).forEach((cb) => cb({ payload: { path } }));
   });
 }
 
@@ -88,9 +86,7 @@ async function openNote() {
   await act(() => notes.load());
   const utils = render(AppShell);
   await waitFor(() =>
-    expect(utils.getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    ),
+    expect(utils.getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body"),
   );
   return utils;
 }
@@ -104,9 +100,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
     await emitContentChanged("Aldric.md");
 
     await waitFor(() =>
-      expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-        "External edit",
-      ),
+      expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("External edit"),
     );
     expect(queryByTestId("conflict-banner")).toBeNull();
   });
@@ -120,9 +114,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
 
     await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
     // Buffer untouched — the editor was not reseeded from disk.
-    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    );
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
     // Autosave is frozen so a queued edit can't clobber the external change
     // on disk while the banner waits for a choice (issue #129).
     expect(editorCalls.pause).toBeGreaterThanOrEqual(1);
@@ -140,9 +132,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
     await act(() => getByTestId("conflict-reload").click());
 
     await waitFor(() =>
-      expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-        "External edit",
-      ),
+      expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("External edit"),
     );
     expect(queryByTestId("conflict-banner")).toBeNull();
     // The stale buffer is dropped, not flushed to disk, on reload.
@@ -160,9 +150,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
 
     expect(queryByTestId("conflict-banner")).toBeNull();
     // The buffer is kept — the editor was never reseeded from disk.
-    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    );
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
     // Autosave resumes so the kept buffer is written to disk (not left frozen).
     expect(editorCalls.resume).toBeGreaterThanOrEqual(1);
   });

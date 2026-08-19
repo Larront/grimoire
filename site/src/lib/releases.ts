@@ -50,19 +50,13 @@ function resolvePlatforms(assets: GithubAsset[]): Platform[] {
   const msi = find((n) => isInstaller(n) && lower(n).endsWith(".msi"));
   const exe = find((n) => isInstaller(n) && lower(n).endsWith(".exe"));
   const dmgArm = find(
-    (n) =>
-      isInstaller(n) &&
-      lower(n).includes("aarch64") &&
-      lower(n).endsWith(".dmg"),
+    (n) => isInstaller(n) && lower(n).includes("aarch64") && lower(n).endsWith(".dmg"),
   );
   const dmgIntel = find(
-    (n) =>
-      isInstaller(n) && lower(n).includes("x64") && lower(n).endsWith(".dmg"),
+    (n) => isInstaller(n) && lower(n).includes("x64") && lower(n).endsWith(".dmg"),
   );
   const deb = find((n) => isInstaller(n) && lower(n).endsWith(".deb"));
-  const appimage = find(
-    (n) => isInstaller(n) && lower(n).endsWith(".appimage"),
-  );
+  const appimage = find((n) => isInstaller(n) && lower(n).endsWith(".appimage"));
 
   const platforms: Platform[] = [];
 
@@ -77,8 +71,7 @@ function resolvePlatforms(assets: GithubAsset[]): Platform[] {
     });
 
   const macos: Asset[] = [];
-  if (dmgArm)
-    macos.push({ label: "Apple Silicon", detail: ".dmg", url: dmgArm });
+  if (dmgArm) macos.push({ label: "Apple Silicon", detail: ".dmg", url: dmgArm });
   if (dmgIntel) macos.push({ label: "Intel", detail: ".dmg", url: dmgIntel });
   if (macos.length)
     platforms.push({
@@ -89,10 +82,8 @@ function resolvePlatforms(assets: GithubAsset[]): Platform[] {
 
   const linux: Asset[] = [];
   if (deb) linux.push({ label: "Debian / Ubuntu", detail: ".deb", url: deb });
-  if (appimage)
-    linux.push({ label: "AppImage", detail: "universal", url: appimage });
-  if (linux.length)
-    platforms.push({ os: "Linux", note: "x86-64", assets: linux });
+  if (appimage) linux.push({ label: "AppImage", detail: "universal", url: appimage });
+  if (linux.length) platforms.push({ os: "Linux", note: "x86-64", assets: linux });
 
   return platforms;
 }
@@ -101,9 +92,7 @@ const FALLBACK: Platform[] = [
   {
     os: "Windows",
     note: "Windows 10 & 11 · 64-bit",
-    assets: [
-      { label: "Get on GitHub", detail: ".msi / .exe", url: RELEASES_PAGE },
-    ],
+    assets: [{ label: "Get on GitHub", detail: ".msi / .exe", url: RELEASES_PAGE }],
   },
   {
     os: "macOS",
@@ -149,18 +138,15 @@ const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function fetchLatest(token: string | undefined): Promise<GithubRelease> {
-  const res = await fetch(
-    `https://api.github.com/repos/${REPO}/releases/latest`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        // Ask the CDN for a fresh answer rather than whatever it last stored.
-        // On its own this is not enough — hence the retry — but it costs nothing.
-        "Cache-Control": "no-cache",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      // Ask the CDN for a fresh answer rather than whatever it last stored.
+      // On its own this is not enough — hence the retry — but it costs nothing.
+      "Cache-Control": "no-cache",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  );
+  });
   if (!res.ok) throw new Error(`GitHub API ${res.status} ${res.statusText}`);
   return (await res.json()) as GithubRelease;
 }

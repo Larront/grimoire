@@ -28,13 +28,7 @@ export interface Map {
   modified_at: string;
 }
 
-export type PinShape =
-  | "circle"
-  | "pin"
-  | "diamond"
-  | "headstone"
-  | "shield"
-  | "banner";
+export type PinShape = "circle" | "pin" | "diamond" | "headstone" | "shield" | "banner";
 
 export type PinIcon =
   | "star"

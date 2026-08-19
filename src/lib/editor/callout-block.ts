@@ -67,16 +67,66 @@ export interface CalloutTypeSpec {
 }
 
 export const CALLOUT_TYPES: readonly CalloutTypeSpec[] = [
-  { type: "note", label: "Note", icon: "StickyNote", keywords: ["callout", "aside", "remark"] },
-  { type: "info", label: "Info", icon: "Info", keywords: ["callout", "information"] },
-  { type: "tip", label: "Tip", icon: "Lightbulb", keywords: ["callout", "hint", "advice"] },
-  { type: "warning", label: "Warning", icon: "TriangleAlert", keywords: ["callout", "caution"] },
-  { type: "danger", label: "Danger", icon: "OctagonAlert", keywords: ["callout", "error", "deadly"] },
-  { type: "question", label: "Question", icon: "CircleQuestionMark", keywords: ["callout", "faq", "unknown"] },
-  { type: "example", label: "Example", icon: "ListChecks", keywords: ["callout", "sample"] },
-  { type: "quote", label: "Quote", icon: "Quote", keywords: ["callout", "cite", "saying"] },
-  { type: "read-aloud", label: "Read Aloud", icon: "Speech", keywords: ["callout", "boxed", "text", "players"] },
-  { type: "encounter", label: "Encounter", icon: "Swords", keywords: ["callout", "fight", "combat", "monsters"] },
+  {
+    type: "note",
+    label: "Note",
+    icon: "StickyNote",
+    keywords: ["callout", "aside", "remark"],
+  },
+  {
+    type: "info",
+    label: "Info",
+    icon: "Info",
+    keywords: ["callout", "information"],
+  },
+  {
+    type: "tip",
+    label: "Tip",
+    icon: "Lightbulb",
+    keywords: ["callout", "hint", "advice"],
+  },
+  {
+    type: "warning",
+    label: "Warning",
+    icon: "TriangleAlert",
+    keywords: ["callout", "caution"],
+  },
+  {
+    type: "danger",
+    label: "Danger",
+    icon: "OctagonAlert",
+    keywords: ["callout", "error", "deadly"],
+  },
+  {
+    type: "question",
+    label: "Question",
+    icon: "CircleQuestionMark",
+    keywords: ["callout", "faq", "unknown"],
+  },
+  {
+    type: "example",
+    label: "Example",
+    icon: "ListChecks",
+    keywords: ["callout", "sample"],
+  },
+  {
+    type: "quote",
+    label: "Quote",
+    icon: "Quote",
+    keywords: ["callout", "cite", "saying"],
+  },
+  {
+    type: "read-aloud",
+    label: "Read Aloud",
+    icon: "Speech",
+    keywords: ["callout", "boxed", "text", "players"],
+  },
+  {
+    type: "encounter",
+    label: "Encounter",
+    icon: "Swords",
+    keywords: ["callout", "fight", "combat", "monsters"],
+  },
 ];
 
 /** The shipped type a word names, matched case-insensitively — or null. */
@@ -396,8 +446,7 @@ export const CalloutBlock = Blockquote.extend({
       calloutType: {
         default: null,
         parseHTML: (el) => (el as HTMLElement).getAttribute("data-callout"),
-        renderHTML: (attrs) =>
-          attrs.calloutType ? { "data-callout": attrs.calloutType } : {},
+        renderHTML: (attrs) => (attrs.calloutType ? { "data-callout": attrs.calloutType } : {}),
       },
       calloutTitle: {
         default: null,
@@ -408,8 +457,7 @@ export const CalloutBlock = Blockquote.extend({
       foldMarker: {
         default: null,
         parseHTML: (el) => (el as HTMLElement).getAttribute("data-callout-fold"),
-        renderHTML: (attrs) =>
-          attrs.foldMarker ? { "data-callout-fold": attrs.foldMarker } : {},
+        renderHTML: (attrs) => (attrs.foldMarker ? { "data-callout-fold": attrs.foldMarker } : {}),
       },
     };
   },
@@ -441,11 +489,7 @@ export const CalloutBlock = Blockquote.extend({
         : {}
       : {};
 
-    return [
-      "blockquote",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, display),
-      0,
-    ];
+    return ["blockquote", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, display), 0];
   },
 
   markdownTokenizer: {
@@ -486,7 +530,12 @@ export const CalloutBlock = Blockquote.extend({
         calloutTitle: attrs.calloutTitle,
         // The fallback for a header with no blockquote around it.
         tokens: [
-          { type: "paragraph", raw, text: raw, tokens: [{ type: "text", raw, text: raw }] },
+          {
+            type: "paragraph",
+            raw,
+            text: raw,
+            tokens: [{ type: "text", raw, text: raw }],
+          },
         ],
       };
     },

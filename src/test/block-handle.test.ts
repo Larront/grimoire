@@ -33,13 +33,7 @@ import {
   turnIntoKindOf,
   type BlockTarget,
 } from "$lib/editor/block-handle";
-import {
-  closeNote,
-  note,
-  saved,
-  targetOf,
-  targetOfNth,
-} from "./fixtures/note-editor";
+import { closeNote, note, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
 /**
  * A target the document no longer holds, in the shape a gesture held across an edit, an
@@ -219,10 +213,7 @@ describe("recognising the block a target was taken from", () => {
     // guard narrows a bystander to is a block indistinguishable from the original.
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     duplicateBlock(editor, targetOf(editor, "paragraph"));
-    const [first, second] = [
-      targetOf(editor, "paragraph"),
-      targetOfNth(editor, "paragraph", 1),
-    ];
+    const [first, second] = [targetOf(editor, "paragraph"), targetOfNth(editor, "paragraph", 1)];
 
     expect(first.node).toBe(second.node);
     deleteBlock(editor, first);
@@ -279,11 +270,7 @@ describe("deleting a block", () => {
   // controls out a removal of a duplicate rather than a removal of the only way out.
   it.each([
     ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
-    [
-      "a timeline",
-      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
-      "timelineBlock",
-    ],
+    ["a timeline", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```", "timelineBlock"],
     ["a scene block", "```scene\n# The Tavern\nId: 7\n```", "sceneBlock"],
   ])("takes %s, which has no removal control of its own", (_what, md, type) => {
     const editor = note(["Before.", "", md, "", "After."].join("\n"));
@@ -317,9 +304,13 @@ describe("duplicating a block", () => {
   });
 
   it("brings a callout's children along", () => {
-    const md = ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join(
-      "\n",
-    );
+    const md = [
+      "> [!encounter] The Ambush",
+      "> ```statblock",
+      "> # Kobold A",
+      "> HP: 5/5",
+      "> ```",
+    ].join("\n");
     const editor = note(md);
     duplicateBlock(editor, targetOf(editor, "blockquote"));
 
@@ -472,15 +463,11 @@ describe("naming the kind a block already is", () => {
     // The handle targets the *innermost* block, which for a list item is the paragraph
     // its text lives in — so the answer is only in the ancestry above it.
     const bullets = note("- the one with the sling");
-    expect(turnIntoKindOf(bullets.state.doc, targetOf(bullets, "paragraph"))).toBe(
-      "bulletList",
-    );
+    expect(turnIntoKindOf(bullets.state.doc, targetOf(bullets, "paragraph"))).toBe("bulletList");
     closeNote();
 
     const numbered = note("1. first light");
-    expect(turnIntoKindOf(numbered.state.doc, targetOf(numbered, "paragraph"))).toBe(
-      "orderedList",
-    );
+    expect(turnIntoKindOf(numbered.state.doc, targetOf(numbered, "paragraph"))).toBe("orderedList");
   });
 
   it("reads a plain quote as a quote, and a callout's own prose as a paragraph", () => {
@@ -493,9 +480,7 @@ describe("naming the kind a block already is", () => {
     closeNote();
 
     const callout = note("> [!encounter] The Ambush\n> Two kobolds.");
-    expect(turnIntoKindOf(callout.state.doc, targetOf(callout, "paragraph"))).toBe(
-      "paragraph",
-    );
+    expect(turnIntoKindOf(callout.state.doc, targetOf(callout, "paragraph"))).toBe("paragraph");
   });
 
   it("has no answer for a block that cannot be turned into anything", () => {
@@ -521,8 +506,6 @@ describe("naming the kind a block already is", () => {
     const editor = note("A sentence.");
     const target = targetOf(editor, "paragraph");
 
-    expect(
-      turnIntoKindOf(editor.state.doc, { pos: 9999, node: target.node }),
-    ).toBeNull();
+    expect(turnIntoKindOf(editor.state.doc, { pos: 9999, node: target.node })).toBeNull();
   });
 });

@@ -65,10 +65,7 @@
 // convention Grimoire has no opinion about.
 import { Node, mergeAttributes } from "@tiptap/core";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
-import {
-  createBlockNodeView,
-  type BlockView,
-} from "$lib/editor/node-view-connector";
+import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 import { fenceInfoFor, fenceParams } from "$lib/editor/fence-claim";
 import { blockDom, listAttr, textAttr } from "$lib/editor/block-attrs";
 import {
@@ -187,9 +184,7 @@ export function blankStatblockSection(): StatblockSection {
  */
 function isUnwrittenStatblock(block: Statblock): boolean {
   return (
-    block.rows.length === 1 &&
-    block.rows.every(isBlankLabelledRow) &&
-    block.sections.length === 0
+    block.rows.length === 1 && block.rows.every(isBlankLabelledRow) && block.sections.length === 0
   );
 }
 
@@ -252,9 +247,7 @@ export function entryBodyText(raw: string): string {
   return raw
     .split(/\r?\n/)
     .filter((line) => !isBlank(line))
-    .map((line, index) =>
-      index > 0 && SECTION_LINE.test(line) ? line.replace(/^## ?/, "") : line,
-    )
+    .map((line, index) => (index > 0 && SECTION_LINE.test(line) ? line.replace(/^## ?/, "") : line))
     .join("\n");
 }
 
@@ -291,8 +284,7 @@ export function parseStatblockBody(body: string): Statblock {
 
     let paragraph: string[] = [];
     const flush = () => {
-      if (paragraph.length)
-        sections[sections.length - 1].entries.push(entryOf(paragraph));
+      if (paragraph.length) sections[sections.length - 1].entries.push(entryOf(paragraph));
       paragraph = [];
     };
     while (i < lines.length && headingOf(lines[i]) === null) {
@@ -377,9 +369,7 @@ export function serializeStatblock(block: Statblock): string {
     if (lines.length) lines.push("");
     lines.push(section.heading ? `## ${section.heading}` : "##");
 
-    const entries = section.entries
-      .map(serializeEntry)
-      .filter((entry) => entry.length > 0);
+    const entries = section.entries.map(serializeEntry).filter((entry) => entry.length > 0);
     entries.forEach((entryLines, index) => {
       if (index > 0) lines.push("");
       lines.push(...entryLines);
@@ -394,10 +384,7 @@ export function serializeStatblock(block: Statblock): string {
   // `undefined`, and comparing that against the default would write `width=undefined`
   // into the GM's file. Anything unrecognised is the default, and the default is omitted.
   const width = asStatblockWidth(block.width);
-  const info = fenceInfoFor(
-    "statblock",
-    width === DEFAULT_STATBLOCK_WIDTH ? {} : { width },
-  );
+  const info = fenceInfoFor("statblock", width === DEFAULT_STATBLOCK_WIDTH ? {} : { width });
 
   return ["```" + info, ...lines, "```"].join("\n");
 }

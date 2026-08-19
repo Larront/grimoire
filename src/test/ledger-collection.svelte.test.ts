@@ -95,9 +95,7 @@ describe("createLedgerCollection", () => {
     // Two reads in flight at once is what a switch causes, and the outgoing ledger's is
     // the one likelier to be slow — it was asked first, and it can be answered last.
     const resolvers: ((v: string[]) => void)[] = [];
-    const fetch = vi.fn(
-      () => new Promise<string[]>((resolve) => resolvers.push(resolve)),
-    );
+    const fetch = vi.fn(() => new Promise<string[]>((resolve) => resolvers.push(resolve)));
     const collection = mount({ fetch });
 
     mockLedgerOpen = true;

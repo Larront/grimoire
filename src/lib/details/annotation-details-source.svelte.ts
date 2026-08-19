@@ -74,7 +74,9 @@ export function createAnnotationDetailsSource(
   }
 
   return {
-    get saveStatus() { return saves.status; },
+    get saveStatus() {
+      return saves.status;
+    },
     saveAnnotation,
     deleteAnnotation,
     retrySave: saves.retry,

@@ -72,9 +72,7 @@ describe("readWikiSuggestKey", () => {
       kind: "move",
       selectedIndex: 1,
     });
-    expect(
-      readWikiSuggestKey("ArrowDown", { itemCount: 3, selectedIndex: 2 }),
-    ).toEqual({
+    expect(readWikiSuggestKey("ArrowDown", { itemCount: 3, selectedIndex: 2 })).toEqual({
       kind: "move",
       selectedIndex: 0,
     });
@@ -88,9 +86,7 @@ describe("readWikiSuggestKey", () => {
   });
 
   it("accepts the highlighted note on Enter", () => {
-    expect(
-      readWikiSuggestKey("Enter", { itemCount: 3, selectedIndex: 2 }),
-    ).toEqual({
+    expect(readWikiSuggestKey("Enter", { itemCount: 3, selectedIndex: 2 })).toEqual({
       kind: "accept",
       selectedIndex: 2,
     });
@@ -112,12 +108,9 @@ describe("readWikiSuggestKey", () => {
   describe("an empty list claims only Escape", () => {
     const empty = { itemCount: 0, selectedIndex: 0 };
 
-    it.each(["ArrowDown", "ArrowUp", "Enter"])(
-      "leaves %s to the surface",
-      (key) => {
-        expect(readWikiSuggestKey(key, empty)).toBeNull();
-      },
-    );
+    it.each(["ArrowDown", "ArrowUp", "Enter"])("leaves %s to the surface", (key) => {
+      expect(readWikiSuggestKey(key, empty)).toBeNull();
+    });
 
     it("still dismisses on Escape", () => {
       expect(readWikiSuggestKey("Escape", empty)).toEqual({ kind: "dismiss" });
@@ -145,9 +138,7 @@ describe("searchWikiTargets", () => {
 
 describe("wikiMenuAnchor", () => {
   it("sits below the anchor, and remembers its top so a flip clears it", () => {
-    expect(
-      wikiMenuAnchor({ left: 10, bottom: 40, top: 24 } as DOMRect),
-    ).toEqual({
+    expect(wikiMenuAnchor({ left: 10, bottom: 40, top: 24 } as DOMRect)).toEqual({
       x: 10,
       y: 44,
       anchorTop: 24,

@@ -24,11 +24,7 @@
 // Nothing here cleans a value on the way in. It is not merely undesirable but
 // *impossible*: pools count in opposite directions, so a clean `HP: 3/12` is `12/12`
 // to one GM and `0/12` to another, and Grimoire cannot know which.
-import {
-  blankStatblock,
-  parseStatblockBody,
-  type Statblock,
-} from "$lib/editor/statblock-block";
+import { blankStatblock, parseStatblockBody, type Statblock } from "$lib/editor/statblock-block";
 
 /**
  * One saved shape. The fence is exactly what the block serialized to — delimiters and
@@ -134,8 +130,7 @@ export function fenceBody(text: string): string {
 // ─── Choosing a preset ────────────────────────────────────────────────────────
 
 /** The one name comparison this feature has: whole, trimmed, case-insensitive. */
-export const sameName = (a: string, b: string) =>
-  a.trim().toLowerCase() === b.trim().toLowerCase();
+export const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** Whether a name belongs to a shipped preset, and so is not the GM's to take. */
 export function isShippedName(name: string): boolean {
@@ -189,13 +184,8 @@ export function resolvePreset(
  * the argument exactly as typed — there is no name to prefer, and inventing a casing
  * for it would be Grimoire rewriting what the GM wrote.
  */
-export function statblockFromPreset(
-  preset: StatblockPreset | null,
-  argument: string,
-): Statblock {
-  const block = preset
-    ? parseStatblockBody(fenceBody(preset.fence))
-    : blankStatblock();
+export function statblockFromPreset(preset: StatblockPreset | null, argument: string): Statblock {
+  const block = preset ? parseStatblockBody(fenceBody(preset.fence)) : blankStatblock();
   const name = argument.trim();
   if (!name) return block;
   const matched = preset && sameName(preset.name, name);

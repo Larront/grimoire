@@ -29,17 +29,17 @@ refuses to own.
 > **A block's content lives in the note, written as plain markdown — unless it is a reference,
 > and a reference may only address something that already has a ledger path.**
 
-ADR-0007 drew the axis as *content vs reference*. That axis is real but decides nothing on its
+ADR-0007 drew the axis as _content vs reference_. That axis is real but decides nothing on its
 own, because Image is a reference too and Image is portable: `![alt](path)` against Scene's
 `<scene-block data-id="7">`. Same side of the axis, opposite outcomes. The rule above adds the
 clause that does the work — **a reference needs a path** — and with it the axis stops needing to
 be argued per block.
 
-| Block | Placement |
-|---|---|
-| Timeline, Infobox, Statblock, Callout | Content, in the note |
-| Image | Reference to a file in `ledger/images/` — has a path, legal |
-| Scene | Reference to a SQLite row — **no path, illegal, the documented exception** |
+| Block                                 | Placement                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| Timeline, Infobox, Statblock, Callout | Content, in the note                                                       |
+| Image                                 | Reference to a file in `ledger/images/` — has a path, legal                |
+| Scene                                 | Reference to a SQLite row — **no path, illegal, the documented exception** |
 
 The path clause is what gives the rule teeth. Without it "references are allowed" is a loophole
 any future block walks through, and Scene's raw id becomes precedent rather than debt. With it,
@@ -102,7 +102,7 @@ audit confirms holds. A collector for that would hide something no more complex 
 it, adding a layer to every future debugging session for nothing.
 
 It would also aim at the wrong cost, which is the risk worth naming: the expensive part of a new
-block is §4, not registration, and a registry would tidy the cheap part while *looking* like the
+block is §4, not registration, and a registry would tidy the cheap part while _looking_ like the
 pattern had done its job.
 
 The drift the pattern exists to fix is not evidence against this. All three shipped blocks are
@@ -116,10 +116,10 @@ Two pieces, and they are the pattern's only executable content. Everything else 
 **The node-view connector.** One implementation replacing three (~50 lines each). This is what
 makes the fourth and tenth block cheap; the rest of this ADR does not remove work.
 
-- **Two modes**, mirroring §5: *sealed* (`contenteditable="false"`, all state in attrs) and
-  *container* (a `contentDOM` whose children ProseMirror owns).
+- **Two modes**, mirroring §5: _sealed_ (`contenteditable="false"`, all state in attrs) and
+  _container_ (a `contentDOM` whose children ProseMirror owns).
 - **Attributes passed as one object**, not positionally. Today's positional `setAttrs(align,
-  width, src, alt)` re-breaks every consumer when an attribute is added.
+width, src, alt)` re-breaks every consumer when an attribute is added.
 - **One named hole for event handling.** Image must let `mousedown` through for node selection;
   Scene must hold a slider drag that leaves the node view. That divergence is essential and the
   connector must not paper over it.
@@ -136,10 +136,10 @@ what a row contains**. Each block draws its own row.
 
 Two distinct primitives are involved and are named apart because their memberships differ:
 
-| | Members |
-|---|---|
-| **Labelled Row** — the `Label: value` data shape, one parser, one serializer | Infobox rows, Statblock header rows (byte-identical per #150) |
-| **Row list** — order and controls, content-agnostic | Timeline events, Infobox rows, Statblock header rows, Statblock entries |
+|                                                                              | Members                                                                 |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Labelled Row** — the `Label: value` data shape, one parser, one serializer | Infobox rows, Statblock header rows (byte-identical per #150)           |
+| **Row list** — order and controls, content-agnostic                          | Timeline events, Infobox rows, Statblock header rows, Statblock entries |
 
 Timeline needs the second and not the first, which is the tell that one primitive would half-fit
 four places.
@@ -155,7 +155,7 @@ reference implementation to extract from rather than invent.
   Infobox, Statblock.
 - **Container** — real ProseMirror children. Callout.
 
-The provisional third shape (*typed container*, children constrained to one node type) is
+The provisional third shape (_typed container_, children constrained to one node type) is
 **dropped, not deferred** — #151 dissolved the Encounter block that was its only motivation.
 
 ADR-0007 deferred nested content because Timeline would have needed holes built from nothing.
@@ -179,12 +179,12 @@ is stated so the next block author must answer it out loud, rather than reaching
 habit — a mode is the most expensive thing a block can add, doubling its states and needing a way
 into and out of each.
 
-Two things *are* universal, generalised here from the tickets that decided them:
+Two things _are_ universal, generalised here from the tickets that decided them:
 
 - **Posture never serializes.** Mode, collapse and selection are view state; document state is what
   the GM carries to another device and reads correctly in Obsidian
   ([#150](https://github.com/Larront/grimoire/issues/150)). Scene's `expanded` is the outlier
-  (closed — see *Amendments*).
+  (closed — see _Amendments_).
 - **Every mutation is one undo.** A block that changes the document from its view starts its own
   undo group, because `prosemirror-history` groups adjacent steps inside 500 ms and would otherwise
   fold a play-state change into an unrelated prose edit (#153).
@@ -201,7 +201,7 @@ which is forced by there being no schema in a fence to consult.
 A block must not write note bytes by any route but the editor (audit constraints 3 and 4). Scene's
 out-of-band SQLite writes are tolerable only because scene slots are not note content; the same
 route for note content would land writes while a Conflict Banner is up. (Amended — the rule now
-reads *by any route but the editor or the note-rename rewrite path*; see *Amendments*.)
+reads _by any route but the editor or the note-rename rewrite path_; see _Amendments_.)
 
 ### 8. What the pattern does not own
 
@@ -226,8 +226,8 @@ Named as seams, because a pattern that owns everything becomes a framework nobod
   comprehension — any surface may parse rows from the document in front of it; nothing may record
   a row's label or value outside that note.
 - **Text and links inside a block.** One sentence, and it belongs to
-  [#156](https://github.com/Larront/grimoire/issues/156)'s primitives rather than here: *a block's
-  free-text values are Linked Text Fields; a block never renders or resolves a wikilink itself.*
+  [#156](https://github.com/Larront/grimoire/issues/156)'s primitives rather than here: _a block's
+  free-text values are Linked Text Fields; a block never renders or resolves a wikilink itself._
 
 ### 9. Membership
 
@@ -264,7 +264,7 @@ pattern is a contract about how a block behaves in a GM's file, not a code-shari
 
 - **Scene is out of pattern until migrated**, on the serialization rule and on `expanded` being view
   state persisted into the document. It has no tests, making it the riskiest change the map proposes;
-  characterisation tests before migration are #155's call. (Both closed — see *Amendments*.)
+  characterisation tests before migration are #155's call. (Both closed — see _Amendments_.)
 - **Two pieces of machinery must exist before Infobox is built**, or the pattern ships as prose and
   the fourth block copy-pastes the third.
 - **The connector's event-handling hole is a deliberate hole.** A later attempt to close it "for
@@ -283,7 +283,7 @@ pattern is a contract about how a block behaves in a GM's file, not a code-shari
 
 ### 2026-08-03 — Scene's migration shipped ([#185](https://github.com/Larront/grimoire/issues/185))
 
-The decision above is unchanged; three statements in it described a *pending* state that has now
+The decision above is unchanged; three statements in it described a _pending_ state that has now
 resolved, and one rule is widened. The reasoning is left as written — it is the record of what was
 argued — so this section says what is no longer true rather than editing the argument.
 
@@ -292,13 +292,13 @@ document; mixer collapse is view state, and collapsing writes no bytes. `<scene-
 — cited in §1 as the evidence that opaque HTML was avoidable, and still the honest description of
 what Scene wrote when this ADR was accepted — is now a ` ```scene ` fence carrying the id and the
 scene's name. §1's table row stands unchanged and on purpose: a scene is still a SQLite row with no
-ledger path, so it is still **the documented exception**. The fence makes the reference *legible,
-not legal*, and recording this ticket as bringing Scene into conformance would be wrong.
+ledger path, so it is still **the documented exception**. The fence makes the reference _legible,
+not legal_, and recording this ticket as bringing Scene into conformance would be wrong.
 
 **§7's write rule is widened, narrowly.** A scene rename has to rewrite the name cached in every
 note referencing it — a copy with an owner elsewhere is either synced or lying — so note bytes are
 now written by one more route: `note_mutation::commit_backlink_rewrites`, the batched
-write-and-reconcile a *note* rename's backlink rewrites already used. That path predates this ADR
+write-and-reconcile a _note_ rename's backlink rewrites already used. That path predates this ADR
 and §7 never named it, which is the sense in which this is a clarification as much as a widening:
 the rule's target is a **block writing through a channel of its own**, and adding a caller to the
 one sanctioned non-editor writer is not that. What the rule keeps forbidding is what the audit
@@ -323,22 +323,22 @@ being contradicted.
 **One table now declares each block's word and icon**
 ([#220](https://github.com/Larront/grimoire/issues/220)). The slash menu, the gutter
 handle's "Turn into" section and the handle's accessible label named the same blocks
-separately, with a comment in the second *asserting* they agreed and nothing keeping it.
+separately, with a comment in the second _asserting_ they agreed and nothing keeping it.
 `BLOCK_VOCABULARY` (`block-vocabulary.ts`) is that comment as data, and `BLOCK_WORDS` is
 derived from it.
 
 This is **not** the registry §3 rejects, and the distinction is the reason it is worth
 recording. §3's argument is about node specs, markdown claims, slash entries and node
-views — a collector for those would tidy the *cheap* part of a new block while hiding the
+views — a collector for those would tidy the _cheap_ part of a new block while hiding the
 expensive one. Fourteen display strings are not that: nothing about a block's behaviour
 goes through this table, and the failure it prevents — a GM meeting one block under two
 names — is not a failure a checklist can catch. The icon names are typed against the icon
 map, so a typo is now a build error rather than a menu item drawn with no glyph.
 
-It does cross §3's *"One directory. Everything block-specific lives in it"*, and knowingly:
+It does cross §3's _"One directory. Everything block-specific lives in it"_, and knowingly:
 a word and an icon are not block-specific in the sense that clause protects. That clause
 keeps a block's **implementation** in one place so a new one can be read and deleted whole;
-these strings belong to the *menus*, which are editor chrome no block owns, and neither
+these strings belong to the _menus_, which are editor chrome no block owns, and neither
 menu could read them from fourteen directories without a collector of exactly the kind §3
 refuses. A block's directory still holds everything that makes it work.
 
@@ -349,8 +349,8 @@ Image kept theirs, which is §8's drift at the level of a single control. Both a
 the statblock's control row is one button shorter in both modes.
 
 **Timeline's values are Linked Text Fields** ([#214](https://github.com/Larront/grimoire/issues/214)).
-§8's sentence — *a block's free-text values are Linked Text Fields; a block never renders
-or resolves a wikilink itself* — was true of Infobox, Statblock and Callout and false of
+§8's sentence — _a block's free-text values are Linked Text Fields; a block never renders
+or resolves a wikilink itself_ — was true of Infobox, Statblock and Callout and false of
 Timeline, which built `data-wiki-link` spans as an HTML string for `{@html}` and asked the
 Link Resolver itself. `renderTimelineText` and its escaper are deleted, so the sentence now
 holds without exception.
@@ -363,7 +363,7 @@ field commits its own edit on blur.
 
 ### 2026-08-19 — The connector knows what a block holds ([#209](https://github.com/Larront/grimoire/issues/209))
 
-§4's *attributes passed as one object, not positionally* stands, and was too weak. It is a
+§4's _attributes passed as one object, not positionally_ stands, and was too weak. It is a
 claim about the **connector**, and it held: adding an attribute never re-broke the
 connector's signature. It was never a claim about the system, because the seam was untyped
 in both directions — `BlockAttrs = Record<string, unknown>` and `component: Component<any,
@@ -433,7 +433,7 @@ worth testing without rendering an input.
 
 Collapsing the two copies settled a behaviour they had quietly disagreed on. Both kept the
 item count at a minimum of one so a wrapping modulo stayed safe, and both therefore claimed
-the arrow keys and Enter while the menu was showing *no notes found* — swallowing, for a list
+the arrow keys and Enter while the menu was showing _no notes found_ — swallowing, for a list
 with no entries, a caret move in prose and a line break in a field. **An empty list now claims
-only Escape.** The menu still draws, because *no notes found* is the useful answer to a query
+only Escape.** The menu still draws, because _no notes found_ is the useful answer to a query
 that matched nothing; it simply stops intercepting keys it has nothing to do with.

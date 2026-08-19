@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { filterCommands, slashArgument } from "$lib/editor/slash-command";
 
-const labels = (query: string) =>
-  filterCommands(query).map((item) => item.label);
+const labels = (query: string) => filterCommands(query).map((item) => item.label);
 
 // ── The menu without an argument ─────────────────────────────────────────────
 

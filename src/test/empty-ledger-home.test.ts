@@ -22,7 +22,7 @@ const NOTE = {
   modified_at: "2026-01-01T00:00:00Z",
 };
 
-function mockOpenLedger(noteList: typeof NOTE[] = []) {
+function mockOpenLedger(noteList: (typeof NOTE)[] = []) {
   vi.mocked(invoke).mockImplementation(async (cmd: string) => {
     if (cmd === "open_ledger")
       return {

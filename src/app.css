@@ -809,9 +809,7 @@
    A flex row rather than a grid, because the blocks are not a matrix: they are as many as
    the GM put in the box, at whatever widths they chose, and a wrapping row is the one of
    the two that does not invent a column count on their behalf. */
-.tiptap
-  .callout-body
-  > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
+.tiptap .callout-body > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1089,11 +1087,7 @@ input[type="range"]:disabled {
   --normal-text: var(--foreground);
   /* 12%, mixed in oklab, matching how the callout backgrounds this borrows its
      grammar from are mixed. */
-  --success-bg: color-mix(
-    in oklab,
-    var(--success) 12%,
-    var(--background-elevated)
-  );
+  --success-bg: color-mix(in oklab, var(--success) 12%, var(--background-elevated));
   --success-text: var(--success);
   --error-bg: color-mix(in oklab, var(--error) 12%, var(--background-elevated));
   --error-text: var(--error);
@@ -1177,18 +1171,14 @@ input[type="range"]:disabled {
    still unmistakably an error from the circle-x, the spine and the red cast. The
    status was never carried by the text colour anyway — DESIGN.md §6 pairs every
    error and success with an icon precisely because colour alone is not a cue. */
-[data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]
-  [data-title] {
+[data-sonner-toaster] [data-sonner-toast][data-rich-colors][data-styled="true"] [data-title] {
   color: var(--foreground);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
 }
 
-[data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]
-  [data-description] {
+[data-sonner-toaster] [data-sonner-toast][data-rich-colors][data-styled="true"] [data-description] {
   color: var(--foreground-muted);
   font-size: 13px;
   font-weight: 400;
@@ -1200,9 +1190,7 @@ input[type="range"]:disabled {
    density changes space, not scale (DESIGN.md, The Fixed Scale Rule) — which is
    why the height has a floor: at dense, `--row-h - 8px` is 20px and a 13px
    label at 1.4 line-height has under a pixel of air above and below it. */
-[data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]
-  [data-button] {
+[data-sonner-toaster] [data-sonner-toast][data-rich-colors][data-styled="true"] [data-button] {
   height: max(24px, calc(var(--row-h) - 8px));
   padding: 0 10px;
   border-radius: var(--radius-structural);
@@ -1256,8 +1244,7 @@ input[type="range"]:disabled {
    356px toast squeezes the sentence to three cramped lines and reads as a
    crowded row of equals; stacked, the question is a question and the answers
    are answers. The content claiming the full row is what forces the wrap. */
-[data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-cancel]) {
+[data-sonner-toaster] [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-cancel]) {
   flex-wrap: wrap;
   row-gap: 12px;
   align-items: flex-start;
@@ -1274,16 +1261,12 @@ input[type="range"]:disabled {
    and stops reading as the title's mark. 1px is half the difference between the
    16px icon and the title's 18.2px line box. */
 [data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]:has(
-    [data-description]
-  ) {
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-description]) {
   align-items: flex-start;
 }
 
 [data-sonner-toaster]
-  [data-sonner-toast][data-rich-colors][data-styled="true"]:has(
-    [data-description]
-  )
+  [data-sonner-toast][data-rich-colors][data-styled="true"]:has([data-description])
   [data-icon] {
   margin-top: 1px;
 }
@@ -1321,8 +1304,7 @@ input[type="range"]:disabled {
 }
 
 /* The close button now sits inside the toast, so the text needs to clear it. */
-[data-sonner-toaster]
-  [data-sonner-toast][data-styled="true"]:has([data-close-button]) {
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"]:has([data-close-button]) {
   padding-right: 40px;
 }
 

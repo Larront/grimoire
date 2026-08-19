@@ -62,7 +62,11 @@ describe("a Timeline draws its events", () => {
 
   it("draws a wikilink in any of the three as a live link", () => {
     const { container } = timeline([
-      { date: "[[The Long Winter]]", title: "[[Aldric]] rides", description: "Toward [[Harbor]]." },
+      {
+        date: "[[The Long Winter]]",
+        title: "[[Aldric]] rides",
+        description: "Toward [[Harbor]].",
+      },
     ]);
     const links = [...container.querySelectorAll("[data-wiki-link]")];
 
@@ -124,7 +128,9 @@ describe("editing an event's values", () => {
     await openField(getByLabelText("Event 1 description"));
     const input = getByLabelText("Event 1 description");
     expect(input.tagName).toBe("TEXTAREA");
-    await fireEvent.input(input, { target: { value: "Two lines.\n\nAnd a third." } });
+    await fireEvent.input(input, {
+      target: { value: "Two lines.\n\nAnd a third." },
+    });
     await fireEvent.blur(input);
 
     expect(committed(onCommit)[0].description).toBe("Two lines.\n\nAnd a third.");

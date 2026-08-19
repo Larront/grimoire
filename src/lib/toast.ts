@@ -60,21 +60,14 @@ export function toastImportFailures(
  * and recoverable (ADR-0014). It rewrites nothing without consent: *Update* runs
  * `onUpdate`; *Leave as-is* just dismisses.
  */
-export function toastExternalMoveLinks(
-  oldName: string,
-  count: number,
-  onUpdate: () => void,
-) {
-  toast(
-    `'${oldName}' moved externally. Update ${count} backlink${count === 1 ? "" : "s"}?`,
-    {
-      duration: Infinity,
-      action: { label: "Update", onClick: onUpdate },
-      // Clicking cancel dismisses the toast; there is no backend call — leaving
-      // the backlinks as they are on disk is a safe, non-destructive choice.
-      cancel: { label: "Leave as-is", onClick: () => {} },
-    },
-  );
+export function toastExternalMoveLinks(oldName: string, count: number, onUpdate: () => void) {
+  toast(`'${oldName}' moved externally. Update ${count} backlink${count === 1 ? "" : "s"}?`, {
+    duration: Infinity,
+    action: { label: "Update", onClick: onUpdate },
+    // Clicking cancel dismisses the toast; there is no backend call — leaving
+    // the backlinks as they are on disk is a safe, non-destructive choice.
+    cancel: { label: "Leave as-is", onClick: () => {} },
+  });
 }
 
 /**
@@ -119,17 +112,14 @@ export function toastMigrationReport(report: {
   });
 
   if (failed > 0) {
-    toast.error(
-      `${failed} note${failed === 1 ? "" : "s"} couldn't be updated`,
-      {
-        id: "format-migration",
-        duration: Infinity,
-        closeButton: true,
-        ...body(
-          `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them:`,
-        ),
-      },
-    );
+    toast.error(`${failed} note${failed === 1 ? "" : "s"} couldn't be updated`, {
+      id: "format-migration",
+      duration: Infinity,
+      closeButton: true,
+      ...body(
+        `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them:`,
+      ),
+    });
     return;
   }
 
@@ -137,9 +127,7 @@ export function toastMigrationReport(report: {
     id: "format-migration",
     duration: ERROR_DURATION,
     closeButton: true,
-    ...body(
-      "Copies of them from before the change, and a report of what changed, are here:",
-    ),
+    ...body("Copies of them from before the change, and a report of what changed, are here:"),
   });
 }
 
@@ -170,17 +158,14 @@ export function toastUnlinkedPins(count: number, onShowPins: () => void) {
     toast.dismiss("unlinked-pins");
     return;
   }
-  toast(
-    `${count} pin${count === 1 ? "" : "s"} lost ${count === 1 ? "its" : "their"} note`,
-    {
-      id: "unlinked-pins",
-      duration: Infinity,
-      closeButton: true,
-      description:
-        "Some of this ledger's bookkeeping was repaired when it opened. Your notes are intact, but these pins need linking to them again.",
-      action: { label: "Show pins", onClick: onShowPins },
-    },
-  );
+  toast(`${count} pin${count === 1 ? "" : "s"} lost ${count === 1 ? "its" : "their"} note`, {
+    id: "unlinked-pins",
+    duration: Infinity,
+    closeButton: true,
+    description:
+      "Some of this ledger's bookkeeping was repaired when it opened. Your notes are intact, but these pins need linking to them again.",
+    action: { label: "Show pins", onClick: onShowPins },
+  });
 }
 
 /**

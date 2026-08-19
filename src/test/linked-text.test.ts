@@ -69,9 +69,7 @@ describe("splitLinkedText", () => {
   });
 
   it("hands markup back as text, because nothing downstream builds HTML", () => {
-    expect(splitLinkedText("<b>Ash</b> & co")).toEqual([
-      { kind: "text", text: "<b>Ash</b> & co" },
-    ]);
+    expect(splitLinkedText("<b>Ash</b> & co")).toEqual([{ kind: "text", text: "<b>Ash</b> & co" }]);
   });
 });
 

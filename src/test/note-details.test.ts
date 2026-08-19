@@ -1,7 +1,11 @@
 import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import NoteDetails from "../lib/components/NoteDetails.svelte";
-import type { AliasCollision, BacklinkNote, OutboundLink } from "../lib/components/NoteDetails.svelte";
+import type {
+  AliasCollision,
+  BacklinkNote,
+  OutboundLink,
+} from "../lib/components/NoteDetails.svelte";
 import type { Note } from "../lib/types/ledger";
 
 afterEach(() => {
@@ -34,7 +38,7 @@ describe("NoteDetails — rendering", () => {
 
   it("renders nothing when note is null", () => {
     const { container } = render(NoteDetails, { props: { note: null } });
-    expect(container.querySelector('[data-section]')).toBeNull();
+    expect(container.querySelector("[data-section]")).toBeNull();
   });
 
   it("section order is tags → aliases → backlinks → outbound → folder → modified", () => {
@@ -129,9 +133,7 @@ describe("NoteDetails — backlinks section", () => {
   });
 
   it("shows folder path in link-folder", () => {
-    const backlinks: BacklinkNote[] = [
-      { id: 2, path: "Characters/Bard.md", title: "Bard" },
-    ];
+    const backlinks: BacklinkNote[] = [{ id: 2, path: "Characters/Bard.md", title: "Bard" }];
     const { container } = render(NoteDetails, {
       props: { note: testNote, backlinks },
     });
@@ -184,9 +186,7 @@ describe("NoteDetails — backlinks section", () => {
 
   it("clicking backlink row calls onNavigateNote(id, title)", async () => {
     const onNavigateNote = vi.fn();
-    const backlinks: BacklinkNote[] = [
-      { id: 2, path: "Characters/Bard.md", title: "Bard" },
-    ];
+    const backlinks: BacklinkNote[] = [{ id: 2, path: "Characters/Bard.md", title: "Bard" }];
     const { container } = render(NoteDetails, {
       props: { note: testNote, backlinks, onNavigateNote },
     });
@@ -313,7 +313,12 @@ describe("NoteDetails — outbound links section", () => {
 
   it("expand state resets when note changes", async () => {
     const note1: Note = { ...testNote, id: 1 };
-    const note2: Note = { ...testNote, id: 2, path: "Notes/Other.md", title: "Other" };
+    const note2: Note = {
+      ...testNote,
+      id: 2,
+      path: "Notes/Other.md",
+      title: "Other",
+    };
     const outboundLinks: OutboundLink[] = Array.from({ length: 7 }, (_, i) => ({
       target_path: `Notes/Note${i}.md`,
       resolved_id: i + 10,

@@ -59,11 +59,36 @@ export interface BlockVocabularyEntry {
 }
 
 export const BLOCK_VOCABULARY: Record<BlockVocabularyKey, BlockVocabularyEntry> = {
-  paragraph: { label: "Paragraph", word: "paragraph", icon: "Pilcrow", node: "paragraph" },
-  heading1: { label: "Heading 1", word: "heading", icon: "Heading1", node: "heading" },
-  heading2: { label: "Heading 2", word: "heading", icon: "Heading2", node: "heading" },
-  heading3: { label: "Heading 3", word: "heading", icon: "Heading3", node: "heading" },
-  bulletList: { label: "Bullet List", word: "list", icon: "List", node: "bulletList" },
+  paragraph: {
+    label: "Paragraph",
+    word: "paragraph",
+    icon: "Pilcrow",
+    node: "paragraph",
+  },
+  heading1: {
+    label: "Heading 1",
+    word: "heading",
+    icon: "Heading1",
+    node: "heading",
+  },
+  heading2: {
+    label: "Heading 2",
+    word: "heading",
+    icon: "Heading2",
+    node: "heading",
+  },
+  heading3: {
+    label: "Heading 3",
+    word: "heading",
+    icon: "Heading3",
+    node: "heading",
+  },
+  bulletList: {
+    label: "Bullet List",
+    word: "list",
+    icon: "List",
+    node: "bulletList",
+  },
   orderedList: {
     label: "Numbered List",
     word: "numbered list",
@@ -73,12 +98,42 @@ export const BLOCK_VOCABULARY: Record<BlockVocabularyKey, BlockVocabularyEntry> 
   // The *ordinary* quote, not a typed callout: both are `blockquote` underneath, and a
   // callout is named by its own type word (see `blockLabel`).
   quote: { label: "Quote", word: "quote", icon: "Quote", node: "blockquote" },
-  codeBlock: { label: "Code Block", word: "code block", icon: "Code", node: "codeBlock" },
-  divider: { label: "Divider", word: "divider", icon: "Minus", node: "horizontalRule" },
-  scene: { label: "Ambient Scene", word: "scene", icon: "Music2", node: "sceneBlock" },
-  infobox: { label: "Infobox", word: "infobox", icon: "PanelRight", node: "infoboxBlock" },
-  statblock: { label: "Statblock", word: "statblock", icon: "Shield", node: "statblockBlock" },
-  timeline: { label: "Timeline", word: "timeline", icon: "CalendarDays", node: "timelineBlock" },
+  codeBlock: {
+    label: "Code Block",
+    word: "code block",
+    icon: "Code",
+    node: "codeBlock",
+  },
+  divider: {
+    label: "Divider",
+    word: "divider",
+    icon: "Minus",
+    node: "horizontalRule",
+  },
+  scene: {
+    label: "Ambient Scene",
+    word: "scene",
+    icon: "Music2",
+    node: "sceneBlock",
+  },
+  infobox: {
+    label: "Infobox",
+    word: "infobox",
+    icon: "PanelRight",
+    node: "infoboxBlock",
+  },
+  statblock: {
+    label: "Statblock",
+    word: "statblock",
+    icon: "Shield",
+    node: "statblockBlock",
+  },
+  timeline: {
+    label: "Timeline",
+    word: "timeline",
+    icon: "CalendarDays",
+    node: "timelineBlock",
+  },
   image: { label: "Image", word: "image", icon: "Image", node: "image" },
 };
 
@@ -109,7 +164,5 @@ export function nameAndIcon(block: BlockVocabularyKey): {
  */
 export const BLOCK_WORDS: Record<string, string> = {
   listItem: "list item",
-  ...Object.fromEntries(
-    Object.values(BLOCK_VOCABULARY).map(({ node, word }) => [node, word]),
-  ),
+  ...Object.fromEntries(Object.values(BLOCK_VOCABULARY).map(({ node, word }) => [node, word])),
 };

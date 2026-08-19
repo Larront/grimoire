@@ -145,9 +145,7 @@ describe("paneDetailState — ledger lifecycle", () => {
     await flush();
     await fireEvent.click(first.getByTestId("stub-pin-11"));
     await flush();
-    expect(
-      first.getByTestId("map-canvas-stub").getAttribute("data-selected-pin"),
-    ).toBe("11");
+    expect(first.getByTestId("map-canvas-stub").getAttribute("data-selected-pin")).toBe("11");
     cleanup();
 
     await openLedgerAt("/test/ledger-b");
@@ -158,9 +156,7 @@ describe("paneDetailState — ledger lifecycle", () => {
     const second = render(MapPane, { props: { mapId: MAP_ID, pane: "left" } });
     await flush();
 
-    expect(
-      second.getByTestId("map-canvas-stub").getAttribute("data-selected-pin"),
-    ).toBe("");
+    expect(second.getByTestId("map-canvas-stub").getAttribute("data-selected-pin")).toBe("");
   });
 
   it("keeps selections while the same ledger stays open", async () => {

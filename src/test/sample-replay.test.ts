@@ -22,7 +22,14 @@ function mockSampleInvoke(recents: (typeof RECENT_LEDGER)[] = []) {
     if (cmd === "get_recent_ledgers") return recents;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: SAMPLE_PATH, note_count: 3, scene_count: 0, map_count: 0, failed_imports: [], unlinked_pins: [] };
+      return {
+        path: SAMPLE_PATH,
+        note_count: 3,
+        scene_count: 0,
+        map_count: 0,
+        failed_imports: [],
+        unlinked_pins: [],
+      };
     if (cmd === "get_notes") return [];
     return null;
   });
@@ -91,17 +98,13 @@ describe("sample replay — command palette", () => {
 
   it("lists an 'Explore example world' command when searching", async () => {
     await openPaletteAndSearch("explore");
-    expect(
-      document.body.querySelector('[data-testid="cmd-explore-sample"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-explore-sample"]')).toBeTruthy();
   });
 
   it("'Explore example world' command calls exploreSample", async () => {
     await openPaletteAndSearch("explore");
 
-    const btn = document.body.querySelector(
-      '[data-testid="cmd-explore-sample"]',
-    ) as HTMLElement;
+    const btn = document.body.querySelector('[data-testid="cmd-explore-sample"]') as HTMLElement;
     expect(btn).toBeTruthy();
     await fireEvent.click(btn);
     await flush();

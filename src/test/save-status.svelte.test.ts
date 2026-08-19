@@ -92,7 +92,9 @@ describe("save-status machine — retry contract", () => {
       calls++;
       throw new Error("nope");
     });
-    await machine.run(async () => { calls++; });
+    await machine.run(async () => {
+      calls++;
+    });
     expect(machine.status).toBe("saved");
 
     await machine.retry();
@@ -133,7 +135,12 @@ describe("save-status machine — teardown", () => {
   it("writes no status for an attempt that settles after teardown", async () => {
     const machine = mount();
     let settle!: () => void;
-    const pending = machine.run(() => new Promise<void>((res) => { settle = res; }));
+    const pending = machine.run(
+      () =>
+        new Promise<void>((res) => {
+          settle = res;
+        }),
+    );
 
     cleanup!();
     cleanup = null;
@@ -145,7 +152,12 @@ describe("save-status machine — teardown", () => {
   it("writes no status for an attempt that fails after teardown", async () => {
     const machine = mount();
     let fail!: (e: Error) => void;
-    const pending = machine.run(() => new Promise<void>((_res, rej) => { fail = rej; }));
+    const pending = machine.run(
+      () =>
+        new Promise<void>((_res, rej) => {
+          fail = rej;
+        }),
+    );
 
     cleanup!();
     cleanup = null;

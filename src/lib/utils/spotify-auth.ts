@@ -20,10 +20,7 @@ export async function connectSpotify(): Promise<SpotifyAuthStatus> {
         const unlisten = await unlistenPromise;
         unlisten();
         try {
-          const result = await api.spotifyExchangeCode(
-            event.payload.code,
-            event.payload.state,
-          );
+          const result = await api.spotifyExchangeCode(event.payload.code, event.payload.state);
           resolve(result);
         } catch (e) {
           reject(e);

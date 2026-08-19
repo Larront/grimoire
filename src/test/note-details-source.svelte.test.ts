@@ -43,7 +43,12 @@ const noteA: Note = {
   modified_at: "2026-01-01T00:00:00Z",
 } as unknown as Note;
 
-const noteB: Note = { ...noteA, id: 2, path: "notes/harbor.md", title: "Harbor" } as Note;
+const noteB: Note = {
+  ...noteA,
+  id: 2,
+  path: "notes/harbor.md",
+  title: "Harbor",
+} as Note;
 
 type Responses = Record<string, unknown>;
 
@@ -99,7 +104,14 @@ describe("note Details Source — fetch fan-out", () => {
       get_note_aliases: ["The Captain"],
       get_alias_collisions: [{ alias: "The Captain", other_note_id: 9, other_note_title: "Ash" }],
       get_backlinks: [{ id: 3, path: "notes/log.md", title: "Log" }],
-      get_outbound_links: [{ target_path: "Harbor.md", resolved_id: 2, resolved_title: "Harbor", resolved_path: "notes/harbor.md" }],
+      get_outbound_links: [
+        {
+          target_path: "Harbor.md",
+          resolved_id: 2,
+          resolved_title: "Harbor",
+          resolved_path: "notes/harbor.md",
+        },
+      ],
       list_all_tags: ["npc", "allied", "place"],
     });
     const source = mount(() => noteA);
@@ -111,11 +123,16 @@ describe("note Details Source — fetch fan-out", () => {
     expect(source.backlinks).toHaveLength(1);
     expect(source.outboundLinks).toHaveLength(1);
     expect(source.allTags).toEqual(["npc", "allied", "place"]);
-    expect(callsFor("read_note_tags")[0][1]).toEqual({ notePath: "notes/aldric.md" });
+    expect(callsFor("read_note_tags")[0][1]).toEqual({
+      notePath: "notes/aldric.md",
+    });
   });
 
   it("clears all state when the note becomes null", async () => {
-    mockCommands({ read_note_tags: ["npc"], get_backlinks: [{ id: 3, path: "x", title: "X" }] });
+    mockCommands({
+      read_note_tags: ["npc"],
+      get_backlinks: [{ id: 3, path: "x", title: "X" }],
+    });
     let note = $state<Note | null>(noteA);
     const source = mount(() => note);
     await flush();
@@ -149,7 +166,9 @@ describe("note Details Source — fetch fan-out", () => {
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "read_note_tags") {
         if (args?.notePath === noteA.path) {
-          return new Promise((res) => { resolveA = res; });
+          return new Promise((res) => {
+            resolveA = res;
+          });
         }
         return Promise.resolve(["harbor-tag"]);
       }
@@ -205,7 +224,10 @@ describe("note Details Source — save-status machine", () => {
     const allTagsBefore = callsFor("list_all_tags").length;
 
     await source.saveTags(["npc"]);
-    expect(callsFor("write_note_tags")[0][1]).toEqual({ notePath: noteA.path, tags: ["npc"] });
+    expect(callsFor("write_note_tags")[0][1]).toEqual({
+      notePath: noteA.path,
+      tags: ["npc"],
+    });
     expect(callsFor("list_all_tags").length).toBe(allTagsBefore + 1);
     expect(source.saveStatus).toBe("saved");
 
@@ -263,7 +285,9 @@ describe("note Details Source — stale guards on the failure path (#202)", () =
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "read_note_tags") {
         if (args?.notePath === noteA.path) {
-          return new Promise((_res, rej) => { rejectA = rej; });
+          return new Promise((_res, rej) => {
+            rejectA = rej;
+          });
         }
         return Promise.resolve(["harbor-tag"]);
       }
@@ -292,7 +316,9 @@ describe("note Details Source — stale guards on the failure path (#202)", () =
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "get_note_aliases") {
         if (args?.noteId === noteA.id) {
-          return new Promise((_res, rej) => { rejectA = rej; });
+          return new Promise((_res, rej) => {
+            rejectA = rej;
+          });
         }
         return Promise.resolve(["Harbormaster"]);
       }
@@ -319,12 +345,25 @@ describe("note Details Source — stale guards on the failure path (#202)", () =
     mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "get_backlinks") {
-        if (args?.noteId === noteA.id) return new Promise((res) => { resolveA = res; });
+        if (args?.noteId === noteA.id)
+          return new Promise((res) => {
+            resolveA = res;
+          });
         return Promise.resolve([{ id: 7, path: "notes/dock.md", title: "Dock" }]);
       }
       if (cmd === "get_outbound_links") {
-        if (args?.noteId === noteA.id) return new Promise((_r, rej) => { rejectOutboundA = rej; });
-        return Promise.resolve([{ target_path: "Ash.md", resolved_id: null, resolved_title: null, resolved_path: null }]);
+        if (args?.noteId === noteA.id)
+          return new Promise((_r, rej) => {
+            rejectOutboundA = rej;
+          });
+        return Promise.resolve([
+          {
+            target_path: "Ash.md",
+            resolved_id: null,
+            resolved_title: null,
+            resolved_path: null,
+          },
+        ]);
       }
       return Promise.resolve(null);
     });
@@ -430,7 +469,9 @@ describe("note Details Source — teardown (#210)", () => {
     let rejectWrite!: (e: Error) => void;
     mocked.mockImplementation((cmd: string) => {
       if (cmd === "write_note_tags") {
-        return new Promise((_res, rej) => { rejectWrite = rej; });
+        return new Promise((_res, rej) => {
+          rejectWrite = rej;
+        });
       }
       return Promise.resolve(null);
     });

@@ -28,16 +28,11 @@ describe("File tree skeleton", () => {
     const { container } = render(AppShell);
 
     await waitFor(() => {
-      const skeletons = container.querySelectorAll(
-        '[data-sidebar="menu-skeleton"]',
-      );
-      if (skeletons.length === 0)
-        throw new Error("No file tree skeletons found");
+      const skeletons = container.querySelectorAll('[data-sidebar="menu-skeleton"]');
+      if (skeletons.length === 0) throw new Error("No file tree skeletons found");
       return skeletons;
     });
 
-    expect(
-      container.querySelectorAll('[data-sidebar="menu-skeleton"]').length,
-    ).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[data-sidebar="menu-skeleton"]').length).toBeGreaterThan(0);
   });
 });

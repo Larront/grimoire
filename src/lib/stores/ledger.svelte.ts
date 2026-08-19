@@ -85,9 +85,7 @@ function createLedgerStore() {
   // format (ADR-0017) — FormatMigrationDialog (also in the root layout) composes
   // its copy from this plan and offers Update/Cancel. Declining leaves it null
   // and the ledger closed: the refusal that put it here simply stands.
-  let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(
-    null,
-  );
+  let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(null);
 
   /** Applies a successful open_ledger result to store state and surfaces
    *  failed imports and snapshot recovery. */
@@ -150,10 +148,7 @@ function createLedgerStore() {
    *  beside it would say less than the dialog behind it. The rebuild prompt is
    *  left reporting, because a damaged database is a fault the GM should be told
    *  about whether or not they take the offer to repair it. */
-  async function routeOpenRefusal(
-    ledgerPath: string,
-    e: unknown,
-  ): Promise<boolean> {
+  async function routeOpenRefusal(ledgerPath: string, e: unknown): Promise<boolean> {
     const raw = String(e);
     if (raw.includes("ERR_DB_CORRUPT")) {
       corruptLedgerPath = ledgerPath;
@@ -163,9 +158,7 @@ function createLedgerStore() {
       // migrations that actually found work rather than written in advance.
       // A plan we cannot obtain means no prompt: the refusal stands, which is
       // the same place a decline leaves the GM.
-      const plan = await api.silent
-        .planFormatMigration(ledgerPath)
-        .catch(() => null);
+      const plan = await api.silent.planFormatMigration(ledgerPath).catch(() => null);
       if (plan) {
         formatMigration = { path: ledgerPath, plan };
         // The database side is settled by the time this refusal is reached, so

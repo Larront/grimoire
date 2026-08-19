@@ -68,7 +68,9 @@ describe("a Linked Text Field draws its value", () => {
   });
 
   it("draws the text around a link as text", () => {
-    const { getByLabelText } = field({ value: "ruled by [[Captain Ash]] since 812" });
+    const { getByLabelText } = field({
+      value: "ruled by [[Captain Ash]] since 812",
+    });
     expect(getByLabelText("Value")).toHaveTextContent("ruled by Captain Ash since 812");
   });
 
@@ -129,7 +131,9 @@ describe("a Linked Text Field is directly editable", () => {
   it("commits on Enter", async () => {
     const { getByLabelText, onCommit } = field({ value: "4,200" });
     await fireEvent.click(getByLabelText("Value"));
-    await fireEvent.input(getByLabelText("Value"), { target: { value: "4,300" } });
+    await fireEvent.input(getByLabelText("Value"), {
+      target: { value: "4,300" },
+    });
     await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter" });
 
     expect(onCommit).toHaveBeenCalledWith("4,300");
@@ -146,7 +150,9 @@ describe("a Linked Text Field is directly editable", () => {
   it("abandons the edit on Escape", async () => {
     const { getByLabelText, onCommit } = field({ value: "4,200" });
     await fireEvent.click(getByLabelText("Value"));
-    await fireEvent.input(getByLabelText("Value"), { target: { value: "nonsense" } });
+    await fireEvent.input(getByLabelText("Value"), {
+      target: { value: "nonsense" },
+    });
     await fireEvent.keyDown(getByLabelText("Value"), { key: "Escape" });
 
     expect(onCommit).not.toHaveBeenCalled();
@@ -171,9 +177,14 @@ describe("a Linked Text Field is directly editable", () => {
   it("holds the value to what the format can represent as the GM types", async () => {
     // A label's colon is the Labelled Row's separator, so the field that edits one
     // never lets a colon in — the restriction is the format's, applied at the field.
-    const { getByLabelText, onCommit } = field({ value: "Ruler", restrict: labelText });
+    const { getByLabelText, onCommit } = field({
+      value: "Ruler",
+      restrict: labelText,
+    });
     await fireEvent.click(getByLabelText("Value"));
-    await fireEvent.input(getByLabelText("Value"), { target: { value: "Ruler: styled" } });
+    await fireEvent.input(getByLabelText("Value"), {
+      target: { value: "Ruler: styled" },
+    });
     await fireEvent.blur(getByLabelText("Value"));
 
     expect(onCommit).toHaveBeenCalledWith("Ruler styled");
@@ -189,7 +200,9 @@ describe("typing [[ in a field offers notes to link", () => {
   async function openSuggestions(value = "Ruled by [[") {
     const rendered = field({ value: "Ruled by " });
     await fireEvent.click(rendered.getByLabelText("Value"));
-    await fireEvent.input(rendered.getByLabelText("Value"), { target: { value } });
+    await fireEvent.input(rendered.getByLabelText("Value"), {
+      target: { value },
+    });
     // The lookup is awaited inside the handler, so let its promise settle.
     await Promise.resolve();
     await Promise.resolve();

@@ -87,25 +87,19 @@ describe("a folder row", () => {
 
     const { container } = render(FileTree, { props: props(folderNode) });
 
-    expect(container.querySelector("button")!.getAttribute("data-state")).toBe(
-      "open",
-    );
+    expect(container.querySelector("button")!.getAttribute("data-state")).toBe("open");
   });
 
   it("stays open across a rebuild — a refresh must not close what the GM opened", async () => {
     const first = render(FileTree, { props: props(folderNode) });
     await fireEvent.click(first.container.querySelector("button")!);
-    expect(
-      first.container.querySelector("button")!.getAttribute("data-state"),
-    ).toBe("open");
+    expect(first.container.querySelector("button")!.getAttribute("data-state")).toBe("open");
 
     // What a refresh does: the old rows go, new ones are built from disk.
     cleanup();
     const rebuilt = render(FileTree, { props: props(folderNode) });
 
-    expect(
-      rebuilt.container.querySelector("button")!.getAttribute("data-state"),
-    ).toBe("open");
+    expect(rebuilt.container.querySelector("button")!.getAttribute("data-state")).toBe("open");
   });
 
   it("closes on click, and stays closed", async () => {
@@ -114,9 +108,7 @@ describe("a folder row", () => {
 
     await fireEvent.click(container.querySelector("button")!);
 
-    expect(container.querySelector("button")!.getAttribute("data-state")).toBe(
-      "closed",
-    );
+    expect(container.querySelector("button")!.getAttribute("data-state")).toBe("closed");
     expect(treeExpansion.isExpanded("World")).toBe(false);
   });
 });

@@ -71,7 +71,12 @@ beforeEach(() => {
     if (cmd === "create_note") {
       // Recreation inserts a fresh row with a NEW id, as the backend does.
       const a = args as { noteTitle: string; notePath: string };
-      const created: Note = { ...testNote, id: 2, title: a.noteTitle, path: a.notePath };
+      const created: Note = {
+        ...testNote,
+        id: 2,
+        title: a.noteTitle,
+        path: a.notePath,
+      };
       storeNotes = [created];
       return created;
     }
@@ -93,9 +98,7 @@ async function openNote() {
   await act(() => notes.load());
   const utils = render(AppShell);
   await waitFor(() =>
-    expect(utils.getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    ),
+    expect(utils.getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body"),
   );
   return utils;
 }
@@ -117,9 +120,7 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
 
     // The pane did NOT collapse to "Note not found" — the buffer is still shown.
     await waitFor(() => expect(getByTestId("deleted-banner")).toBeTruthy());
-    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    );
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
     expect(queryByTestId("note-load-error")).toBeNull();
   });
 
@@ -143,16 +144,20 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     // Recreated at the original path, then the buffer written into it.
     const calls = vi.mocked(invoke).mock.calls;
     const create = calls.find((c) => c[0] === "create_note");
-    expect(create?.[1]).toMatchObject({ noteTitle: "Aldric", notePath: "Aldric.md" });
+    expect(create?.[1]).toMatchObject({
+      noteTitle: "Aldric",
+      notePath: "Aldric.md",
+    });
     const write = calls.find((c) => c[0] === "write_note_content");
-    expect(write?.[1]).toMatchObject({ notePath: "Aldric.md", content: "Original body" });
+    expect(write?.[1]).toMatchObject({
+      notePath: "Aldric.md",
+      content: "Original body",
+    });
 
     // The tab followed the recreated note (new id); the banner cleared and the
     // editor remounted on the restored file.
     await waitFor(() => expect(queryByTestId("deleted-banner")).toBeNull());
-    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    );
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
   });
 
   it("'Close' closes the tab", async () => {
@@ -179,8 +184,6 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     // No delete banner, and the same editor buffer is still mounted (the id never
     // changed, so the pane wasn't torn down or reloaded).
     expect(queryByTestId("deleted-banner")).toBeNull();
-    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe(
-      "Original body",
-    );
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
   });
 });

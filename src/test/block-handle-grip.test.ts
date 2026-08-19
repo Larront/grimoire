@@ -248,9 +248,9 @@ describe("starting a drag from the grip", () => {
 
   it("declines a target the document no longer holds, and starts nothing", () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
-    expect(
-      startBlockDrag(editor, gone(editor, "paragraph"), fakeDataTransfer().transfer),
-    ).toBe(false);
+    expect(startBlockDrag(editor, gone(editor, "paragraph"), fakeDataTransfer().transfer)).toBe(
+      false,
+    );
     expect(editor.view.dragging).toBeNull();
   });
 
@@ -306,7 +306,17 @@ describe("every block can be picked up by the handle", () => {
     // Two fences of the same shape in one note: a position that drifted by one node would
     // pass every case above and still carry the wrong creature.
     const editor = note(
-      ["```statblock", "# Kobold A", "HP: 5/5", "```", "", "```statblock", "# Kobold B", "HP: 5/5", "```"].join("\n"),
+      [
+        "```statblock",
+        "# Kobold A",
+        "HP: 5/5",
+        "```",
+        "",
+        "```statblock",
+        "# Kobold B",
+        "HP: 5/5",
+        "```",
+      ].join("\n"),
     );
     startBlockDrag(editor, targetOfNth(editor, "statblockBlock", 1), fakeDataTransfer().transfer);
 
@@ -315,7 +325,9 @@ describe("every block can be picked up by the handle", () => {
 
   it("takes the callout's contents with it, because they are its children", () => {
     const editor = note(
-      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join("\n"),
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join(
+        "\n",
+      ),
     );
     startBlockDrag(editor, targetOf(editor, "blockquote"), fakeDataTransfer().transfer);
 

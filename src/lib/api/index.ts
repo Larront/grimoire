@@ -26,12 +26,10 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_EMPTY_NAME: "That needs a name.",
   ERR_BAD_NAME: "That name can't contain / or \\.",
   ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
-  ERR_UNSUPPORTED_IMAGE:
-    "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
+  ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
-  ERR_DB_LOCKED:
-    "Another program is using this ledger's database — close it and try again.",
+  ERR_DB_LOCKED: "Another program is using this ledger's database — close it and try again.",
   ERR_DB_CORRUPT: "This ledger's database is damaged.",
   // [[Ledger Format Version]] refusals (ADR-0017). Both directions of mismatch
   // refuse to open, so this copy is the whole GM-facing story for each.
@@ -41,8 +39,7 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   // toast whenever the dialog opens, because a dialog already forcing a decision
   // does not need a line of its own beside it. What survives here is the dead-end
   // case — the refusal stands and nothing else would say so.
-  ERR_FORMAT_MIGRATION_REQUIRED:
-    "This ledger's notes need updating before it can be opened.",
+  ERR_FORMAT_MIGRATION_REQUIRED: "This ledger's notes need updating before it can be opened.",
   // The backup is the one all-or-nothing step: it failed, so nothing was
   // rewritten, and the ledger is exactly as it was.
   ERR_FORMAT_BACKUP_FAILED:
@@ -114,10 +111,7 @@ const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
 
 /** Wrap every generated command with an on-failure behaviour, preserving types. */
-function wrap<C extends Record<string, AnyFn>>(
-  source: C,
-  onError: (error: unknown) => void,
-): C {
+function wrap<C extends Record<string, AnyFn>>(source: C, onError: (error: unknown) => void): C {
   const out = {} as Record<string, AnyFn>;
   for (const [name, fn] of Object.entries(source)) {
     // `name` widens to string through Object.entries; the Set stays narrowly

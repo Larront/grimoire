@@ -60,10 +60,7 @@ export type WikiSuggestVerdict =
  * themselves is finished, so it offers nothing — that is the deterministic escape hatch
  * from a loose match, matching prose's `[[target]]` input rule.
  */
-export function findWikiTrigger(
-  text: string,
-  caret: number,
-): WikiTrigger | null {
+export function findWikiTrigger(text: string, caret: number): WikiTrigger | null {
   const before = text.slice(0, caret);
   const start = before.lastIndexOf("[[");
   if (start === -1) return null;
@@ -79,9 +76,7 @@ export function findWikiTrigger(
  * search that cannot answer should show *no notes found* rather than break the keystroke
  * that asked.
  */
-export async function searchWikiTargets(
-  query: string,
-): Promise<NoteSearchResult[]> {
+export async function searchWikiTargets(query: string): Promise<NoteSearchResult[]> {
   try {
     return await api.searchNotes(query);
   } catch {
@@ -90,9 +85,7 @@ export async function searchWikiTargets(
 }
 
 /** Places the menu just under whatever it is anchored to. */
-export function wikiMenuAnchor(
-  rect: DOMRect | null | undefined,
-): WikiMenuAnchor {
+export function wikiMenuAnchor(rect: DOMRect | null | undefined): WikiMenuAnchor {
   return {
     x: rect?.left ?? 0,
     y: (rect?.bottom ?? 0) + 4,

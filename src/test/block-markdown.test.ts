@@ -66,8 +66,7 @@ describe("Timeline claims its fence", () => {
   });
 
   it("round-trips a timeline fence byte for byte", () => {
-    const md =
-      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\n```";
+    const md = "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\n```";
     expect(roundTrip(md)).toBe(md);
   });
 
@@ -187,7 +186,10 @@ describe("Infobox claims its fence", () => {
     ["a value holding a colon", "```infobox\nRuler: Ash, styled: the Grey\n```"],
     ["a title holding a colon", "```infobox\n# Harbor's End: the docks\n```"],
     ["a thumbnail", "```infobox\n![The harbour](images/harbor.png)\n```"],
-    ["a thumbnail under a title", "```infobox\n# Harbor's End\n![The harbour](images/harbor.png)\n```"],
+    [
+      "a thumbnail under a title",
+      "```infobox\n# Harbor's End\n![The harbour](images/harbor.png)\n```",
+    ],
     ["a thumbnail with no caption", "```infobox\n![](images/harbor.png)\n```"],
     ["a shielded title-shaped row", "```infobox\n#\n# The docks\n```"],
     ["a shielded image-shaped row", "```infobox\n![]()\n![a](images/a.png)\n```"],
@@ -291,7 +293,10 @@ describe("Statblock claims its fence", () => {
         heading: "Actions",
         entries: [
           { name: "Shortbow", body: "+4 to hit, 1d6+2 piercing." },
-          { name: "Nimble Escape", body: "Disengages or hides as a bonus action." },
+          {
+            name: "Nimble Escape",
+            body: "Disengages or hides as a bonus action.",
+          },
         ],
       },
     ]);
@@ -434,9 +439,7 @@ describe("Callout is a blockquote with a type", () => {
   });
 
   it("keeps the GM's casing of the type word", () => {
-    expect(onlyNode(read("> [!WaRnInG] Careful"), "blockquote").attrs?.calloutType).toBe(
-      "WaRnInG",
-    );
+    expect(onlyNode(read("> [!WaRnInG] Careful"), "blockquote").attrs?.calloutType).toBe("WaRnInG");
   });
 
   it("reads a fold marker without acting on the file", () => {
@@ -527,50 +530,29 @@ describe("Callout round-trips byte for byte", () => {
 
 describe("a callout holds arbitrary block content", () => {
   const CASES: [string, string][] = [
-    [
-      "two paragraphs",
-      "> [!note] The Ledger\n> First thought.\n>\n> Second thought.",
-    ],
+    ["two paragraphs", "> [!note] The Ledger\n> First thought.\n>\n> Second thought."],
     [
       "a bullet list",
       "> [!encounter] The Ambush\n> Four goblins:\n>\n> - one with a sling\n> - three with knives",
     ],
-    [
-      "a heading",
-      "> [!note] The Ledger\n> ## The terms\n>\n> Signed in ash.",
-    ],
-    [
-      "a timeline fence",
-      "> [!encounter] The Ambush\n> ```timeline\n> # Goblins strike\n> ```",
-    ],
+    ["a heading", "> [!note] The Ledger\n> ## The terms\n>\n> Signed in ash."],
+    ["a timeline fence", "> [!encounter] The Ambush\n> ```timeline\n> # Goblins strike\n> ```"],
     [
       "a timeline fence under a blank line",
       "> [!encounter] The Ambush\n>\n> ```timeline\n> # Goblins strike\n> ```",
     ],
-    [
-      "a python fence",
-      "> [!note] The Ledger\n> ```python\n> print('hello')\n> ```",
-    ],
+    ["a python fence", "> [!note] The Ledger\n> ```python\n> print('hello')\n> ```"],
     [
       "a nested callout",
       "> [!note] The Ledger\n> > [!warning] The bridge is out\n> > Mind the gap.",
     ],
-    [
-      "a nested ordinary quote",
-      "> [!note] The Ledger\n> > Someone else said it first.",
-    ],
-    [
-      "a wikilink",
-      "> [!read-aloud] The Ember Gate\n> The road runs on to [[Blackreach]].",
-    ],
+    ["a nested ordinary quote", "> [!note] The Ledger\n> > Someone else said it first."],
+    ["a wikilink", "> [!read-aloud] The Ember Gate\n> The road runs on to [[Blackreach]]."],
     [
       "an aligned image",
       "> [!read-aloud] The Ember Gate\n> ![portrait](images/a.png){align=left width=60%}",
     ],
-    [
-      "a horizontal rule",
-      "> [!note] The Ledger\n> Before.\n>\n> ---\n>\n> After.",
-    ],
+    ["a horizontal rule", "> [!note] The Ledger\n> Before.\n>\n> ---\n>\n> After."],
   ];
 
   it.each(CASES)("round-trips %s unchanged", (_what, md) => {
@@ -793,13 +775,12 @@ describe("Scene claims its fence", () => {
     expect(onlyNode(doc, "sceneBlock").attrs?.sceneId).toBe(null);
   });
 
-  it.each([
-    "```scene\n# Boss Battle\nId: 7\n```",
-    "```scene\nId: 7\n```",
-    "```scene\n```",
-  ])("round-trips %o byte for byte", (md) => {
-    expect(roundTrip(md)).toBe(md);
-  });
+  it.each(["```scene\n# Boss Battle\nId: 7\n```", "```scene\nId: 7\n```", "```scene\n```"])(
+    "round-trips %o byte for byte",
+    (md) => {
+      expect(roundTrip(md)).toBe(md);
+    },
+  );
 
   it("reads two scene fences in one note", () => {
     const md = [

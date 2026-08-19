@@ -86,7 +86,10 @@ export function classifyValue(value: string): PlayValue {
   if (TRACK.test(value)) {
     const marks: Mark[] = [];
     for (const mark of value.matchAll(MARK)) {
-      marks.push({ checked: mark[1].toLowerCase() === "x", label: mark[2].trim() });
+      marks.push({
+        checked: mark[1].toLowerCase() === "x",
+        label: mark[2].trim(),
+      });
     }
     return { kind: "track", marks };
   }

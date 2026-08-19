@@ -70,7 +70,10 @@ describe("parseStatblockBody", () => {
             heading: "Actions",
             entries: [
               { name: "Shortbow", body: "+4 to hit, 1d6+2 piercing." },
-              { name: "Nimble Escape", body: "Disengages or hides as a bonus action." },
+              {
+                name: "Nimble Escape",
+                body: "Disengages or hides as a bonus action.",
+              },
             ],
           },
         ],
@@ -135,9 +138,9 @@ describe("parseStatblockBody", () => {
 
   it("reads several sections, keeping the GM's order", () => {
     expect(
-      parseStatblockBody(body("## Traits", "Amphibious: It breathes water.", "", "## Actions", "Bite: 1d6")).sections.map(
-        (s) => s.heading,
-      ),
+      parseStatblockBody(
+        body("## Traits", "Amphibious: It breathes water.", "", "## Actions", "Bite: 1d6"),
+      ).sections.map((s) => s.heading),
     ).toEqual(["Traits", "Actions"]);
   });
 
@@ -167,15 +170,20 @@ describe("parseStatblockBody", () => {
 
   it("reads a paragraph with no colon on its first line as unnamed prose", () => {
     expect(
-      parseStatblockBody(body("## Legendary Actions", "The aboleth takes three actions.")).sections[0]
-        .entries,
+      parseStatblockBody(body("## Legendary Actions", "The aboleth takes three actions."))
+        .sections[0].entries,
     ).toEqual([{ name: "", body: "The aboleth takes three actions." }]);
   });
 
   it("reads a section preamble before its first named entry", () => {
     expect(
       parseStatblockBody(
-        body("## Legendary Actions", "It can take three, choosing from below.", "", "Detect: It makes a Wisdom check."),
+        body(
+          "## Legendary Actions",
+          "It can take three, choosing from below.",
+          "",
+          "Detect: It makes a Wisdom check.",
+        ),
       ).sections[0].entries,
     ).toEqual([
       { name: "", body: "It can take three, choosing from below." },
@@ -185,9 +193,9 @@ describe("parseStatblockBody", () => {
 
   it("reads a leading colon as unnamed prose whose first line holds one", () => {
     // The shield `serializeStatblock` writes; read here so the pair stays inverse.
-    expect(parseStatblockBody(body("## Lore", ": Rumour: the deep remembers.")).sections[0].entries).toEqual(
-      [{ name: "", body: "Rumour: the deep remembers." }],
-    );
+    expect(
+      parseStatblockBody(body("## Lore", ": Rumour: the deep remembers.")).sections[0].entries,
+    ).toEqual([{ name: "", body: "Rumour: the deep remembers." }]);
   });
 
   it("keeps lines before the first section in the header, however they read", () => {
@@ -275,14 +283,20 @@ describe("serializeStatblock", () => {
 
   it("writes an empty heading as a bare double hash", () => {
     expect(
-      serializeStatblock(record({ sections: [{ heading: "", entries: [{ name: "Bite", body: "1d6" }] }] })),
+      serializeStatblock(
+        record({
+          sections: [{ heading: "", entries: [{ name: "Bite", body: "1d6" }] }],
+        }),
+      ),
     ).toBe(body("```statblock", "##", "Bite: 1d6", "```"));
   });
 
   it("writes unnamed prose as itself", () => {
     expect(
       serializeStatblock(
-        record({ sections: [{ heading: "Lore", entries: [{ name: "", body: "It remembers." }] }] }),
+        record({
+          sections: [{ heading: "Lore", entries: [{ name: "", body: "It remembers." }] }],
+        }),
       ),
     ).toBe(body("```statblock", "## Lore", "It remembers.", "```"));
   });
@@ -293,7 +307,12 @@ describe("serializeStatblock", () => {
     expect(
       serializeStatblock(
         record({
-          sections: [{ heading: "Lore", entries: [{ name: "", body: "Rumour: the deep remembers." }] }],
+          sections: [
+            {
+              heading: "Lore",
+              entries: [{ name: "", body: "Rumour: the deep remembers." }],
+            },
+          ],
         }),
       ),
     ).toBe(body("```statblock", "## Lore", ": Rumour: the deep remembers.", "```"));
@@ -302,7 +321,9 @@ describe("serializeStatblock", () => {
   it("shields unnamed prose whose first line would read back as a section", () => {
     expect(
       serializeStatblock(
-        record({ sections: [{ heading: "Lore", entries: [{ name: "", body: "## Deeper" }] }] }),
+        record({
+          sections: [{ heading: "Lore", entries: [{ name: "", body: "## Deeper" }] }],
+        }),
       ),
     ).toBe(body("```statblock", "## Lore", ": ## Deeper", "```"));
   });
@@ -334,7 +355,9 @@ describe("serializeStatblock", () => {
   it("drops an entry the GM typed nothing into", () => {
     expect(
       serializeStatblock(
-        record({ sections: [{ heading: "Actions", entries: [{ name: "", body: "" }] }] }),
+        record({
+          sections: [{ heading: "Actions", entries: [{ name: "", body: "" }] }],
+        }),
       ),
     ).toBe("```statblock\n## Actions\n```");
   });
@@ -342,7 +365,9 @@ describe("serializeStatblock", () => {
   it("writes an entry with a name and no body as a bare label", () => {
     expect(
       serializeStatblock(
-        record({ sections: [{ heading: "Actions", entries: [{ name: "Bite", body: "" }] }] }),
+        record({
+          sections: [{ heading: "Actions", entries: [{ name: "Bite", body: "" }] }],
+        }),
       ),
     ).toBe(body("```statblock", "## Actions", "Bite:", "```"));
   });
@@ -376,9 +401,7 @@ describe("width on the fence", () => {
   });
 
   it("writes the width when it is not the default", () => {
-    expect(serializeStatblock(record({ width: "narrow" }))).toBe(
-      "```statblock width=narrow\n```",
-    );
+    expect(serializeStatblock(record({ width: "narrow" }))).toBe("```statblock width=narrow\n```");
   });
 
   it("writes the default for a block from before width existed", () => {
@@ -457,7 +480,10 @@ describe("a statblock round-trips byte for byte", () => {
             heading: "Actions",
             entries: [
               { name: "Shortbow", body: "+4 to hit, 1d6+2 piercing." },
-              { name: "Nimble Escape", body: "Disengages or hides as a bonus action." },
+              {
+                name: "Nimble Escape",
+                body: "Disengages or hides as a bonus action.",
+              },
             ],
           },
         ],
@@ -481,7 +507,12 @@ describe("a statblock round-trips byte for byte", () => {
         sections: [
           {
             heading: "Actions",
-            entries: [{ name: "Tentacle", body: "Hit: 12 (2d6 + 5) bludgeoning damage." }],
+            entries: [
+              {
+                name: "Tentacle",
+                body: "Hit: 12 (2d6 + 5) bludgeoning damage.",
+              },
+            ],
           },
         ],
       }),
@@ -505,13 +536,23 @@ describe("a statblock round-trips byte for byte", () => {
     [
       "unnamed prose",
       record({
-        sections: [{ heading: "Description", entries: [{ name: "", body: "It remembers." }] }],
+        sections: [
+          {
+            heading: "Description",
+            entries: [{ name: "", body: "It remembers." }],
+          },
+        ],
       }),
     ],
     [
       "unnamed prose holding a colon",
       record({
-        sections: [{ heading: "Lore", entries: [{ name: "", body: "Rumour: the deep remembers." }] }],
+        sections: [
+          {
+            heading: "Lore",
+            entries: [{ name: "", body: "Rumour: the deep remembers." }],
+          },
+        ],
       }),
     ],
     [
@@ -531,7 +572,9 @@ describe("a statblock round-trips byte for byte", () => {
     ["a section with no entries", record({ sections: [{ heading: "Actions", entries: [] }] })],
     [
       "an empty section heading",
-      record({ sections: [{ heading: "", entries: [{ name: "Bite", body: "1d6" }] }] }),
+      record({
+        sections: [{ heading: "", entries: [{ name: "Bite", body: "1d6" }] }],
+      }),
     ],
     [
       "several sections",
@@ -539,19 +582,34 @@ describe("a statblock round-trips byte for byte", () => {
         name: "Aboleth",
         rows: [{ label: "HP", value: "120/135" }],
         sections: [
-          { heading: "Traits", entries: [{ name: "Amphibious", body: "It breathes air and water." }] },
-          { heading: "Actions", entries: [{ name: "Tentacle", body: "+9 to hit." }] },
-          { heading: "Legendary Actions", entries: [{ name: "", body: "Three per round." }] },
+          {
+            heading: "Traits",
+            entries: [{ name: "Amphibious", body: "It breathes air and water." }],
+          },
+          {
+            heading: "Actions",
+            entries: [{ name: "Tentacle", body: "+9 to hit." }],
+          },
+          {
+            heading: "Legendary Actions",
+            entries: [{ name: "", body: "Three per round." }],
+          },
         ],
       }),
     ],
     ["an empty row value", record({ rows: [{ label: "HP", value: "" }] })],
-    ["an unlabelled header row", record({ rows: [{ label: "", value: "A creature of the deep" }] })],
+    [
+      "an unlabelled header row",
+      record({ rows: [{ label: "", value: "A creature of the deep" }] }),
+    ],
     [
       "an unlabelled header row holding a colon",
       record({ rows: [{ label: "", value: "see: the ledger" }] }),
     ],
-    ["a header row that looks like the name", record({ rows: [{ label: "", value: "# The deep" }] })],
+    [
+      "a header row that looks like the name",
+      record({ rows: [{ label: "", value: "# The deep" }] }),
+    ],
     [
       "a header row that looks like a section",
       record({ rows: [{ label: "", value: "## Actions" }] }),
@@ -560,13 +618,22 @@ describe("a statblock round-trips byte for byte", () => {
     ["a value that is only spaces", record({ rows: [{ label: "Note", value: "  " }] })],
     [
       "unnamed prose that looks like a section",
-      record({ sections: [{ heading: "Lore", entries: [{ name: "", body: "## Deeper" }] }] }),
+      record({
+        sections: [{ heading: "Lore", entries: [{ name: "", body: "## Deeper" }] }],
+      }),
     ],
     [
       "unnamed prose that looks like the name",
-      record({ sections: [{ heading: "Lore", entries: [{ name: "", body: "# The deep" }] }] }),
+      record({
+        sections: [{ heading: "Lore", entries: [{ name: "", body: "# The deep" }] }],
+      }),
     ],
-    ["an entry with a name and no body", record({ sections: [{ heading: "Actions", entries: [{ name: "Bite", body: "" }] }] })],
+    [
+      "an entry with a name and no body",
+      record({
+        sections: [{ heading: "Actions", entries: [{ name: "Bite", body: "" }] }],
+      }),
+    ],
     [
       "a value the next ticket will make playable",
       record({
@@ -582,7 +649,10 @@ describe("a statblock round-trips byte for byte", () => {
       record({
         rows: [{ label: "Served", value: "[[People/Ash.md|the Captain]]" }],
         sections: [
-          { heading: "Lore", entries: [{ name: "Bound", body: "Sworn to [[Captain Ash]]." }] },
+          {
+            heading: "Lore",
+            entries: [{ name: "Bound", body: "Sworn to [[Captain Ash]]." }],
+          },
         ],
       }),
     ],
@@ -643,9 +713,9 @@ describe("a statblock normalises decoration and nothing else", () => {
   });
 
   it("drops a blank line under a section heading", () => {
-    expect(
-      serializeStatblock(parseStatblockBody(body("## Actions", "", "Bite: 1d6"))),
-    ).toBe(body("```statblock", "## Actions", "Bite: 1d6", "```"));
+    expect(serializeStatblock(parseStatblockBody(body("## Actions", "", "Bite: 1d6")))).toBe(
+      body("```statblock", "## Actions", "Bite: 1d6", "```"),
+    );
   });
 
   it("keeps a blank line inside nothing, because an entry cannot hold one", () => {
@@ -736,9 +806,18 @@ describe("/statblock", () => {
     const ed = editor();
     try {
       ed.commands.setContent([
-        { type: "statblockBlock", attrs: { ...blankStatblock(), name: "Kobold A" } },
-        { type: "paragraph", content: [{ type: "text", text: "Prose between." }] },
-        { type: "statblockBlock", attrs: { ...blankStatblock(), name: "Kobold B" } },
+        {
+          type: "statblockBlock",
+          attrs: { ...blankStatblock(), name: "Kobold A" },
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Prose between." }],
+        },
+        {
+          type: "statblockBlock",
+          attrs: { ...blankStatblock(), name: "Kobold B" },
+        },
       ]);
 
       expect(ed.getJSON().content?.filter((n) => n.type === "statblockBlock")).toHaveLength(2);
@@ -809,8 +888,14 @@ describe("a hit is its own undo step", () => {
       content: {
         type: "doc",
         content: [
-          { type: "paragraph", content: [{ type: "text", text: "The goblin " }] },
-          { type: "statblockBlock", attrs: record({ rows: [{ label: "HP", value: "43/59" }] }) },
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "The goblin " }],
+          },
+          {
+            type: "statblockBlock",
+            attrs: record({ rows: [{ label: "HP", value: "43/59" }] }),
+          },
         ],
       },
     });

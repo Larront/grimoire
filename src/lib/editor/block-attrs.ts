@@ -128,9 +128,7 @@ function dataAttrName(key: string): string {
 }
 
 /** A block's record read three ways — see `BlockDomProjections`. */
-export function blockDom<R extends object>(
-  dom: BlockDom<R>,
-): BlockDomProjections<R> {
+export function blockDom<R extends object>(dom: BlockDom<R>): BlockDomProjections<R> {
   const fields = Object.entries(dom) as [keyof R & string, BlockAttr<unknown>][];
 
   const attributes: Record<string, NodeAttrSpec> = {};

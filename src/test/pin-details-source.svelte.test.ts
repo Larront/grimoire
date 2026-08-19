@@ -67,7 +67,9 @@ let applied: Pin[] = [];
 function mount(
   getPin: () => Pin | null,
   getLinkedNote: () => Note | null = () => null,
-  applyPin: (saved: Pin) => void = (saved) => { applied.push(saved); },
+  applyPin: (saved: Pin) => void = (saved) => {
+    applied.push(saved);
+  },
 ): PinDetailsSource {
   let source!: PinDetailsSource;
   cleanup = $effect.root(() => {
@@ -91,7 +93,9 @@ describe("pin Details Source — fetch fan-out", () => {
     mockCommands({
       get_pin_tags: ["harbor"],
       list_all_tags: ["harbor", "npc"],
-      get_pin_categories_for_map: [{ id: 1, map_id: 5, name: "Town", icon: "house", color: "#fff" }],
+      get_pin_categories_for_map: [
+        { id: 1, map_id: 5, name: "Town", icon: "house", color: "#fff" },
+      ],
     });
     const source = mount(() => basePin);
     await flush();
@@ -149,7 +153,10 @@ describe("pin Details Source — fetch fan-out", () => {
     const longBody = "# Heading\n" + "x".repeat(200);
     mockCommands({ read_note_content: longBody });
     let linked = $state<Note | null>(linkedNote);
-    const source = mount(() => basePin, () => linked);
+    const source = mount(
+      () => basePin,
+      () => linked,
+    );
     await flush();
 
     expect(source.notePreview).not.toContain("#");
@@ -171,7 +178,10 @@ describe("pin Details Source — save-status machine", () => {
     const allTagsBefore = callsFor("list_all_tags").length;
 
     await source.savePinTags(["harbor"]);
-    expect(callsFor("set_pin_tags")[0][1]).toEqual({ pinId: 1, tags: ["harbor"] });
+    expect(callsFor("set_pin_tags")[0][1]).toEqual({
+      pinId: 1,
+      tags: ["harbor"],
+    });
     expect(callsFor("list_all_tags").length).toBe(allTagsBefore + 1);
     expect(source.saveStatus).toBe("saved");
 
@@ -214,9 +224,7 @@ describe("pin Details Source — pin row saves (#203)", () => {
 
     // PinDetails awaits this from a bare `onblur` with no catch. It used to go
     // through the toasting surface and rethrow into nothing.
-    await expect(
-      source.savePin({ ...basePin, title: "Renamed" } as Pin),
-    ).resolves.toBeUndefined();
+    await expect(source.savePin({ ...basePin, title: "Renamed" } as Pin)).resolves.toBeUndefined();
     expect(source.saveStatus).toBe("error");
     expect(applied).toEqual([]);
   });
@@ -269,7 +277,10 @@ describe("pin Details Source — stale guards on the failure path (#202)", () =>
     mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "get_pin_tags") {
-        if (args?.pinId === 1) return new Promise((_res, rej) => { rejectA = rej; });
+        if (args?.pinId === 1)
+          return new Promise((_res, rej) => {
+            rejectA = rej;
+          });
         return Promise.resolve(["quay"]);
       }
       return Promise.resolve(null);
@@ -293,7 +304,10 @@ describe("pin Details Source — stale guards on the failure path (#202)", () =>
     mocked.mockImplementation((cmd: string, rawArgs?: unknown) => {
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "get_pin_categories_for_map") {
-        if (args?.mapId === 5) return new Promise((_res, rej) => { rejectA = rej; });
+        if (args?.mapId === 5)
+          return new Promise((_res, rej) => {
+            rejectA = rej;
+          });
         return Promise.resolve([{ id: 9, map_id: 6, name: "Ruin", icon: "house", color: "#fff" }]);
       }
       return Promise.resolve(null);
@@ -318,14 +332,19 @@ describe("pin Details Source — stale guards on the failure path (#202)", () =>
       const args = rawArgs as Record<string, unknown> | undefined;
       if (cmd === "read_note_content") {
         if (args?.notePath === linkedNote.path) {
-          return new Promise((_res, rej) => { rejectA = rej; });
+          return new Promise((_res, rej) => {
+            rejectA = rej;
+          });
         }
         return Promise.resolve("The harbour at night");
       }
       return Promise.resolve(null);
     });
     let linked = $state<Note | null>(linkedNote);
-    const source = mount(() => basePin, () => linked);
+    const source = mount(
+      () => basePin,
+      () => linked,
+    );
     flushSync();
 
     linked = { ...linkedNote, id: 43, path: "notes/harbor.md" } as Note;

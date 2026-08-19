@@ -70,8 +70,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     group: "Text",
     ...nameAndIcon("paragraph"),
     keywords: ["p", "text", "plain"],
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setParagraph().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setParagraph().run(),
   },
   {
     group: "Text",
@@ -98,15 +97,13 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     group: "Text",
     ...nameAndIcon("quote"),
     keywords: ["blockquote", "cite"],
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setBlockquote().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setBlockquote().run(),
   },
   {
     group: "Text",
     ...nameAndIcon("codeBlock"),
     keywords: ["pre", "code", "codeblock"],
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setCodeBlock().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setCodeBlock().run(),
   },
   // ── List ──────────────────────────────────────────────────────────────────
   {
@@ -114,23 +111,20 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     ...nameAndIcon("bulletList"),
     keywords: ["ul", "unordered"],
     // toggleBulletList is intentional: typing /bullet inside a bullet list removes it.
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).toggleBulletList().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).toggleBulletList().run(),
   },
   {
     group: "List",
     ...nameAndIcon("orderedList"),
     keywords: ["ol", "ordered"],
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
   },
   // ── Insert ────────────────────────────────────────────────────────────────
   {
     group: "Insert",
     ...nameAndIcon("divider"),
     keywords: ["hr", "rule", "separator"],
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
   },
   {
     group: "Insert",
@@ -252,9 +246,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
 
 /** Whether a command answers to a word exactly, by label or by keyword. */
 function isNamed(item: SlashCommandItem, word: string): boolean {
-  return (
-    item.label.toLowerCase() === word || item.keywords.some((kw) => kw === word)
-  );
+  return item.label.toLowerCase() === word || item.keywords.some((kw) => kw === word);
 }
 
 /**
@@ -279,17 +271,13 @@ export function filterCommands(query: string): SlashCommandItem[] {
     const q = query.toLowerCase().trim();
     if (!q) return SLASH_COMMANDS;
     return SLASH_COMMANDS.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.keywords.some((kw) => kw.includes(q)),
+      (item) => item.label.toLowerCase().includes(q) || item.keywords.some((kw) => kw.includes(q)),
     );
   }
 
   const head = query.slice(0, space).toLowerCase();
   if (!head) return [];
-  return SLASH_COMMANDS.filter(
-    (item) => item.acceptsArgument && isNamed(item, head),
-  );
+  return SLASH_COMMANDS.filter((item) => item.acceptsArgument && isNamed(item, head));
 }
 
 /**
@@ -344,11 +332,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           props: SlashCommandItem;
         }) => {
           const ed = editor as Editor;
-          props.command(
-            ed,
-            range,
-            slashArgument(ed.state.doc.textBetween(range.from, range.to)),
-          );
+          props.command(ed, range, slashArgument(ed.state.doc.textBetween(range.from, range.to)));
         },
 
         render: () => {
@@ -411,10 +395,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               const count = currentState.items.length;
 
               // Move down — Tab or ArrowDown
-              if (
-                event.key === "ArrowDown" ||
-                (event.key === "Tab" && !event.shiftKey)
-              ) {
+              if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
                 selectedIndex = (selectedIndex + 1) % count;
                 currentState = { ...currentState, selectedIndex };
                 onSlashCommand(currentState);
@@ -422,10 +403,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               }
 
               // Move up — Shift+Tab or ArrowUp
-              if (
-                event.key === "ArrowUp" ||
-                (event.key === "Tab" && event.shiftKey)
-              ) {
+              if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
                 selectedIndex = (selectedIndex - 1 + count) % count;
                 currentState = { ...currentState, selectedIndex };
                 onSlashCommand(currentState);

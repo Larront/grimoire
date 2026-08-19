@@ -37,7 +37,6 @@ describe("entity colour presets", () => {
     it(`${preset.name}'s swatch is that preset's dark --primary`, () => {
       expect(darkPrimary(preset.name)).toBe(preset.swatch);
     });
-
   }
 
   // The third copy, and the one a review caught this test missing: `shared/tokens.css`

@@ -37,7 +37,10 @@ describe("a menu with no room below the caret", () => {
     // A tall menu in a short window. Flipping would clip the top of the list — the item
     // the GM is likeliest to want — where overflowing the bottom clips the last.
     const tall = { width: 240, height: 700 };
-    const { top, flipped } = menuPlacement(caret(300), tall, { width: 1200, height: 400 });
+    const { top, flipped } = menuPlacement(caret(300), tall, {
+      width: 1200,
+      height: 400,
+    });
     expect(flipped).toBe(false);
     expect(top).toBeGreaterThanOrEqual(8);
   });

@@ -68,35 +68,27 @@ describe("command palette – Add tag visibility", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeTruthy();
   });
 
   it("'Add tag' item is absent when active tab is a map", async () => {
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 
   it("'Add tag' item is absent when active tab is a scene", async () => {
     tabs.openTab({ type: "scene", id: 1, title: "Scene 1" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 
   it("'Add tag' item is absent when no tabs are open", async () => {
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 });
 
@@ -107,9 +99,7 @@ describe("command palette – Add tag flow", () => {
     await setupNote();
     render(AppSearch);
     await openTagPicker();
-    expect(
-      document.body.querySelector('[data-testid="add-tag-picker"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="add-tag-picker"]')).toBeTruthy();
   });
 
   it("tag picker loads the note's existing tags", async () => {
@@ -156,9 +146,7 @@ describe("command palette – Add tag flow", () => {
     await fireEvent.input(input);
     await fireEvent.keyDown(input, { key: "Enter" });
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="add-tag-picker"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="add-tag-picker"]')).toBeNull();
   });
 
   it("right rail open state is not changed when a tag is added via the palette", async () => {
@@ -312,15 +300,11 @@ describe("command palette – Notes search", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
     await fireEvent.click(result);
     await flush();
 
-    const noteTabs = tabs.left.tabs.filter(
-      (t) => t.type === "note" && t.id === 1,
-    );
+    const noteTabs = tabs.left.tabs.filter((t) => t.type === "note" && t.id === 1);
     expect(noteTabs.length).toBe(1);
   });
 
@@ -340,9 +324,7 @@ describe("command palette – Notes search", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-note-result"]')).toBeTruthy();
 
     // Close and reopen — no stale results
     searchPalette.open = false;
@@ -350,9 +332,7 @@ describe("command palette – Notes search", () => {
     searchPalette.open = true;
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-note-result"]')).toBeNull();
   });
 });
 
@@ -373,13 +353,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful at dusk",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful at dusk",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -391,22 +373,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="note-excerpt"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="note-excerpt"]')).toBeTruthy();
   });
 
   it("does not show excerpt when excerpt is null (title-only match)", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: null,
-            match_count: 0,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -418,22 +400,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="note-excerpt"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="note-excerpt"]')).toBeNull();
   });
 
   it("shows N matches chip when match_count > 1", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "harbor here and harbor there",
-            match_count: 3,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "harbor here and harbor there",
+              match_count: 3,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -454,13 +436,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -472,22 +456,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="match-count-chip"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="match-count-chip"]')).toBeNull();
   });
 
   it("excerpt contains a highlighted span for the matched term", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -511,13 +495,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 4,
-            title: "The Harbor",
-            path: "harbor.md",
-            excerpt: "the harbor shines",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 4,
+              title: "The Harbor",
+              path: "harbor.md",
+              excerpt: "the harbor shines",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -529,9 +515,7 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
     await fireEvent.click(result);
     await flush();
 
@@ -542,13 +526,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [],
@@ -568,13 +554,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [],
@@ -601,77 +589,72 @@ describe("command palette – excerpt and match chip", () => {
 
 // ── Maps and Scenes groups (issue #34) ────────────────────────────────────────
 
-describe.each(RESULT_KINDS)(
-  "command palette – $kind results",
-  ({ kind, hit, payload }) => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
+describe.each(RESULT_KINDS)("command palette – $kind results", ({ kind, hit, payload }) => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-    afterEach(() => {
-      searchPalette.open = false;
-      vi.useRealTimers();
-    });
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
 
-    it("draws the group when search_all returns a row for it", async () => {
-      searchReturns(payload([hit(2)]));
-      await searchFor("xx");
-      expect(rowOf(kind)).toBeTruthy();
-    });
+  it("draws the group when search_all returns a row for it", async () => {
+    searchReturns(payload([hit(2)]));
+    await searchFor("xx");
+    expect(rowOf(kind)).toBeTruthy();
+  });
 
-    it("draws no group when its array comes back empty", async () => {
-      searchReturns(NO_RESULTS);
-      await searchFor("zzz");
-      expect(rowsOf(kind).length).toBe(0);
-    });
+  it("draws no group when its array comes back empty", async () => {
+    searchReturns(NO_RESULTS);
+    await searchFor("zzz");
+    expect(rowsOf(kind).length).toBe(0);
+  });
 
-    it("opens a tab for the row that was clicked", async () => {
-      searchReturns(payload([hit(5)]));
-      await searchFor("xx");
-      await fireEvent.click(rowOf(kind));
-      await flush();
-      expect(tabs.activeTab?.type).toBe(kind);
-      expect(tabs.activeTab?.id).toBe(5);
-    });
+  it("opens a tab for the row that was clicked", async () => {
+    searchReturns(payload([hit(5)]));
+    await searchFor("xx");
+    await fireEvent.click(rowOf(kind));
+    await flush();
+    expect(tabs.activeTab?.type).toBe(kind);
+    expect(tabs.activeTab?.id).toBe(5);
+  });
 
-    it("closes the palette behind the tab it opened", async () => {
-      searchReturns(payload([hit(5)]));
-      await searchFor("xx");
-      await fireEvent.click(rowOf(kind));
-      await flush();
-      expect(searchPalette.open).toBe(false);
-    });
+  it("closes the palette behind the tab it opened", async () => {
+    searchReturns(payload([hit(5)]));
+    await searchFor("xx");
+    await fireEvent.click(rowOf(kind));
+    await flush();
+    expect(searchPalette.open).toBe(false);
+  });
 
-    it("Ctrl+Enter opens a second tab rather than reusing the one already open", async () => {
-      tabs.openTab({ type: kind, id: 1, title: "Already open" });
-      searchReturns(payload([hit(1)]));
-      await searchFor("xx");
+  it("Ctrl+Enter opens a second tab rather than reusing the one already open", async () => {
+    tabs.openTab({ type: kind, id: 1, title: "Already open" });
+    searchReturns(payload([hit(1)]));
+    await searchFor("xx");
 
-      await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
-      await fireEvent.click(rowOf(kind));
-      await flush();
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await fireEvent.click(rowOf(kind));
+    await flush();
 
-      const opened = tabs.left.tabs.filter((t) => t.type === kind && t.id === 1);
-      expect(opened.length).toBe(2);
-    });
+    const opened = tabs.left.tabs.filter((t) => t.type === kind && t.id === 1);
+    expect(opened.length).toBe(2);
+  });
 
-    it("Shift+Enter creates the split and opens right, leaving the focus where it was", async () => {
-      tabs.openTab({ type: "note", id: 99, title: "Existing" });
-      expect(tabs.right).toBeNull();
-      searchReturns(payload([hit(7)]));
-      await searchFor("xx");
+  it("Shift+Enter creates the split and opens right, leaving the focus where it was", async () => {
+    tabs.openTab({ type: "note", id: 99, title: "Existing" });
+    expect(tabs.right).toBeNull();
+    searchReturns(payload([hit(7)]));
+    await searchFor("xx");
 
-      await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
-      await fireEvent.click(rowOf(kind));
-      await flush();
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await fireEvent.click(rowOf(kind));
+    await flush();
 
-      expect(tabs.right?.tabs.some((t) => t.type === kind && t.id === 7)).toBe(
-        true,
-      );
-      expect(tabs.focusedPane).toBe("left");
-    });
-  },
-);
+    expect(tabs.right?.tabs.some((t) => t.type === kind && t.id === 7)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
+  });
+});
 
 // ── Group order ───────────────────────────────────────────────────────────────
 
@@ -699,8 +682,7 @@ describe("command palette – Maps and Scenes order", () => {
     expect(sceneResult).toBeTruthy();
     // Map result must appear before scene result in document order
     expect(
-      mapResult.compareDocumentPosition(sceneResult) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      mapResult.compareDocumentPosition(sceneResult) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 });
@@ -734,9 +716,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeTruthy();
   });
 
   it("no Tags group when tags array is empty", async () => {
@@ -751,9 +731,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("shows count chip with note_count value", async () => {
@@ -795,9 +773,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const tagItem = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const tagItem = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     await fireEvent.click(tagItem);
     await flush();
 
@@ -828,16 +804,22 @@ describe("command palette – Tags group", () => {
     await flush();
 
     // "npc" should be hidden since tag:npc is already active
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("Tags group renders before Notes group in the DOM", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 1, title: "NPC Note", path: "npc.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 1,
+              title: "NPC Note",
+              path: "npc.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [{ name: "npc", note_count: 3 }],
@@ -862,8 +844,7 @@ describe("command palette – Tags group", () => {
 
   it("no Tags group when search_all returns no tags field (backward compat)", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({ notes: [], maps: [], scenes: [] });
+      if (cmd === "search_all") return Promise.resolve({ notes: [], maps: [], scenes: [] });
       return Promise.resolve(null);
     });
     render(AppSearch);
@@ -872,9 +853,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("selecting tag when existing filter plus free text appends tag and preserves free text", async () => {
@@ -898,9 +877,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const villainTag = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const villainTag = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     expect(villainTag).toBeTruthy();
     await fireEvent.click(villainTag);
     await flush();
@@ -916,9 +893,7 @@ describe("command palette – Tags group", () => {
         callCount++;
         // Second call (after tag:npc is in input) returns allied tag
         const tags =
-          callCount <= 1
-            ? [{ name: "npc", note_count: 2 }]
-            : [{ name: "allied", note_count: 1 }];
+          callCount <= 1 ? [{ name: "npc", note_count: 2 }] : [{ name: "allied", note_count: 1 }];
         return Promise.resolve({ notes: [], maps: [], scenes: [], tags });
       }
       return Promise.resolve(null);
@@ -930,9 +905,7 @@ describe("command palette – Tags group", () => {
     await flush();
 
     // Select npc tag → input becomes "tag:npc"
-    const npcTag = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const npcTag = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     await fireEvent.click(npcTag);
     await flush();
     await vi.advanceTimersByTimeAsync(80);
@@ -994,7 +967,15 @@ describe("command palette – Commands group ordering", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 1, title: "Crafter", path: "crafter.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 1,
+              title: "Crafter",
+              path: "crafter.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -1025,7 +1006,9 @@ describe("command palette – Commands group visibility", () => {
   it("shows up to 3 commands when query is empty", async () => {
     render(AppSearch);
     await openPalette();
-    const allCmds = document.body.querySelectorAll('[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]');
+    const allCmds = document.body.querySelectorAll(
+      '[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]',
+    );
     expect(allCmds.length).toBeLessThanOrEqual(3);
     expect(allCmds.length).toBeGreaterThanOrEqual(1);
   });
@@ -1090,9 +1073,12 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_note", expect.objectContaining({
-      noteTitle: "Untitled",
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_note",
+      expect.objectContaining({
+        noteTitle: "Untitled",
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1114,9 +1100,12 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_scene", expect.objectContaining({
-      name: expect.any(String),
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_scene",
+      expect.objectContaining({
+        name: expect.any(String),
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1138,9 +1127,12 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_map_empty", expect.objectContaining({
-      title: expect.any(String),
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_map_empty",
+      expect.objectContaining({
+        title: expect.any(String),
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1177,7 +1169,8 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    const expectedMode = modeBefore === 'light' ? 'dark' : modeBefore === 'dark' ? 'system' : 'light';
+    const expectedMode =
+      modeBefore === "light" ? "dark" : modeBefore === "dark" ? "system" : "light";
     expect(userPrefersMode.current).toBe(expectedMode);
     expect(searchPalette.open).toBe(false);
   });
@@ -1343,9 +1336,7 @@ describe("command palette – Create note from template", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-create-note-from-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-create-note-from-template"]')).toBeNull();
   });
 
   it("template picker mode resets when palette is closed", async () => {
@@ -1372,9 +1363,7 @@ describe("command palette – Create note from template", () => {
     searchPalette.open = true;
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-template-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-template-result"]')).toBeNull();
   });
 });
 
@@ -1517,7 +1506,12 @@ describe("command palette – Recent section", () => {
   });
 
   function setupRecent(
-    entries: Array<{ entity_kind: string; entity_id: number; title: string; accessed_at: string }>,
+    entries: Array<{
+      entity_kind: string;
+      entity_id: number;
+      title: string;
+      accessed_at: string;
+    }>,
   ) {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "get_recent_entities") return Promise.resolve(entries);
@@ -1534,7 +1528,12 @@ describe("command palette – Recent section", () => {
 
   it("renders Recent group above Commands when input is empty", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1557,7 +1556,12 @@ describe("command palette – Recent section", () => {
 
   it("Recent group disappears the moment user types", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1573,12 +1577,42 @@ describe("command palette – Recent section", () => {
 
   it("shows at most 5 entries even when more are returned", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "N1", accessed_at: "2026-05-19T10:06:00.000Z" },
-      { entity_kind: "note", entity_id: 2, title: "N2", accessed_at: "2026-05-19T10:05:00.000Z" },
-      { entity_kind: "map", entity_id: 1, title: "M1", accessed_at: "2026-05-19T10:04:00.000Z" },
-      { entity_kind: "scene", entity_id: 1, title: "S1", accessed_at: "2026-05-19T10:03:00.000Z" },
-      { entity_kind: "note", entity_id: 3, title: "N3", accessed_at: "2026-05-19T10:02:00.000Z" },
-      { entity_kind: "note", entity_id: 4, title: "N4", accessed_at: "2026-05-19T10:01:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "N1",
+        accessed_at: "2026-05-19T10:06:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 2,
+        title: "N2",
+        accessed_at: "2026-05-19T10:05:00.000Z",
+      },
+      {
+        entity_kind: "map",
+        entity_id: 1,
+        title: "M1",
+        accessed_at: "2026-05-19T10:04:00.000Z",
+      },
+      {
+        entity_kind: "scene",
+        entity_id: 1,
+        title: "S1",
+        accessed_at: "2026-05-19T10:03:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 3,
+        title: "N3",
+        accessed_at: "2026-05-19T10:02:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 4,
+        title: "N4",
+        accessed_at: "2026-05-19T10:01:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1588,7 +1622,12 @@ describe("command palette – Recent section", () => {
 
   it("each row shows a type chip with the entity kind", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1601,7 +1640,12 @@ describe("command palette – Recent section", () => {
   it("each row shows a relative-time hint", async () => {
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: twoMinutesAgo },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: twoMinutesAgo,
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1613,7 +1657,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent note row opens the note tab and closes palette", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 3, title: "Harbor", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 3,
+        title: "Harbor",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1629,7 +1678,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent map row opens the map tab", async () => {
     setupRecent([
-      { entity_kind: "map", entity_id: 5, title: "World Map", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "map",
+        entity_id: 5,
+        title: "World Map",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1644,7 +1698,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent scene row opens the scene tab", async () => {
     setupRecent([
-      { entity_kind: "scene", entity_id: 7, title: "Battle", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "scene",
+        entity_id: 7,
+        title: "Battle",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1659,7 +1718,12 @@ describe("command palette – Recent section", () => {
 
   it("opening a Recent row calls record_recent to update the timestamp", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1680,7 +1744,15 @@ describe("command palette – Recent section", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 3, title: "Aldric", path: "aldric.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 3,
+              title: "Aldric",
+              path: "aldric.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -1706,7 +1778,12 @@ describe("command palette – Recent section", () => {
 
   it("Ctrl+Enter on a Recent row opens a new tab without reuse", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     render(AppSearch);
@@ -1723,7 +1800,12 @@ describe("command palette – Recent section", () => {
 
   it("Shift+Enter on a Recent row opens in opposite pane", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 5, title: "Target", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 5,
+        title: "Target",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     tabs.openTab({ type: "note", id: 99, title: "Existing" });
     render(AppSearch);
@@ -1762,15 +1844,24 @@ describe("command palette – per-group caps", () => {
   }
 
   function makeTags(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ name: `tag${i + 1}`, note_count: 1 }));
+    return Array.from({ length: count }, (_, i) => ({
+      name: `tag${i + 1}`,
+      note_count: 1,
+    }));
   }
 
   function makeMaps(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ id: i + 1, title: `Map ${i + 1}` }));
+    return Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      title: `Map ${i + 1}`,
+    }));
   }
 
   function makeScenes(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `Scene ${i + 1}` }));
+    return Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      name: `Scene ${i + 1}`,
+    }));
   }
 
   async function searchWithResults(results: Record<string, unknown>) {
@@ -1818,49 +1909,50 @@ describe("command palette – per-group caps", () => {
     },
     { group: "tags", row: "tag", label: "Tags", cap: 5, make: makeTags },
     { group: "maps", row: "map", label: "Maps", cap: 3, make: makeMaps },
-    { group: "scenes", row: "scene", label: "Scenes", cap: 3, make: makeScenes },
+    {
+      group: "scenes",
+      row: "scene",
+      label: "Scenes",
+      cap: 3,
+      make: makeScenes,
+    },
   ];
 
-  describe.each(GROUP_CAPS)(
-    "$label group",
-    ({ group, row, label, cap, make, company }) => {
-      const results = (count: number) => ({
-        notes: [],
-        maps: [],
-        scenes: [],
-        [group]: make(count),
-        ...(company ?? {}),
-      });
-      const drawn = () =>
-        document.body.querySelectorAll(`[data-testid="cmd-${row}-result"]`);
-      const showMore = () =>
-        document.body.querySelector(`[data-testid="cmd-show-more-${group}"]`);
+  describe.each(GROUP_CAPS)("$label group", ({ group, row, label, cap, make, company }) => {
+    const results = (count: number) => ({
+      notes: [],
+      maps: [],
+      scenes: [],
+      [group]: make(count),
+      ...(company ?? {}),
+    });
+    const drawn = () => document.body.querySelectorAll(`[data-testid="cmd-${row}-result"]`);
+    const showMore = () => document.body.querySelector(`[data-testid="cmd-show-more-${group}"]`);
 
-      it(`draws at most ${cap} rows`, async () => {
-        await searchWithResults(results(cap + 4));
-        expect(drawn().length).toBe(cap);
-      });
+    it(`draws at most ${cap} rows`, async () => {
+      await searchWithResults(results(cap + 4));
+      expect(drawn().length).toBe(cap);
+    });
 
-      it("draws no Show more row while the group is within its cap", async () => {
-        await searchWithResults(results(cap));
-        expect(showMore()).toBeNull();
-      });
+    it("draws no Show more row while the group is within its cap", async () => {
+      await searchWithResults(results(cap));
+      expect(showMore()).toBeNull();
+    });
 
-      it("draws a Show more row naming what is left over", async () => {
-        await searchWithResults(results(cap + 2));
-        expect(showMore()?.textContent).toContain("2");
-        expect(showMore()?.textContent).toContain(label);
-      });
+    it("draws a Show more row naming what is left over", async () => {
+      await searchWithResults(results(cap + 2));
+      expect(showMore()?.textContent).toContain("2");
+      expect(showMore()?.textContent).toContain(label);
+    });
 
-      it("reveals the rest when the Show more row is clicked, and takes the row away", async () => {
-        await searchWithResults(results(cap + 4));
-        await fireEvent.click(showMore() as HTMLElement);
-        await flush();
-        expect(drawn().length).toBe(cap + 4);
-        expect(showMore()).toBeNull();
-      });
-    },
-  );
+    it("reveals the rest when the Show more row is clicked, and takes the row away", async () => {
+      await searchWithResults(results(cap + 4));
+      await fireEvent.click(showMore() as HTMLElement);
+      await flush();
+      expect(drawn().length).toBe(cap + 4);
+      expect(showMore()).toBeNull();
+    });
+  });
 
   // Commands are not a search_all group, and have no Show more table entry.
   it("Commands group renders at most 3 commands when many match", async () => {
@@ -1875,8 +1967,15 @@ describe("command palette – per-group caps", () => {
   });
 
   it("expanding one group does not expand other groups", async () => {
-    await searchWithResults({ notes: makeNotes(10), maps: [], scenes: [], tags: makeTags(8) });
-    const showMoreNotes = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    await searchWithResults({
+      notes: makeNotes(10),
+      maps: [],
+      scenes: [],
+      tags: makeTags(8),
+    });
+    const showMoreNotes = document.body.querySelector(
+      '[data-testid="cmd-show-more-notes"]',
+    ) as HTMLElement;
     await fireEvent.click(showMoreNotes);
     await flush();
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
@@ -1887,13 +1986,23 @@ describe("command palette – per-group caps", () => {
   // ── Single-group cap relaxation ───────────────────────────────────────────────
 
   it("Notes cap relaxes to 15 when notes is the only group with results", async () => {
-    await searchWithResults({ notes: makeNotes(15), maps: [], scenes: [], tags: [] });
+    await searchWithResults({
+      notes: makeNotes(15),
+      maps: [],
+      scenes: [],
+      tags: [],
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
     expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
   });
 
   it("Show more still appears for Notes when single-group count exceeds 15", async () => {
-    await searchWithResults({ notes: makeNotes(17), maps: [], scenes: [], tags: [] });
+    await searchWithResults({
+      notes: makeNotes(17),
+      maps: [],
+      scenes: [],
+      tags: [],
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
     const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]');
     expect(showMore).toBeTruthy();
@@ -1911,7 +2020,12 @@ describe("command palette – per-group caps", () => {
   });
 
   it("Tags cap stays at 5 in single-group case (only Notes relaxes)", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(8) });
+    await searchWithResults({
+      notes: [],
+      maps: [],
+      scenes: [],
+      tags: makeTags(8),
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(5);
     expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeTruthy();
   });
@@ -1922,7 +2036,11 @@ describe("command palette – per-group caps", () => {
     // Include a map so activeGroupCount > 1, preventing single-group relaxation (cap stays 6)
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
-        return Promise.resolve({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
+        return Promise.resolve({
+          notes: makeNotes(10),
+          maps: [{ id: 1, title: "Map" }],
+          scenes: [],
+        });
       return Promise.resolve(null);
     });
     render(AppSearch);
@@ -1931,7 +2049,9 @@ describe("command palette – per-group caps", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    const showMore = document.body.querySelector(
+      '[data-testid="cmd-show-more-notes"]',
+    ) as HTMLElement;
     await fireEvent.click(showMore);
     await flush();
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
@@ -1959,7 +2079,10 @@ describe("command palette – Save note as template", () => {
     archived: false,
     modified_at: "2026-01-01T00:00:00Z",
   };
-  const fakeSavedEntry = { display_name: "My Note", path: ".grimoire/templates/My Note.md" };
+  const fakeSavedEntry = {
+    display_name: "My Note",
+    path: ".grimoire/templates/My Note.md",
+  };
 
   afterEach(() => {
     searchPalette.open = false;
@@ -1975,9 +2098,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeTruthy();
   });
 
   it("is hidden when active tab is not a note", async () => {
@@ -1988,9 +2109,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeNull();
   });
 
   it("is hidden when no tabs are open", async () => {
@@ -2000,9 +2119,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeNull();
   });
 
   it("invoking it calls save_note_as_template with the active note path and closes palette", async () => {
@@ -2036,7 +2153,10 @@ describe("command palette – Save note as template", () => {
 // ── Create new template (issue #48) ──────────────────────────────────────────
 
 describe("command palette – Create new template", () => {
-  const fakeEntry = { display_name: "Untitled", path: ".grimoire/templates/Untitled.md" };
+  const fakeEntry = {
+    display_name: "Untitled",
+    path: ".grimoire/templates/Untitled.md",
+  };
 
   afterEach(() => {
     searchPalette.open = false;
@@ -2049,9 +2169,7 @@ describe("command palette – Create new template", () => {
     input.value = "template";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-create-template"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-create-template"]')).toBeTruthy();
   });
 
   it("selecting it invokes create_template and closes palette", async () => {
@@ -2109,9 +2227,7 @@ describe("command palette – Open graph view", () => {
   it("'Open graph view' command appears in the Commands group", async () => {
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-open-graph"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-open-graph"]')).toBeTruthy();
   });
 
   it("appears when searching 'graph'", async () => {
@@ -2121,9 +2237,7 @@ describe("command palette – Open graph view", () => {
     input.value = "graph";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-open-graph"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-open-graph"]')).toBeTruthy();
   });
 
   it("selecting 'Open graph view' opens a graph tab and closes palette", async () => {
@@ -2151,10 +2265,9 @@ describe("command palette – Open graph view", () => {
     await fireEvent.click(item2);
     await flush();
 
-    const allGraphTabs = [
-      ...tabs.left.tabs,
-      ...(tabs.right?.tabs ?? []),
-    ].filter((t) => t.type === "graph");
+    const allGraphTabs = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
+      (t) => t.type === "graph",
+    );
     expect(allGraphTabs.length).toBe(1);
   });
 });

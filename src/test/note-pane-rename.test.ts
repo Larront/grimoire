@@ -66,9 +66,7 @@ function withRailDefaults(
   };
 }
 
-async function openNotePane(
-  invokeImpl: (cmd: string, args?: unknown) => unknown,
-) {
+async function openNotePane(invokeImpl: (cmd: string, args?: unknown) => unknown) {
   vi.mocked(invoke).mockImplementation(withRailDefaults(invokeImpl));
   tabs.openTab({ type: "note", id: 1, title: "Aldric" });
   await act(() => notes.load());
@@ -83,13 +81,14 @@ describe("note rename — auto-rewrite (toggle off)", () => {
     const { container } = await openNotePane(async (cmd) => {
       if (cmd === "get_notes") return [testNote];
       if (cmd === "rename_note")
-        return { note: { ...testNote, title: "Aldric 2", path: "Aldric 2.md" }, updated_count: 0 };
+        return {
+          note: { ...testNote, title: "Aldric 2", path: "Aldric 2.md" },
+          updated_count: 0,
+        };
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     expect(titleInput).toBeTruthy();
 
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
@@ -100,7 +99,10 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       expect(invokeSpy).toHaveBeenCalledWith(
         "rename_note",
         expect.objectContaining({
-          note: expect.objectContaining({ title: "Aldric 2", path: "Aldric 2.md" }),
+          note: expect.objectContaining({
+            title: "Aldric 2",
+            path: "Aldric 2.md",
+          }),
         }),
       );
     });
@@ -117,17 +119,12 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith(
-        "3 notes updated",
-        expect.anything(),
-      );
+      expect(toast.success).toHaveBeenCalledWith("3 notes updated", expect.anything());
     });
   });
 
@@ -142,17 +139,12 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
     await waitFor(() => {
-      expect(toast.success).toHaveBeenCalledWith(
-        "1 note updated",
-        expect.anything(),
-      );
+      expect(toast.success).toHaveBeenCalledWith("1 note updated", expect.anything());
     });
   });
 
@@ -167,9 +159,7 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -192,9 +182,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -210,9 +198,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -236,14 +222,10 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
-    await waitFor(() =>
-      expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy(),
-    );
+    await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
 
     invokeSpy.mockClear();
     const updateBtn = document.body.querySelector<HTMLButtonElement>(
@@ -269,18 +251,17 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       if (cmd === "get_notes") return [testNote];
       if (cmd === "get_note_backlink_count") return 2;
       if (cmd === "rename_note")
-        return { note: { ...testNote, title: "Aldric 2", path: "Aldric 2.md" }, updated_count: 0 };
+        return {
+          note: { ...testNote, title: "Aldric 2", path: "Aldric 2.md" },
+          updated_count: 0,
+        };
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
-    await waitFor(() =>
-      expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy(),
-    );
+    await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
 
     invokeSpy.mockClear();
     const renameOnlyBtn = document.body.querySelector<HTMLButtonElement>(
@@ -298,10 +279,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
         }),
       );
       // update_note no longer exists — the links choice is the boolean argument.
-      expect(invokeSpy).not.toHaveBeenCalledWith(
-        "update_note",
-        expect.anything(),
-      );
+      expect(invokeSpy).not.toHaveBeenCalledWith("update_note", expect.anything());
     });
   });
 
@@ -312,18 +290,12 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
-    await waitFor(() =>
-      expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy(),
-    );
+    await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
 
-    const cancelBtn = document.body.querySelector<HTMLButtonElement>(
-      '[role="alertdialog"] button',
-    );
+    const cancelBtn = document.body.querySelector<HTMLButtonElement>('[role="alertdialog"] button');
     await fireEvent.click(cancelBtn!);
 
     await waitFor(() => {
@@ -344,9 +316,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>(
-      'input[placeholder="Untitled"]',
-    );
+    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     invokeSpy.mockClear();
     await fireEvent.blur(titleInput!);

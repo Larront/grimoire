@@ -35,8 +35,12 @@ const notesLoad = vi.fn();
 const mapsLoad = vi.fn();
 const updatePdfTab = vi.fn();
 
-vi.mock("$lib/stores/notes.svelte", () => ({ notes: { load: () => notesLoad() } }));
-vi.mock("$lib/stores/maps.svelte", () => ({ maps: { load: () => mapsLoad() } }));
+vi.mock("$lib/stores/notes.svelte", () => ({
+  notes: { load: () => notesLoad() },
+}));
+vi.mock("$lib/stores/maps.svelte", () => ({
+  maps: { load: () => mapsLoad() },
+}));
 vi.mock("$lib/stores/tabs.svelte", () => ({
   tabs: { updatePdfTab: (...a: unknown[]) => updatePdfTab(...a) },
 }));
@@ -264,7 +268,12 @@ describe("dropIntoFolder", () => {
   });
 
   it("moves a map and reloads the maps store", async () => {
-    const map = item({ kind: "map", path: "World.jpg", noteId: null, mapId: 7 });
+    const map = item({
+      kind: "map",
+      path: "World.jpg",
+      noteId: null,
+      mapId: 7,
+    });
 
     expect(await dropIntoFolder(map, "territories", noteMap)).toBe(true);
     expect(moveMap).toHaveBeenCalledWith(7, "territories");
@@ -273,7 +282,12 @@ describe("dropIntoFolder", () => {
 
   it("re-keys an open PDF tab to where the file landed", async () => {
     movePdf.mockResolvedValue("rulebooks/DMG.pdf");
-    const pdf = item({ kind: "pdf", path: "DMG.pdf", name: "DMG", noteId: null });
+    const pdf = item({
+      kind: "pdf",
+      path: "DMG.pdf",
+      name: "DMG",
+      noteId: null,
+    });
 
     expect(await dropIntoFolder(pdf, "rulebooks", noteMap)).toBe(true);
     expect(movePdf).toHaveBeenCalledWith("DMG.pdf", "rulebooks");
@@ -291,9 +305,7 @@ describe("dropIntoFolder", () => {
 
     expect(await dropIntoFolder(folder, "Characters/Nobles", noteMap)).toBe(false);
     expect(moveFolder).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalledWith(
-      expect.stringContaining("inside itself"),
-    );
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("inside itself"));
   });
 
   it("reports no change when the command fails, and does not toast twice", async () => {

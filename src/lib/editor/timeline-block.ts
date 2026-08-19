@@ -1,9 +1,6 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
-import {
-  createBlockNodeView,
-  type BlockView,
-} from "$lib/editor/node-view-connector";
+import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
 import { blockDom, listAttr } from "$lib/editor/block-attrs";
 

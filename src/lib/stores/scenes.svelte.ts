@@ -132,7 +132,11 @@ function createScenesStore() {
     return slots;
   }
 
-  async function updateSlot(sceneId: number, slotId: number, params: UpdateSlotParams): Promise<SceneSlot[]> {
+  async function updateSlot(
+    sceneId: number,
+    slotId: number,
+    params: UpdateSlotParams,
+  ): Promise<SceneSlot[]> {
     await api.updateSceneSlot(
       slotId,
       params.label,

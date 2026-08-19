@@ -14,9 +14,7 @@ afterEach(cleanup);
 
 function renderRow(name = "Old Name") {
   const result = render(RenameInRowFixture, { props: { name } });
-  const input = result.container.querySelector(
-    "input[data-mode='edit']",
-  ) as HTMLInputElement;
+  const input = result.container.querySelector("input[data-mode='edit']") as HTMLInputElement;
   return { ...result, input };
 }
 

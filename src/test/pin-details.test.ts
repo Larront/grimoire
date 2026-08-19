@@ -24,8 +24,22 @@ const basePin = {
 import type { PinCategory } from "$lib/types/ledger";
 
 const categories = [
-  { id: 1, map_id: 5, name: "Town", icon: "house", color: "#ff0000", shape: "circle" },
-  { id: 2, map_id: null, name: "Global", icon: "star", color: "#00ff00", shape: "pin" },
+  {
+    id: 1,
+    map_id: 5,
+    name: "Town",
+    icon: "house",
+    color: "#ff0000",
+    shape: "circle",
+  },
+  {
+    id: 2,
+    map_id: null,
+    name: "Global",
+    icon: "star",
+    color: "#00ff00",
+    shape: "pin",
+  },
 ] as PinCategory[];
 
 const linkedNote = {
@@ -113,7 +127,12 @@ describe("PinDetails — title editing", () => {
 describe("PinDetails — linked note", () => {
   it("shows linked note title when linkedNote is provided", async () => {
     const { getByText } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        pin: { ...basePin, note_id: 42 },
+        linkedNote,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(getByText("Aldric")).toBeTruthy();
@@ -125,7 +144,8 @@ describe("PinDetails — linked note", () => {
         pin: { ...basePin, note_id: 42 },
         linkedNote,
         notePreview: "Some note content",
-        onUpdate: vi.fn(), onDelete: vi.fn(),
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
       },
     });
     await flush();
@@ -144,7 +164,13 @@ describe("PinDetails — linked note", () => {
   it("calls onOpenNote when the open-note button is clicked", async () => {
     const onOpenNote = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn(), onOpenNote },
+      props: {
+        pin: { ...basePin, note_id: 42 },
+        linkedNote,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+        onOpenNote,
+      },
     });
     await flush();
     const btn = container.querySelector('button[title="Open note"]') as HTMLElement;
@@ -155,7 +181,12 @@ describe("PinDetails — linked note", () => {
   it("calls onUpdate with note_id: null when Unlink is clicked", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { getByText } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate, onDelete: vi.fn() },
+      props: {
+        pin: { ...basePin, note_id: 42 },
+        linkedNote,
+        onUpdate,
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     await fireEvent.click(getByText("Unlink"));
@@ -165,7 +196,12 @@ describe("PinDetails — linked note", () => {
   it("does not use goto navigation (no goto import)", async () => {
     // This test verifies the component file exists and is importable as PinDetails
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, note_id: 42 }, linkedNote, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        pin: { ...basePin, note_id: 42 },
+        linkedNote,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     // If goto were called, it would throw in test environment — reaching here confirms it's not
@@ -179,7 +215,14 @@ describe("PinDetails — tags", () => {
   it("calls onTagsChange when the chip editor commits a change", async () => {
     const onTagsChange = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: basePin, pinTags: [], allTags: ["npc"], onTagsChange, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        pin: basePin,
+        pinTags: [],
+        allTags: ["npc"],
+        onTagsChange,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     const input = container.querySelector('[data-section="tags"] input') as HTMLInputElement;
@@ -207,7 +250,9 @@ describe("PinDetails — Pin Category", () => {
       props: { pin: basePin, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
-    const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-slot="pin-category-select"]',
+    ) as HTMLSelectElement;
     expect(select).toBeTruthy();
     const opts = Array.from(select.options).map((o) => o.text);
     expect(opts).toContain("Uncategorized");
@@ -218,7 +263,9 @@ describe("PinDetails — Pin Category", () => {
       props: { pin: basePin, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
-    const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-slot="pin-category-select"]',
+    ) as HTMLSelectElement;
     const opts = Array.from(select.options).map((o) => o.text);
     expect(opts).toContain("Town");
     expect(opts).toContain("Global");
@@ -226,10 +273,17 @@ describe("PinDetails — Pin Category", () => {
 
   it("shows the current category_id as selected", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        pin: { ...basePin, category_id: 1 },
+        categories,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
-    const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-slot="pin-category-select"]',
+    ) as HTMLSelectElement;
     expect(select.value).toBe("1");
   });
 
@@ -239,7 +293,9 @@ describe("PinDetails — Pin Category", () => {
       props: { pin: basePin, categories, onUpdate, onDelete: vi.fn() },
     });
     await flush();
-    const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-slot="pin-category-select"]',
+    ) as HTMLSelectElement;
     await fireEvent.change(select, { target: { value: "1" } });
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ category_id: 1 }));
   });
@@ -247,10 +303,17 @@ describe("PinDetails — Pin Category", () => {
   it("calls onUpdate with category_id: null when Uncategorized is selected", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(PinDetails, {
-      props: { pin: { ...basePin, category_id: 1 }, categories, onUpdate, onDelete: vi.fn() },
+      props: {
+        pin: { ...basePin, category_id: 1 },
+        categories,
+        onUpdate,
+        onDelete: vi.fn(),
+      },
     });
     await flush();
-    const select = container.querySelector('[data-slot="pin-category-select"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-slot="pin-category-select"]',
+    ) as HTMLSelectElement;
     await fireEvent.change(select, { target: { value: "" } });
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ category_id: null }));
   });
@@ -283,7 +346,12 @@ describe("PinDetails — lock/unlock", () => {
   it("calls onToggleLock when lock button is clicked", async () => {
     const onToggleLock = vi.fn();
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn(), onToggleLock },
+      props: {
+        pin: basePin,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+        onToggleLock,
+      },
     });
     await flush();
     const btn = container.querySelector('button[title="Unlock to drag"]') as HTMLElement;
@@ -293,7 +361,12 @@ describe("PinDetails — lock/unlock", () => {
 
   it("shows LockOpen icon when unlocked=true", async () => {
     const { container } = render(PinDetails, {
-      props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn(), unlocked: true },
+      props: {
+        pin: basePin,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+        unlocked: true,
+      },
     });
     await flush();
     const btn = container.querySelector('button[title="Lock pin"]');
