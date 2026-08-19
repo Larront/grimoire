@@ -71,6 +71,15 @@ These mirror [`docs/agents/conventions.md`](docs/agents/conventions.md):
   `playwright install` above). jsdom performs **no layout**, so an assertion about a
   position, a width, or one thing fitting beside another passes no matter what the
   stylesheet says. Everything else stays in jsdom, which is far faster.
+- **A jsdom test never asserts a class name.** It is the same rule as the one above,
+  reaching one step further. `expect(el.className).toContain("h-(--row-h)")` restates
+  the template rather than checking it: it breaks when the same styling moves into a
+  CSS rule, and it holds when the token behind it is retuned to something broken —
+  because jsdom never resolves the class to anything. If the claim is about a box or
+  about what a token does, it belongs in the browser project where there is a box to
+  measure. If it is about behaviour, assert the behaviour. The exception is a class
+  that *is* the output — `ThemeWatcher` swapping `accent-crimson` for `accent-verdant`
+  on the root element is a state change that happens to be spelled as a class.
 - **Formatting** — run Prettier (`bunx prettier --write .`) before committing.
 - **Both `bun run check` and `bun run test` must pass** — CI enforces them.
 
