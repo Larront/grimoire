@@ -311,7 +311,7 @@ fn finish_open(
     crate::note_write::reset_recent_writes();
 
     {
-        let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
+        let mut state = ledger.lock().map_err(|_| crate::ledger::ERR_LOCK_POISONED)?;
         state.path = Some(ledger_path.clone());
         state.connection = Some(conn);
         state.search_index = search_index;
@@ -346,7 +346,7 @@ pub fn close_ledger(app: AppHandle, ledger: State<AppLedger>) -> Result<(), Stri
     // Tear the watcher down first so no event fires against a half-closed ledger.
     crate::ledger_watch::stop(&app);
 
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
+    let mut state = ledger.lock().map_err(|_| crate::ledger::ERR_LOCK_POISONED)?;
     state.connection = None;
     state.path = None;
     state.search_index = None;

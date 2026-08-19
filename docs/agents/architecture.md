@@ -49,7 +49,11 @@ SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fall
 - `media.rs` — copies audio/image files into the ledger's media directory
 - `spotify.rs` — OAuth flow, token storage, token refresh
 
-`LedgerState` (in `ledger.rs`) is a `Mutex<Option<AppLedger>>` managed by Tauri state. Commands guard against uninitialized ledger with early returns.
+`LedgerState` (in `ledger.rs`) is the Tauri-managed state behind `AppLedger = Mutex<LedgerState>`: a folder, a database connection and a search index, all `None` until a ledger opens.
+
+A command never reconstructs that from the three `Option`s. `with_open_ledger(&ledger, |l| …)` locks the state and hands the closure an `OpenLedger` — `path`, `conn`, `index` — or fails with `ERR_NO_LEDGER` / `ERR_LOCK_POISONED`, which are spelled once in `ledger.rs`. Commands whose work is all on disk take `ledger_path(&ledger)?` instead, which releases the lock before returning. The lock is held for the whole closure, so nothing inside it may call another command that locks `AppLedger`.
+
+Domain work then takes the resolved `OpenLedger` (or plain `conn` / `&Path` params) in a `*_inner` / `*_on_conn` function, which is what the tests call — no `State<AppLedger>` required.
 
 ## Database
 

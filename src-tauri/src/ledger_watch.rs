@@ -480,11 +480,10 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
     }
 
     let notify = {
-        let state_ref = &mut *guard;
-        let Some(conn) = state_ref.connection.as_mut() else {
+        // A watcher event that lands mid-close has nothing to reconcile.
+        let Ok(crate::ledger::OpenLedger { conn, index, .. }) = guard.open() else {
             return;
         };
-        let index = state_ref.search_index.as_ref();
         match change {
             Change::Upsert { rel_path, content } => {
                 match upsert_external_note(conn, index, &rel_path, &content) {
@@ -598,8 +597,7 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
     }
 
     let (rebuilt, unlinked_pins) = {
-        let state_ref = &mut *guard;
-        let Some(conn) = state_ref.connection.as_mut() else {
+        let Ok(crate::ledger::OpenLedger { conn, .. }) = guard.open() else {
             return;
         };
         // Bring the notes table into agreement with disk before the rebuild pass

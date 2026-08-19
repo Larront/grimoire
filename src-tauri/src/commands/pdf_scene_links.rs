@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::db::models::{NewPdfSceneLink, PdfSceneLink};
 use crate::db::schema::pdf_scene_links;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 
 #[tauri::command]
 #[specta::specta]
@@ -25,20 +25,20 @@ pub fn create_pdf_scene_link(
     scene_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<PdfSceneLink, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::insert_into(pdf_scene_links::table)
-        .values(NewPdfSceneLink {
-            pdf_path,
-            page,
-            start_offset,
-            end_offset,
-            quote,
-            scene_id,
-        })
-        .returning(PdfSceneLink::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::insert_into(pdf_scene_links::table)
+            .values(NewPdfSceneLink {
+                pdf_path,
+                page,
+                start_offset,
+                end_offset,
+                quote,
+                scene_id,
+            })
+            .returning(PdfSceneLink::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -47,13 +47,13 @@ pub fn get_pdf_scene_links(
     pdf_path: String,
     ledger: State<AppLedger>,
 ) -> Result<Vec<PdfSceneLink>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    pdf_scene_links::table
-        .filter(pdf_scene_links::pdf_path.eq(pdf_path))
-        .order((pdf_scene_links::page.asc(), pdf_scene_links::start_offset.asc()))
-        .load::<PdfSceneLink>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        pdf_scene_links::table
+            .filter(pdf_scene_links::pdf_path.eq(pdf_path))
+            .order((pdf_scene_links::page.asc(), pdf_scene_links::start_offset.asc()))
+            .load::<PdfSceneLink>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// Re-link a Scene-link to a different Scene (the toolbar change-Scene dropdown,
@@ -67,24 +67,24 @@ pub fn update_pdf_scene_link(
     scene_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<PdfSceneLink, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(pdf_scene_links::table.find(id))
-        .set(pdf_scene_links::scene_id.eq(scene_id))
-        .returning(PdfSceneLink::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(pdf_scene_links::table.find(id))
+            .set(pdf_scene_links::scene_id.eq(scene_id))
+            .returning(PdfSceneLink::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pdf_scene_link(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(pdf_scene_links::table.find(id))
-        .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(pdf_scene_links::table.find(id))
+            .execute(l.conn)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// Re-key every Scene-link from `old_path` to `new_path`. Called from `rename_pdf`

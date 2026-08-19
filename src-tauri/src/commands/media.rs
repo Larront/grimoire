@@ -1,4 +1,4 @@
-use crate::ledger::AppLedger;
+use crate::ledger::{ledger_path, with_open_ledger, AppLedger};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -58,7 +58,7 @@ pub fn resolve_image_filename(images_dir: &Path, file_name: &str) -> PathBuf {
     }
 }
 
-pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Result<String, String> {
+pub fn copy_image_file_to(ledger_path: &Path, absolute_path: &str) -> Result<String, String> {
     let src = PathBuf::from(absolute_path);
     validate_image_extension(&src)?;
     let file_name = src
@@ -66,7 +66,6 @@ pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Re
         .ok_or("Invalid file path")?
         .to_string_lossy()
         .to_string();
-    let ledger_path = ledger_path.ok_or("No ledger open")?;
     let images_dir = ledger_path.join(".grimoire").join("images");
     std::fs::create_dir_all(&images_dir).map_err(|e| e.to_string())?;
     let dest = resolve_image_filename(&images_dir, &file_name);
@@ -82,8 +81,8 @@ pub fn copy_image_file_to(ledger_path: Option<&Path>, absolute_path: &str) -> Re
 #[tauri::command]
 #[specta::specta]
 pub fn copy_image_file(absolute_path: String, ledger: State<AppLedger>) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    copy_image_file_to(state.path.as_deref(), &absolute_path)
+    let ledger_path = ledger_path(&ledger)?;
+    copy_image_file_to(&ledger_path, &absolute_path)
 }
 
 pub fn save_image_bytes_to(images_dir: &Path, filename: &str, bytes: &[u8]) -> Result<String, String> {
@@ -112,8 +111,7 @@ pub fn save_image_bytes(
     filename: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+    let ledger_path = ledger_path(&ledger)?;
     let images_dir = ledger_path.join(".grimoire").join("images");
     save_image_bytes_to(&images_dir, &filename, &bytes)
 }
@@ -124,9 +122,8 @@ pub fn get_image_absolute_path(
     relative_path: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    let canonical = validate_path(ledger_path, &relative_path)?;
+    let ledger_path = ledger_path(&ledger)?;
+    let canonical = validate_path(&ledger_path, &relative_path)?;
     canonical
         .to_str()
         .map(|s| s.to_string())
@@ -143,9 +140,8 @@ pub fn get_pdf_absolute_path(
     relative_path: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    let canonical = validate_path(ledger_path, &relative_path)?;
+    let ledger_path = ledger_path(&ledger)?;
+    let canonical = validate_path(&ledger_path, &relative_path)?;
     canonical
         .to_str()
         .map(|s| s.to_string())
@@ -210,18 +206,17 @@ pub fn rename_pdf(
     new_stem: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    // The lock is taken twice on purpose: the filesystem rename runs without it.
+    let ledger_path = ledger_path(&ledger)?;
 
     let new_path = rename_pdf_inner(&ledger_path, &old_path, &new_stem)?;
 
     // The Scene-link table is keyed by the PDF path (ADR-0011 §Consequences), so a
     // rename must re-key its rows or the links would be orphaned at the old path.
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    crate::commands::pdf_scene_links::rewrite_pdf_path(conn, &old_path, &new_path)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        crate::commands::pdf_scene_links::rewrite_pdf_path(l.conn, &old_path, &new_path)
+            .map_err(|e| e.to_string())
+    })?;
 
     Ok(new_path)
 }
@@ -313,19 +308,17 @@ pub fn move_pdf(
     dest_folder: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    let ledger_path = ledger_path(&ledger)?;
 
     let new_path = move_pdf_inner(&ledger_path, &old_path, &dest_folder)?;
     if new_path == old_path {
         return Ok(new_path);
     }
 
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    crate::commands::pdf_scene_links::rewrite_pdf_path(conn, &old_path, &new_path)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        crate::commands::pdf_scene_links::rewrite_pdf_path(l.conn, &old_path, &new_path)
+            .map_err(|e| e.to_string())
+    })?;
 
     Ok(new_path)
 }
@@ -435,9 +428,7 @@ pub fn save_pdf_bytes(
     target_folder: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    let ledger_path = ledger_path(&ledger)?;
     import_pdf_bytes_to(&ledger_path, &target_folder, &filename, &bytes)
 }
 
@@ -451,17 +442,15 @@ pub fn delete_pdf_inner(ledger_path: &Path, pdf_path: &str) -> Result<(), String
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pdf(pdf_path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    let ledger_path = ledger_path(&ledger)?;
     delete_pdf_inner(&ledger_path, &pdf_path)?;
 
     // A deleted PDF's Scene-links have no referent and the PDF is not a DB row that
     // could cascade, so remove them explicitly (ADR-0011 §Consequences).
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    crate::commands::pdf_scene_links::delete_links_for_pdf(conn, &pdf_path)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        crate::commands::pdf_scene_links::delete_links_for_pdf(l.conn, &pdf_path)
+            .map_err(|e| e.to_string())
+    })?;
 
     Ok(())
 }
@@ -562,23 +551,12 @@ mod tests {
         let src = outer.path().join("portrait.png");
         fs::write(&src, b"png-bytes").unwrap();
 
-        let rel = copy_image_file_to(Some(&ledger), src.to_str().unwrap()).unwrap();
+        let rel = copy_image_file_to(&ledger, src.to_str().unwrap()).unwrap();
         assert_eq!(rel, ".grimoire/images/portrait.png");
         assert_eq!(
             fs::read(ledger.join(".grimoire/images/portrait.png")).unwrap(),
             b"png-bytes"
         );
-    }
-
-    #[test]
-    fn test_copy_image_file_no_ledger_open_returns_graceful_error() {
-        let outer = tempfile::tempdir().unwrap();
-        let src = outer.path().join("portrait.png");
-        fs::write(&src, b"png-bytes").unwrap();
-
-        let result = copy_image_file_to(None, src.to_str().unwrap());
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "No ledger open");
     }
 
     #[test]
@@ -589,7 +567,7 @@ mod tests {
         let src = outer.path().join("icon.svg");
         fs::write(&src, b"<svg/>").unwrap();
 
-        let result = copy_image_file_to(Some(&ledger), src.to_str().unwrap());
+        let result = copy_image_file_to(&ledger, src.to_str().unwrap());
         assert!(result.is_err());
         assert!(!ledger.join(".grimoire/images").join("icon.svg").exists());
     }

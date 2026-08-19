@@ -1,4 +1,4 @@
-use crate::ledger::AppLedger;
+use crate::ledger::{ledger_path, AppLedger};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -119,17 +119,15 @@ pub fn list_templates_for_ledger(ledger_path: &Path) -> Result<Vec<TemplateEntry
 #[tauri::command]
 #[specta::specta]
 pub fn list_templates(ledger: State<AppLedger>) -> Result<Vec<TemplateEntry>, String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    list_templates_for_ledger(ledger_path)
+    let ledger_path = ledger_path(&ledger)?;
+    list_templates_for_ledger(&ledger_path)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn restore_builtin_templates(ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    restore_builtin_templates_for_ledger(ledger_path)
+    let ledger_path = ledger_path(&ledger)?;
+    restore_builtin_templates_for_ledger(&ledger_path)
 }
 
 pub(crate) fn resolve_template_path(ledger_path: &Path, path: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -237,9 +235,8 @@ pub fn rename_template(
     new_name: String,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    rename_template_for_ledger(ledger_path, &path, &new_name)
+    let ledger_path = ledger_path(&ledger)?;
+    rename_template_for_ledger(&ledger_path, &path, &new_name)
 }
 
 pub fn delete_template_for_ledger(ledger_path: &Path, path: &str) -> Result<(), String> {
@@ -251,33 +248,29 @@ pub fn delete_template_for_ledger(ledger_path: &Path, path: &str) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub fn create_template(ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    create_template_for_ledger(ledger_path)
+    let ledger_path = ledger_path(&ledger)?;
+    create_template_for_ledger(&ledger_path)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn read_template(path: String, ledger: State<AppLedger>) -> Result<String, String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    read_template_content(ledger_path, &path)
+    let ledger_path = ledger_path(&ledger)?;
+    read_template_content(&ledger_path, &path)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn write_template(path: String, content: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    write_template_content_for_ledger(ledger_path, &path, &content)
+    let ledger_path = ledger_path(&ledger)?;
+    write_template_content_for_ledger(&ledger_path, &path, &content)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_template(path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    delete_template_for_ledger(ledger_path, &path)
+    let ledger_path = ledger_path(&ledger)?;
+    delete_template_for_ledger(&ledger_path, &path)
 }
 
 pub fn save_note_as_template_for_ledger(ledger_path: &Path, note_path: &str) -> Result<TemplateEntry, String> {
@@ -335,9 +328,8 @@ pub fn save_note_as_template_for_ledger(ledger_path: &Path, note_path: &str) -> 
 #[tauri::command]
 #[specta::specta]
 pub fn save_note_as_template(note_path: String, ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    save_note_as_template_for_ledger(ledger_path, &note_path)
+    let ledger_path = ledger_path(&ledger)?;
+    save_note_as_template_for_ledger(&ledger_path, &note_path)
 }
 
 #[cfg(test)]

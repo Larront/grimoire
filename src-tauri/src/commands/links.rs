@@ -8,7 +8,7 @@ use crate::commands::frontmatter;
 use crate::db::schema::note_aliases::dsl as na;
 use crate::db::schema::note_links::dsl as nl;
 use crate::db::schema::notes::dsl as n;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger, OpenLedger};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -402,9 +402,7 @@ pub fn get_alias_collisions(
     note_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<Vec<AliasCollision>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_alias_collisions_on_conn(conn, note_id)
+    with_open_ledger(&ledger, |l| get_alias_collisions_on_conn(l.conn, note_id))
 }
 
 #[derive(Serialize, specta::Type, Debug, Clone)]
@@ -469,9 +467,7 @@ pub fn resolve_note_target(
     target: String,
     ledger: State<AppLedger>,
 ) -> Result<Option<ResolvedNote>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    resolve_note_target_on_conn(conn, &target)
+    with_open_ledger(&ledger, |l| resolve_note_target_on_conn(l.conn, &target))
 }
 
 #[derive(Serialize, Debug, Clone, specta::Type)]
@@ -520,9 +516,7 @@ pub fn get_backlinks_on_conn(
 #[tauri::command]
 #[specta::specta]
 pub fn get_backlinks(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<BacklinkNote>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_backlinks_on_conn(conn, note_id)
+    with_open_ledger(&ledger, |l| get_backlinks_on_conn(l.conn, note_id))
 }
 
 pub fn get_outbound_links_on_conn(
@@ -556,9 +550,7 @@ pub fn get_outbound_links(
     note_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<Vec<OutboundLink>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_outbound_links_on_conn(conn, note_id)
+    with_open_ledger(&ledger, |l| get_outbound_links_on_conn(l.conn, note_id))
 }
 
 pub fn get_note_backlink_count_on_conn(
@@ -583,21 +575,19 @@ pub fn get_note_backlink_count_on_conn(
 #[tauri::command]
 #[specta::specta]
 pub fn get_note_backlink_count(note_path: String, ledger: State<AppLedger>) -> Result<u32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_note_backlink_count_on_conn(conn, &note_path)
+    with_open_ledger(&ledger, |l| get_note_backlink_count_on_conn(l.conn, &note_path))
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_note_aliases(note_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    na::note_aliases
-        .filter(na::note_id.eq(note_id))
-        .select(na::alias)
-        .load(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        na::note_aliases
+            .filter(na::note_id.eq(note_id))
+            .select(na::alias)
+            .load(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -607,13 +597,17 @@ pub fn set_note_aliases(
     aliases: Vec<String>,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
+    with_open_ledger(&ledger, |l| set_note_aliases_inner(l, note_id, &aliases))
+}
 
-    // Field-split so conn (mut) and search_index (ref) can be borrowed simultaneously.
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
+/// Write `aliases` into the note's frontmatter and reconcile the derived indexes
+/// from the rewritten file.
+fn set_note_aliases_inner(
+    l: OpenLedger,
+    note_id: i32,
+    aliases: &[String],
+) -> Result<(), String> {
+    let OpenLedger { path: ledger_path, conn, index } = l;
 
     let note: crate::db::models::Note = n::notes
         .find(note_id)
@@ -622,7 +616,7 @@ pub fn set_note_aliases(
 
     let full_path = ledger_path.join(&note.path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
-    let new_content = frontmatter::apply_aliases(&content, &aliases);
+    let new_content = frontmatter::apply_aliases(&content, aliases);
 
     crate::note_mutation::commit(conn, index, &full_path, &note, &new_content)?;
     Ok(())

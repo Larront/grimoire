@@ -8,7 +8,7 @@
 //
 // Edge IDs use sequential integers serialised as strings.
 
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 use diesel::prelude::*;
 use serde::Serialize;
 use tauri::State;
@@ -258,9 +258,7 @@ pub fn get_graph_data_on_conn(
 #[tauri::command]
 #[specta::specta]
 pub fn get_graph_data(ledger: State<AppLedger>) -> Result<GraphData, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_graph_data_on_conn(conn)
+    with_open_ledger(&ledger, |l| get_graph_data_on_conn(l.conn))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ use tauri::State;
 
 use crate::db::models::{NewScene, NewSceneSlot, Scene, SceneSlot, SceneWithCount, UpdateScene, UpdateSceneSlot, UpdateSceneThumbnail};
 use crate::db::schema::{scene_slots, scenes};
-use crate::ledger::AppLedger;
+use crate::ledger::{ledger_path, with_open_ledger, AppLedger};
 
 /// Validates that `relative` resolves to a path inside `ledger_root`.
 /// Both sides are canonicalized so the starts_with check works correctly on Windows
@@ -28,28 +28,28 @@ fn validate_path(ledger_root: &Path, relative: &str) -> Result<PathBuf, String> 
 #[tauri::command]
 #[specta::specta]
 pub fn get_scenes(ledger: State<AppLedger>) -> Result<Vec<Scene>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    scenes::table
-        .order(scenes::id.asc())
-        .load::<Scene>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        scenes::table
+            .order(scenes::id.asc())
+            .load::<Scene>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let created: Scene = diesel::insert_into(scenes::table)
-        .values(NewScene { name })
-        .returning(Scene::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        let created: Scene = diesel::insert_into(scenes::table)
+            .values(NewScene { name })
+            .returning(Scene::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    crate::search::scene_indexed(state.search_index.as_ref(), &created);
+        crate::search::scene_indexed(l.index, &created);
 
-    Ok(created)
+        Ok(created)
+    })
 }
 
 /// Rename a scene, and bring the copy of its name that every note referencing it
@@ -69,96 +69,90 @@ pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, Str
 #[tauri::command]
 #[specta::specta]
 pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let crate::ledger::LedgerState {
-        connection,
-        search_index,
-        ..
-    } = &mut *state;
-    let conn = connection.as_mut().ok_or("No ledger open")?;
-    let updated: Scene = diesel::update(scenes::table.find(id))
-        .set(UpdateScene { name })
-        .returning(Scene::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        let updated: Scene = diesel::update(scenes::table.find(id))
+            .set(UpdateScene { name })
+            .returning(Scene::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    crate::search::scene_indexed(search_index.as_ref(), &updated);
+        crate::search::scene_indexed(l.index, &updated);
 
-    match crate::scene_fence::propagate_rename(
-        conn,
-        search_index.as_ref(),
-        &ledger_path,
-        updated.id,
-        &updated.name,
-    ) {
-        Ok(0) => {}
-        Ok(n) => log::info!("[update_scene] renamed scene {id} in {n} note(s)"),
-        Err(e) => log::warn!("[update_scene] could not update the scene name in notes: {e}"),
-    }
+        match crate::scene_fence::propagate_rename(
+            l.conn,
+            l.index,
+            l.path,
+            updated.id,
+            &updated.name,
+        ) {
+            Ok(0) => {}
+            Ok(n) => log::info!("[update_scene] renamed scene {id} in {n} note(s)"),
+            Err(e) => log::warn!("[update_scene] could not update the scene name in notes: {e}"),
+        }
 
-    Ok(updated)
+        Ok(updated)
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_scene(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    // Read the scene before it goes, the way `delete_map` does: a log line naming
-    // the scene that fell out of search is worth one query the GM never notices.
-    let doomed: Scene = scenes::table
-        .find(id)
-        .first(conn)
-        .map_err(|e| e.to_string())?;
-    diesel::delete(scenes::table.find(id))
-        .execute(conn)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        // Read the scene before it goes, the way `delete_map` does: a log line naming
+        // the scene that fell out of search is worth one query the GM never notices.
+        let doomed: Scene = scenes::table
+            .find(id)
+            .first(l.conn)
+            .map_err(|e| e.to_string())?;
+        diesel::delete(scenes::table.find(id))
+            .execute(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    crate::search::scene_unindexed(state.search_index.as_ref(), &doomed);
+        crate::search::scene_unindexed(l.index, &doomed);
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn toggle_scene_favorite(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(scenes::table.find(id))
-        .set(scenes::favorited.eq(sql::<Integer>("1 - favorited")))
-        .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(scenes::table.find(id))
+            .set(scenes::favorited.eq(sql::<Integer>("1 - favorited")))
+            .execute(l.conn)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_scenes_with_slot_counts(ledger: State<AppLedger>) -> Result<Vec<SceneWithCount>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::sql_query(
-        "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count, \
-         s.thumbnail_path, s.thumbnail_color, s.thumbnail_icon \
-         FROM scenes s \
-         LEFT JOIN scene_slots ss ON ss.scene_id = s.id \
-         GROUP BY s.id \
-         ORDER BY s.id ASC"
-    )
-    .load::<SceneWithCount>(conn)
-    .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::sql_query(
+            "SELECT s.id, s.name, s.favorited, s.created_at, COUNT(ss.id) AS slot_count, \
+             s.thumbnail_path, s.thumbnail_color, s.thumbnail_icon \
+             FROM scenes s \
+             LEFT JOIN scene_slots ss ON ss.scene_id = s.id \
+             GROUP BY s.id \
+             ORDER BY s.id ASC"
+        )
+        .load::<SceneWithCount>(l.conn)
+        .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_scene_slots(scene_id: i32, ledger: State<AppLedger>) -> Result<Vec<SceneSlot>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    scene_slots::table
-        .filter(scene_slots::scene_id.eq(scene_id))
-        .order(scene_slots::slot_order.asc())
-        .load::<SceneSlot>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        scene_slots::table
+            .filter(scene_slots::scene_id.eq(scene_id))
+            .order(scene_slots::slot_order.asc())
+            .load::<SceneSlot>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -174,22 +168,22 @@ pub fn create_scene_slot(
     shuffle: bool,
     ledger: State<AppLedger>,
 ) -> Result<SceneSlot, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::insert_into(scene_slots::table)
-        .values(NewSceneSlot {
-            scene_id,
-            source,
-            source_id,
-            label,
-            volume: volume as f32,
-            is_loop: loop_,
-            slot_order,
-            shuffle,
-        })
-        .returning(SceneSlot::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::insert_into(scene_slots::table)
+            .values(NewSceneSlot {
+                scene_id,
+                source,
+                source_id,
+                label,
+                volume: volume as f32,
+                is_loop: loop_,
+                slot_order,
+                shuffle,
+            })
+            .returning(SceneSlot::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -203,30 +197,30 @@ pub fn update_scene_slot(
     shuffle: bool,
     ledger: State<AppLedger>,
 ) -> Result<SceneSlot, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(scene_slots::table.find(id))
-        .set(UpdateSceneSlot {
-            label,
-            volume: volume as f32,
-            is_loop: loop_,
-            slot_order,
-            shuffle,
-        })
-        .returning(SceneSlot::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(scene_slots::table.find(id))
+            .set(UpdateSceneSlot {
+                label,
+                volume: volume as f32,
+                is_loop: loop_,
+                slot_order,
+                shuffle,
+            })
+            .returning(SceneSlot::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_scene_slot(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(scene_slots::table.find(id))
-        .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(scene_slots::table.find(id))
+            .execute(l.conn)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -236,21 +230,22 @@ pub fn reorder_scene_slots(
     ordered_ids: Vec<i32>,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    conn.transaction(|conn| {
-        for (order, &slot_id) in ordered_ids.iter().enumerate() {
-            diesel::update(
-                scene_slots::table
-                    .filter(scene_slots::id.eq(slot_id))
-                    .filter(scene_slots::scene_id.eq(scene_id)),
-            )
-            .set(scene_slots::slot_order.eq(order as i32))
-            .execute(conn)?;
-        }
-        Ok(())
+    with_open_ledger(&ledger, |l| {
+        l.conn
+            .transaction(|conn| {
+                for (order, &slot_id) in ordered_ids.iter().enumerate() {
+                    diesel::update(
+                        scene_slots::table
+                            .filter(scene_slots::id.eq(slot_id))
+                            .filter(scene_slots::scene_id.eq(scene_id)),
+                    )
+                    .set(scene_slots::slot_order.eq(order as i32))
+                    .execute(conn)?;
+                }
+                Ok(())
+            })
+            .map_err(|e: diesel::result::Error| e.to_string())
     })
-    .map_err(|e: diesel::result::Error| e.to_string())
 }
 
 #[tauri::command]
@@ -263,11 +258,10 @@ pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Resul
         .to_string_lossy()
         .to_string();
 
-    // Brief lock: resolve conflict-free destination path while holding lock,
-    // then drop before the expensive fs::copy. Matches spec's split-lock pattern.
+    // The lock is released before the expensive fs::copy: `ledger_path` hands back
+    // the folder and nothing else, which is the whole of what this needs.
     let (dest, relative) = {
-        let state = ledger.lock().map_err(|e| e.to_string())?;
-        let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+        let ledger_path = ledger_path(&ledger)?;
         let audio_dir = ledger_path.join(".grimoire").join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&audio_dir, &file_name);
@@ -277,7 +271,7 @@ pub fn copy_audio_file(absolute_path: String, ledger: State<AppLedger>) -> Resul
             .to_string_lossy();
         let relative = format!(".grimoire/audio/{}", dest_name);
         (dest, relative)
-    }; // lock dropped here — fs::copy runs without holding mutex
+    };
 
     std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
     Ok(relative)
@@ -295,10 +289,8 @@ pub fn copy_audio_bytes(
     file_name: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    // Brief lock to resolve a conflict-free destination, then drop before writing.
     let (dest, relative) = {
-        let state = ledger.lock().map_err(|e| e.to_string())?;
-        let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+        let ledger_path = ledger_path(&ledger)?;
         let audio_dir = ledger_path.join(".grimoire").join("audio");
         std::fs::create_dir_all(&audio_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&audio_dir, &file_name);
@@ -308,7 +300,7 @@ pub fn copy_audio_bytes(
             .to_string_lossy();
         let relative = format!(".grimoire/audio/{}", dest_name);
         (dest, relative)
-    }; // lock dropped here — fs::write runs without holding mutex
+    };
 
     std::fs::write(&dest, &bytes).map_err(|e| e.to_string())?;
     Ok(relative)
@@ -345,9 +337,8 @@ pub fn get_audio_absolute_path(
     relative_path: String,
     ledger: State<AppLedger>,
 ) -> Result<String, String> {
-    let state = ledger.lock().map_err(|e| e.to_string())?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
-    let canonical = validate_path(ledger_path, &relative_path)?;
+    let ledger_path = ledger_path(&ledger)?;
+    let canonical = validate_path(&ledger_path, &relative_path)?;
     canonical
         .to_str()
         .map(|s| s.to_string())
@@ -363,13 +354,13 @@ pub fn update_scene_thumbnail(
     thumbnail_icon: Option<String>,
     ledger: State<AppLedger>,
 ) -> Result<Scene, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(scenes::table.find(id))
-        .set(UpdateSceneThumbnail { thumbnail_path, thumbnail_color, thumbnail_icon })
-        .returning(Scene::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(scenes::table.find(id))
+            .set(UpdateSceneThumbnail { thumbnail_path, thumbnail_color, thumbnail_icon })
+            .returning(Scene::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -391,8 +382,7 @@ pub fn copy_thumbnail_file(absolute_path: String, ledger: State<AppLedger>) -> R
     }
 
     let (dest, relative) = {
-        let state = ledger.lock().map_err(|e| e.to_string())?;
-        let ledger_path = state.path.as_ref().ok_or("No ledger open")?;
+        let ledger_path = ledger_path(&ledger)?;
         let thumb_dir = ledger_path.join(".grimoire").join("thumbnails");
         std::fs::create_dir_all(&thumb_dir).map_err(|e| e.to_string())?;
         let dest = resolve_filename(&thumb_dir, &file_name);

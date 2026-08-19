@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::db::models::{NewSpotifyAuth, SpotifyAuth, SpotifyAuthStatus};
 use crate::db::schema::spotify_auth;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger, ERR_LOCK_POISONED};
 
 // ---- PKCE helpers ----
 
@@ -94,16 +94,16 @@ fn persist_auth(auth: &TokenResponse, conn: &mut SqliteConnection) -> Result<(),
 pub fn spotify_get_auth_status(
     ledger: State<AppLedger>,
 ) -> Result<Option<SpotifyAuthStatus>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    match spotify_auth::table.find(1).first::<SpotifyAuth>(conn) {
-        Ok(auth) => Ok(Some(SpotifyAuthStatus {
-            is_connected: true,
-            expires_at: auth.expires_at,
-        })),
-        Err(diesel::result::Error::NotFound) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    with_open_ledger(&ledger, |l| {
+        match spotify_auth::table.find(1).first::<SpotifyAuth>(l.conn) {
+            Ok(auth) => Ok(Some(SpotifyAuthStatus {
+                is_connected: true,
+                expires_at: auth.expires_at,
+            })),
+            Err(diesel::result::Error::NotFound) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    })
 }
 
 #[tauri::command]
@@ -244,11 +244,7 @@ pub async fn spotify_exchange_code(
     let auth = parse_token_response(&token_data, None)?;
     let expires_at = auth.expires_at.clone();
 
-    {
-        let mut ledger_state = ledger.lock().map_err(|e| e.to_string())?;
-        let conn = ledger_state.connection.as_mut().ok_or("No ledger open")?;
-        persist_auth(&auth, conn)?;
-    }
+    with_open_ledger(&ledger, |l| persist_auth(&auth, l.conn))?;
 
     Ok(SpotifyAuthStatus {
         is_connected: true,
@@ -262,9 +258,11 @@ pub async fn spotify_refresh_token(
     ledger: State<'_, AppLedger>,
 ) -> Result<SpotifyAuthStatus, String> {
     let (client_id, current_refresh) = {
-        let mut state = ledger.lock().map_err(|e| e.to_string())?;
+        // The client id lives on the state beside the open ledger, so this one
+        // takes the guard itself rather than going through `with_open_ledger`.
+        let mut state = ledger.lock().map_err(|_| ERR_LOCK_POISONED)?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No ledger open")?;
+        let conn = state.open()?.conn;
         let current_refresh = spotify_auth::table
             .find(1)
             .select(spotify_auth::refresh_token)
@@ -283,11 +281,7 @@ pub async fn spotify_refresh_token(
     let auth = parse_token_response(&token_data, Some(current_refresh))?;
     let expires_at = auth.expires_at.clone();
 
-    {
-        let mut state = ledger.lock().map_err(|e| e.to_string())?;
-        let conn = state.connection.as_mut().ok_or("No ledger open")?;
-        persist_auth(&auth, conn)?;
-    }
+    with_open_ledger(&ledger, |l| persist_auth(&auth, l.conn))?;
 
     Ok(SpotifyAuthStatus {
         is_connected: true,
@@ -299,9 +293,9 @@ pub async fn spotify_refresh_token(
 #[specta::specta]
 pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<String, String> {
     let (client_id, auth) = {
-        let mut state = ledger.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|_| ERR_LOCK_POISONED)?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No ledger open")?;
+        let conn = state.open()?.conn;
         let auth = spotify_auth::table
             .find(1)
             .first::<SpotifyAuth>(conn)
@@ -323,11 +317,7 @@ pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<St
         .await?;
         let new_auth = parse_token_response(&token_data, Some(auth.refresh_token))?;
         let new_access = new_auth.access_token.clone();
-        {
-            let mut state = ledger.lock().map_err(|e| e.to_string())?;
-            let conn = state.connection.as_mut().ok_or("No ledger open")?;
-            persist_auth(&new_auth, conn)?;
-        }
+        with_open_ledger(&ledger, |l| persist_auth(&new_auth, l.conn))?;
         return Ok(new_access);
     }
 
@@ -337,21 +327,21 @@ pub async fn spotify_get_access_token(ledger: State<'_, AppLedger>) -> Result<St
 #[tauri::command]
 #[specta::specta]
 pub fn spotify_revoke(ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(spotify_auth::table)
-        .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(spotify_auth::table)
+            .execute(l.conn)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
 }
 
 // ---- Private helper: read token + client_id, auto-refresh if expiring ----
 
 async fn get_token_and_client(ledger: &State<'_, AppLedger>) -> Result<(String, String), String> {
     let (auth, client_id) = {
-        let mut state = ledger.lock().map_err(|e| e.to_string())?;
+        let mut state = ledger.lock().map_err(|_| ERR_LOCK_POISONED)?;
         let client_id = state.spotify_client_id.clone();
-        let conn = state.connection.as_mut().ok_or("No ledger open")?;
+        let conn = state.open()?.conn;
         let auth = spotify_auth::table
             .find(1)
             .first::<SpotifyAuth>(conn)
@@ -370,11 +360,7 @@ async fn get_token_and_client(ledger: &State<'_, AppLedger>) -> Result<(String, 
         .await?;
         let new_auth = parse_token_response(&token_data, Some(auth.refresh_token))?;
         let new_access = new_auth.access_token.clone();
-        {
-            let mut state = ledger.lock().map_err(|e| e.to_string())?;
-            let conn = state.connection.as_mut().ok_or("No ledger open")?;
-            persist_auth(&new_auth, conn)?;
-        }
+        with_open_ledger(ledger, |l| persist_auth(&new_auth, l.conn))?;
         return Ok((client_id, new_access));
     }
     Ok((client_id, auth.access_token))

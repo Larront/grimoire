@@ -1,7 +1,7 @@
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
-use crate::ledger::AppLedger;
+use crate::ledger::{ledger_path, with_open_ledger, AppLedger};
 use diesel::prelude::*;
 use diesel::sql_query;                // used in rename_folder (Task 4)
 use diesel::sql_types::Text;          // used in rename_folder (Task 4)
@@ -125,25 +125,23 @@ pub fn build_file_tree(
 #[tauri::command]
 #[specta::specta]
 pub fn get_file_tree(ledger: State<AppLedger>) -> Result<FileNode, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        // Build note map — the ledger is locked for the whole closure; do not call
+        // get_notes as a sub-command (double-locking AppLedger's Mutex would deadlock).
+        let note_list = notes.load::<Note>(l.conn).map_err(|e| e.to_string())?;
+        let note_map: HashMap<String, i32> = note_list
+            .into_iter()
+            .map(|n| (n.path, n.id))
+            .collect();
 
-    // Build note map — acquire mutex once; do not call get_notes as a sub-command
-    // (double-locking AppLedger's Mutex would deadlock).
-    let note_list = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
-    let note_map: HashMap<String, i32> = note_list
-        .into_iter()
-        .map(|n| (n.path, n.id))
-        .collect();
+        let map_list = maps::table.load::<Map>(l.conn).map_err(|e| e.to_string())?;
+        let map_map: HashMap<String, (i32, String)> = map_list
+            .into_iter()
+            .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
+            .collect();
 
-    let map_list = maps::table.load::<Map>(conn).map_err(|e| e.to_string())?;
-    let map_map: HashMap<String, (i32, String)> = map_list
-        .into_iter()
-        .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
-        .collect();
-
-    Ok(build_file_tree(&ledger_path, "", &note_map, &map_map))
+        Ok(build_file_tree(l.path, "", &note_map, &map_map))
+    })
 }
 
 // ── create_folder ──────────────────────────────────────────────────────────
@@ -156,9 +154,8 @@ pub fn create_folder_inner(ledger_path: &Path, folder_path: &str) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub fn create_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    // `ledger_path` releases the lock before the filesystem op.
+    let ledger_path = ledger_path(&ledger)?;
     create_folder_inner(&ledger_path, &folder_path)
 }
 
@@ -251,12 +248,9 @@ pub fn delete_folder_inner(
 #[tauri::command]
 #[specta::specta]
 pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    delete_folder_inner(&ledger_path, &folder_path, conn, index)
+    with_open_ledger(&ledger, |l| {
+        delete_folder_inner(l.path, &folder_path, l.conn, l.index)
+    })
 }
 
 // ── rename_folder / move_folder ─────────────────────────────────────────────
@@ -482,14 +476,11 @@ pub fn rename_folder(
     new_name: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    // Cast the internal usize count to i32 at the command seam: specta forbids
-    // BigInt-style types in exported bindings, and link counts are always small.
-    rename_folder_inner(&ledger_path, &old_path, &new_name, conn, index).map(|n| n as i32)
+    with_open_ledger(&ledger, |l| {
+        // Cast the internal usize count to i32 at the command seam: specta forbids
+        // BigInt-style types in exported bindings, and link counts are always small.
+        rename_folder_inner(l.path, &old_path, &new_name, l.conn, l.index).map(|n| n as i32)
+    })
 }
 
 #[tauri::command]
@@ -499,12 +490,9 @@ pub fn move_folder(
     dest_folder: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    move_folder_inner(&ledger_path, &old_path, &dest_folder, conn, index).map(|n| n as i32)
+    with_open_ledger(&ledger, |l| {
+        move_folder_inner(l.path, &old_path, &dest_folder, l.conn, l.index).map(|n| n as i32)
+    })
 }
 
 #[cfg(test)]
