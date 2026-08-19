@@ -51,7 +51,7 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import InfoboxBlockView from "$lib/components/editor/InfoboxBlockView.svelte";
 import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
-import { jsonListAttr } from "$lib/editor/block-attrs";
+import { blockDom, listAttr, textAttr } from "$lib/editor/block-attrs";
 import {
   blankLabelledRow,
   isBlankLabelledRow,
@@ -81,16 +81,29 @@ export interface Infobox {
 }
 
 /** A freshly inserted panel opens its one blank row, so its view must let it. */
-interface InfoboxBlockViewExports extends BlockView {
+interface InfoboxBlockViewExports extends BlockView<Infobox> {
   focusRow: (index: number) => void;
 }
+
+/**
+ * How the panel's record crosses the DOM, declared once (#209). The schema's
+ * attributes, the `data-*` a copied panel travels as, and the node view's stand-ins are
+ * all read off this — so a field added to `Infobox` is a type error here and nowhere
+ * else.
+ */
+const INFOBOX_DOM = blockDom<Infobox>({
+  title: textAttr(),
+  image: textAttr(),
+  imageAlt: textAttr(),
+  rows: listAttr<LabelledRow>(),
+});
 
 /**
  * What `/infobox` inserts: no title, and one empty row so there is somewhere to
  * type. The empty row is not content — it serializes to nothing at all.
  */
 export function blankInfobox(): Infobox {
-  return { title: "", image: "", imageAlt: "", rows: [blankLabelledRow()] };
+  return { ...INFOBOX_DOM.defaults, rows: [blankLabelledRow()] };
 }
 
 /** Whether a panel holds nothing a GM typed — a fresh insert, still untouched. */
@@ -219,28 +232,12 @@ export const InfoboxBlock = Node.create({
   // not allow it, however the selection was made.
   draggable: true,
 
+  // Every attribute reads itself back off the DOM, because copying a panel inside the
+  // editor goes out through `renderHTML` and back in through here — an attribute that
+  // only writes is an attribute a copy-paste drops. Both directions come off the one
+  // table above, so neither can forget a field the other names.
   addAttributes() {
-    return {
-      // Both attributes read themselves back off the DOM, because copying a panel
-      // inside the editor goes out through `renderHTML` and back in through here —
-      // an attribute that only writes is an attribute a copy-paste drops.
-      title: {
-        default: "",
-        parseHTML: (el) => (el as HTMLElement).dataset.title ?? "",
-      },
-      image: {
-        default: "",
-        parseHTML: (el) => (el as HTMLElement).dataset.image ?? "",
-      },
-      imageAlt: {
-        default: "",
-        parseHTML: (el) => (el as HTMLElement).dataset.imageAlt ?? "",
-      },
-      rows: {
-        default: [],
-        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.rows),
-      },
-    };
+    return INFOBOX_DOM.attributes;
   },
 
   parseHTML() {
@@ -250,15 +247,7 @@ export const InfoboxBlock = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     return [
       "infobox-block",
-      mergeAttributes(
-        {
-          "data-title": node.attrs.title,
-          "data-image": node.attrs.image,
-          "data-image-alt": node.attrs.imageAlt,
-          "data-rows": encodeURIComponent(JSON.stringify(node.attrs.rows)),
-        },
-        HTMLAttributes,
-      ),
+      mergeAttributes(INFOBOX_DOM.dataset(node.attrs as Infobox), HTMLAttributes),
     ];
   },
 
@@ -279,31 +268,20 @@ export const InfoboxBlock = Node.create({
   },
 
   addNodeView() {
-    return createBlockNodeView<InfoboxBlockViewExports>({
+    return createBlockNodeView<Infobox, InfoboxBlockViewExports>({
       component: InfoboxBlockView,
       // The float's hook. It sits on the wrapper because the wrapper is the block in
       // the document's flow — the element paragraphs wrap around — and it is an
       // attribute rather than a class so nothing in the note or the view can look
       // like it decides the layout (#148).
       domAttrs: { "data-infobox-block": "", "data-note-block": "infobox" },
-      defaults: { title: "", image: "", imageAlt: "", rows: [] },
-      props: ({ updateAttributes }) => ({
-        onCommit: (infobox: Infobox) =>
-          updateAttributes({
-            title: infobox.title,
-            image: infobox.image,
-            imageAlt: infobox.imageAlt,
-            rows: infobox.rows,
-          }),
-      }),
-      mounted: (view, attrs) => {
+      defaults: INFOBOX_DOM.defaults,
+      // The panel *is* the write-back's argument: the connector merges a `Partial<Infobox>`
+      // into the node, so an edited panel needs no field-by-field projection on the way
+      // through — and a field this once forgot to name is now impossible rather than silent.
+      props: ({ updateAttributes }) => ({ onCommit: updateAttributes }),
+      mounted: (view, panel) => {
         // A fresh `/infobox`: one empty row, opened for typing straight away.
-        const panel: Infobox = {
-          title: attrs.title as string,
-          image: attrs.image as string,
-          imageAlt: attrs.imageAlt as string,
-          rows: attrs.rows as LabelledRow[],
-        };
         if (panel.rows.length === 1 && isBlankInfobox(panel)) view.focusRow(0);
       },
     });

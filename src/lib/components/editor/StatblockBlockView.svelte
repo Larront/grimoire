@@ -72,31 +72,25 @@
     type Statblock,
     type StatblockEntry,
     type StatblockSection,
-    type StatblockWidth,
   } from "$lib/editor/statblock-block";
 
+  // The creature's record, taken as one prop bag rather than as four named props: the
+  // connector mounts a block with its record spread over the props, so the rest element
+  // *is* the record and nothing here re-lists its fields (#209). A fifth attribute arrives
+  // without a line changing in this file.
   let {
-    name,
-    rows,
-    sections,
-    width,
     onCommit,
-  }: {
-    name: string;
-    rows: LabelledRow[];
-    sections: StatblockSection[];
-    width: StatblockWidth;
+    ...attrs
+  }: Statblock & {
     onCommit: (block: Statblock) => void;
   } = $props();
 
+  // The editable copy. One record rather than one mirror per field, which is what makes
+  // `setAttrs` below total: an undo hands over a whole creature, so there is no field it
+  // can leave behind holding a stale value for the next commit to write back — the silent
+  // loss #209 named.
   // svelte-ignore state_referenced_locally
-  let _name = $state(name);
-  // svelte-ignore state_referenced_locally
-  let _rows = $state<LabelledRow[]>(rows);
-  // svelte-ignore state_referenced_locally
-  let _sections = $state<StatblockSection[]>(sections);
-  // svelte-ignore state_referenced_locally
-  let _width = $state<StatblockWidth>(width);
+  let block = $state<Statblock>({ ...attrs });
 
   /**
    * View state, both of it. Neither is ever handed to `onCommit`, and `setAttrs` leaves
@@ -125,12 +119,7 @@
     focus?.level === "entry" && focus.section === section && focus.index === index;
 
   function commit() {
-    onCommit({
-      name: _name,
-      rows: $state.snapshot(_rows) as LabelledRow[],
-      sections: $state.snapshot(_sections) as StatblockSection[],
-      width: _width,
-    });
+    onCommit($state.snapshot(block) as Statblock);
   }
 
   /**
@@ -141,12 +130,12 @@
    * structure mode to do it.
    */
   function toggleWidth() {
-    _width = _width === "narrow" ? "comfortable" : "narrow";
+    block.width = block.width === "narrow" ? "comfortable" : "narrow";
     commit();
   }
 
   function setName(next: string) {
-    _name = next;
+    block.name = next;
     commit();
   }
 
@@ -173,7 +162,7 @@
   // ── The header ──────────────────────────────────────────────────────────────
 
   function setRow(index: number, patch: Partial<LabelledRow>) {
-    _rows[index] = { ..._rows[index], ...patch };
+    block.rows[index] = { ...block.rows[index], ...patch };
     focus = null;
     commit();
   }
@@ -183,7 +172,7 @@
   // there and the same at all three depths; what differs here is only which level of the
   // creature the focus names.
   function handleRowChange(next: LabelledRow[], change: RowChange) {
-    _rows = next;
+    block.rows = next;
     focus = null;
     settleRowChange(change, {
       focus: (index) => (focus = { level: "row", index }),
@@ -215,7 +204,7 @@
     // Enter commits and closes the input, which in some browsers blurs it on the way
     // out. Without this the hit would land twice, and the second one is invisible.
     if (poolRow !== index) return;
-    const value = classifyValue(_rows[index].value);
+    const value = classifyValue(block.rows[index].value);
     poolRow = null;
     if (value.kind !== "pool") return;
     const next = applyArithmetic(value.current, poolDraft);
@@ -226,7 +215,7 @@
   }
 
   function toggleMark(index: number, mark: number) {
-    const value = classifyValue(_rows[index].value);
+    const value = classifyValue(block.rows[index].value);
     if (value.kind !== "track") return;
     const marks: Mark[] = value.marks.map((m, i) =>
       i === mark ? { ...m, checked: !m.checked } : m,
@@ -236,19 +225,21 @@
 
   /** What a collapsed statblock keeps: the rows a GM can play on, in their order. */
   const playableRows = $derived(
-    _rows.map((row, index) => ({ row, index })).filter(({ row }) => isPlayable(row.value)),
+    block.rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => isPlayable(row.value)),
   );
 
   // ── Sections ────────────────────────────────────────────────────────────────
 
   function setHeading(index: number, heading: string) {
-    _sections[index] = { ..._sections[index], heading };
+    block.sections[index] = { ...block.sections[index], heading };
     focus = null;
     commit();
   }
 
   function handleSectionChange(next: StatblockSection[], change: RowChange) {
-    _sections = next;
+    block.sections = next;
     focus = null;
     settleRowChange(change, {
       focus: (index) => (focus = { level: "section", index }),
@@ -259,15 +250,15 @@
   // ── Entries ─────────────────────────────────────────────────────────────────
 
   function setEntry(section: number, index: number, patch: Partial<StatblockEntry>) {
-    const entries = [..._sections[section].entries];
+    const entries = [...block.sections[section].entries];
     entries[index] = { ...entries[index], ...patch };
-    _sections[section] = { ..._sections[section], entries };
+    block.sections[section] = { ...block.sections[section], entries };
     focus = null;
     commit();
   }
 
   function handleEntryChange(section: number, next: StatblockEntry[], change: RowChange) {
-    _sections[section] = { ..._sections[section], entries: next };
+    block.sections[section] = { ...block.sections[section], entries: next };
     focus = null;
     settleRowChange(change, {
       focus: (index) => (focus = { level: "entry", section, index }),
@@ -286,24 +277,23 @@
 
   function saveShapeAsPreset() {
     capturedFence = serializeStatblock({
-      name: _name,
-      rows: $state.snapshot(_rows) as LabelledRow[],
-      sections: $state.snapshot(_sections) as StatblockSection[],
+      name: block.name,
+      rows: $state.snapshot(block.rows) as LabelledRow[],
+      sections: $state.snapshot(block.sections) as StatblockSection[],
       // Width travels with the shape, because it is part of what the GM is keeping: a
       // preset made from a narrowed creature stamps narrowed creatures, which is what
       // building a preset off one member of a tiled encounter is for.
-      width: _width,
+      width: block.width,
     });
     savingPreset = true;
   }
 
-  export function setAttrs(attrs: Statblock) {
-    _name = attrs.name;
-    _rows = attrs.rows;
-    _sections = attrs.sections;
-    // Width is document state, so it comes back with the rest of it — an undo of a
-    // narrowing has to redraw the card, not just rewrite the fence underneath it.
-    _width = asStatblockWidth(attrs.width);
+  export function setAttrs(next: Statblock) {
+    // The whole record, width included — width is document state, so an undo of a
+    // narrowing has to redraw the card and not just rewrite the fence underneath it. It
+    // is still read through `asStatblockWidth`, because a card pasted from elsewhere may
+    // carry a word this version has no drawing for.
+    block = { ...next, width: asStatblockWidth(next.width) };
     focus = null;
     poolRow = null;
   }
@@ -532,7 +522,7 @@
   class="statblock-block group/block relative my-2 select-none rounded-lg border border-l-[3px]
          border-border bg-card/40 px-3 py-2"
   class:statblock-editing={editing}
-  data-width={_width}
+  data-width={block.width}
   contenteditable="false"
   onkeydown={handleKeydown}
 >
@@ -569,10 +559,10 @@
       type="button"
       class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      aria-label={_width === "narrow" ? "Widen statblock" : "Narrow statblock"}
+      aria-label={block.width === "narrow" ? "Widen statblock" : "Narrow statblock"}
       onclick={toggleWidth}
     >
-      {#if _width === "narrow"}
+      {#if block.width === "narrow"}
         <UnfoldHorizontal size={13} />
       {:else}
         <FoldHorizontal size={13} />
@@ -617,7 +607,7 @@
        preset and tick are four buttons against view mode's collapse, width, preset and
        pencil. `pr-20` is the width four already had, not a fresh guess. -->
   <LinkedTextField
-    value={_name}
+    value={block.name}
     onCommit={setName}
     restrict={oneLine}
     readonly={!editing}
@@ -626,7 +616,7 @@
     class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-20"
   />
 
-  {#if !collapsed && _rows.length === 0}
+  {#if !collapsed && block.rows.length === 0}
     <div class="font-sans text-xs italic text-muted-foreground mb-1">No header rows yet</div>
   {/if}
 
@@ -641,7 +631,7 @@
     </div>
   {:else if editing}
     <RowList
-      rows={_rows}
+      rows={block.rows}
       row={headerRow}
       noun="row"
       createRow={blankLabelledRow}
@@ -649,7 +639,7 @@
     />
 
     <RowList
-      rows={_sections}
+      rows={block.sections}
       row={statblockSection}
       noun="section"
       createRow={blankStatblockSection}
@@ -658,12 +648,12 @@
   {:else}
     <div class="statblock-split">
       <div class="statblock-stats">
-        {#each _rows as row, i (i)}
+        {#each block.rows as row, i (i)}
           {@render viewRow(row, i)}
         {/each}
       </div>
       <div class="statblock-reference">
-        {#each _sections as section, s (s)}
+        {#each block.sections as section, s (s)}
           <div class="pt-2">
             {@render sectionHeading(section, s, false)}
             {#each section.entries as entry, i (i)}
@@ -676,7 +666,11 @@
   {/if}
 </div>
 
-<SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={_name} />
+<SavePresetDialog
+  bind:open={savingPreset}
+  fence={capturedFence}
+  suggestedName={block.name}
+/>
 
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state

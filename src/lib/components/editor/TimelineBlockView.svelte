@@ -20,7 +20,11 @@
   // What is left is the timeline's own business: the rail, the collapsible description,
   // and which edits become a document write. Order and the hover-revealed controls are
   // the Row List's, and the `[[` autocomplete inside a value is the field's.
-  import { createBlankEvent, type TimelineEvent } from "$lib/editor/timeline-block";
+  import {
+    createBlankEvent,
+    type Timeline,
+    type TimelineEvent,
+  } from "$lib/editor/timeline-block";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import {
@@ -31,27 +35,31 @@
   import { oneLine } from "$lib/editor/labelled-row";
   import { ChevronDown } from "@lucide/svelte";
 
+  // The block's record, taken as one prop bag rather than field by field: the connector
+  // mounts a block with its record spread over the props, so the rest element *is* the
+  // record and nothing here re-lists it (#209).
   let {
-    events,
     onCommit,
-  }: {
-    events: TimelineEvent[];
-    onCommit: (events: TimelineEvent[]) => void;
+    ...attrs
+  }: Timeline & {
+    onCommit: (timeline: Timeline) => void;
   } = $props();
 
+  // The editable copy — one record, so an undo hands over a whole timeline and `setAttrs`
+  // has no field it can leave behind holding a stale value.
   // svelte-ignore state_referenced_locally
-  let _events = $state<TimelineEvent[]>(events);
+  let timeline = $state<Timeline>({ ...attrs });
   /** Which events have their description showing. View state, never serialized. */
   let expandedSet = $state(new Set<number>());
   /** The event whose title is opening for typing, after an insert or a fresh `/timeline`. */
   let focusedRow = $state<number | null>(null);
 
   function commit() {
-    onCommit($state.snapshot(_events) as TimelineEvent[]);
+    onCommit($state.snapshot(timeline) as Timeline);
   }
 
   function setEvent(index: number, patch: Partial<TimelineEvent>) {
-    _events[index] = { ..._events[index], ...patch };
+    timeline.events[index] = { ...timeline.events[index], ...patch };
     focusedRow = null;
     commit();
   }
@@ -68,7 +76,7 @@
   // the rows, and what it means for this block to open an event. Whether the change
   // reaches the document is `settleRowChange`'s rule, stated once there.
   function handleRowChange(next: TimelineEvent[], change: RowChange) {
-    _events = next;
+    timeline.events = next;
     expandedSet = remapRowIndices(expandedSet, change);
     settleRowChange(change, {
       focus: (index) => {
@@ -82,8 +90,8 @@
     });
   }
 
-  export function setAttrs(attrs: { events: TimelineEvent[] }) {
-    _events = attrs.events;
+  export function setAttrs(next: Timeline) {
+    timeline = next;
     focusedRow = null;
   }
 
@@ -103,7 +111,7 @@
        the row's fields — the timeline's single use of the accent, and the same signal
        the node used to carry for the mode this block no longer has. -->
   <div class="relative w-4 flex-none self-stretch" aria-hidden="true">
-    {#if i < _events.length - 1}
+    {#if i < timeline.events.length - 1}
       <div
         class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[34px] w-px bg-muted-foreground/25"
       ></div>
@@ -200,14 +208,14 @@
        (#175 review). The gutter handle picks the block up (#190) and its menu deletes it
        (#194), so the block draws neither. -->
 
-  {#if _events.length === 0}
+  {#if timeline.events.length === 0}
     <div class="ml-6 text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>
   {/if}
 
   <!-- Order, the hover-revealed move / delete / insert-between controls and their
        gaps are the Row List's; the gaps are indented to clear the spine. -->
   <RowList
-    rows={_events}
+    rows={timeline.events}
     row={eventRow}
     noun="event"
     insertionPointClass="pl-6"

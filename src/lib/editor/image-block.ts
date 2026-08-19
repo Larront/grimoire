@@ -9,8 +9,32 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * What an image node holds (#209) — the record the node view and the view are both typed
+ * against.
+ *
+ * Not derived from a `blockDom` table like the fenced blocks', and it is the one block
+ * where that would be wrong: `src`, `alt` and `title` are TipTap's own attributes on the
+ * extension this one extends, written as real HTML attributes rather than as a dataset of
+ * a record, and `align` and `width` render themselves through the schema. So the record is
+ * declared here and the attributes stay where they are, checked against each other by the
+ * connector rather than by a table.
+ *
+ * `alt` is a string here and nullable in the document, which the node view's stand-ins
+ * settle before the view ever sees it. `title` is TipTap's, never written by Grimoire and
+ * never read by the view; it is named because a record that hid an attribute would be the
+ * silent-loss shape all over again.
+ */
+export interface ImageAttrs {
+  src: string;
+  alt: string;
+  align: string;
+  width: string;
+  title: string | null;
+}
+
 /** Image draws its own selected state, so its view must accept one. */
-interface ImageBlockViewExports extends BlockView {
+interface ImageBlockViewExports extends BlockView<ImageAttrs> {
   setSelected: (selected: boolean) => void;
 }
 
@@ -133,10 +157,10 @@ export const ImageBlock = Image.extend({
   },
 
   addNodeView() {
-    return createBlockNodeView<ImageBlockViewExports>({
+    return createBlockNodeView<ImageAttrs, ImageBlockViewExports>({
       component: ImageBlockView,
       domAttrs: { "data-image-block": "", "data-note-block": "image" },
-      defaults: { src: "", alt: "", align: "center", width: "100%" },
+      defaults: { src: "", alt: "", align: "center", width: "100%", title: null },
       drawsOwnSelection: true,
       props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,

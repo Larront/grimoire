@@ -14,7 +14,9 @@ afterEach(cleanup);
 
 /** Titles as the block last handed them to the document, per commit. */
 function committedTitles(onCommit: ReturnType<typeof vi.fn>, call: number): string[] {
-  return (onCommit.mock.calls[call][0] as { title: string }[]).map((e) => e.title);
+  return (onCommit.mock.calls[call][0] as { events: { title: string }[] }).events.map(
+    (e) => e.title,
+  );
 }
 
 describe("Timeline rows", () => {

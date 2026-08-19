@@ -546,7 +546,7 @@ export const CalloutBlock = Blockquote.extend({
   addNodeView() {
     const editor = this.editor;
 
-    return createBlockNodeView({
+    return createBlockNodeView<CalloutAttrs>({
       component: CalloutBlockView,
       domAttrs: { "data-note-block": "callout" },
       mode: "container",

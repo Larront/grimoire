@@ -70,7 +70,7 @@ import {
   type BlockView,
 } from "$lib/editor/node-view-connector";
 import { fenceInfoFor, fenceParams } from "$lib/editor/fence-claim";
-import { jsonListAttr } from "$lib/editor/block-attrs";
+import { blockDom, listAttr, textAttr } from "$lib/editor/block-attrs";
 import {
   blankLabelledRow,
   isBlankLabelledRow,
@@ -133,21 +133,37 @@ export interface Statblock {
 }
 
 /** A freshly inserted statblock opens its one blank row, so its view must let it. */
-interface StatblockBlockViewExports extends BlockView {
+interface StatblockBlockViewExports extends BlockView<Statblock> {
   focusRow: (index: number) => void;
 }
+
+/**
+ * How the creature's record crosses the DOM, declared once (#209). The schema's
+ * attributes, the `data-*` a copied card travels as, and the node view's stand-ins are
+ * all read off this — so the eleven edits a new attribute used to need are down to the
+ * record and this table, both of which the compiler checks.
+ *
+ * Width reads through `asStatblockWidth` rather than straight off the entry, because a
+ * pasted card may carry a word this version has no drawing for; the fence is read the
+ * same way (`parseMarkdown` below).
+ */
+const STATBLOCK_DOM = blockDom<Statblock>({
+  name: textAttr(),
+  rows: listAttr<LabelledRow>(),
+  sections: listAttr<StatblockSection>(),
+  width: {
+    default: DEFAULT_STATBLOCK_WIDTH,
+    write: (width) => width,
+    read: asStatblockWidth,
+  },
+});
 
 /**
  * What `/statblock` inserts: no name, no sections, and one empty header row so there
  * is somewhere to type. The empty row is not content — it serializes to nothing.
  */
 export function blankStatblock(): Statblock {
-  return {
-    name: "",
-    rows: [blankLabelledRow()],
-    sections: [],
-    width: DEFAULT_STATBLOCK_WIDTH,
-  };
+  return { ...STATBLOCK_DOM.defaults, rows: [blankLabelledRow()] };
 }
 
 /** An entry an insert-between control adds to a section. */
@@ -396,28 +412,12 @@ export const StatblockBlock = Node.create({
   // not allow it, however the selection was made.
   draggable: true,
 
+  // Every attribute reads itself back off the DOM, because copying a statblock inside
+  // the editor goes out through `renderHTML` and back in through here — an attribute
+  // that only writes is an attribute a copy-paste drops. Both directions come off the
+  // one table above, so neither can forget a field the other names.
   addAttributes() {
-    return {
-      // Every attribute reads itself back off the DOM, because copying a statblock
-      // inside the editor goes out through `renderHTML` and back in through here — an
-      // attribute that only writes is an attribute a copy-paste drops.
-      name: {
-        default: "",
-        parseHTML: (el) => (el as HTMLElement).dataset.name ?? "",
-      },
-      rows: {
-        default: [],
-        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.rows),
-      },
-      sections: {
-        default: [],
-        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.sections),
-      },
-      width: {
-        default: DEFAULT_STATBLOCK_WIDTH,
-        parseHTML: (el) => asStatblockWidth((el as HTMLElement).dataset.width),
-      },
-    };
+    return STATBLOCK_DOM.attributes;
   },
 
   parseHTML() {
@@ -427,17 +427,7 @@ export const StatblockBlock = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     return [
       "statblock-block",
-      mergeAttributes(
-        {
-          "data-name": node.attrs.name,
-          "data-rows": encodeURIComponent(JSON.stringify(node.attrs.rows)),
-          "data-sections": encodeURIComponent(
-            JSON.stringify(node.attrs.sections),
-          ),
-          "data-width": node.attrs.width,
-        },
-        HTMLAttributes,
-      ),
+      mergeAttributes(STATBLOCK_DOM.dataset(node.attrs as Statblock), HTMLAttributes),
     ];
   },
 
@@ -466,32 +456,17 @@ export const StatblockBlock = Node.create({
   },
 
   addNodeView() {
-    return createBlockNodeView<StatblockBlockViewExports>({
+    return createBlockNodeView<Statblock, StatblockBlockViewExports>({
       component: StatblockBlockView,
       domAttrs: { "data-note-block": "statblock" },
-      defaults: {
-        name: "",
-        rows: [],
-        sections: [],
-        width: DEFAULT_STATBLOCK_WIDTH,
-      },
-      props: ({ updateAttributes }) => ({
-        onCommit: (block: Statblock) =>
-          updateAttributes({
-            name: block.name,
-            rows: block.rows,
-            sections: block.sections,
-            width: block.width,
-          }),
-      }),
-      mounted: (view, attrs) => {
+      defaults: STATBLOCK_DOM.defaults,
+      // The creature *is* the write-back's argument: the connector merges a
+      // `Partial<Statblock>` into the node, so an edited card needs no field-by-field
+      // projection on the way through — which is where a forgotten field used to cost the
+      // GM the value at the next autosave.
+      props: ({ updateAttributes }) => ({ onCommit: updateAttributes }),
+      mounted: (view, block) => {
         // A fresh `/statblock`: one empty header row, opened for typing straight away.
-        const block: Statblock = {
-          name: attrs.name as string,
-          rows: attrs.rows as LabelledRow[],
-          sections: attrs.sections as StatblockSection[],
-          width: asStatblockWidth(attrs.width),
-        };
         if (isUnwrittenStatblock(block)) view.focusRow(0);
       },
     });

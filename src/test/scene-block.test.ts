@@ -114,7 +114,9 @@ function makeSlot(overrides: Partial<SceneSlot> = {}): SceneSlot {
 
 function renderView(props: { sceneId: number | null }) {
   return render(SceneBlockView, {
-    props: { ...props, onUpdate: vi.fn() },
+    // The cached name is part of the reference the view is handed, and nothing on screen
+    // comes from it — so every case here passes the empty one.
+    props: { sceneName: "", ...props, onUpdate: vi.fn() },
   });
 }
 

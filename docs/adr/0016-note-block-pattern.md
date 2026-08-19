@@ -360,3 +360,43 @@ three values for three inputs because pre-rendered markup cannot be typed into, 
 is its own way in. A timeline holds no play values, so there was nothing for a mode to
 protect. `RowList`'s `onRowFocusOut` went with it — that mode was its only caller, and a
 field commits its own edit on blur.
+
+### 2026-08-19 — The connector knows what a block holds ([#209](https://github.com/Larront/grimoire/issues/209))
+
+§4's *attributes passed as one object, not positionally* stands, and was too weak. It is a
+claim about the **connector**, and it held: adding an attribute never re-broke the
+connector's signature. It was never a claim about the system, because the seam was untyped
+in both directions — `BlockAttrs = Record<string, unknown>` and `component: Component<any,
+any>` — so every block re-enumerated its own field names on both sides of it, and the
+compiler compared none of the copies.
+
+Adding one attribute to Statblock cost eleven edits, none of them forced. The failure that
+made this worth fixing is §4's own stated fear arriving by a different route: a field
+forgotten in a view's `setAttrs` left that view's mirror holding a stale value, and the next
+commit wrote the stale value back — the GM's edit gone at the following `getMarkdown()`,
+with nothing anywhere saying so.
+
+**The connector is now generic over the block's record.** `createBlockNodeView<Infobox,
+…>` types `defaults`, `updateAttributes`, `mounted` and the view's own `setAttrs` against
+one declaration, so a block's write-back is the record itself — `onCommit:
+updateAttributes` — rather than a hand-listed projection of it. Each view holds **one
+`$state` record** instead of one mirror per field, which is where the silent loss actually
+dies: an undo hands over a whole block, so there is no field left behind to go stale.
+
+**A block's DOM crossing is one table** (`blockDom`, `block-attrs.ts`). The schema's
+attributes, the `data-*` a copied block travels as, and the connector's stand-ins are three
+projections of it, and `BlockDom<R>` demands an entry per field of the record — so the three
+enumerations that used to drift are one the compiler checks. Image and Callout stay
+hand-written and that is the honest answer for both: their DOM form is not a dataset of
+their record (TipTap's own `src`/`alt`, and the `data-callout` #180's stylesheet matches).
+
+This is **not** the registry §3 rejects, on the same grounds §3 gives: nothing collects
+these tables, each block declares its own and hands it to its own `addAttributes` and
+`renderHTML`. It is aimed squarely at the cost §3 named as the expensive one — the node
+view — rather than at registration.
+
+What the record does not reach is the fence. `parseMarkdown` and the serializer still name
+a block's fields, because a fence's grammar is the block's own (§2) and no type can state
+what line a field is written on. Nine of the eleven edits collapse. Adding an attribute to
+Statblock now costs four: the record, its table entry, the fence's parser and the fence's
+serializer — and the first two are the compiler's, not a checklist's.

@@ -14,7 +14,7 @@
 import { render, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
-import type { TimelineEvent } from "$lib/editor/timeline-block";
+import type { Timeline, TimelineEvent } from "$lib/editor/timeline-block";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
   linkResolver: { isKnown: () => true, prime: vi.fn(), resolve: vi.fn() },
@@ -38,7 +38,7 @@ function timeline(events: TimelineEvent[] = SHATTERING) {
 
 /** The events as the block last handed them to the document. */
 function committed(onCommit: ReturnType<typeof vi.fn>, call = 0): TimelineEvent[] {
-  return onCommit.mock.calls[call][0] as TimelineEvent[];
+  return (onCommit.mock.calls[call][0] as Timeline).events;
 }
 
 // ─── Drawing ──────────────────────────────────────────────────────────────────

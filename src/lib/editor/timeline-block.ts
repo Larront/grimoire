@@ -5,7 +5,7 @@ import {
   type BlockView,
 } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
-import { jsonListAttr } from "$lib/editor/block-attrs";
+import { blockDom, listAttr } from "$lib/editor/block-attrs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,10 +15,28 @@ export interface TimelineEvent {
   description: string;
 }
 
+/**
+ * The block's record — one field, and named all the same (#209). A record is what the
+ * connector, the schema and the view are typed against, so a timeline that later carries
+ * anything beside its events adds a field here and nowhere else.
+ */
+export interface Timeline {
+  events: TimelineEvent[];
+}
+
 /** A freshly inserted timeline opens its one blank event, so its view must let it. */
-interface TimelineBlockViewExports extends BlockView {
+interface TimelineBlockViewExports extends BlockView<Timeline> {
   focusRow: (index: number) => void;
 }
+
+/**
+ * How the timeline's record crosses the DOM, declared once: the schema's attributes, the
+ * `data-*` a copied timeline travels as, and the node view's stand-ins are all read off
+ * this table.
+ */
+const TIMELINE_DOM = blockDom<Timeline>({
+  events: listAttr<TimelineEvent>(),
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -163,12 +181,7 @@ export const TimelineBlock = Node.create({
   draggable: true,
 
   addAttributes() {
-    return {
-      events: {
-        default: [],
-        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.events),
-      },
-    };
+    return TIMELINE_DOM.attributes;
   },
 
   parseHTML() {
@@ -178,12 +191,7 @@ export const TimelineBlock = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     return [
       "timeline-block",
-      mergeAttributes(
-        {
-          "data-events": encodeURIComponent(JSON.stringify(node.attrs.events)),
-        },
-        HTMLAttributes,
-      ),
+      mergeAttributes(TIMELINE_DOM.dataset(node.attrs as Timeline), HTMLAttributes),
     ];
   },
 
@@ -201,22 +209,21 @@ export const TimelineBlock = Node.create({
       : [],
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
-  renderMarkdown(node: { attrs: { events: TimelineEvent[] } }) {
+  renderMarkdown(node: { attrs: Timeline }) {
     return serializeTimelineEvents(node.attrs.events);
   },
 
   addNodeView() {
-    return createBlockNodeView<TimelineBlockViewExports>({
+    return createBlockNodeView<Timeline, TimelineBlockViewExports>({
       component: TimelineBlockView,
       domAttrs: { "data-note-block": "timeline" },
-      defaults: { events: [] },
-      props: ({ updateAttributes }) => ({
-        onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
-      }),
-      mounted: (view, attrs) => {
+      defaults: TIMELINE_DOM.defaults,
+      // The record is the write-back's argument: the connector merges a `Partial<Timeline>`
+      // into the node, so nothing here re-lists what a timeline holds.
+      props: ({ updateAttributes }) => ({ onCommit: updateAttributes }),
+      mounted: (view, { events }) => {
         // Fresh /timeline insert: one blank event → its title opens for typing, the way
         // a fresh infobox's first row does.
-        const events = attrs.events as TimelineEvent[];
         if (events.length === 1 && isBlankEvent(events[0])) view.focusRow(0);
       },
     });

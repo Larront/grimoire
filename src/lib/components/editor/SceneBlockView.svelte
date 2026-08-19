@@ -23,32 +23,34 @@
   } from "@lucide/svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { api } from "$lib/api";
+  import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
   
-  // `sceneName` is accepted and never read, and that is the decision rather than an
+  // The reference's record, taken as one prop bag: the connector mounts a block with its
+  // record spread over the props, so the rest element *is* the record and nothing here
+  // re-lists it (#209).
+  //
+  // `sceneName` is carried and never read, and that is the decision rather than an
   // oversight (#185): the name in the file is a copy the database owns, and a stale
   // copy *lies*. Every name on screen below comes from the store, so the cached one
-  // has no path to being believed — it is declared here only because the node view
-  // hands a block all of its attributes, and a prop this view silently swallowed
-  // would be one a later reader could start reading.
+  // has no path to being believed — it is held only because the record holds it, and a
+  // field this view dropped would be one the next commit wrote back stale.
   let {
-    sceneId,
-    sceneName: _nameInTheFile,
     onUpdate,
-  }: {
-    sceneId: number | null;
-    sceneName?: string;
-    onUpdate: (attrs: { sceneId: number | null; sceneName: string }) => void;
+    ...attrs
+  }: SceneRef & {
+    onUpdate: (partial: Partial<SceneRef>) => void;
   } = $props();
 
-  // Internal copy updated by setAttrs() on undo/redo
+  // The internal copy, updated by setAttrs() on undo/redo. One record, so there is no
+  // field an undo can leave behind.
   // svelte-ignore state_referenced_locally
-  let _sceneId = $state(sceneId);
+  let ref = $state<SceneRef>({ ...attrs });
 
-  export function setAttrs(attrs: { sceneId: number | null }) {
-    _sceneId = attrs.sceneId;
+  export function setAttrs(next: SceneRef) {
+    ref = next;
   }
 
   // Whether the mixer panel is open. View state, and it stays that way (#185):
@@ -108,13 +110,17 @@
   }
 
   $effect(() => {
-    reloadSlots(_sceneId);
+    reloadSlots(ref.sceneId);
   });
 
-  const thisScene = $derived(scenes.scenes.find((s) => s.id === _sceneId) ?? null);
-  const isThisSceneActive = $derived(_sceneId !== null && audioEngine.isSceneActive(_sceneId));
-  const isThisSceneLoading = $derived(audioEngine.loadingSceneId === _sceneId);
-  const isThisScenePlaying = $derived(_sceneId !== null && audioEngine.isScenePlaying(_sceneId));
+  const thisScene = $derived(scenes.scenes.find((s) => s.id === ref.sceneId) ?? null);
+  const isThisSceneActive = $derived(
+    ref.sceneId !== null && audioEngine.isSceneActive(ref.sceneId),
+  );
+  const isThisSceneLoading = $derived(audioEngine.loadingSceneId === ref.sceneId);
+  const isThisScenePlaying = $derived(
+    ref.sceneId !== null && audioEngine.isScenePlaying(ref.sceneId),
+  );
   const showBars = $derived(
     isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
   );
@@ -140,13 +146,13 @@
   // ── Pause / Resume / Stop (parity with ScenePane) ────────────────────────
 
   function handlePlayPause() {
-    if (_sceneId === null || isThisSceneLoading) return;
+    if (ref.sceneId === null || isThisSceneLoading) return;
     if (isThisScenePlaying) {
       audioEngine.pauseScene();
     } else if (isThisSceneActive && audioEngine.isScenePaused) {
       audioEngine.resumeScene();
     } else {
-      audioEngine.playScene(_sceneId);
+      audioEngine.playScene(ref.sceneId);
     }
   }
 
@@ -249,9 +255,9 @@
         slot.slot_order,
         !!slot.shuffle,
       );
-      if (_sceneId !== null) {
-        scenes.invalidateSlots(_sceneId);
-        await reloadSlots(_sceneId);
+      if (ref.sceneId !== null) {
+        scenes.invalidateSlots(ref.sceneId);
+        await reloadSlots(ref.sceneId);
       }
     } catch (e) {
       console.error("Failed to toggle loop:", e);
@@ -268,9 +274,9 @@
         slot.slot_order,
         !slot.shuffle,
       );
-      if (_sceneId !== null) {
-        scenes.invalidateSlots(_sceneId);
-        await reloadSlots(_sceneId);
+      if (ref.sceneId !== null) {
+        scenes.invalidateSlots(ref.sceneId);
+        await reloadSlots(ref.sceneId);
       }
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
@@ -278,7 +284,7 @@
   }
 </script>
 
-{#if _sceneId === null}
+{#if ref.sceneId === null}
   <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
   <div class="my-1 rounded-md border border-border/60 bg-card px-3 py-2.5 select-none">
     <!-- Search. Every control here binds a scene, so a `/scene` inserted by accident

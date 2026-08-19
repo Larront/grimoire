@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
+  import type { ImageAttrs } from "$lib/editor/image-block";
   import { portal } from "$lib/utils/portal";
   import {
     AlignLeft,
@@ -10,54 +11,38 @@
   } from "@lucide/svelte";
   import { fade } from "svelte/transition";
 
+  // The image's record, taken as one prop bag rather than field by field: the connector
+  // mounts a block with its record spread over the props, so the rest element *is* the
+  // record and nothing here re-lists it (#209). `selected` is not part of it — it is the
+  // node's selected state, which the connector drives through `setSelected` below.
   let {
-    src,
-    alt,
-    align,
-    width,
     selected = false,
     onUpdate,
     onCaptionUpdate,
     onSrcReplace,
-  }: {
-    src: string;
-    alt: string;
-    align: string;
-    width: string;
+    ...attrs
+  }: ImageAttrs & {
     selected?: boolean;
-    onUpdate: (attrs: { align: string; width: string }) => void;
+    onUpdate: (partial: Partial<ImageAttrs>) => void;
     onCaptionUpdate: (alt: string) => void;
     onSrcReplace?: (src: string) => void;
   } = $props();
 
-  // Internal mutable copies — NodeView calls setAttrs / setSelected to update these
+  // The editable copy — one record, which is what makes `setAttrs` total: an undo hands
+  // over a whole image, so there is no field it can leave behind holding a stale value.
   // svelte-ignore state_referenced_locally
-  let _align = $state(align);
-  // svelte-ignore state_referenced_locally
-  let _width = $state(width);
-  // svelte-ignore state_referenced_locally
-  let _src = $state(src);
-  // svelte-ignore state_referenced_locally
-  let _alt = $state(alt);
+  let image = $state<ImageAttrs>({ ...attrs });
   // svelte-ignore state_referenced_locally
   let _selected = $state(selected);
   let _lightboxOpen = $state(false);
 
   // The src's resolution, loading and not-found states included — the same helper the
   // Infobox's thumbnail uses, which is what keeps one race fixed in one place.
-  const file = ledgerImage(() => _src);
+  const file = ledgerImage(() => image.src);
   let containerEl: HTMLDivElement | undefined = $state();
 
-  export function setAttrs(attrs: {
-    align: string;
-    width: string;
-    src: string;
-    alt: string;
-  }) {
-    _align = attrs.align;
-    _width = attrs.width;
-    _src = attrs.src;
-    _alt = attrs.alt;
+  export function setAttrs(next: ImageAttrs) {
+    image = next;
   }
 
   export function setSelected(val: boolean) {
@@ -159,7 +144,7 @@
    * keyboard resize is one undo step in ProseMirror exactly as a drag is.
    */
   function resizeByKey(e: KeyboardEvent) {
-    const current = parseFloat(_width) || 100;
+    const current = parseFloat(image.width) || 100;
     let next = current;
     if (e.key === "ArrowRight" || e.key === "ArrowUp") next = current + STEP_PCT;
     else if (e.key === "ArrowLeft" || e.key === "ArrowDown")
@@ -172,8 +157,8 @@
     e.stopPropagation();
     next = Math.round(Math.min(100, Math.max(MIN_WIDTH_PCT, next)));
     if (next === current) return;
-    _width = `${next}%`;
-    onUpdate({ align: _align, width: _width });
+    image.width = `${next}%`;
+    onUpdate({ align: image.align, width: image.width });
   }
 
   // Resize state — tracked here AND in the extension's stopEvent closure
@@ -188,7 +173,7 @@
     dragStartX = e.clientX;
     const parent = containerEl?.parentElement;
     dragStartWidthPx = parent
-      ? parent.offsetWidth * (parseFloat(_width) / 100)
+      ? parent.offsetWidth * (parseFloat(image.width) / 100)
       : 200;
     // Signal to stopEvent in the extension that a resize is in progress
     containerEl
@@ -203,7 +188,7 @@
         100,
         Math.round((newPx / containerEl.parentElement.offsetWidth) * 100),
       );
-      _width = `${pct}%`;
+      image.width = `${pct}%`;
     }
 
     function onUp() {
@@ -213,7 +198,7 @@
         ?.removeAttribute("data-resizing");
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      onUpdate({ align: _align, width: _width });
+      onUpdate({ align: image.align, width: image.width });
     }
 
     window.addEventListener("mousemove", onMove);
@@ -224,9 +209,9 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="my-2 flex flex-col"
-  style="align-items: {alignMap[_align] ?? 'center'};"
+  style="align-items: {alignMap[image.align] ?? 'center'};"
 >
-  <div bind:this={containerEl} class="relative" style="width: {_width};">
+  <div bind:this={containerEl} class="relative" style="width: {image.width};">
     {#if _selected}
       <!-- Floating toolbar — bottom-center, overlaying the image -->
       <div
@@ -236,39 +221,39 @@
       >
         <button
           class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
-                 transition-colors {_align === 'left' ? 'text-primary' : ''}"
+                 transition-colors {image.align === 'left' ? 'text-primary' : ''}"
           aria-label="Align left"
-          aria-pressed={_align === "left"}
+          aria-pressed={image.align === "left"}
           onmousedown={(e) => e.preventDefault()}
           onclick={() => {
-            _align = "left";
-            onUpdate({ align: "left", width: _width });
+            image.align = "left";
+            onUpdate({ align: "left", width: image.width });
           }}
         >
           <AlignLeft size={14} />
         </button>
         <button
           class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
-                 transition-colors {_align === 'center' ? 'text-primary' : ''}"
+                 transition-colors {image.align === 'center' ? 'text-primary' : ''}"
           aria-label="Align center"
-          aria-pressed={_align === "center"}
+          aria-pressed={image.align === "center"}
           onmousedown={(e) => e.preventDefault()}
           onclick={() => {
-            _align = "center";
-            onUpdate({ align: "center", width: _width });
+            image.align = "center";
+            onUpdate({ align: "center", width: image.width });
           }}
         >
           <AlignCenter size={14} />
         </button>
         <button
           class="p-1 rounded hover:bg-muted text-muted-foreground/60 hover:text-foreground
-                 transition-colors {_align === 'right' ? 'text-primary' : ''}"
+                 transition-colors {image.align === 'right' ? 'text-primary' : ''}"
           aria-label="Align right"
-          aria-pressed={_align === "right"}
+          aria-pressed={image.align === "right"}
           onmousedown={(e) => e.preventDefault()}
           onclick={() => {
-            _align = "right";
-            onUpdate({ align: "right", width: _width });
+            image.align = "right";
+            onUpdate({ align: "right", width: image.width });
           }}
         >
           <AlignRight size={14} />
@@ -294,7 +279,7 @@
     {#if file.url}
       <img
         src={file.url}
-        alt={_alt}
+        alt={image.alt}
         class="block w-full rounded"
         draggable="false"
         onerror={file.markMissing}
@@ -304,7 +289,7 @@
         class="flex flex-col items-center justify-center gap-2 w-full min-h-20 py-3 rounded
                border border-border/60 bg-card text-muted-foreground/60 text-xs font-sans"
       >
-        <span>Image not found: {_src}</span>
+        <span>Image not found: {image.src}</span>
         <button
           type="button"
           data-replace-btn
@@ -335,8 +320,8 @@
         aria-label="Image width"
         aria-valuemin={MIN_WIDTH_PCT}
         aria-valuemax={100}
-        aria-valuenow={parseFloat(_width) || 100}
-        aria-valuetext="{Math.round(parseFloat(_width) || 100)}%"
+        aria-valuenow={parseFloat(image.width) || 100}
+        aria-valuetext="{Math.round(parseFloat(image.width) || 100)}%"
         class="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize
                bg-card border border-border rounded-tl z-10"
         onmousedown={startResize}
@@ -348,7 +333,7 @@
   {#if _selected}
     <input
       type="text"
-      value={_alt}
+      value={image.alt}
       placeholder="Add caption…"
       aria-label="Image caption"
       data-caption-input
@@ -356,11 +341,11 @@
              text-foreground bg-transparent border-b border-border/60
              placeholder:text-muted-foreground/50 outline-none
              focus:border-primary"
-      style="max-width: {_width};"
+      style="max-width: {image.width};"
       oninput={(e) => {
-        _alt = (e.target as HTMLInputElement).value;
+        image.alt = (e.target as HTMLInputElement).value;
       }}
-      onblur={() => onCaptionUpdate(_alt)}
+      onblur={() => onCaptionUpdate(image.alt)}
       onmousedown={(e) => e.stopPropagation()}
     />
   {:else}
@@ -368,11 +353,11 @@
          so selecting an image doesn't shift surrounding text. -->
     <p
       class="mt-1 w-full text-sm text-center font-sans border-b border-transparent text-muted-foreground"
-      style="max-width: {_width}; min-height: 1.25rem; margin-bottom: 0;"
+      style="max-width: {image.width}; min-height: 1.25rem; margin-bottom: 0;"
       data-caption
-      aria-hidden={!_alt}
+      aria-hidden={!image.alt}
     >
-      {_alt || " "}
+      {image.alt || " "}
     </p>
   {/if}
 </div>
@@ -409,7 +394,7 @@
     >
       <img
         src={file.url}
-        alt={_alt}
+        alt={image.alt}
         data-lightbox-img
         class="max-w-none block"
         draggable="false"
