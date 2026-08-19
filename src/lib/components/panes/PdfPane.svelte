@@ -204,9 +204,7 @@
     for (let p = 1; p <= numPages; p++) {
       const tc = await getTextContent(p);
       if (token !== searchToken) return; // superseded by a newer query
-      const items = tc.items
-        .filter((it): it is TextItem => "str" in it)
-        .map((it) => it.str);
+      const items = tc.items.filter((it): it is TextItem => "str" in it).map((it) => it.str);
       const index = buildPageIndex(items);
       for (const match of findMatches(index, q)) {
         found.push({ page: p, ranges: rangesForMatch(index, match) });
@@ -621,7 +619,10 @@
     {#if pendingSelection && !pickerOpen}
       <div
         class="fixed z-30 rounded-md border border-border bg-popover shadow-md"
-        style="left: {pendingSelection.rect.left}px; top: {Math.max(8, pendingSelection.rect.top - 40)}px;"
+        style="left: {pendingSelection.rect.left}px; top: {Math.max(
+          8,
+          pendingSelection.rect.top - 40,
+        )}px;"
       >
         <Button
           variant="ghost"
@@ -638,7 +639,10 @@
     {#if pendingSelection && pickerOpen}
       <div
         class="fixed z-30"
-        style="left: {pendingSelection.rect.left}px; top: {Math.min(pendingSelection.rect.bottom + 6, (typeof window !== 'undefined' ? window.innerHeight : 800) - 280)}px;"
+        style="left: {pendingSelection.rect.left}px; top: {Math.min(
+          pendingSelection.rect.bottom + 6,
+          (typeof window !== 'undefined' ? window.innerHeight : 800) - 280,
+        )}px;"
       >
         <ScenePicker onSelect={linkScene} onNewScene={linkNewScene} />
       </div>

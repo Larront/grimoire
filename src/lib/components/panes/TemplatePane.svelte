@@ -23,17 +23,20 @@
       lastFetchedPath = targetPath;
       body = null;
       isLoading = true;
-      api.readTemplate(targetPath).then((content) => {
-        if (lastFetchedPath !== targetPath) return;
-        const parsed = parseFrontmatter(content);
-        frontmatterTags = parsed.tags;
-        body = parsed.body;
-        isLoading = false;
-      }).catch((e) => {
-        console.error("read_template failed:", e);
-        body = "";
-        isLoading = false;
-      });
+      api
+        .readTemplate(targetPath)
+        .then((content) => {
+          if (lastFetchedPath !== targetPath) return;
+          const parsed = parseFrontmatter(content);
+          frontmatterTags = parsed.tags;
+          body = parsed.body;
+          isLoading = false;
+        })
+        .catch((e) => {
+          console.error("read_template failed:", e);
+          body = "";
+          isLoading = false;
+        });
     }
   });
 
@@ -110,9 +113,7 @@
         onblur={commitTitle}
         onkeydown={handleTitleKeydown}
       />
-      <div
-        class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"
-      ></div>
+      <div class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"></div>
       {#if body !== null}
         <Editor initialContent={body} onSave={handleSave} />
       {/if}

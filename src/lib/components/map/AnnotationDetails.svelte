@@ -2,9 +2,9 @@
   import type { AnnotationKind } from "$lib/types/ledger";
 
   export const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: 'Text Label',
-    rect: 'Rectangle',
-    circle: 'Circle',
+    text: "Text Label",
+    rect: "Rectangle",
+    circle: "Circle",
   };
 </script>
 
@@ -26,7 +26,7 @@
 
   let { annotation, unlocked = false, onToggleLock, onUpdate, onDelete }: Props = $props();
 
-  let draftLabel = $state('');
+  let draftLabel = $state("");
 
   // The row the draft was loaded from — see the same field on PinDetails: the
   // `annotation` prop is null by the time teardown runs when the panel closes
@@ -35,7 +35,7 @@
 
   $effect(() => {
     editing = annotation;
-    draftLabel = annotation.label ?? '';
+    draftLabel = annotation.label ?? "";
   });
 
   // Patches `editing` rather than `annotation` — see the same note on PinDetails.
@@ -49,12 +49,11 @@
   // the same floating panel, destroyed by the same tab change.
   function commitLabel() {
     if (!editing) return;
-    if (draftLabel === (editing.label ?? '')) return;
-    save({ label: draftLabel || 'Label' });
+    if (draftLabel === (editing.label ?? "")) return;
+    save({ label: draftLabel || "Label" });
   }
 
   onDestroy(commitLabel);
-
 </script>
 
 <!-- Kind row -->
@@ -67,7 +66,9 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock annotation" : "Unlock to drag"}
     class="p-1.5 rounded-md transition-colors cursor-pointer
-           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked
+      ? 'text-primary hover:text-primary/70'
+      : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-3.5 h-3.5" />
@@ -77,7 +78,7 @@
   </button>
 </div>
 
-{#if annotation.kind === 'text'}
+{#if annotation.kind === "text"}
   <!-- Label (text only) -->
   <DetailSection label="Label" sectionKey="label">
     <!-- svelte-ignore a11y_autofocus -->
@@ -87,7 +88,7 @@
       bind:value={draftLabel}
       onblur={commitLabel}
       onkeydown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLElement).blur();
+        if (e.key === "Enter") (e.target as HTMLElement).blur();
       }}
       class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
              font-mono text-[10px] text-foreground outline-none focus:border-primary"
@@ -110,7 +111,10 @@
   </DetailSection>
 {:else}
   <!-- Opacity (shapes only) -->
-  <DetailSection label="Fill Opacity — {Math.round(annotation.opacity * 100)}%" sectionKey="opacity">
+  <DetailSection
+    label="Fill Opacity — {Math.round(annotation.opacity * 100)}%"
+    sectionKey="opacity"
+  >
     <input
       id="ann-opacity"
       type="range"
@@ -134,7 +138,7 @@
 {/if}
 
 <!-- Fill / text color -->
-<DetailSection label={annotation.kind === 'text' ? 'Text Color' : 'Fill Color'} sectionKey="color">
+<DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
   <ColorSwatches
     value={annotation.color}
     presets={ENTITY_COLOR_PRESETS}

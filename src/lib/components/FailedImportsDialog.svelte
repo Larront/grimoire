@@ -1,6 +1,6 @@
 <script lang="ts">
-  import * as Dialog from '$lib/components/ui/dialog';
-  import type { FailedImport } from '$lib/stores/ledger.svelte';
+  import * as Dialog from "$lib/components/ui/dialog";
+  import type { FailedImport } from "$lib/stores/ledger.svelte";
 
   let {
     open = $bindable(false),
@@ -16,7 +16,7 @@
     <Dialog.Header>
       <Dialog.Title>Import failures</Dialog.Title>
       <Dialog.Description>
-        {failures.length} file{failures.length === 1 ? '' : 's'} could not be imported.
+        {failures.length} file{failures.length === 1 ? "" : "s"} could not be imported.
       </Dialog.Description>
     </Dialog.Header>
 

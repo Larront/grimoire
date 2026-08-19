@@ -10,7 +10,7 @@
   let activeSlots = $state<SceneSlot[]>([]);
 
   let sceneName = $derived(
-    scenes.scenes.find((s) => s.id === audioEngine.activeSceneId)?.name ?? "Unknown Scene"
+    scenes.scenes.find((s) => s.id === audioEngine.activeSceneId)?.name ?? "Unknown Scene",
   );
   let isActive = $derived(audioEngine.activeSceneId !== null);
 
@@ -19,16 +19,21 @@
     scenes.scenes; // reactive dependency for freshness
     let cancelled = false;
     if (sceneId) {
-      scenes.getSlots(sceneId).then((s) => {
-        if (!cancelled) activeSlots = s;
-      }).catch(() => {
-        if (!cancelled) activeSlots = [];
-      });
+      scenes
+        .getSlots(sceneId)
+        .then((s) => {
+          if (!cancelled) activeSlots = s;
+        })
+        .catch(() => {
+          if (!cancelled) activeSlots = [];
+        });
     } else {
       activeSlots = [];
       expanded = false;
     }
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   });
 
   async function togglePlayPause() {
@@ -70,7 +75,9 @@
           aria-expanded={expanded}
         >
           <ChevronUp
-            class="size-3.5 text-muted-foreground transition-transform duration-200 {expanded ? '' : 'rotate-180'}"
+            class="size-3.5 text-muted-foreground transition-transform duration-200 {expanded
+              ? ''
+              : 'rotate-180'}"
           />
         </button>
       </div>

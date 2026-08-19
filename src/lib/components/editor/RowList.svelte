@@ -69,9 +69,7 @@
 
   /** A gap is revealed by hovering either of the rows it sits between, or itself. */
   function gapVisible(gap: number): boolean {
-    return (
-      hoveredGap === gap || hoveredIndex === gap - 1 || hoveredIndex === gap
-    );
+    return hoveredGap === gap || hoveredIndex === gap - 1 || hoveredIndex === gap;
   }
 
   /**
@@ -158,75 +156,75 @@
   onmouseenter={() => (hoveredList = true)}
   onmouseleave={() => (hoveredList = false)}
 >
-{#each rows as item, i (i)}
-  <!-- Gap before row i (hover-revealed, focus-visible) -->
-  <div class={insertionPointClass}>
-    {@render insertionPoint(
-      i,
-      i === 0 ? `Insert ${noun} at top` : `Insert ${noun} after position ${i}`,
-      gapVisible(i),
-    )}
-  </div>
+  {#each rows as item, i (i)}
+    <!-- Gap before row i (hover-revealed, focus-visible) -->
+    <div class={insertionPointClass}>
+      {@render insertionPoint(
+        i,
+        i === 0 ? `Insert ${noun} at top` : `Insert ${noun} after position ${i}`,
+        gapVisible(i),
+      )}
+    </div>
 
-  <div
-    class="row-list-row group relative flex items-start gap-2"
-    role="group"
-    aria-label={`${groupNoun} ${i + 1}`}
-    onmouseenter={() => (hoveredIndex = i)}
-    onmouseleave={() => (hoveredIndex = null)}
-  >
-    <!-- The controls come first in the DOM and are positioned over the row, so
+    <div
+      class="row-list-row group relative flex items-start gap-2"
+      role="group"
+      aria-label={`${groupNoun} ${i + 1}`}
+      onmouseenter={() => (hoveredIndex = i)}
+      onmouseleave={() => (hoveredIndex = null)}
+    >
+      <!-- The controls come first in the DOM and are positioned over the row, so
          tabbing into a row reaches move / delete before the row's own fields —
          the order Timeline had when they lived inside its content column. -->
 
-    <!-- Up / down nudge controls — revealed on hover / keyboard focus -->
-    <div
-      class="absolute top-0 right-6 flex flex-col opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+      <!-- Up / down nudge controls — revealed on hover / keyboard focus -->
+      <div
+        class="absolute top-0 right-6 flex flex-col opacity-0 transition-opacity duration-150 motion-reduce:transition-none
              group-hover:opacity-100 group-focus-within:opacity-100"
-    >
-      <button
-        type="button"
-        class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
+      >
+        <button
+          type="button"
+          class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
                disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-        disabled={i === 0}
-        onclick={() => move(i, i - 1)}
-        aria-label={`Move ${noun} up`}
-      >
-        <ChevronUp size={13} />
-      </button>
-      <button
-        type="button"
-        class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
+          disabled={i === 0}
+          onclick={() => move(i, i - 1)}
+          aria-label={`Move ${noun} up`}
+        >
+          <ChevronUp size={13} />
+        </button>
+        <button
+          type="button"
+          class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
                disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-        disabled={i === rows.length - 1}
-        onclick={() => move(i, i + 1)}
-        aria-label={`Move ${noun} down`}
-      >
-        <ChevronDown size={13} />
-      </button>
-    </div>
+          disabled={i === rows.length - 1}
+          onclick={() => move(i, i + 1)}
+          aria-label={`Move ${noun} down`}
+        >
+          <ChevronDown size={13} />
+        </button>
+      </div>
 
-    <!-- Delete button — revealed on hover / keyboard focus -->
-    <button
-      type="button"
-      class="absolute top-0 right-0 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
+      <!-- Delete button — revealed on hover / keyboard focus -->
+      <button
+        type="button"
+        class="absolute top-0 right-0 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
              opacity-0 transition-opacity duration-150 motion-reduce:transition-none
              group-hover:opacity-100 group-focus-within:opacity-100
              focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      onclick={() => remove(i)}
-      aria-label={`Delete ${noun}`}
-    >
-      <X size={13} />
-    </button>
+        onclick={() => remove(i)}
+        aria-label={`Delete ${noun}`}
+      >
+        <X size={13} />
+      </button>
 
-    {@render row(item, i)}
+      {@render row(item, i)}
+    </div>
+  {/each}
+
+  <!-- Trailing gap: revealed with the list, and permanent while the list is empty -->
+  <div class={insertionPointClass}>
+    {@render insertionPoint(rows.length, `Add ${noun}`, trailingVisible)}
   </div>
-{/each}
-
-<!-- Trailing gap: revealed with the list, and permanent while the list is empty -->
-<div class={insertionPointClass}>
-  {@render insertionPoint(rows.length, `Add ${noun}`, trailingVisible)}
-</div>
 </div>

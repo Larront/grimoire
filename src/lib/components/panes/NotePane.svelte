@@ -22,7 +22,7 @@
   interface Props {
     noteId: number;
     rename?: boolean;
-    pane: 'left' | 'right';
+    pane: "left" | "right";
     tabIndex: number;
   }
   let { noteId, rename, pane, tabIndex }: Props = $props();
@@ -215,7 +215,7 @@
   $effect(() => {
     if (note) {
       const title = note.title;
-      untrack(() => tabs.updateTabTitle('note', noteId, title));
+      untrack(() => tabs.updateTabTitle("note", noteId, title));
     }
   });
 
@@ -356,19 +356,24 @@
   const details = createNoteDetailsSource(() => note);
 
   function navigateToNote(id: number, title: string) {
-    tabs.openTab({ type: 'note', id, title });
+    tabs.openTab({ type: "note", id, title });
   }
 
   async function createStubNote(targetPath: string) {
     const { title } = parseWikiTarget(targetPath);
     const newNote = await api.createNote(title, targetPath, null);
     await notes.load();
-    tabs.openTab({ type: 'note', id: newNote.id, title: newNote.title });
+    tabs.openTab({ type: "note", id: newNote.id, title: newNote.title });
   }
 </script>
 
 {#snippet detailPanel()}
-  <DetailPanel title="Details" onclose={surface.toggle} saveStatus={details.saveStatus} onRetrySave={details.retrySave}>
+  <DetailPanel
+    title="Details"
+    onclose={surface.toggle}
+    saveStatus={details.saveStatus}
+    onRetrySave={details.retrySave}
+  >
     <NoteDetails
       {note}
       bind:tags={details.tags}
@@ -396,8 +401,8 @@
         <AlertDialog.Title>Update linked notes?</AlertDialog.Title>
         <AlertDialog.Description>
           {pendingBacklinkCount}
-          {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note.
-          Update their wikilinks to the new name?
+          {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note. Update their wikilinks
+          to the new name?
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>
@@ -408,8 +413,8 @@
           onclick={handleRenameOnly}
           class="inline-flex items-center justify-center rounded-md text-sm font-medium
                  border border-border bg-background hover:bg-accent hover:text-accent-foreground
-                 h-9 px-4 py-2 transition-colors"
-        >Rename only</button>
+                 h-9 px-4 py-2 transition-colors">Rename only</button
+        >
         <AlertDialog.Action onclick={handleRenameAndUpdate} data-testid="rename-update-btn">
           Rename + Update
         </AlertDialog.Action>
@@ -461,7 +466,8 @@
                 class="inline-flex h-7 items-center rounded-md border border-border bg-background
                        px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
                        transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Reload from disk</button>
+                >Reload from disk</button
+              >
               <button
                 type="button"
                 data-testid="conflict-keep"
@@ -469,7 +475,8 @@
                 class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
                        text-primary-foreground hover:bg-primary/90 transition-colors
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Keep my version</button>
+                >Keep my version</button
+              >
             </div>
           </div>
         {/if}
@@ -487,8 +494,7 @@
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
               <p class="text-xs text-muted-foreground">
-                This note's file was deleted outside Grimoire. Your unsaved copy
-                is still here.
+                This note's file was deleted outside Grimoire. Your unsaved copy is still here.
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
@@ -499,7 +505,8 @@
                 class="inline-flex h-7 items-center rounded-md border border-border bg-background
                        px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
                        transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Close</button>
+                >Close</button
+              >
               <button
                 type="button"
                 data-testid="deleted-recreate"
@@ -507,7 +514,8 @@
                 class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
                        text-primary-foreground hover:bg-primary/90 transition-colors
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Save to recreate</button>
+                >Save to recreate</button
+              >
             </div>
           </div>
         {/if}
@@ -525,9 +533,7 @@
             onblur={commitTitle}
             onkeydown={handleTitleKeydown}
           />
-          <div
-            class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"
-          ></div>
+          <div class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"></div>
           {#if loadError}
             <!-- No Editor mounts in this state, so no autosave can recreate
                  the missing file. -->
@@ -536,8 +542,8 @@
               class="flex flex-col items-start gap-3 text-muted-foreground"
             >
               <p class="text-sm leading-relaxed max-w-prose">
-                This note couldn't be read — its file may have been moved or
-                deleted outside Grimoire.
+                This note couldn't be read — its file may have been moved or deleted outside
+                Grimoire.
               </p>
               <button
                 type="button"
@@ -545,11 +551,17 @@
                 onclick={closeThisTab}
                 class="text-sm text-primary underline-offset-2 hover:underline
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-              >Close tab</button>
+                >Close tab</button
+              >
             </div>
           {:else if body !== null}
             {#key reloadTick}
-              <Editor bind:this={editorApi} initialContent={body} onSave={handleSave} {highlightQuery} />
+              <Editor
+                bind:this={editorApi}
+                initialContent={body}
+                onSave={handleSave}
+                {highlightQuery}
+              />
             {/key}
           {/if}
         </div>

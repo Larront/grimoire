@@ -72,9 +72,7 @@
    * near it writes `Warning` into `> [!warning]`. It also reads as what it is: faded,
    * so a GM can see the box is unnamed and click to name it.
    */
-  const fallback = $derived(
-    callout.calloutType ? titleCaseCalloutType(callout.calloutType) : "",
-  );
+  const fallback = $derived(callout.calloutType ? titleCaseCalloutType(callout.calloutType) : "");
 
   /**
    * Collapsing hides real document content, so the caret must not still be in it — a

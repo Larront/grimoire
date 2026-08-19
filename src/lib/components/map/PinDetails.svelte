@@ -113,9 +113,7 @@
       : notes.notes,
   );
 
-  const PIN_SHAPES: PinShape[] = [
-    "circle", "pin", "diamond", "headstone", "shield", "banner",
-  ];
+  const PIN_SHAPES: PinShape[] = ["circle", "pin", "diamond", "headstone", "shield", "banner"];
 
   const SHAPE_PREVIEWS: Record<PinShape, string> = {
     circle: `<circle cx="8" cy="8" r="6" fill="currentColor"/>`,
@@ -149,7 +147,9 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock pin" : "Unlock to drag"}
     class="mt-1 p-1.5 rounded-md transition-colors cursor-pointer shrink-0
-           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked
+      ? 'text-primary hover:text-primary/70'
+      : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-4 h-4" />
@@ -162,9 +162,13 @@
 <!-- Linked note -->
 <DetailSection label="Linked Note" sectionKey="linked-note">
   {#if linkedNote}
-    <div class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2">
+    <div
+      class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2"
+    >
       <div class="flex items-center justify-between gap-2">
-        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground">{linkedNote.title}</span>
+        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground"
+          >{linkedNote.title}</span
+        >
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
           class="shrink-0 p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
@@ -191,10 +195,15 @@
         placeholder="Search notes…"
       />
       {#if noteSearchQuery.trim()}
-        <div class="bg-background-subtle border border-background-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+        <div
+          class="bg-background-subtle border border-background-border rounded-lg overflow-hidden max-h-36 overflow-y-auto"
+        >
           {#each filteredNotes.slice(0, 8) as n (n.id)}
             <button
-              onclick={() => { save({ note_id: n.id }); noteSearchQuery = ""; }}
+              onclick={() => {
+                save({ note_id: n.id });
+                noteSearchQuery = "";
+              }}
               class="w-full px-3 py-2 font-mono text-[10px] text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
             >
               {n.title}
@@ -210,11 +219,7 @@
 
 <!-- Tags -->
 <DetailSection label="Tags" sectionKey="tags">
-  <TagChipEditor
-    bind:tags={pinTags}
-    suggestions={allTags}
-    onchange={onTagsChange}
-  />
+  <TagChipEditor bind:tags={pinTags} suggestions={allTags} onchange={onTagsChange} />
 </DetailSection>
 
 <!-- Category -->
@@ -246,8 +251,7 @@
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
            font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
-    placeholder="Add notes about this location…"
-  ></textarea>
+    placeholder="Add notes about this location…"></textarea>
 </DetailSection>
 
 <!-- Appearance -->
@@ -256,7 +260,9 @@
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
       <span class="font-mono text-[10px] text-foreground-muted">Shape, icon, color</span>
       <ChevronDown
-        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen ? 'rotate-180' : ''}"
+        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen
+          ? 'rotate-180'
+          : ''}"
       />
     </CollapsibleTrigger>
 
@@ -264,7 +270,9 @@
       <div class="flex flex-col gap-3 pt-3">
         <!-- Shape -->
         <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Shape</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Shape</span
+          >
           <div class="flex gap-1">
             {#each PIN_SHAPES as shape (shape)}
               <button
@@ -275,7 +283,9 @@
                        {pin.shape === shape
                   ? 'border-primary bg-primary-subtle'
                   : 'border-background-border hover:border-primary/50 hover:bg-primary-subtle/50'}"
-                style="color:{pin.shape === shape ? resolvedColor : 'var(--color-foreground-muted)'}"
+                style="color:{pin.shape === shape
+                  ? resolvedColor
+                  : 'var(--color-foreground-muted)'}"
               >
                 <svg viewBox="0 0 16 16" width="16" height="16">
                   <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -288,7 +298,9 @@
 
         <!-- Icon -->
         <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Icon</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Icon</span
+          >
           <div class="grid grid-cols-4 gap-1">
             {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
               <button
@@ -308,7 +320,9 @@
 
         <!-- Color -->
         <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Color</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Color</span
+          >
           <ColorSwatches
             value={pin.color}
             presets={ENTITY_COLOR_PRESETS}

@@ -54,8 +54,8 @@
       bind:this={itemRefs[i]}
       class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors
              {i === state.selectedIndex
-               ? 'bg-muted text-foreground'
-               : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
+        ? 'bg-muted text-foreground'
+        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
       role="option"
       aria-selected={i === state.selectedIndex}
       onclick={() => state.command(item)}

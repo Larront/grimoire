@@ -2,7 +2,8 @@
   import { editorClean, editorCalls } from "./editor-clean";
 
   // Mirror the real Editor's prop surface so NotePane binds/renders it the same.
-  let { initialContent }: { initialContent: string; onSave?: unknown; highlightQuery?: string } = $props();
+  let { initialContent }: { initialContent: string; onSave?: unknown; highlightQuery?: string } =
+    $props();
 
   // NotePane gates its external-reload policy on this (via bind:this).
   export function isClean(): boolean {

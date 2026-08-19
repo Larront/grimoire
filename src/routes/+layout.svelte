@@ -17,13 +17,9 @@
   // is inside the DEV branch on purpose: Vite replaces `import.meta.env.DEV`
   // with `false` for production, so both the branch and the dynamic import are
   // eliminated and the component never enters a release bundle.
-  let ToastLab = $state<
-    typeof import("$lib/components/dev/ToastLab.svelte").default | null
-  >(null);
+  let ToastLab = $state<typeof import("$lib/components/dev/ToastLab.svelte").default | null>(null);
   if (import.meta.env.DEV) {
-    import("$lib/components/dev/ToastLab.svelte").then(
-      (m) => (ToastLab = m.default),
-    );
+    import("$lib/components/dev/ToastLab.svelte").then((m) => (ToastLab = m.default));
   }
 
   // Load persisted global prefs once at startup (fire-and-forget).
@@ -84,12 +80,7 @@
      what makes the status legible without relying on the hue (red and green are
      invisible to ~8% of male users). Sonner's own error glyph is an
      exclamation, not an x. Toast colours and geometry are in src/app.css. -->
-<Toaster
-  richColors
-  successIcon={circleCheckIcon}
-  errorIcon={circleXIcon}
-  closeIcon={closeIcon}
-/>
+<Toaster richColors successIcon={circleCheckIcon} errorIcon={circleXIcon} {closeIcon} />
 
 {#snippet circleCheckIcon()}
   <CircleCheck size={16} strokeWidth={2} aria-hidden="true" />

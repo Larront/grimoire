@@ -13,7 +13,8 @@
     <div class="flex items-center gap-2 min-w-0">
       <BookOpen class="size-3.5 shrink-0 text-primary" />
       <p class="text-xs text-muted-foreground">
-        You're exploring an example world. Poke around freely; nothing here affects your real ledgers.
+        You're exploring an example world. Poke around freely; nothing here affects your real
+        ledgers.
       </p>
     </div>
     <button

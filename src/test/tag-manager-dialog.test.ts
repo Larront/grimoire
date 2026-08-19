@@ -416,8 +416,11 @@ describe("tag manager — retag ⋯ menu", () => {
     const confirmDialog = document.body.querySelector(
       '[data-testid="retag-confirm-dialog"]',
     ) as HTMLElement;
-    expect(confirmDialog.textContent).toMatch(/3 note/);
-    expect(confirmDialog.textContent).toMatch(/2 pin/);
+    // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
+    // the formatter's business, not this assertion's.
+    const copy = confirmDialog.textContent?.replace(/\s+/g, " ");
+    expect(copy).toMatch(/3 note/);
+    expect(copy).toMatch(/2 pin/);
   });
 
   it("confirming rename calls retag_tag with from and to", async () => {

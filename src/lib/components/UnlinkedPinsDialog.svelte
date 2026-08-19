@@ -26,9 +26,10 @@
     <Dialog.Header>
       <Dialog.Title>Pins that need their note again</Dialog.Title>
       <Dialog.Description>
-        Opening this ledger repaired some of its bookkeeping. Every note came
-        through unchanged, but {pins.length === 1 ? "this pin" : "these pins"} lost
-        the link to {pins.length === 1 ? "its" : "their"} note along the way. Open
+        Opening this ledger repaired some of its bookkeeping. Every note came through unchanged, but {pins.length ===
+        1
+          ? "this pin"
+          : "these pins"} lost the link to {pins.length === 1 ? "its" : "their"} note along the way. Open
         a map to re-link {pins.length === 1 ? "it" : "them"}.
       </Dialog.Description>
     </Dialog.Header>

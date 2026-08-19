@@ -32,7 +32,7 @@
 
   interface Props {
     mapId: number;
-    pane: 'left' | 'right';
+    pane: "left" | "right";
   }
   let { mapId, pane }: Props = $props();
 
@@ -152,9 +152,7 @@
       api.silent.getAnnotations(m.id) as Promise<MapAnnotation[]>,
     ]);
 
-    const imageFetch = m.image_path
-      ? api.silent.getMapImageDataUrl(m.id)
-      : Promise.resolve(null);
+    const imageFetch = m.image_path ? api.silent.getMapImageDataUrl(m.id) : Promise.resolve(null);
 
     Promise.all([ipcFetches, imageFetch])
       .then(([[p, c, a], url]) => {
@@ -182,7 +180,7 @@
   $effect(() => {
     if (mapData) {
       const title = mapData.title;
-      untrack(() => tabs.updateTabTitle('map', mapId, title));
+      untrack(() => tabs.updateTabTitle("map", mapId, title));
     }
   });
 
@@ -197,13 +195,21 @@
   }
 
   async function commitTitleRename() {
-    if (!mapData || !draftTitle.trim()) { renamingTitle = false; return; }
+    if (!mapData || !draftTitle.trim()) {
+      renamingTitle = false;
+      return;
+    }
     const trimmed = draftTitle.trim();
-    if (trimmed === mapData.title) { renamingTitle = false; return; }
+    if (trimmed === mapData.title) {
+      renamingTitle = false;
+      return;
+    }
     try {
       await api.updateMap({ ...mapData, title: trimmed });
       await maps.load();
-    } catch { /* ignore */ } finally {
+    } catch {
+      /* ignore */
+    } finally {
       renamingTitle = false;
     }
   }
@@ -235,7 +241,7 @@
   async function handlePinPlace(x: number, y: number) {
     if (!mapData) return;
     try {
-      const pin = await api.createPin(mapData.id, x, y, "New Pin", null, null, null) as Pin;
+      const pin = (await api.createPin(mapData.id, x, y, "New Pin", null, null, null)) as Pin;
       pins = [pin, ...pins];
       selectedPin = pin;
       placingMode = false;
@@ -290,7 +296,7 @@
 
   async function handlePinMove(pin: Pin, x: number, y: number) {
     try {
-      const result = await api.updatePin({ ...pin, x, y }) as Pin;
+      const result = (await api.updatePin({ ...pin, x, y })) as Pin;
       pins = pins.map((p) => (p.id === result.id ? result : p));
       if (selectedPin?.id === result.id) selectedPin = result;
     } catch (e) {
@@ -310,7 +316,7 @@
   }) {
     if (!mapData) return;
     try {
-      const ann = await api.createAnnotation({
+      const ann = (await api.createAnnotation({
         mapId: mapData.id,
         kind: data.kind,
         x: data.x,
@@ -324,28 +330,31 @@
         strokeWidth: 2,
         fontSize: 16,
         opacity: 0.2,
-      }) as MapAnnotation;
+      })) as MapAnnotation;
       annotations = [ann, ...annotations];
       selectedAnnotation = ann;
       selectedPin = null;
       // Stay in annotation mode for text (quick multi-placement); exit for shapes
-      if (data.kind !== 'text') annotationMode = null;
+      if (data.kind !== "text") annotationMode = null;
     } catch (e) {
       console.error("create annotation failed:", e);
     }
   }
 
-  async function handleAnnotationMove(id: number, updates: {
-    x: number;
-    y: number;
-    x2?: number;
-    y2?: number;
-    radius?: number;
-  }) {
+  async function handleAnnotationMove(
+    id: number,
+    updates: {
+      x: number;
+      y: number;
+      x2?: number;
+      y2?: number;
+      radius?: number;
+    },
+  ) {
     const existing = annotations.find((a) => a.id === id);
     if (!existing) return;
     try {
-      const result = await api.updateAnnotation({ ...existing, ...updates }) as MapAnnotation;
+      const result = (await api.updateAnnotation({ ...existing, ...updates })) as MapAnnotation;
       annotations = annotations.map((a) => (a.id === result.id ? result : a));
       if (selectedAnnotation?.id === result.id) selectedAnnotation = result;
     } catch (e) {
@@ -369,12 +378,7 @@
     const el = target as HTMLElement | null;
     if (!el) return false;
     const tag = el.tagName;
-    return (
-      tag === "INPUT" ||
-      tag === "TEXTAREA" ||
-      tag === "SELECT" ||
-      el.isContentEditable
-    );
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
   }
 
   function onMapKeydown(e: KeyboardEvent) {
@@ -491,8 +495,7 @@
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
       <p class="font-sans text-base font-semibold">Can't display this map</p>
       <p class="text-sm text-muted-foreground leading-relaxed">
-        Its image couldn't be read — the file may have been moved or deleted
-        outside Grimoire.
+        Its image couldn't be read — the file may have been moved or deleted outside Grimoire.
       </p>
     </div>
   </div>
@@ -500,7 +503,9 @@
   <!-- Empty state: no image assigned yet -->
   <div class="flex h-full items-center justify-center">
     <div class="flex flex-col items-center gap-6 text-center max-w-xs">
-      <div class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted">
+      <div
+        class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted"
+      >
         <ImagePlus class="size-7 text-primary" strokeWidth={1.5} />
       </div>
       <div class="space-y-1.5">
@@ -524,9 +529,7 @@
   </div>
 {:else}
   <!-- Ready state: full map canvas -->
-  <div
-    class="relative w-full h-full overflow-hidden isolate"
-  >
+  <div class="relative w-full h-full overflow-hidden isolate">
     <!-- Map canvas -->
     <MapCanvas
       map={mapData}
@@ -553,7 +556,9 @@
         selectedPin = null;
         selectedAnnotation = null;
       }}
-      onready={(m) => { leafletMap = m; }}
+      onready={(m) => {
+        leafletMap = m;
+      }}
       onannotationplace={handleAnnotationPlace}
       onannotationmove={handleAnnotationMove}
       onannotationclick={(ann) => {
@@ -573,7 +578,10 @@
           bind:value={draftTitle}
           onblur={commitTitleRename}
           onkeydown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); commitTitleRename(); }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitTitleRename();
+            }
             if (e.key === "Escape") renamingTitle = false;
           }}
           aria-label="Map name"
@@ -607,9 +615,15 @@
 
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
-      {@render tool(Type, "Place text label", annotationMode === 'text', () => setAnnotationMode('text'))}
-      {@render tool(RectangleHorizontal, "Draw rectangle", annotationMode === 'rect', () => setAnnotationMode('rect'))}
-      {@render tool(Circle, "Draw circle", annotationMode === 'circle', () => setAnnotationMode('circle'))}
+      {@render tool(Type, "Place text label", annotationMode === "text", () =>
+        setAnnotationMode("text"),
+      )}
+      {@render tool(RectangleHorizontal, "Draw rectangle", annotationMode === "rect", () =>
+        setAnnotationMode("rect"),
+      )}
+      {@render tool(Circle, "Draw circle", annotationMode === "circle", () =>
+        setAnnotationMode("circle"),
+      )}
 
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
@@ -620,16 +634,16 @@
     <!-- Mode hint -->
     {#if placingMode || annotationMode}
       {@const hint = placingMode
-        ? 'Click anywhere to place a pin'
-        : annotationMode === 'text'
-          ? 'Click anywhere to place a text label'
-          : annotationMode === 'rect'
-            ? 'Click and drag to draw a rectangle'
-            : 'Click and drag to draw a circle'}
-      <div
-        class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none"
-      >
-        <div class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md">
+        ? "Click anywhere to place a pin"
+        : annotationMode === "text"
+          ? "Click anywhere to place a text label"
+          : annotationMode === "rect"
+            ? "Click and drag to draw a rectangle"
+            : "Click and drag to draw a circle"}
+      <div class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none">
+        <div
+          class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md"
+        >
           <p class="text-xs text-muted-foreground">{hint}</p>
         </div>
       </div>
@@ -642,12 +656,20 @@
          lives, and the surface flies the panel in but not out (see
          `DetailSurface.svelte`). -->
     {#if selectedPin && !placingMode && !annotationMode}
-      <DetailSurface {surface} open={true} onclose={() => { selectedPin = null; }}>
+      <DetailSurface
+        {surface}
+        open={true}
+        onclose={() => {
+          selectedPin = null;
+        }}
+      >
         <DetailPanel
           title={selectedPin!.title || "Pin"}
           saveStatus={pinDetails.saveStatus}
           onRetrySave={pinDetails.retrySave}
-          onclose={() => { selectedPin = null; }}
+          onclose={() => {
+            selectedPin = null;
+          }}
         >
           <PinDetails
             pin={selectedPin!}
@@ -661,7 +683,7 @@
             onToggleLock={togglePinLock}
             onUpdate={pinDetails.savePin}
             onDelete={handlePinDelete}
-            onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
+            onOpenNote={(id, title) => tabs.openTab({ type: "note", id, title })}
           />
         </DetailPanel>
       </DetailSurface>
@@ -669,12 +691,20 @@
 
     <!-- Selected annotation panel -->
     {#if selectedAnnotation && !placingMode}
-      <DetailSurface {surface} open={true} onclose={() => { selectedAnnotation = null; }}>
+      <DetailSurface
+        {surface}
+        open={true}
+        onclose={() => {
+          selectedAnnotation = null;
+        }}
+      >
         <DetailPanel
           title={KIND_LABELS[selectedAnnotation!.kind]}
           saveStatus={annotationDetails.saveStatus}
           onRetrySave={annotationDetails.retrySave}
-          onclose={() => { selectedAnnotation = null; }}
+          onclose={() => {
+            selectedAnnotation = null;
+          }}
         >
           <AnnotationDetails
             annotation={selectedAnnotation!}

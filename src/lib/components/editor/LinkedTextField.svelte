@@ -287,8 +287,7 @@
       void offerSuggestions(e.currentTarget);
     }}
     onblur={commit}
-    onkeydown={handleKeydown}
-  ></textarea>
+    onkeydown={handleKeydown}></textarea>
 {:else if editing}
   <input
     bind:this={input}

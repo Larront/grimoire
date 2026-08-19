@@ -2,13 +2,7 @@
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
   import type { ImageAttrs } from "$lib/editor/image-block";
   import { portal } from "$lib/utils/portal";
-  import {
-    AlignLeft,
-    AlignCenter,
-    AlignRight,
-    Maximize2,
-    X,
-  } from "@lucide/svelte";
+  import { AlignLeft, AlignCenter, AlignRight, Maximize2, X } from "@lucide/svelte";
   import { fade } from "svelte/transition";
 
   // The image's record, taken as one prop bag rather than field by field: the connector
@@ -127,9 +121,7 @@
     // Into the viewer rather than left behind it. `tick`-free: the portalled node is in
     // the document by the time this effect runs, since the effect depends on the same
     // flag that renders it.
-    (
-      lightboxEl?.querySelector<HTMLElement>("[data-lightbox-close]") ?? lightboxEl
-    )?.focus();
+    (lightboxEl?.querySelector<HTMLElement>("[data-lightbox-close]") ?? lightboxEl)?.focus();
     return () => window.removeEventListener("keydown", onKey);
   });
 
@@ -147,8 +139,7 @@
     const current = parseFloat(image.width) || 100;
     let next = current;
     if (e.key === "ArrowRight" || e.key === "ArrowUp") next = current + STEP_PCT;
-    else if (e.key === "ArrowLeft" || e.key === "ArrowDown")
-      next = current - STEP_PCT;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowDown") next = current - STEP_PCT;
     else if (e.key === "Home") next = MIN_WIDTH_PCT;
     else if (e.key === "End") next = 100;
     else return;
@@ -172,30 +163,21 @@
     isDragging = true;
     dragStartX = e.clientX;
     const parent = containerEl?.parentElement;
-    dragStartWidthPx = parent
-      ? parent.offsetWidth * (parseFloat(image.width) / 100)
-      : 200;
+    dragStartWidthPx = parent ? parent.offsetWidth * (parseFloat(image.width) / 100) : 200;
     // Signal to stopEvent in the extension that a resize is in progress
-    containerEl
-      ?.closest("[data-image-block]")
-      ?.setAttribute("data-resizing", "");
+    containerEl?.closest("[data-image-block]")?.setAttribute("data-resizing", "");
 
     function onMove(e: MouseEvent) {
       if (!isDragging || !containerEl?.parentElement) return;
       const delta = e.clientX - dragStartX;
       const newPx = Math.max(80, dragStartWidthPx + delta);
-      const pct = Math.min(
-        100,
-        Math.round((newPx / containerEl.parentElement.offsetWidth) * 100),
-      );
+      const pct = Math.min(100, Math.round((newPx / containerEl.parentElement.offsetWidth) * 100));
       image.width = `${pct}%`;
     }
 
     function onUp() {
       isDragging = false;
-      containerEl
-        ?.closest("[data-image-block]")
-        ?.removeAttribute("data-resizing");
+      containerEl?.closest("[data-image-block]")?.removeAttribute("data-resizing");
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       onUpdate({ align: image.align, width: image.width });
@@ -207,10 +189,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="my-2 flex flex-col"
-  style="align-items: {alignMap[image.align] ?? 'center'};"
->
+<div class="my-2 flex flex-col" style="align-items: {alignMap[image.align] ?? 'center'};">
   <div bind:this={containerEl} class="relative" style="width: {image.width};">
     {#if _selected}
       <!-- Floating toolbar — bottom-center, overlaying the image -->
@@ -388,10 +367,7 @@
     </button>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="min-h-full w-full flex items-center justify-center p-8"
-      onclick={onBackdropClick}
-    >
+    <div class="min-h-full w-full flex items-center justify-center p-8" onclick={onBackdropClick}>
       <img
         src={file.url}
         alt={image.alt}

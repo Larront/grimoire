@@ -2,9 +2,7 @@
   import { Search } from "@lucide/svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
 
-  const isMac = $derived(
-    typeof navigator !== "undefined" && /mac/i.test(navigator.platform),
-  );
+  const isMac = $derived(typeof navigator !== "undefined" && /mac/i.test(navigator.platform));
 </script>
 
 <div

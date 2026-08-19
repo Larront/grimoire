@@ -20,18 +20,10 @@
   // What is left is the timeline's own business: the rail, the collapsible description,
   // and which edits become a document write. Order and the hover-revealed controls are
   // the Row List's, and the `[[` autocomplete inside a value is the field's.
-  import {
-    createBlankEvent,
-    type Timeline,
-    type TimelineEvent,
-  } from "$lib/editor/timeline-block";
+  import { createBlankEvent, type Timeline, type TimelineEvent } from "$lib/editor/timeline-block";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
-  import {
-    remapRowIndices,
-    settleRowChange,
-    type RowChange,
-  } from "$lib/editor/row-list";
+  import { remapRowIndices, settleRowChange, type RowChange } from "$lib/editor/row-list";
   import { oneLine } from "$lib/editor/labelled-row";
   import { ChevronDown } from "@lucide/svelte";
 

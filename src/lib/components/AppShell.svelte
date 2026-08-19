@@ -28,7 +28,7 @@
   const rightSurface = paneSurface("right");
 </script>
 
-{#snippet navButtons(pane: 'left' | 'right')}
+{#snippet navButtons(pane: "left" | "right")}
   <div class="flex items-center shrink-0 gap-0.5 px-1">
     <button
       onclick={() => tabs.navigateBack(pane)}
@@ -56,7 +56,7 @@
 -->
 <svelte:window
   onkeydown={(e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+    if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
       tabs.closeActiveTab();
     }
@@ -66,10 +66,10 @@
   <Sidebar.Provider>
     <IconRail
       onFilesClick={() => {}}
-      onScenesClick={() => tabs.navigateOpen({ type: 'scenes', id: 0, title: 'All Scenes' })}
+      onScenesClick={() => tabs.navigateOpen({ type: "scenes", id: 0, title: "All Scenes" })}
       onSearchClick={() => (searchPalette.open = true)}
       onSettingsClick={() => (dialogs.settingsOpen = true)}
-      onGraphClick={() => tabs.openTab({ type: 'graph', id: 0, title: 'Graph' })}
+      onGraphClick={() => tabs.openTab({ type: "graph", id: 0, title: "Graph" })}
     />
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
@@ -77,10 +77,7 @@
       bind:open={failedImportsModal.open}
       failures={failedImportsModal.failures}
     />
-    <UnlinkedPinsDialog
-      bind:open={unlinkedPinsModal.open}
-      pins={unlinkedPinsModal.pins}
-    />
+    <UnlinkedPinsDialog bind:open={unlinkedPinsModal.open} pins={unlinkedPinsModal.pins} />
     <SearchPalette />
     <SampleEffects />
     <div class="ml-12 flex min-h-svh flex-1">
@@ -90,16 +87,13 @@
           <!-- Split pane content area -->
           <div class="flex flex-1 min-h-0 overflow-hidden">
             <!-- Left pane (always present) -->
-            <div
-              class="relative flex flex-col flex-1 min-w-0 min-h-0"
-              role="none"
-            >
+            <div class="relative flex flex-col flex-1 min-w-0 min-h-0" role="none">
               <SampleBanner />
               <div class="flex items-center border-b border-sidebar-border">
                 <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />
                 </div>
-                {@render navButtons('left')}
+                {@render navButtons("left")}
                 <TabBar pane="left" />
                 {#if leftSurface.toggleable}
                   <div class="ml-auto shrink-0 px-2">
@@ -123,12 +117,16 @@
                 <div
                   data-pane-content="right"
                   class={[
-                    'absolute inset-y-0 right-0 w-24 z-50 pointer-events-none flex flex-col items-center justify-center',
-                    tabs.dragging !== null ? 'border-l-2 border-dashed border-primary/40 bg-primary/5' : ''
-                  ].join(' ')}
+                    "absolute inset-y-0 right-0 w-24 z-50 pointer-events-none flex flex-col items-center justify-center",
+                    tabs.dragging !== null
+                      ? "border-l-2 border-dashed border-primary/40 bg-primary/5"
+                      : "",
+                  ].join(" ")}
                 >
                   {#if tabs.dragging !== null}
-                    <span class="text-xs text-primary/70 font-medium select-none [writing-mode:vertical-rl] rotate-180">
+                    <span
+                      class="text-xs text-primary/70 font-medium select-none [writing-mode:vertical-rl] rotate-180"
+                    >
                       Drop to split
                     </span>
                   {/if}
@@ -141,7 +139,7 @@
               <div class="w-px bg-sidebar-border shrink-0"></div>
               <div class="flex flex-col flex-1 min-w-0 min-h-0" role="none">
                 <div class="flex items-center border-b border-sidebar-border">
-                  {@render navButtons('right')}
+                  {@render navButtons("right")}
                   <TabBar pane="right" />
                   {#if rightSurface.toggleable}
                     <div class="ml-auto shrink-0 px-2">

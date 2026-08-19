@@ -113,8 +113,7 @@
   let focus = $state<FocusTarget | null>(null);
 
   const rowFocused = (index: number) => focus?.level === "row" && focus.index === index;
-  const sectionFocused = (index: number) =>
-    focus?.level === "section" && focus.index === index;
+  const sectionFocused = (index: number) => focus?.level === "section" && focus.index === index;
   const entryFocused = (section: number, index: number) =>
     focus?.level === "entry" && focus.section === section && focus.index === index;
 
@@ -225,9 +224,7 @@
 
   /** What a collapsed statblock keeps: the rows a GM can play on, in their order. */
   const playableRows = $derived(
-    block.rows
-      .map((row, index) => ({ row, index }))
-      .filter(({ row }) => isPlayable(row.value)),
+    block.rows.map((row, index) => ({ row, index })).filter(({ row }) => isPlayable(row.value)),
   );
 
   // ── Sections ────────────────────────────────────────────────────────────────
@@ -477,9 +474,7 @@
      which is where the maximum becomes reachable at all. `pr-14` reserves the gutter
      the Row List's controls sit in. -->
 {#snippet headerRow(row: LabelledRow, i: number)}
-  <div
-    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px"
-  >
+  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px">
     {@render rowLabel(row, i, true)}
     <LinkedTextField
       value={row.value}
@@ -666,11 +661,7 @@
   {/if}
 </div>
 
-<SavePresetDialog
-  bind:open={savingPreset}
-  fence={capturedFence}
-  suggestedName={block.name}
-/>
+<SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={block.name} />
 
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state

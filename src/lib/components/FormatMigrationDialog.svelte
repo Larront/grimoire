@@ -55,8 +55,8 @@
       <AlertDialog.Header>
         <AlertDialog.Title>{heading}</AlertDialog.Title>
         <AlertDialog.Description>
-          Grimoire has changed how it writes part of your notes. Opening this
-          ledger rewrites {count} on disk, once.
+          Grimoire has changed how it writes part of your notes. Opening this ledger rewrites {count}
+          on disk, once.
         </AlertDialog.Description>
       </AlertDialog.Header>
 
@@ -79,9 +79,7 @@
                   ? "One line of your own writing changes:"
                   : `${plan.warnings.length} lines of your own writing change:`}
               </p>
-              <ul
-                class="text-muted-foreground max-h-32 list-disc space-y-1 overflow-y-auto pl-5"
-              >
+              <ul class="text-muted-foreground max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
                 {#each plan.warnings as warning (warning)}
                   <li>{warning}</li>
                 {/each}
@@ -90,10 +88,10 @@
           {/if}
 
           <p class="text-muted-foreground">
-            Every note it touches is copied first — plain markdown files inside
-            this ledger's <code>.grimoire</code> folder, with a report of
-            everything that changed. If you'd rather not, this ledger won't be
-            opened and nothing is written.
+            Every note it touches is copied first — plain markdown files inside this ledger's <code
+              >.grimoire</code
+            > folder, with a report of everything that changed. If you'd rather not, this ledger won't
+            be opened and nothing is written.
           </p>
         </div>
       {/if}
