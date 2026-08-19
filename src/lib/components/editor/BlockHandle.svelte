@@ -10,7 +10,13 @@
   // It is drawn `fixed` and placed from measurements, for the reason the two anchored
   // menus are: the block it belongs to is inside a scroll container the grip is not in,
   // and an absolutely positioned element would need an offset parent that agrees with it.
-  import { onDestroy, tick } from "svelte";
+  //
+  // What is left here after #211 is the seeing and the pointing: a box to measure, a
+  // position to draw at, a fade, and the events a GM produces. Which block the handle is
+  // on, what keeps it up, whether its menu is open and what order a gesture's steps go in
+  // are all one thing — `handle` — and this reports gestures to it rather than performing
+  // its sequences.
+  import { tick } from "svelte";
   import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
   import { GripVertical } from "@lucide/svelte";
@@ -18,62 +24,30 @@
   import {
     blockElementAt,
     blockLabel,
-    blockStillThere,
-    endBlockDrag,
-    moveBlock,
     placeHandle,
-    releaseBlock,
     selectBlock,
     startBlockDrag,
     type BlockTarget,
   } from "$lib/editor/block-handle";
-  import {
-    actionFailureMessage,
-    blockHandleMenuSections,
-    runBlockHandleAction,
-    type BlockHandleCommand,
-    type BlockHandleMenuSection,
-  } from "$lib/editor/block-handle-menu";
+  import type { BlockHandleLife } from "$lib/editor/block-handle-life.svelte";
   import BlockHandleMenu from "./BlockHandleMenu.svelte";
-  import { toastError } from "$lib/toast";
 
   interface Props {
     editor: Editor;
-    /** The block under the pointer, from the extension. */
+    /**
+     * The block this grip is drawn beside.
+     *
+     * A prop and not `handle.target`, though the handle is where it comes from: the grip
+     * fades out, and it fades out *because* the target went. Reading it live would leave
+     * the outro with nothing to draw; a prop keeps its last value for the length of the
+     * fade, which is what an element on its way out should be showing.
+     */
     target: BlockTarget;
-    /**
-     * Held while the pointer or focus is on the grip itself. The editor stops reporting
-     * pointer movement the moment the pointer leaves the prose, so without this the grip
-     * disappears exactly as the GM reaches for it.
-     */
-    onHold: (held: boolean) => void;
-    /**
-     * The grip's menu opened or closed (#191). Separate from `onHold` because the two
-     * overlap in both orders — the pointer leaves the grip to reach the menu, and Escape
-     * closes the menu with the pointer still on the grip — and because an open menu also
-     * freezes which block the handle is on.
-     */
-    onPin: (pinned: boolean) => void;
-    /** The block moved; the handle now belongs beside it at its new position. */
-    onRetarget: (target: BlockTarget) => void;
-    /** The gesture is over and what it changed has landed — take the grip down now. */
-    onRelease: () => void;
-    /** The handle was raised from the keyboard, so it is the grip that should have focus. */
-    grabbed?: boolean;
-    /** Focus taken; the grab has been answered. */
-    onGrabHandled?: () => void;
+    /** The handle's life: what it is on, what holds it up, and what a gesture does. */
+    handle: BlockHandleLife;
   }
 
-  let {
-    editor,
-    target,
-    onHold,
-    onPin,
-    onRetarget,
-    onRelease,
-    grabbed = false,
-    onGrabHandled,
-  }: Props = $props();
+  let { editor, target, handle }: Props = $props();
 
   let el = $state<HTMLButtonElement>();
   let left = $state(0);
@@ -84,109 +58,22 @@
 
   const label = $derived(blockLabel(target.node));
 
-  // ── The menu ────────────────────────────────────────────────────────────────
-  //
-  // What a click on the grip reaches (#191, #192). The block the menu acts on is captured
-  // *when it opens* — the whole target, position and node both, so that an edit landing
-  // while the menu is up is caught rather than silently redirected to whichever block has
-  // moved into that position.
-  //
-  // The sections are captured with it, and for the same reason rather than for symmetry:
-  // they are read off the document, and which kind is ticked as current is a fact about
-  // the block as it stood when the GM opened the menu. Deriving them live would have the
-  // list under the pointer change shape mid-reach.
-  let menuOpen = $state(false);
-  let menuTarget = $state.raw<BlockTarget | null>(null);
-  let menuSections = $state.raw<BlockHandleMenuSection[]>([]);
-  let menuAnchor = $state({ x: 0, y: 0, anchorTop: 0 });
+  /** The grip's own box, which is what the menu is anchored off. */
+  function anchor() {
+    const box = el!.getBoundingClientRect();
+    // Below the grip where there is room, above it where there is not.
+    return { x: box.left, y: box.bottom + 4, anchorTop: box.top - 4 };
+  }
 
   function openMenu() {
     if (!el) return;
-    // A menu built on a block the document has lost is ten confident items that are all
-    // silent no-ops — every write behind them refuses, and nothing on screen says why. The
-    // grip goes instead, which is what a target that has gone means everywhere else.
-    if (!blockStillThere(editor.state.doc, target)) {
-      release();
-      return;
-    }
-    const box = el.getBoundingClientRect();
-    // Off the grip's own box: below it where there is room, above it where there is not.
-    menuAnchor = { x: box.left, y: box.bottom + 4, anchorTop: box.top - 4 };
-    menuTarget = target;
-    menuSections = blockHandleMenuSections(editor.state.doc, target);
-    menuOpen = true;
-    onPin(true);
+    handle.openMenu(anchor());
   }
-
-  function closeMenu() {
-    if (!menuOpen) return;
-    menuOpen = false;
-    onPin(false);
-  }
-
-  // The grip can go out from under an open menu — a scroll invalidates the target and the
-  // whole handle is unmounted — and a pin that outlived it would be a latch nothing is
-  // left to release, freezing the grip off for the rest of the session.
-  onDestroy(() => {
-    if (menuOpen) onPin(false);
-  });
 
   /** Dismissed without choosing: the grip takes its focus back, and stays up under it. */
   function dismissMenu() {
-    closeMenu();
+    handle.closeMenu();
     el?.focus();
-  }
-
-  /**
-   * One menu item, on the block the menu was opened on.
-   *
-   * The `catch` is not tidiness: Copy awaits a clipboard, and a clipboard *rejects* — a
-   * denied permission, a webview that will not hand one over. Closing the menu has
-   * already taken focus off the item that held it, so a throw on the way past would leave
-   * the GM's next keystrokes going nowhere at all. It is toasted rather than swallowed
-   * because a copy that silently did not happen is discovered at the paste, in another
-   * app, with the thing that was going to be pasted no longer to hand.
-   *
-   * The message names the command rather than always naming the clipboard, because the
-   * other three can reach here too — Turn into runs a chain of writes against a position
-   * taken when the menu opened — and telling a GM whose Delete failed that their clipboard
-   * is broken sends them looking in the wrong place for a gesture that also did nothing.
-   *
-   * It ends in `release` like every other way out of the grip — see there for why the
-   * grip cannot simply hand focus back.
-   */
-  async function runMenuAction(command: BlockHandleCommand) {
-    const acting = menuTarget;
-    closeMenu();
-    try {
-      if (acting) await runBlockHandleAction(editor, acting, command);
-    } catch {
-      toastError(
-        actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"),
-      );
-    } finally {
-      release();
-    }
-  }
-
-  /**
-   * The end of a gesture that hands the prose back: a menu item, Escape, a menu opened on
-   * a block that has gone.
-   *
-   * The handle comes down and `releaseBlock` puts the caret back. Both halves matter and
-   * neither is optional at either route: every position the handle holds describes the
-   * document as it was *before* the write — after a Delete there is no block there at all
-   * — so a grip left on screen points at whatever has moved into that spot, and a
-   * whole-block selection left set is a block the GM's next character replaces.
-   *
-   * Not every ending is this one. A drag ends in `handleDragEnd`, which takes the handle
-   * down without touching focus — see `releaseBlock` for why a drop must keep it. And
-   * dismissing the menu without choosing is not an ending at all: the grip takes its own
-   * focus back and stays up, still holding the block, still able to be dragged.
-   */
-  function release() {
-    onRelease();
-    releaseBlock(editor);
   }
 
   // Re-placed whenever the target changes — every pointer move that lands on a different
@@ -199,27 +86,11 @@
   // taking focus out of the prose because a pointer crossed a paragraph would move the
   // GM's caret out of the sentence they are typing.
   $effect(() => {
-    if (grabbed && el) {
+    if (handle.grabbed && el) {
       el.focus();
-      onGrabHandled?.();
+      handle.grabHandled();
     }
   });
-
-  // ── What is holding the grip ────────────────────────────────────────────────
-  //
-  // Two signals, one latch, and they are tracked apart because they overlap: the pointer
-  // and the focus. `Mod-Shift-h` raises the grip under wherever the pointer happens to be
-  // resting and focuses it, so the GM's first nudge of the mouse raises `mouseleave` on a
-  // grip that still holds the keyboard — and a single shared boolean would report that as
-  // "nothing is holding this", drop the handle, and strand focus on nothing mid-gesture.
-  //
-  // Plain `let`: nothing is drawn from either, and the reader is `onHold` alone.
-  let hovered = false;
-  let focused = false;
-
-  function reportHold() {
-    onHold(hovered || focused);
-  }
 
   function place() {
     if (!el) return;
@@ -243,30 +114,13 @@
   }
 
   /**
-   * Every way a drag can end, including the ways that change nothing: dropped somewhere
-   * that took it, dropped on nothing, Escaped, dragged out of the window. The handle comes
-   * down for all of them, and the editor is told the drag is over for all of them — see
-   * `endBlockDrag` for what a drag that quietly stayed "in progress" does to the next one.
-   *
-   * Focus is deliberately untouched, which is why this is not `release()`: a drop that
-   * landed has already been focused by whoever took it, and that is often not this editor
-   * — the other pane's note, the sidebar, Obsidian. See `releaseBlock`.
-   */
-  function handleDragEnd() {
-    endBlockDrag(editor);
-    onRelease();
-  }
-
-  /**
    * One place per press, with the moved block staying the handle's target so a GM can
    * walk a creature up an initiative order without re-finding the grip. Focus stays on
    * the button — it is outside the editor's DOM, so the document rewriting under it does
    * not take it away.
    */
   async function move(direction: -1 | 1) {
-    const moved = moveBlock(editor, target, direction);
-    if (!moved) return;
-    onRetarget(moved);
+    if (!handle.move(direction)) return;
     await tick();
     place();
   }
@@ -336,7 +190,7 @@
         // with the moved block still selected — an Escape after `↑` would otherwise leave
         // the GM's next character standing in for the block they just reordered.
         event.preventDefault();
-        release();
+        handle.release();
         break;
     }
   }
@@ -349,8 +203,8 @@
   data-block-handle
   aria-label="Actions for {label}"
   aria-haspopup="menu"
-  aria-expanded={menuOpen}
-  aria-controls={menuOpen ? "block-handle-menu" : undefined}
+  aria-expanded={!!handle.menu}
+  aria-controls={handle.menu ? "block-handle-menu" : undefined}
   aria-describedby="block-handle-hint"
   title="Click for actions · drag to move · ↑ ↓ to reorder"
   style="left: {left}px; top: {top}px; visibility: {placed ? 'visible' : 'hidden'}"
@@ -358,15 +212,15 @@
          text-muted-foreground/70 transition-colors
          hover:bg-muted hover:text-foreground
          cursor-grab active:cursor-grabbing"
-  onmouseenter={() => ((hovered = true), reportHold())}
-  onmouseleave={() => ((hovered = false), reportHold())}
-  onfocus={() => ((focused = true), reportHold())}
-  onblur={() => ((focused = false), reportHold())}
+  onmouseenter={() => handle.hover(true)}
+  onmouseleave={() => handle.hover(false)}
+  onfocus={() => handle.focus(true)}
+  onblur={() => handle.focus(false)}
   onmousedown={() => selectBlock(editor, target)}
   ondragstart={handleDragStart}
-  ondragend={handleDragEnd}
+  ondragend={() => handle.endDrag()}
   onkeydown={handleKeydown}
-  onclick={() => (menuOpen ? dismissMenu() : openMenu())}
+  onclick={() => (handle.menu ? dismissMenu() : openMenu())}
   in:grip|global
   out:grip|global
 >
@@ -386,14 +240,14 @@
 <!-- Click and not pointerdown is what keeps this out of the drag's way: a completed drag
      raises no click at all, so the two gestures share one button without a timer or a
      movement threshold between them. -->
-{#if menuOpen}
+{#if handle.menu}
   <BlockHandleMenu
-    sections={menuSections}
+    sections={handle.menu.sections}
     {label}
-    anchor={menuAnchor}
+    anchor={handle.menu.anchor}
     trigger={el}
-    onSelect={(command) => void runMenuAction(command)}
-    onClose={(returnFocus) => (returnFocus ? dismissMenu() : closeMenu())}
+    onSelect={(command) => void handle.choose(command)}
+    onClose={(returnFocus) => (returnFocus ? dismissMenu() : handle.closeMenu())}
   />
 {/if}
 

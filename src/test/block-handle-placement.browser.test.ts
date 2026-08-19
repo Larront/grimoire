@@ -20,6 +20,7 @@ import {
   type BlockTarget,
 } from "$lib/editor/block-handle";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
+import { createBlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import "../app.css";
 
 // The narrowest a note pane realistically gets: a window split in two, inside an app
@@ -90,14 +91,7 @@ function pointerAt(editor: Editor, point: { left: number; top: number }): BlockT
 async function grip(editor: Editor, target: BlockTarget): Promise<DOMRect> {
   handle = mount(BlockHandle, {
     target: document.body,
-    props: {
-      editor,
-      target,
-      onHold: () => {},
-      onPin: () => {},
-      onRetarget: () => {},
-      onRelease: () => {},
-    },
+    props: { editor, target, handle: createBlockHandleLife(() => editor) },
   });
   await tick();
   const el = document.querySelector("[data-block-handle]");

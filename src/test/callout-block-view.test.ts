@@ -15,6 +15,7 @@ import { fireEvent, render } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
+import { createBlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import {
   bodyStart,
   caretAt,
@@ -522,16 +523,10 @@ describe("a callout follows the document", () => {
  * action to hand back to the prose.
  */
 async function deleteViaGrip(editor: Editor) {
-  render(BlockHandle, {
-    props: {
-      editor,
-      target: targetOf(editor, "blockquote"),
-      onHold: () => {},
-      onPin: () => {},
-      onRetarget: () => {},
-      onRelease: () => {},
-    },
-  });
+  const handle = createBlockHandleLife(() => editor);
+  const target = targetOf(editor, "blockquote");
+  handle.point(target);
+  render(BlockHandle, { props: { editor, target, handle } });
   const grip = document.querySelector<HTMLButtonElement>("[data-block-handle]");
   expect(grip, "a grip on the callout").not.toBeNull();
 
