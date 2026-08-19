@@ -1,9 +1,15 @@
 import { Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
-import { api } from "$lib/api";
 import Suggestion from "@tiptap/suggestion";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { parseWikiTarget, wikiStem } from "./wiki-target";
+import {
+  readWikiSuggestKey,
+  searchWikiTargets,
+  wikiMenuAnchor,
+  type NoteSearchResult,
+  type WikiMenuAnchor,
+} from "./wiki-suggest";
 
 interface WikiBrokenState {
   broken: Set<string>;
@@ -17,23 +23,16 @@ interface WikiBrokenState {
 export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink");
 
 // The target text rules live in wiki-target.ts (TipTap-free, so the Link Resolver
-// can share them); re-exported here because this is where callers look for them.
+// can share them) and the dropdown's grammar in wiki-suggest.ts (TipTap-free, so a
+// Linked Text Field can share it); both re-exported here because this is where callers
+// look for them.
 export { stripWikiFragment, wikiStem, parseWikiTarget } from "./wiki-target";
+export type { NoteSearchResult } from "./wiki-suggest";
 
-export interface WikiLinkSuggestionState {
+export interface WikiLinkSuggestionState extends WikiMenuAnchor {
   items: NoteSearchResult[];
   command: (item: NoteSearchResult) => void;
   selectedIndex: number; // managed by the suggestion plugin's onKeyDown, not the component
-  x: number;
-  y: number;
-  /** The caret's top edge, which is what the menu sits above when it flips. */
-  anchorTop: number;
-}
-
-export interface NoteSearchResult {
-  id: number;
-  title: string;
-  path: string;
 }
 
 // `[[target]]`, anchored: a tokenizer is offered the rest of the line, and a
@@ -109,9 +108,9 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   },
 
   addNodeView() {
-    // Color and cursor are driven by CSS off [data-wiki-link] / [data-broken] so the
-    // editor and the timeline's {@html} links share one styling source. The broken
-    // marker is applied by the decoration plugin below, not by the node view.
+    // Color and cursor are driven by CSS off [data-wiki-link] / [data-broken], so a
+    // link in prose and a link inside a Linked Text Field share one styling source.
+    // The broken marker is applied by the decoration plugin below, not by the node view.
     return ({ node }) => {
       const dom = document.createElement("span");
       // Plain inline (not inline-flex): a flex box centers its content on the
@@ -220,13 +219,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         char: "[[",
         startOfLine: false,
 
-        items: async ({ query }: { query: string }) => {
-          try {
-            return await api.searchNotes(query);
-          } catch {
-            return [];
-          }
-        },
+        items: ({ query }: { query: string }) => searchWikiTargets(query),
 
         command: ({
           editor,
@@ -263,14 +256,11 @@ export const WikiLink = Node.create<WikiLinkOptions>({
             },
             si: number,
           ): WikiLinkSuggestionState {
-            const rect = props.clientRect?.();
             return {
               items: props.items,
               command: props.command,
               selectedIndex: si,
-              x: rect?.left ?? 0,
-              y: (rect?.bottom ?? 0) + 4,
-              anchorTop: rect?.top ?? 0,
+              ...wikiMenuAnchor(props.clientRect?.()),
             };
           }
 
@@ -295,33 +285,27 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               onSuggestion(currentState);
             },
 
+            // What each key means is `readWikiSuggestKey`'s, shared with the Linked
+            // Text Field; what is left here is prose's own half — moving the highlight
+            // is a closure variable, and accepting runs TipTap's `command`.
             onKeyDown({ event }: { event: KeyboardEvent }) {
               if (!currentState) return false;
-              const count = Math.max(currentState.items.length, 1);
+              const verdict = readWikiSuggestKey(event.key, {
+                itemCount: currentState.items.length,
+                selectedIndex,
+              });
+              if (!verdict) return false;
 
-              if (event.key === "ArrowDown") {
-                selectedIndex = (selectedIndex + 1) % count;
+              if (verdict.kind === "move") {
+                selectedIndex = verdict.selectedIndex;
                 currentState = { ...currentState, selectedIndex };
                 onSuggestion(currentState);
-                return true;
-              }
-              if (event.key === "ArrowUp") {
-                selectedIndex = (selectedIndex - 1 + count) % count;
-                currentState = { ...currentState, selectedIndex };
-                onSuggestion(currentState);
-                return true;
-              }
-              if (event.key === "Enter") {
-                if (currentState.items[selectedIndex]) {
-                  currentState.command(currentState.items[selectedIndex]);
-                }
-                return true;
-              }
-              if (event.key === "Escape") {
+              } else if (verdict.kind === "dismiss") {
                 onSuggestion(null);
-                return true;
+              } else {
+                currentState.command(currentState.items[verdict.selectedIndex]);
               }
-              return false;
+              return true;
             },
 
             onExit() {

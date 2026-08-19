@@ -400,3 +400,40 @@ a block's fields, because a fence's grammar is the block's own (§2) and no type
 what line a field is written on. Nine of the eleven edits collapse. Adding an attribute to
 Statblock now costs four: the record, its table entry, the fence's parser and the fence's
 serializer — and the first two are the compiler's, not a checklist's.
+
+### 2026-08-19 — The `[[` dropdown has one grammar ([#215](https://github.com/Larront/grimoire/issues/215))
+
+§4's warning against "share it when something else needs it" had reappeared one layer above
+the machinery it was written for. Three copies of wikilink autocomplete existed — prose's
+suggestion plugin, the Linked Text Field's, and Timeline's own — and
+[#214](https://github.com/Larront/grimoire/issues/214) took the third away by taking
+Timeline's hand-rolled wikilinks away with it. What this amendment records is the decision
+about the two that were left, because it is the question #215 said was genuine rather than
+obvious: **what, exactly, do a ProseMirror plugin and a Svelte component share when they
+offer the same menu?**
+
+**Not the dropdown, and not a session object.** They already shared the drawn menu —
+`WikiLinkSuggestion` — and that was never the duplication. Below it they have no common
+structure to share: prose's state lives in a plugin closure and reaches Svelte through a
+callback, a field's lives in `$state`. A session object holding both would have to be a rune
+module the plugin instantiates, which buys a shared shape at the price of the ProseMirror
+half importing Svelte's reactivity to hold three fields.
+
+**What they share is everything the GM can perceive**, and that is `wiki-suggest.ts`: which
+keys the menu claims and what each one means, what a query returns, and where the menu sits
+relative to the caret. Four pure functions, no framework on either side, and nowhere left for
+the two surfaces to disagree about what Enter does.
+
+**Spotting the `[[` stays per-surface, and that is not drift.** Prose has ProseMirror's own
+`Suggestion` plugin watching the document; a field has a string and a caret. There is no
+shared thing there to extract — the two are different mechanisms reaching the same verdict,
+not two copies of one. The field's half moved into `wiki-suggest.ts` all the same, as
+`findWikiTrigger`, because it is the one piece of it that is pure and a rule about brackets is
+worth testing without rendering an input.
+
+Collapsing the two copies settled a behaviour they had quietly disagreed on. Both kept the
+item count at a minimum of one so a wrapping modulo stayed safe, and both therefore claimed
+the arrow keys and Enter while the menu was showing *no notes found* — swallowing, for a list
+with no entries, a caret move in prose and a line break in a field. **An empty list now claims
+only Escape.** The menu still draws, because *no notes found* is the useful answer to a query
+that matched nothing; it simply stops intercepting keys it has nothing to do with.
