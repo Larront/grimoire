@@ -4,9 +4,10 @@
   import { LoaderCircle } from "@lucide/svelte";
 
   // Shown when open_ledger reported ERR_DB_CORRUPT and no usable snapshot
-  // exists (issue #116). Real scene/pin loss is on the table, so this is the
-  // one recovery path that asks first — auto-restore (snapshot present)
-  // happens without a dialog.
+  // exists (issue #116). Real scene, pin and Quick Note loss is on the table
+  // (Quick Notes are database-only by ADR-0018), so this is the one recovery
+  // path that asks first — auto-restore (snapshot present) happens without a
+  // dialog.
   let isRebuilding = $state(false);
 
   async function handleRebuild() {
@@ -34,10 +35,10 @@
       <AlertDialog.Header>
         <AlertDialog.Title>This ledger's database is damaged</AlertDialog.Title>
         <AlertDialog.Description>
-          No backup exists yet. Rebuilding recovers every note from its file, but scenes, pins, and
-          map details will be lost. The damaged database file is kept inside the ledger's <code
-            >.grimoire</code
-          > folder in case you want to attempt recovery with another tool first.
+          No backup exists yet. Rebuilding recovers every note from its file, but scenes, pins, map
+          details, and Quick Notes will be lost. The damaged database file is kept inside the
+          ledger's <code>.grimoire</code> folder in case you want to attempt recovery with another tool
+          first.
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>
