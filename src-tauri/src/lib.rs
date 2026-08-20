@@ -21,6 +21,7 @@ use commands::media::*;
 use commands::notes::*;
 use commands::pdf_scene_links::*;
 use commands::preferences::*;
+use commands::quick_notes::*;
 use commands::recent::*;
 use commands::recent_ledgers::*;
 use commands::sample::*;
@@ -64,6 +65,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_note_from_template,
             create_pdf_scene_link,
             update_pdf_scene_link,
+            create_quick_note,
             create_pin,
             create_pin_category,
             create_scene,
@@ -115,6 +117,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_tag_graph_styles,
             get_tag_usage_counts,
             list_all_tags,
+            list_quick_notes,
             list_statblock_presets,
             list_templates,
             migrate_ledger_format,
@@ -380,6 +383,9 @@ pub fn run() {
             // Graph styles
             get_tag_graph_styles,
             set_tag_graph_style,
+            // Quick Notes (ADR-0018 — rows, invisible to every derived index)
+            list_quick_notes,
+            create_quick_note,
         ])
         .setup(|_app| {
             #[cfg(target_os = "windows")]

@@ -16,6 +16,7 @@
     LayoutTemplate,
     FileDown,
     Network,
+    NotebookPen,
     BookOpen,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
@@ -174,6 +175,13 @@
     tabs.openTab({ type: "graph", id: 0, title: "Graph" });
   }
 
+  // One tab, never two: `openTab`'s dedup switches to the pane wherever it is
+  // already open, across both panes, exactly as the Graph does.
+  function cmdOpenQuickNotes() {
+    searchPalette.open = false;
+    tabs.openTab({ type: "quickNotes", id: 0, title: "Quick Notes" });
+  }
+
   function cmdOpenSettings() {
     searchPalette.open = false;
     dialogs.settingsOpen = true;
@@ -297,6 +305,13 @@
       noteOnly: false,
       icon: Network,
       action: cmdOpenGraphView,
+    },
+    {
+      label: "Open Quick Notes",
+      testid: "cmd-open-quick-notes",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdOpenQuickNotes,
     },
     {
       label: "Create note from template",

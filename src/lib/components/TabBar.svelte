@@ -10,6 +10,7 @@
     Plus,
     File,
     Network,
+    NotebookPen,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import type { TabType } from "$lib/stores/tabs.svelte";
@@ -134,6 +135,8 @@
         return Music2;
       case "graph":
         return Network;
+      case "quickNotes":
+        return NotebookPen;
       case "empty":
         return File;
     }
