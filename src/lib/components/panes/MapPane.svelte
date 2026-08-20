@@ -29,6 +29,7 @@
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
   import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
+  import { isTypingIn } from "$lib/utils/keyboard";
 
   interface Props {
     mapId: number;
@@ -374,13 +375,6 @@
     character, not a rectangle. Escape clears the selection, which is the other half of
     the same reflex.
   */
-  function isTypingIn(target: EventTarget | null): boolean {
-    const el = target as HTMLElement | null;
-    if (!el) return false;
-    const tag = el.tagName;
-    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
-  }
-
   function onMapKeydown(e: KeyboardEvent) {
     if (isTypingIn(e.target)) return;
 

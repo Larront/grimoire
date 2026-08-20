@@ -1,10 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger } from "$lib/stores/ledger.svelte";
-  import { notes } from "$lib/stores/notes.svelte";
-  import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-  import { api } from "$lib/api";
+  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note } from "$lib/types/ledger";
   import { LoaderCircle } from "@lucide/svelte";
 
@@ -17,14 +15,7 @@
     isCreatingNote = true;
     errorMsg = null;
     try {
-      const newNote = await api.createNote("Untitled", "Untitled.md", null);
-      await notes.load();
-      tabs.openTab({
-        type: "note",
-        id: newNote.id,
-        title: "Untitled",
-        rename: true,
-      });
+      await createUntitledNoteAtRoot();
     } catch (e) {
       errorMsg = String(e);
     } finally {

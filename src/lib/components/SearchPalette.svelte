@@ -31,6 +31,7 @@
   import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
+  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -137,12 +138,12 @@
     addTagOpen = true;
   }
 
+  // Shared with `Ctrl/Cmd+N` (#227) and the empty ledger's first-note button, so
+  // the three cannot drift apart.
   async function cmdCreateNote() {
     searchPalette.open = false;
     try {
-      const newNote = await api.createNote("Untitled", "Untitled.md", null);
-      await notes.load();
-      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
+      await createUntitledNoteAtRoot();
     } catch (e) {
       console.error("create_note failed:", e);
     }

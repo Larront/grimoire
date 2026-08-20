@@ -17,7 +17,9 @@
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
-  import { failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
+  import { ledger, failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
+  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
@@ -28,6 +30,17 @@
   // it has one, so adding a pane type never means editing this file.
   const leftSurface = paneSurface("left");
   const rightSurface = paneSurface("right");
+
+  // The palette's _Create note_ path, unchanged (#227). The GM has been told by
+  // the toast the write already raised; this is the shell, with nowhere of its
+  // own to say it again.
+  async function createNote() {
+    try {
+      await createUntitledNoteAtRoot();
+    } catch (e) {
+      console.error("create_note failed:", e);
+    }
+  }
 </script>
 
 {#snippet navButtons(pane: "left" | "right")}
@@ -61,6 +74,19 @@
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
       tabs.closeActiveTab();
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
+      // `Ctrl+N` without a modifier is emacs-style "next line" in a native text
+      // field, so where the GM is typing it already means something and this
+      // stays out of the way. `Cmd+N` means nothing there, and is the binding a
+      // Mac GM's hands know, so it fires wherever they are. Shift is the [[Quick
+      // Notes Dialog]]'s (#231), and belongs to it alone.
+      if (e.ctrlKey && !e.metaKey && isTypingIn(e.target)) return;
+      // Silent with no ledger open, matching Ctrl/Cmd+Shift+N — no toast
+      // explaining that a world is required.
+      if (!ledger.isOpen) return;
+      e.preventDefault();
+      void createNote();
     }
   }}
 />

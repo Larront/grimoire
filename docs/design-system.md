@@ -441,13 +441,14 @@ Never use a modal for a destructive confirmation — it is disproportionate and 
 
 ### Required Keyboard Shortcuts
 
-| Action               | Mac     | Windows  |
-| -------------------- | ------- | -------- |
-| Open Command Palette | `Cmd+K` | `Ctrl+K` |
-| Close tab            | `Cmd+W` | `Ctrl+W` |
-| Toggle sidebar       | `Cmd+\` | `Ctrl+\` |
-| New note             | `Cmd+N` | `Ctrl+N` |
-| Save (notes)         | `Cmd+S` | `Ctrl+S` |
+| Action               | Mac           | Windows        |
+| -------------------- | ------------- | -------------- |
+| Open Command Palette | `Cmd+K`       | `Ctrl+K`       |
+| Close tab            | `Cmd+W`       | `Ctrl+W`       |
+| Toggle sidebar       | `Cmd+\`       | `Ctrl+\`       |
+| New note             | `Cmd+N`       | `Ctrl+N`       |
+| Capture a Quick Note | `Cmd+Shift+N` | `Ctrl+Shift+N` |
+| Save (notes)         | `Cmd+S`       | `Ctrl+S`       |
 
 All keyboard shortcuts must be documented in a Settings help section and discoverable via the Command Palette (typing "/" surfaces command list).
 
