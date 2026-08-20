@@ -1,5 +1,4 @@
 <script lang="ts">
-  import IconRail from "./sidebar/IconRail.svelte";
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import TagManagerDialog from "./TagManagerDialog.svelte";
@@ -14,12 +13,11 @@
   import * as Sidebar from "./ui/sidebar";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
-  import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { ledger, failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { shell } from "$lib/utils/shell-actions";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
@@ -64,11 +62,6 @@
   </div>
 {/snippet}
 
-<!--
-  --rail-w sets the fixed sidebar container's left offset so it sits flush
-  against the icon rail. The ml-12 wrapper pushes the flex content area
-  right by the same amount so nothing slides under the rail.
--->
 <svelte:window
   onkeydown={(e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
@@ -90,18 +83,10 @@
     }
   }}
 />
-<div class="relative" style="--rail-w: 3rem">
+<!-- No rail, and no offset for one: the sidebar collapses to the strip that used
+     to be `IconRail`, at the same 3rem, in the same place (#226). -->
+<div class="relative">
   <Sidebar.Provider>
-    <IconRail
-      onFilesClick={() => {}}
-      onScenesClick={() => tabs.navigateOpen({ type: "scenes", id: 0, title: "All Scenes" })}
-      onSearchClick={() => (searchPalette.open = true)}
-      onSettingsClick={() => (dialogs.settingsOpen = true)}
-      onGraphClick={() => tabs.openTab({ type: "graph", id: 0, title: "Graph" })}
-      onQuickNotesClick={() =>
-        tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" })}
-      quickNoteCount={quickNotes.count}
-    />
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
     <FailedImportsDialog
@@ -112,7 +97,7 @@
     <SearchPalette />
     <QuickNoteDialog />
     <SampleEffects />
-    <div class="ml-12 flex min-h-svh flex-1">
+    <div class="flex min-h-svh flex-1">
       <AppSidebar />
       <main class="flex min-w-0 flex-1 flex-col">
         <Sidebar.Inset>

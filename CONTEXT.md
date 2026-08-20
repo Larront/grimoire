@@ -70,10 +70,13 @@ Dark. Light and System are available in Settings.
 
 ### App Shell
 
-`[ Icon Rail ] [ Sidebar ] [ Main Content ] [ Right Rail ]`
+`[ Sidebar ] [ Main Content ] [ Right Rail ]`
 
-- **Icon Rail** — always visible, 48px. Brand mark (re-expand to last section), Search, Files (expand + activate file tree), Scenes. Settings lives as a subdued footer icon, not a primary rail item.
-- **Sidebar** — docked on ≥1024px (default open), overlay on ≤1023px (default closed).
+- **Sidebar** — docked on ≥1024px, overlay sheet on ≤1023px. **Collapsed, it _is_ the 48px icon strip**; there is no separate always-present rail beside it. Expanded it carries the search bar, a create toolbar, Files (tree), Scenes (dashboard, favourites and Graph), Quick Notes, and a footer of Templates, the mini player, the ledger selector and Settings.
+  - **Collapsed** it carries, top to bottom: Search, Files, Scenes, Graph, Quick Notes, and Settings in the footer. What cannot be 48px wide is hidden rather than squeezed — the create toolbar, the file tree, the scene favourites, Templates, the mini player and the ledger selector. Files leaves an icon that expands the sidebar and scrolls to the tree; the rest are ordinary rows drawn as icons.
+  - **Collapsed or expanded persists** across restarts, in `localStorage` beside the drag-to-resize width. Expanding restores the remembered width; a drag never collapses the sidebar.
+  - **Toggled** by the trigger in the left pane's tab bar and by `Cmd/Ctrl+\`. There is no brand-mark toggle — the wordmark is the expanded header's identity and nothing replaces it collapsed.
+  - Below 1024px there is **no strip at all**: the sidebar is a sheet, and the tab bar's trigger is the way in.
 - **Right Rail** — 300px, and the docked presentation of a pane's [[Details Pane]] rather than a shell-level column of its own: each pane renders its own on its own right edge when the _pane_ measures ≥820px, floats it inside the pane below that, and shows it as an overlay sheet at ≤1023px of window (ADR-0006 — it does **not** follow focus, and two can be open at once). Each pane's sheet is mutually exclusive with the sidebar overlay and with the other pane's (opening one closes the other).
 
 ### Overlay Mutual Exclusion

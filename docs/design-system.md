@@ -222,24 +222,27 @@ The sidebar collapses to a narrow icon rail — the grid responds accordingly.
 3. **Pinned section** — star icon, flat list of starred/pinned notes (collapsible)
 4. **Recent section** — clock icon, up to 5 recently opened notes (collapsible)
 5. **Campaign tree** — folder icon, hierarchical file tree (collapsible, with "+" to create)
-6. **Quick Notes** — one button with the same count as the rail icon's badge, and deliberately no list: the Quick Notes pane and dialog are the only two surfaces a Quick Note has
+6. **Quick Notes** — one button with a count badge, and deliberately no list: the Quick Notes pane and dialog are the only two surfaces a Quick Note has
 7. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
 8. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
 
-**Icon Rail (collapsed state)** — 48px wide, contains:
+**Icon Rail (collapsed state)** — 48px wide. Not a separate component beside the sidebar: it **is** the sidebar collapsed, and there is no strip at all below 1024px, where the sidebar is an overlay sheet.
 
 Main icons (top):
 
-- Brand mark — re-expands sidebar to last active section
 - Search icon — triggers Command Palette
-- Files icon — expands sidebar and activates the file tree section
+- Files icon — expands the sidebar and scrolls to the file tree
 - Scenes icon — opens the scenes page
 - Graph icon — opens the graph pane
-- Quick Notes icon — an inbox; opens the Quick Notes pane in one click. Carries a count badge of every Quick Note in the ledger, **absent entirely at zero** (never a `0`), following the Scene Player panel's rule that sidebar furniture stays quiet until it has something to say.
+- Quick Notes icon — an inbox; opens the Quick Notes pane in one click. Carries a count badge of every Quick Note in the ledger, **absent entirely at zero** (never a `0`), following the Scene Player panel's rule that sidebar furniture stays quiet until it has something to say. The same count is the right-aligned number when expanded and the corner pill when collapsed.
 
 Footer icon (bottom, smaller / subdued):
 
-- Settings — opens the settings dialog (not a full primary rail icon; visually lighter, pinned to bottom of rail)
+- Settings — opens the settings dialog (visually lighter, pinned to the bottom)
+
+No brand mark: the wordmark is the expanded header's identity and nothing replaces it collapsed — a 48px square with a letter in it, in a strip where every other square is a button, reads as one. Toggling is the tab bar's trigger and `Cmd/Ctrl+\`.
+
+Hidden when collapsed, because none of it can be 48px wide: the create toolbar, the file tree, the scene favourites, Templates, the mini player and the ledger selector. Collapsed-or-expanded persists across restarts; expanding restores the remembered width.
 
 **Main Content Area** — hosts the active document or view. Supports tabs and split view.
 

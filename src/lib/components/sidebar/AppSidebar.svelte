@@ -4,6 +4,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Rename from "$lib/components/ui/rename";
   import * as Sidebar from "$lib/components/ui/sidebar";
+  import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { onMount, setContext, type ComponentProps } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
@@ -20,6 +21,10 @@
     Music2,
     Volume2,
     Inbox,
+    Network,
+    Settings,
+    Search,
+    Files,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap, TemplateEntry } from "$lib/types/ledger";
@@ -42,6 +47,7 @@
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
+  import { shell } from "$lib/utils/shell-actions";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -53,6 +59,23 @@
   let noteMap = $state(new Map<number, Note>());
 
   setContext<Map<number, Note>>("noteMap", noteMap);
+
+  const sidebarState = useSidebar();
+
+  /**
+   * Open the sidebar and bring the file tree into view.
+   *
+   * The collapsed strip's Files icon (#226). Scrolled after the expansion has
+   * been laid out, or the section is measured at the width it is leaving.
+   */
+  function revealFiles() {
+    sidebarState.setOpen(true);
+    requestAnimationFrame(() => {
+      document
+        .getElementById("sidebar-files-section")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   // Favorite scenes from real data
   const favoriteScenes = $derived(scenes.scenes.filter((s) => s.favorited));
@@ -287,9 +310,28 @@
   }
 </script>
 
-<Sidebar.Root bind:ref {...restProps}>
+<!--
+  The sidebar collapses to the rail rather than off-canvas beside one (#226).
+  `SIDEBAR_WIDTH_ICON` is 3rem, which is the width the deleted `IconRail` was, in
+  the place it stood — so collapsing lands a GM exactly where they used to be.
+
+  What each group shows collapsed is decided here rather than inherited: the
+  library fades group *labels* out for free, but a group's *content* is a file
+  tree, a scenes list or a templates list, and none of those can be 48px wide.
+  Each is hidden explicitly, and the two that a GM reaches for mid-session —
+  Files and Scenes — leave an icon behind.
+-->
+<Sidebar.Root collapsible="icon" bind:ref {...restProps}>
   <Sidebar.Header>
-    <div class="flex items-center justify-center px-1">
+    <!-- The wordmark is the one element whose *content* changes rather than its
+         width, so it is the one that needs a beat: everything else rides the
+         library's width transition. Nothing replaces it collapsed — a 48px
+         square with a letter in it, in a strip where every other square is a
+         button, is a decoy, and the toggle it used to carry lives in the tab bar
+         and on Ctrl/Cmd+\. -->
+    <div
+      class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-200 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
+    >
       <span class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
         >Grimoire</span
       >
@@ -305,9 +347,34 @@
              15rem matches the default content width, so at that width this is a
              no-op. The file tree below still uses the full width. -->
         <div class="mx-auto w-full max-w-[15rem]">
-          <AppSearch />
+          <!-- The bar cannot be 48px, so collapsed it is the icon it always had.
+               Same destination, same handler: `AppSearch` is a button onto the
+               palette, not a field. -->
+          <div class="group-data-[collapsible=icon]:hidden">
+            <AppSearch />
+          </div>
+          <Sidebar.Menu class="hidden group-data-[collapsible=icon]:block">
+            <Sidebar.MenuItem>
+              <Sidebar.MenuButton>
+                {#snippet child({ props })}
+                  <button
+                    type="button"
+                    {...props}
+                    data-testid="sidebar-search-icon"
+                    aria-label="Search"
+                    onclick={shell.openSearch}
+                  >
+                    <Search class="size-4" strokeWidth={1.5} />
+                  </button>
+                {/snippet}
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+          </Sidebar.Menu>
+          <!-- Creating is an expanded-sidebar act. `Ctrl/Cmd+N` (#227) covers the
+               common case from anywhere, and four more icons would be the least
+               session-critical controls doubling the strip's weight. -->
           <div
-            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50"
+            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50 group-data-[collapsible=icon]:hidden"
           >
             <Tooltip.Root delayDuration={600}>
               <Tooltip.Trigger
@@ -368,8 +435,30 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
+    <!-- Files, collapsed: the tree cannot narrow to 48px, so it leaves an icon
+         behind that expands and brings the GM to it. This is the one entry whose
+         behaviour genuinely changes — the rail's Files button only ever opened
+         the sidebar and stopped there. -->
+    <Sidebar.Menu class="hidden group-data-[collapsible=icon]:block">
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton>
+          {#snippet child({ props })}
+            <button
+              type="button"
+              {...props}
+              data-testid="sidebar-files-standin"
+              aria-label="Files"
+              onclick={revealFiles}
+            >
+              <Files class="size-4" strokeWidth={1.5} />
+            </button>
+          {/snippet}
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
+
     <!-- Files section -->
-    <div id="sidebar-files-section">
+    <div id="sidebar-files-section" class="group-data-[collapsible=icon]:hidden">
       <Collapsible.Root open class="group/collapsible">
         <Sidebar.Group>
           <Sidebar.GroupLabel>
@@ -457,7 +546,10 @@
         </Sidebar.GroupLabel>
         <Collapsible.Content forceMount>
           {#snippet child({ props, open })}
-            {#if open}
+            <!-- Forced open while the sidebar is collapsed: a GM who folded the
+                   Scenes accordion away meant to hide a list, not to take Scenes
+                   and Graph off the strip that replaced the rail. -->
+            {#if open || sidebarState.state === "collapsed"}
               <div {...props} transition:slide>
                 <Sidebar.GroupContent>
                   <Sidebar.Menu>
@@ -467,8 +559,8 @@
                           <button
                             type="button"
                             {...props}
-                            onclick={() =>
-                              tabs.navigateOpen({ type: "scenes", id: 0, title: "All Scenes" })}
+                            data-testid="sidebar-scenes"
+                            onclick={shell.openScenes}
                           >
                             <LayoutList class="size-4" />
                             All Scenes
@@ -476,8 +568,33 @@
                         {/snippet}
                       </Sidebar.MenuButton>
                     </Sidebar.MenuItem>
+                    <!-- Graph lives here rather than in a list of its own (#235):
+                         it opens a tab, exactly as its neighbours do, and it is
+                         the same kind of thing as they are. Until #226 it is also
+                         still on the rail — two ways to one destination at two
+                         widths, which every other rail entry already is. -->
+                    <Sidebar.MenuItem>
+                      <Sidebar.MenuButton>
+                        {#snippet child({ props })}
+                          <button
+                            type="button"
+                            {...props}
+                            data-testid="sidebar-graph"
+                            onclick={shell.openGraph}
+                          >
+                            <Network class="size-4" />
+                            Graph
+                          </button>
+                        {/snippet}
+                      </Sidebar.MenuButton>
+                    </Sidebar.MenuItem>
+                    <!-- The favourites are the Scenes group's *list*, and a list
+                         cannot be 48px. All Scenes and Graph above are ordinary
+                         menu items and become their icons, which is what the
+                         rail carried — so the group keeps its two entries and
+                         loses only what it could not draw. -->
                     {#each favoriteScenes as scene (scene.id)}
-                      <Sidebar.MenuItem>
+                      <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
                             {@const isPlaying = scene.id === activeSceneDisplayId}
@@ -527,16 +644,23 @@
                   type="button"
                   {...props}
                   data-testid="sidebar-quick-notes"
-                  onclick={() =>
-                    tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" })}
+                  onclick={shell.openQuickNotes}
                 >
                   <Inbox class="size-4" />
                   Quick Notes
                 </button>
               {/snippet}
             </Sidebar.MenuButton>
+            <!-- The library hides a menu badge in icon mode, which would delete
+                 the count in exactly the state it most needs to be read (#226).
+                 Overridden, and re-shaped: the right-aligned number expanded, the
+                 corner pill collapsed — two presentations of one number, both
+                 already drawn before the rail went away. -->
             {#if quickNotes.count > 0}
-              <Sidebar.MenuBadge data-testid="sidebar-quick-notes-count">
+              <Sidebar.MenuBadge
+                data-testid="sidebar-quick-notes-count"
+                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:top-0.5 group-data-[collapsible=icon]:right-1.5 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:min-w-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:bg-sidebar-accent group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:text-[10.5px] group-data-[collapsible=icon]:leading-none group-data-[collapsible=icon]:text-sidebar-accent-foreground/80 group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-sidebar"
+              >
                 {quickNotes.count}
               </Sidebar.MenuBadge>
             {/if}
@@ -547,7 +671,11 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <Collapsible.Root class="group/collapsible">
+    <!-- Templates gets no icon: it had no rail entry, and a footer accordion a GM
+         opens occasionally is not session furniture. The mini player and the
+         ledger selector are both rows of text and controls with nothing to
+         narrow to, so they go with it. -->
+    <Collapsible.Root class="group/collapsible group-data-[collapsible=icon]:hidden">
       <Sidebar.Group class="py-0">
         <Sidebar.GroupLabel class="font-normal opacity-50">
           {#snippet child({ props })}
@@ -637,8 +765,32 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
-    <MiniPlayer />
-    <LedgerSelector />
+    <div class="group-data-[collapsible=icon]:hidden">
+      <MiniPlayer />
+      <LedgerSelector />
+    </div>
+    <!-- Settings, subdued, at the foot of the sidebar as it is at the foot of the
+         rail (#235). A dialog opener rather than a place, so it is the last thing
+         here rather than a row among the groups. -->
+    <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton>
+          {#snippet child({ props })}
+            <button
+              type="button"
+              {...props}
+              data-testid="sidebar-settings"
+              aria-label="Settings"
+              class="text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              onclick={shell.openSettings}
+            >
+              <Settings class="size-4" strokeWidth={1.5} />
+              Settings
+            </button>
+          {/snippet}
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

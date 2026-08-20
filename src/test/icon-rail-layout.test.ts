@@ -1,10 +1,11 @@
-import { render, fireEvent, cleanup, within } from "@testing-library/svelte";
+import { render, fireEvent, cleanup, within, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import LedgerSelector from "../lib/components/sidebar/LedgerSelector.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
+import { SIDEBAR_STATE_STORAGE_KEY } from "../lib/components/ui/sidebar/constants";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -30,6 +31,9 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 
 afterEach(async () => {
   cleanup();
+  // The sidebar remembers collapsed-or-expanded now (#226), and a remembered
+  // state is a test leaking into the next one.
+  localStorage.removeItem(SIDEBAR_STATE_STORAGE_KEY);
   await ledger.closeLedger();
   tabs.closeAll("left");
   if (tabs.right) tabs.closeAll("right");
@@ -118,43 +122,90 @@ describe("ledger selector", () => {
   });
 });
 
-// ── Icon rail ─────────────────────────────────────────────────────────────────
+// ── The collapsed sidebar, which is the rail now (#226) ──────────────────────
+//
+// These were the `IconRail` tests. The component is gone and the strip is the
+// sidebar's own collapsed state, so they assert `data-collapsible="icon"` — the
+// attribute the component already emits, and the thing they were really about.
 
-describe("icon rail", () => {
-  it("renders a Files button in the icon rail", () => {
-    const { getByTestId } = render(AppShell);
-    const rail = getByTestId("icon-rail");
-    // The rail button is scoped within the rail to avoid collision
-    // with the sidebar's "Files" collapsible trigger
-    const filesBtn = within(rail).getByRole("button", { name: /^files$/i });
-    expect(filesBtn).toBeTruthy();
+/**
+ * Collapse the sidebar and hand back its element.
+ *
+ * `Ctrl+\` toggles, and the state now survives a reload (#226) — so a test that
+ * pressed it last leaves the next one starting collapsed. Read the state first
+ * rather than assuming it; `afterEach` clears the key, and this is the belt to
+ * that's braces.
+ */
+async function collapse() {
+  const el = document.querySelector('[data-slot="sidebar"]') as HTMLElement;
+  if (el.getAttribute("data-state") !== "collapsed") {
+    await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
+  }
+  await waitFor(() => expect(el.getAttribute("data-collapsible")).toBe("icon"));
+  return el;
+}
+
+describe("the collapsed sidebar", () => {
+  it("is the 3rem strip when collapsed, and is not when expanded", async () => {
+    render(AppShell);
+    const el = document.querySelector('[data-slot="sidebar"]') as HTMLElement;
+    expect(el.getAttribute("data-state")).toBe("expanded");
+    expect(el.getAttribute("data-collapsible")).toBe("");
+
+    await collapse();
+
+    expect(el.getAttribute("data-state")).toBe("collapsed");
   });
 
-  it("renders a Graph button in the icon rail (between Scenes and Settings)", () => {
-    const { getByTestId } = render(AppShell);
-    const rail = getByTestId("icon-rail");
-    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
-    expect(graphBtn).toBeTruthy();
+  // By testid rather than by name: the expanded sidebar has a "Files" collapsible
+  // trigger of its own, and both are in the DOM at once — jsdom applies no
+  // stylesheet, so it cannot tell which of them the collapsed state is showing.
+  it("keeps Files reachable, as an icon that expands and reveals the tree", async () => {
+    render(AppShell);
+    const sidebar = await collapse();
+
+    await fireEvent.click(within(sidebar).getByTestId("sidebar-files-standin"));
+
+    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("expanded"));
   });
 
-  it("clicking Graph button opens a graph tab", async () => {
-    const { getByTestId } = render(AppShell);
-    const rail = getByTestId("icon-rail");
-    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
+  it("keeps Graph reachable, and it opens the Graph tab", async () => {
+    render(AppShell);
+    const sidebar = await collapse();
+
+    const graphBtn = within(sidebar).getByRole("button", { name: /^graph$/i });
     await fireEvent.click(graphBtn);
-    const graphTabs = tabs.left.tabs.filter((t) => t.type === "graph");
-    expect(graphTabs.length).toBe(1);
+
+    expect(tabs.left.tabs.filter((t) => t.type === "graph")).toHaveLength(1);
   });
 
-  it("clicking Graph button twice does not open a second graph tab", async () => {
-    const { getByTestId } = render(AppShell);
-    const rail = getByTestId("icon-rail");
-    const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
+  it("opens one Graph tab however many times it is pressed", async () => {
+    render(AppShell);
+    const sidebar = await collapse();
+    const graphBtn = within(sidebar).getByRole("button", { name: /^graph$/i });
+
     await fireEvent.click(graphBtn);
     await fireEvent.click(graphBtn);
+
     const graphTabs = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
       (t) => t.type === "graph",
     );
-    expect(graphTabs.length).toBe(1);
+    expect(graphTabs).toHaveLength(1);
   });
+
+  it("carries Search, Scenes, Quick Notes and Settings too", async () => {
+    render(AppShell);
+    const sidebar = await collapse();
+
+    expect(within(sidebar).getByTestId("sidebar-search-icon")).toBeTruthy();
+    expect(within(sidebar).getByTestId("sidebar-scenes")).toBeTruthy();
+    expect(within(sidebar).getByTestId("sidebar-quick-notes")).toBeTruthy();
+    expect(within(sidebar).getByTestId("sidebar-settings")).toBeTruthy();
+  });
+
+  // What the collapsed strip *hides* — the create toolbar, the file tree, the
+  // scene favourites, Templates, the mini player — is decided by CSS that jsdom
+  // does not load, so it is not asserted here. It is a screenshot's job, not
+  // this file's; asserting the class names instead would only restate the
+  // implementation.
 });

@@ -97,11 +97,11 @@ afterEach(async () => {
 });
 
 describe("Quick Notes in the app shell (#233)", () => {
-  it("the rail icon opens the Quick Notes Pane in one click", async () => {
+  it("the shell icon opens the Quick Notes Pane in one click", async () => {
     const { getByTestId } = render(AppShell);
     await flush();
 
-    await fireEvent.click(getByTestId("rail-quick-notes"));
+    await fireEvent.click(getByTestId("sidebar-quick-notes"));
     await flush();
 
     expect(tabs.leftActiveTab?.type).toBe("quickNotes");
@@ -112,37 +112,35 @@ describe("Quick Notes in the app shell (#233)", () => {
     await flush();
 
     expect(quickNotes.count).toBe(0);
-    expect(queryByTestId("rail-quick-notes-count")).toBeNull();
     expect(queryByTestId("sidebar-quick-notes-count")).toBeNull();
   });
 
-  it("shows the ledger's total on both surfaces once a thought is held", async () => {
+  it("shows the ledger's total once a thought is held", async () => {
     rows = [note(1, "The innkeeper knows"), note(2, "Bridge is out")];
     await quickNotes.load();
 
     const { getByTestId } = render(AppShell);
     await flush();
 
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("2");
     expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("2");
   });
 
   it("the count follows a capture and a delete", async () => {
     const { getByTestId, queryByTestId } = render(AppShell);
     await flush();
-    expect(queryByTestId("rail-quick-notes-count")).toBeNull();
+    expect(queryByTestId("sidebar-quick-notes-count")).toBeNull();
 
     await quickNotes.capture("The innkeeper knows");
     await flush();
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("1");
+    expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("1");
 
     await quickNotes.capture("Bridge is out");
     await flush();
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("2");
+    expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("2");
 
     await quickNotes.remove(1);
     await flush();
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("1");
+    expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("1");
   });
 
   it("an undone delete leaves the count where it was", async () => {
@@ -156,7 +154,7 @@ describe("Quick Notes in the app shell (#233)", () => {
 
     const { getByTestId, container } = render(AppShell);
     await flush();
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("1");
+    expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("1");
 
     const deleteButton = container.querySelector<HTMLElement>("[data-quick-note-delete]");
     expect(deleteButton).toBeTruthy();
@@ -168,7 +166,7 @@ describe("Quick Notes in the app shell (#233)", () => {
     await flush();
 
     expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === "delete_quick_note")).toBe(false);
-    expect(getByTestId("rail-quick-notes-count").textContent?.trim()).toBe("1");
+    expect(getByTestId("sidebar-quick-notes-count").textContent?.trim()).toBe("1");
   });
 
   it("the sidebar carries one Quick Notes button and lists nothing", async () => {

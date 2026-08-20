@@ -340,8 +340,8 @@ describe("settings dialog — editing section", () => {
   async function openSettingsDialog() {
     vi.mocked(invoke).mockResolvedValue(null);
     const result = render(AppShell);
-    const rail = result.getByTestId("icon-rail");
-    await fireEvent.click(within(rail).getByRole("button", { name: /^settings$/i }));
+    // The rail is gone (#226) — Settings is a row in the sidebar footer, at every width.
+    await fireEvent.click(result.getByTestId("sidebar-settings"));
     const dialog = await result.findByRole("dialog");
     await fireEvent.click(within(dialog).getByTestId("settings-tab-content"));
     return { ...result, dialog };

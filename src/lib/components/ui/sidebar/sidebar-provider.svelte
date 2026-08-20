@@ -2,12 +2,15 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { cn, type WithElementRef } from "$lib/utils.js";
   import type { HTMLAttributes } from "svelte/elements";
-  import { SIDEBAR_COOKIE_MAX_AGE, SIDEBAR_COOKIE_NAME, SIDEBAR_WIDTH_ICON } from "./constants.js";
+  import { SIDEBAR_WIDTH_ICON, persistSidebarOpen, readSidebarOpen } from "./constants.js";
   import { setSidebar } from "./context.svelte.js";
 
   let {
     ref = $bindable(null),
-    open = $bindable(true),
+    // Read once, at the same moment the width is (`SidebarState`'s constructor),
+    // so the strip is painted at its remembered size in its remembered state
+    // rather than settling into it (#226).
+    open = $bindable(readSidebarOpen()),
     onOpenChange = () => {},
     class: className,
     style,
@@ -23,9 +26,7 @@
     setOpen: (value: boolean) => {
       open = value;
       onOpenChange(value);
-
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+      persistSidebarOpen(value);
     },
   });
 </script>
