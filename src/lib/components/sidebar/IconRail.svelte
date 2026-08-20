@@ -88,7 +88,7 @@
         <span
           data-testid="rail-quick-notes-count"
           aria-hidden="true"
-          class="pointer-events-none absolute -top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10.5px] leading-none font-medium text-primary-foreground tabular-nums select-none"
+          class="pointer-events-none absolute -top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-sidebar-accent px-1 text-[10.5px] leading-none font-medium text-sidebar-accent-foreground/80 ring-1 ring-sidebar tabular-nums select-none"
         >
           {quickNoteCount}
         </span>
