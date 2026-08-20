@@ -35,6 +35,7 @@
   class="fixed z-50 min-w-[240px] max-h-[240px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
          shadow-xl shadow-black/30"
+  data-wiki-suggest
   role="listbox"
   aria-label="Link to note"
 >

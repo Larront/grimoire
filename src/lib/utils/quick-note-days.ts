@@ -21,8 +21,16 @@ export interface CaptureDay {
   notes: QuickNote[];
 }
 
-/** The local calendar day a timestamp falls in, as `YYYY-MM-DD`. */
-function dayKey(date: Date): string {
+/**
+ * The local calendar day a timestamp falls in, as `YYYY-MM-DD`.
+ *
+ * Exported because it is also what a group's `data-capture-day` reads, so a test
+ * naming the group a thought landed in needs the same answer. Spelling it a
+ * second time is how one gets written in UTC by accident — `toISOString()` is the
+ * obvious way to a `YYYY-MM-DD` and it is a different date for a large part of
+ * every day east of Greenwich.
+ */
+export function dayKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;

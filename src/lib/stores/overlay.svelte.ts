@@ -32,4 +32,8 @@ export const overlay = new OverlayState();
 export const dialogs = $state({
   settingsOpen: false,
   tagManagerOpen: false,
+  /** The [[Quick Notes Dialog]] (#231). Here rather than beside the Command
+   *  Palette's own state: it is a shell-level dialog like the two above, and the
+   *  gesture that opens it is a keystroke of its own, not a palette command. */
+  quickNoteOpen: false,
 });

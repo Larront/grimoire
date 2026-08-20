@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import QuickNotesPane from "$lib/components/panes/QuickNotesPane.svelte";
 import { quickNotes } from "$lib/stores/quick-notes.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
+import { dayKey } from "$lib/utils/quick-note-days";
 import type { QuickNote } from "$lib/bindings.gen";
 
 // Everything resolves to the same note, so a click on a drawn link has somewhere
@@ -37,7 +38,11 @@ function note(id: number, body: string, local: string): QuickNote {
   return { id, body, captured_at: new Date(local).toISOString() };
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+// The grouping's own key function, not a second spelling of it. It used to be
+// `toISOString().slice(0, 10)` here, which is UTC's day rather than the GM's — a
+// different date for a large part of every day east of Greenwich, and this
+// assertion failed every morning in the timezone it was written in.
+const today = () => dayKey(new Date());
 
 beforeEach(() => {
   rows = [];

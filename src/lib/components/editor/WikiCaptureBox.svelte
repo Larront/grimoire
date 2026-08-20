@@ -15,7 +15,7 @@
   // the `[[` is per-surface by that module's own design — only the surface knows
   // where its caret is — so this file's autocomplete is a trigger check and four
   // delegated calls.
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import { portal } from "$lib/utils/portal";
   import {
     findWikiTrigger,
@@ -31,6 +31,7 @@
     onCommit,
     ariaLabel,
     placeholder = "",
+    commitOnTeardown = false,
     class: className = "",
   }: {
     /**
@@ -41,6 +42,22 @@
     /** Names the box for a screen reader. */
     ariaLabel: string;
     placeholder?: string;
+    /**
+     * Commit whatever is in the box when it goes away.
+     *
+     * Off by default, because a box that lives as long as its surface does is
+     * left rather than dismissed: the pane's box is still there when the GM comes
+     * back, and a half-typed line in it is a line still being typed. A box that
+     * *is* the surface has no such continuity — take the [[Quick Notes Dialog]]
+     * away and the line goes with it, and a dismissal that discarded the thought
+     * would defeat the one promise the feature makes (#231).
+     *
+     * This is a backstop and not the plan: an owner that knows a way out is coming
+     * should call `commit` before taking the box away, because only then can a
+     * rejected write put the line back where the GM can still see it. What this
+     * catches is the way out nobody announced.
+     */
+    commitOnTeardown?: boolean;
     class?: string;
   } = $props();
 
@@ -48,9 +65,29 @@
   let input = $state<HTMLInputElement>();
 
   /**
+   * Take the caret. For an owner whose surface *is* this box — a dialog opened by
+   * a keystroke — where the GM asked for the box and should be able to start
+   * typing. Exported rather than done on mount so the owner chooses the moment:
+   * a focus trap opening around the box will move the caret itself, and the last
+   * word has to be the owner's.
+   */
+  export function focus() {
+    input?.focus();
+  }
+
+  onDestroy(() => {
+    if (commitOnTeardown) void commit();
+  });
+
+  /**
    * Commit and clear. **The box keeps focus**: a GM parking two thoughts in a
    * row should not have to click back in, and clearing is what says the first
    * one landed.
+   *
+   * Exported so an owner can commit the line on a way out this box cannot see —
+   * a dismissal, a window closing, a ledger being switched — where there is no
+   * Enter coming. It answers **whether the box is now empty**, so an owner about
+   * to take the box away can tell whether doing so would take a thought with it.
    *
    * A rejected commit puts the line back. The whole premise of a capture surface
    * is not losing the thought, and a Quick Note that failed to write exists
@@ -59,17 +96,18 @@
    * have started the next thought while the write was in flight, and that line is
    * theirs.
    */
-  async function commit() {
+  export async function commit(): Promise<boolean> {
     const body = draft.trim();
     closeSuggestions();
     draft = "";
-    if (!body) return;
+    if (!body) return true;
     try {
       await onCommit(body);
     } catch {
       // The failure has already been reported by whoever attempted the write.
       if (!draft) draft = body;
     }
+    return !draft;
   }
 
   // ── `[[` autocomplete ───────────────────────────────────────────────────────

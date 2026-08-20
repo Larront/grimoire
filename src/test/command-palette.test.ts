@@ -1136,6 +1136,29 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
+  it("Capture a Quick Note opens the dialog and closes palette", async () => {
+    dialogs.quickNoteOpen = false;
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "capture";
+    await fireEvent.input(input);
+    await flush();
+
+    // The keystroke is not the only way in: a shortcut has to be reachable from
+    // here too (docs/design-system.md §Keyboard & Accessibility).
+    const item = document.body.querySelector(
+      '[data-testid="cmd-capture-quick-note"]',
+    ) as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(dialogs.quickNoteOpen).toBe(true);
+    expect(searchPalette.open).toBe(false);
+    dialogs.quickNoteOpen = false;
+  });
+
   it("Open Settings sets dialogs.settingsOpen and closes palette", async () => {
     render(AppSearch);
     await openPalette();

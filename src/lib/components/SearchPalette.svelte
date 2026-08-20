@@ -182,6 +182,15 @@
     tabs.openTab({ type: "quickNotes", id: 0, title: "Quick Notes" });
   }
 
+  // The dialog's shortcut is `Ctrl/Cmd+Shift+N`, and a shortcut must also be
+  // reachable from here (docs/design-system.md §Keyboard & Accessibility) — the palette is
+  // where a GM looks for a thing whose key they have not learned yet. It sets the
+  // same flag the keystroke does: one surface, two ways in.
+  function cmdCaptureQuickNote() {
+    searchPalette.open = false;
+    dialogs.quickNoteOpen = true;
+  }
+
   function cmdOpenSettings() {
     searchPalette.open = false;
     dialogs.settingsOpen = true;
@@ -312,6 +321,13 @@
       noteOnly: false,
       icon: NotebookPen,
       action: cmdOpenQuickNotes,
+    },
+    {
+      label: "Capture a Quick Note",
+      testid: "cmd-capture-quick-note",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdCaptureQuickNote,
     },
     {
       label: "Create note from template",

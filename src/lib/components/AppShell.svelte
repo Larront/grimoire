@@ -6,6 +6,7 @@
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
+  import QuickNoteDialog from "./QuickNoteDialog.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
   import SampleBanner from "./SampleBanner.svelte";
@@ -79,6 +80,7 @@
     />
     <UnlinkedPinsDialog bind:open={unlinkedPinsModal.open} pins={unlinkedPinsModal.pins} />
     <SearchPalette />
+    <QuickNoteDialog />
     <SampleEffects />
     <div class="ml-12 flex min-h-svh flex-1">
       <AppSidebar />
