@@ -29,12 +29,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import {
-    toastUndo,
-    toastExternalMoveLinks,
-    toastSuccess,
-    toastUnlinkedPins,
-  } from "$lib/toast";
+  import { toastUndo, toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import {
@@ -49,10 +44,7 @@
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
 
-  let {
-    ref = $bindable(null),
-    ...restProps
-  }: ComponentProps<typeof Sidebar.Root> = $props();
+  let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
   let treeLoading = $state(false);
@@ -142,7 +134,8 @@
     maps.maps;
     if (ledger.isOpen) {
       treeLoading = true;
-      api.getFileTree()
+      api
+        .getFileTree()
         .then((result) => (tree = result))
         .catch((e) => console.error("FileTree tree sync failed:", e))
         .finally(() => (treeLoading = false));
@@ -197,7 +190,7 @@
       const newMap = await api.createMapEmpty("Untitled Map");
       await maps.load();
       refresh();
-      tabs.openTab({ type: 'map', id: newMap.id, title: 'Untitled Map' });
+      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map" });
     } catch (e) {
       console.error("create map failed:", e);
     }
@@ -216,7 +209,7 @@
       if (parentNode) treeExpansion.reveal(parentNode.path);
       await notes.load();
       refresh();
-      tabs.openTab({ type: 'note', id: newNote.id, title: 'Untitled', rename: true });
+      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
     } catch (e) {
       console.error("create note failed:", e);
     }
@@ -224,9 +217,7 @@
 
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
-      await api.createFolder(
-        `${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`,
-      );
+      await api.createFolder(`${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`);
       if (parentNode) treeExpansion.reveal(parentNode.path);
       refresh();
     } catch (e) {
@@ -238,14 +229,26 @@
     try {
       const entry = await api.createTemplate();
       await templates.load();
-      tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
+      tabs.openTab({
+        type: "template",
+        id: 0,
+        title: entry.display_name,
+        badge: "Template",
+        templatePath: entry.path,
+      });
     } catch (e) {
       console.error("create_template failed:", e);
     }
   }
 
   function openTemplate(tmpl: TemplateEntry) {
-    tabs.openTab({ type: "template", id: 0, title: tmpl.display_name, badge: "Template", templatePath: tmpl.path });
+    tabs.openTab({
+      type: "template",
+      id: 0,
+      title: tmpl.display_name,
+      badge: "Template",
+      templatePath: tmpl.path,
+    });
   }
 
   let renamingTemplatePath = $state<string | null>(null);
@@ -285,8 +288,7 @@
 <Sidebar.Root bind:ref {...restProps}>
   <Sidebar.Header>
     <div class="flex items-center justify-center px-1">
-      <span
-        class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
+      <span class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
         >Grimoire</span
       >
     </div>
@@ -305,60 +307,60 @@
           <div
             class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50"
           >
-          <Tooltip.Root delayDuration={600}>
-            <Tooltip.Trigger
-              class="{buttonVariants({
-                variant: 'ghost',
-                size: 'icon-sm',
-              })} text-primary/70 hover:text-primary"
-              aria-label="New Note"
-              onclick={() => handleNewNote(null)}
-            >
-              <FilePlus strokeWidth={1.5} />
-            </Tooltip.Trigger>
-            <Tooltip.Content side="bottom">New Note</Tooltip.Content>
-          </Tooltip.Root>
+            <Tooltip.Root delayDuration={600}>
+              <Tooltip.Trigger
+                class="{buttonVariants({
+                  variant: 'ghost',
+                  size: 'icon-sm',
+                })} text-primary/70 hover:text-primary"
+                aria-label="New Note"
+                onclick={() => handleNewNote(null)}
+              >
+                <FilePlus strokeWidth={1.5} />
+              </Tooltip.Trigger>
+              <Tooltip.Content side="bottom">New Note</Tooltip.Content>
+            </Tooltip.Root>
 
-          <Tooltip.Root delayDuration={600}>
-            <Tooltip.Trigger
-              class="{buttonVariants({
-                variant: 'ghost',
-                size: 'icon-sm',
-              })} text-primary/70 hover:text-primary"
-              aria-label="New Folder"
-              onclick={() => handleNewFolder(null)}
-            >
-              <FolderPlus strokeWidth={1.5} />
-            </Tooltip.Trigger>
-            <Tooltip.Content side="bottom">New Folder</Tooltip.Content>
-          </Tooltip.Root>
+            <Tooltip.Root delayDuration={600}>
+              <Tooltip.Trigger
+                class="{buttonVariants({
+                  variant: 'ghost',
+                  size: 'icon-sm',
+                })} text-primary/70 hover:text-primary"
+                aria-label="New Folder"
+                onclick={() => handleNewFolder(null)}
+              >
+                <FolderPlus strokeWidth={1.5} />
+              </Tooltip.Trigger>
+              <Tooltip.Content side="bottom">New Folder</Tooltip.Content>
+            </Tooltip.Root>
 
-          <Tooltip.Root delayDuration={600}>
-            <Tooltip.Trigger
-              class="{buttonVariants({
-                variant: 'ghost',
-                size: 'icon-sm',
-              })} text-primary/70 hover:text-primary"
-              aria-label="New Map"
-              onclick={() => handleNewMap(null)}
-            >
-              <MapPinPlus strokeWidth={1.5} />
-            </Tooltip.Trigger>
-            <Tooltip.Content side="bottom">New Map</Tooltip.Content>
-          </Tooltip.Root>
+            <Tooltip.Root delayDuration={600}>
+              <Tooltip.Trigger
+                class="{buttonVariants({
+                  variant: 'ghost',
+                  size: 'icon-sm',
+                })} text-primary/70 hover:text-primary"
+                aria-label="New Map"
+                onclick={() => handleNewMap(null)}
+              >
+                <MapPinPlus strokeWidth={1.5} />
+              </Tooltip.Trigger>
+              <Tooltip.Content side="bottom">New Map</Tooltip.Content>
+            </Tooltip.Root>
 
-          <Tooltip.Root delayDuration={600}>
-            <Tooltip.Trigger
-              class="{buttonVariants({
-                variant: 'ghost',
-                size: 'icon-sm',
-              })} text-primary/70 hover:text-primary"
-              aria-label="New Scene"
-            >
-              <Music2 strokeWidth={1.5} />
-            </Tooltip.Trigger>
-            <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
-          </Tooltip.Root>
+            <Tooltip.Root delayDuration={600}>
+              <Tooltip.Trigger
+                class="{buttonVariants({
+                  variant: 'ghost',
+                  size: 'icon-sm',
+                })} text-primary/70 hover:text-primary"
+                aria-label="New Scene"
+              >
+                <Music2 strokeWidth={1.5} />
+              </Tooltip.Trigger>
+              <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
+            </Tooltip.Root>
           </div>
         </div>
       </Sidebar.GroupContent>
@@ -388,57 +390,46 @@
                       ondragover={handleRootDragOver}
                       ondragleave={() => (isRootDropTarget = false)}
                       ondrop={handleRootDrop}
-                      class="rounded-md {isRootDropTarget
-                        ? 'ring-1 ring-primary/40'
-                        : ''}"
+                      class="rounded-md {isRootDropTarget ? 'ring-1 ring-primary/40' : ''}"
                     >
-                    {#if treeLoading && !tree}
-                      <div class="space-y-1 px-2">
-                        <Sidebar.MenuSkeleton showIcon />
-                        <Sidebar.MenuSkeleton showIcon />
-                        <Sidebar.MenuSkeleton showIcon />
-                      </div>
-                    {:else if tree && tree.children.length > 0}
-                      <Sidebar.Menu>
-                        {#each tree.children as treeNode (treeNode.path)}
-                          <FileTree
-                            node={treeNode}
-                            {noteMap}
-                            {refresh}
-                            {handleNewNote}
-                            {handleNewFolder}
-                            {handleNewMap}
-                          />
-                        {/each}
-                      </Sidebar.Menu>
-                    {:else if tree}
-                      <div
-                        class="flex flex-col items-center gap-3 px-4 py-6 text-center"
-                      >
-                        <div
-                          class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
-                        >
-                          <FilePlus
-                            class="size-5 text-primary"
-                            strokeWidth={1.5}
-                          />
+                      {#if treeLoading && !tree}
+                        <div class="space-y-1 px-2">
+                          <Sidebar.MenuSkeleton showIcon />
+                          <Sidebar.MenuSkeleton showIcon />
+                          <Sidebar.MenuSkeleton showIcon />
                         </div>
-                        <div class="space-y-1">
-                          <p class="text-(--font-body) font-medium">No notes yet</p>
-                          <p class="text-(--font-ui) text-muted-foreground">
-                            Create your first note to start building your world.
-                          </p>
+                      {:else if tree && tree.children.length > 0}
+                        <Sidebar.Menu>
+                          {#each tree.children as treeNode (treeNode.path)}
+                            <FileTree
+                              node={treeNode}
+                              {noteMap}
+                              {refresh}
+                              {handleNewNote}
+                              {handleNewFolder}
+                              {handleNewMap}
+                            />
+                          {/each}
+                        </Sidebar.Menu>
+                      {:else if tree}
+                        <div class="flex flex-col items-center gap-3 px-4 py-6 text-center">
+                          <div
+                            class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
+                          >
+                            <FilePlus class="size-5 text-primary" strokeWidth={1.5} />
+                          </div>
+                          <div class="space-y-1">
+                            <p class="text-(--font-body) font-medium">No notes yet</p>
+                            <p class="text-(--font-ui) text-muted-foreground">
+                              Create your first note to start building your world.
+                            </p>
+                          </div>
+                          <Button variant="outline" size="sm" onclick={() => handleNewNote(null)}>
+                            <FilePlus strokeWidth={1.5} />
+                            New Note
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onclick={() => handleNewNote(null)}
-                        >
-                          <FilePlus strokeWidth={1.5} />
-                          New Note
-                        </Button>
-                      </div>
-                    {/if}
+                      {/if}
                     </div>
                   </Sidebar.GroupContent>
                 </div>
@@ -471,7 +462,12 @@
                     <Sidebar.MenuItem>
                       <Sidebar.MenuButton>
                         {#snippet child({ props })}
-                          <button type="button" {...props} onclick={() => tabs.navigateOpen({ type: 'scenes', id: 0, title: 'All Scenes' })}>
+                          <button
+                            type="button"
+                            {...props}
+                            onclick={() =>
+                              tabs.navigateOpen({ type: "scenes", id: 0, title: "All Scenes" })}
+                          >
                             <LayoutList class="size-4" />
                             All Scenes
                           </button>
@@ -487,7 +483,12 @@
                               type="button"
                               {...props}
                               data-scene-playing={isPlaying || undefined}
-                              onclick={() => tabs.navigateOpen({ type: 'scene', id: scene.id, title: scene.name })}
+                              onclick={() =>
+                                tabs.navigateOpen({
+                                  type: "scene",
+                                  id: scene.id,
+                                  title: scene.name,
+                                })}
                             >
                               {#if isPlaying}
                                 <Volume2 class="size-4 text-primary" />
@@ -538,18 +539,28 @@
                       {#each templates.templates as tmpl (tmpl.path)}
                         <ContextMenu.Root>
                           <ContextMenu.Trigger>
-                            <Sidebar.MenuButton data-testid="template-row-{tmpl.display_name}" onclick={() => openTemplate(tmpl)}>
+                            <Sidebar.MenuButton
+                              data-testid="template-row-{tmpl.display_name}"
+                              onclick={() => openTemplate(tmpl)}
+                            >
                               <LayoutTemplate class="size-4 shrink-0 text-muted-foreground" />
                               <Rename.Root
                                 this="span"
                                 class="flex-1 truncate text-sm"
                                 bind:value={
-                                  () => renamingTemplatePath === tmpl.path ? renameTemplateValue : tmpl.display_name,
-                                  (val) => { renameTemplateValue = val; }
+                                  () =>
+                                    renamingTemplatePath === tmpl.path
+                                      ? renameTemplateValue
+                                      : tmpl.display_name,
+                                  (val) => {
+                                    renameTemplateValue = val;
+                                  }
                                 }
                                 bind:mode={
                                   () => (renamingTemplatePath === tmpl.path ? "edit" : "view"),
-                                  (val) => { if (val === "view") renamingTemplatePath = null; }
+                                  (val) => {
+                                    if (val === "view") renamingTemplatePath = null;
+                                  }
                                 }
                                 blurBehavior="exit"
                                 onSave={(val) => handleRenameTemplate(tmpl, val)}
@@ -559,12 +570,15 @@
                           </ContextMenu.Trigger>
                           <ContextMenu.Portal>
                             <ContextMenu.Content>
-                              <ContextMenu.Item onSelect={() => startRenameTemplate(tmpl)}>Rename</ContextMenu.Item>
+                              <ContextMenu.Item onSelect={() => startRenameTemplate(tmpl)}
+                                >Rename</ContextMenu.Item
+                              >
                               <ContextMenu.Separator />
                               <ContextMenu.Item
                                 variant="destructive"
                                 onSelect={() => deleteTemplate(tmpl)}
-                              >Delete Template</ContextMenu.Item>
+                                >Delete Template</ContextMenu.Item
+                              >
                             </ContextMenu.Content>
                           </ContextMenu.Portal>
                         </ContextMenu.Root>

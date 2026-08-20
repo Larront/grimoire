@@ -37,8 +37,7 @@ const zeroRects = () =>
 
 // `Text` genuinely has no `getClientRects` in the DOM types either — the stub is the
 // point, so the cast says so rather than pretending the property was always there.
-(Text.prototype as unknown as { getClientRects: () => DOMRectList }).getClientRects =
-  zeroRects;
+(Text.prototype as unknown as { getClientRects: () => DOMRectList }).getClientRects = zeroRects;
 Element.prototype.getClientRects = zeroRects;
 Range.prototype.getClientRects = zeroRects;
 Range.prototype.getBoundingClientRect = () => ZERO_RECT;

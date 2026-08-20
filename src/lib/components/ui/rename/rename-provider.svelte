@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { useRename } from './rename.svelte.js';
+  import type { Snippet } from "svelte";
+  import { useRename } from "./rename.svelte.js";
 
-	useRename();
+  useRename();
 
-	let { children }: { children: Snippet } = $props();
+  let { children }: { children: Snippet } = $props();
 </script>
 
 {@render children?.()}

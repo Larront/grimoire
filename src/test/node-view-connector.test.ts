@@ -152,11 +152,7 @@ function mountNodeView(
             metas.push({ value, beforeWrite: writes.length === 0 });
             return tr;
           },
-          setNodeMarkup(
-            pos: number,
-            _type: unknown,
-            newAttrs: Record<string, unknown>,
-          ) {
+          setNodeMarkup(pos: number, _type: unknown, newAttrs: Record<string, unknown>) {
             writes.push({ pos, attrs: newAttrs });
             return tr;
           },
@@ -223,9 +219,7 @@ describe("node-view connector — sealed mode", () => {
     expect(view.dom.getAttribute("contenteditable")).toBe("false");
     expect(view.dom.className).toBe("fixture-wrapper");
     expect(view.dom.hasAttribute("data-fixture-block")).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Ambush/2",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Ambush/2");
     // Nothing for ProseMirror to own: a sealed block has no children.
     expect(view.contentDOM).toBeUndefined();
   });
@@ -239,9 +233,7 @@ describe("node-view connector — sealed mode", () => {
       { label: null },
     );
 
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Untitled/0",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Untitled/0");
   });
 });
 
@@ -482,9 +474,7 @@ describe("node-view connector — update path", () => {
     });
 
     expect(accepted).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Retreat/7",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Retreat/7");
   });
 
   it("refuses a node of another type", () => {
@@ -499,9 +489,7 @@ describe("node-view connector — update path", () => {
     });
 
     expect(accepted).toBe(false);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Ambush/2",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Ambush/2");
   });
 });
 
@@ -526,8 +514,7 @@ describe("node-view connector — event handling", () => {
     const { view } = mountNodeView(
       createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
-        stopEvent: () => (event) =>
-          event.type === "mousedown" ? false : undefined,
+        stopEvent: () => (event) => (event.type === "mousedown" ? false : undefined),
       }),
     );
 
@@ -685,12 +672,8 @@ describe("node-view connector — container mode", () => {
 
     expect(view.dom.hasAttribute("contenteditable")).toBe(false);
     expect(view.contentDOM).toBeTruthy();
-    expect(
-      view.contentDOM?.parentElement?.hasAttribute("data-node-view-content"),
-    ).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-title]")?.textContent).toBe(
-      "Read aloud",
-    );
+    expect(view.contentDOM?.parentElement?.hasAttribute("data-node-view-content")).toBe(true);
+    expect(view.dom.querySelector("[data-fixture-title]")?.textContent).toBe("Read aloud");
   });
 
   it("hands events inside the content hole to ProseMirror, and keeps the chrome's", () => {
@@ -705,9 +688,7 @@ describe("node-view connector — container mode", () => {
     const child = view.contentDOM!.appendChild(document.createElement("p"));
     expect(view.stopEvent?.(eventOn(child, "keydown"))).toBe(false);
 
-    const chrome = view.dom.querySelector(
-      "[data-fixture-title]",
-    ) as HTMLElement;
+    const chrome = view.dom.querySelector("[data-fixture-title]") as HTMLElement;
     expect(view.stopEvent?.(eventOn(chrome, "keydown"))).toBe(true);
   });
 
@@ -720,9 +701,7 @@ describe("node-view connector — container mode", () => {
       { title: "Read aloud" },
     );
 
-    const chrome = view.dom.querySelector(
-      "[data-fixture-title]",
-    ) as HTMLElement;
+    const chrome = view.dom.querySelector("[data-fixture-title]") as HTMLElement;
     expect(view.ignoreMutation?.({ target: chrome })).toBe(true);
     expect(view.ignoreMutation?.({ target: view.contentDOM })).toBe(false);
   });

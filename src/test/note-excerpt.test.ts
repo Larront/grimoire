@@ -23,18 +23,14 @@ describe("a fence", () => {
   it("leaves a note that is all fence with something to read", () => {
     const body =
       "```statblock\n# Goblin Scout\nHP: 3/12\n```\n\n```statblock\n# Goblin Boss\nHP: 21\n```";
-    expect(noteExcerpt(body)).toBe(
-      "Statblock — Goblin Scout\n\nStatblock — Goblin Boss",
-    );
+    expect(noteExcerpt(body)).toBe("Statblock — Goblin Scout\n\nStatblock — Goblin Boss");
   });
 
   it("names an Infobox and a Scene by the same convention", () => {
-    expect(
-      noteExcerpt("```infobox\n# Harbor's End\nRuler: [[Aldric]]\n```"),
-    ).toBe("Infobox — Harbor's End");
-    expect(noteExcerpt("```scene\n# Boss Battle\nId: 4\n```")).toBe(
-      "Scene — Boss Battle",
+    expect(noteExcerpt("```infobox\n# Harbor's End\nRuler: [[Aldric]]\n```")).toBe(
+      "Infobox — Harbor's End",
     );
+    expect(noteExcerpt("```scene\n# Boss Battle\nId: 4\n```")).toBe("Scene — Boss Battle");
   });
 
   it("falls back to the bare type when the block has no name", () => {
@@ -43,15 +39,12 @@ describe("a fence", () => {
   });
 
   it("counts a Timeline instead of naming it after its first event", () => {
-    const body =
-      "```timeline\n# The Ambush\nDate: 1247\n\n# The Retreat\nDate: 1248\n```";
+    const body = "```timeline\n# The Ambush\nDate: 1247\n\n# The Retreat\nDate: 1248\n```";
     expect(noteExcerpt(body)).toBe("Timeline — 2 events");
   });
 
   it("counts one event in the singular, and an empty timeline not at all", () => {
-    expect(noteExcerpt("```timeline\n# The Ambush\n```")).toBe(
-      "Timeline — 1 event",
-    );
+    expect(noteExcerpt("```timeline\n# The Ambush\n```")).toBe("Timeline — 1 event");
     expect(noteExcerpt("```timeline\n```")).toBe("Timeline");
   });
 
@@ -61,9 +54,7 @@ describe("a fence", () => {
   });
 
   it("reads a tilde fence, and one that is never closed", () => {
-    expect(noteExcerpt("~~~statblock\n# Goblin Scout\n~~~")).toBe(
-      "Statblock — Goblin Scout",
-    );
+    expect(noteExcerpt("~~~statblock\n# Goblin Scout\n~~~")).toBe("Statblock — Goblin Scout");
     expect(noteExcerpt("Intro\n\n```statblock\n# Goblin Scout\nHP: 3")).toBe(
       "Intro\n\nStatblock — Goblin Scout",
     );
@@ -74,28 +65,20 @@ describe("a fence", () => {
 
 describe("block notation", () => {
   it("drops heading hashes and list markers, keeping the words", () => {
-    const body =
-      "# Goblin Scout\n\n## Tactics\n\n- Flanks the party\n1. Then flees";
-    expect(noteExcerpt(body)).toBe(
-      "Goblin Scout\n\nTactics\n\nFlanks the party\nThen flees",
-    );
+    const body = "# Goblin Scout\n\n## Tactics\n\n- Flanks the party\n1. Then flees";
+    expect(noteExcerpt(body)).toBe("Goblin Scout\n\nTactics\n\nFlanks the party\nThen flees");
   });
 
   it("unwraps a blockquote and names a callout by its type and title", () => {
-    expect(
-      noteExcerpt("> [!warning] The bridge is out\n> Cross at your peril"),
-    ).toBe("Warning — The bridge is out\nCross at your peril");
-    expect(noteExcerpt("> [!read-aloud]\n> The door creaks")).toBe(
-      "Read Aloud\nThe door creaks",
+    expect(noteExcerpt("> [!warning] The bridge is out\n> Cross at your peril")).toBe(
+      "Warning — The bridge is out\nCross at your peril",
     );
+    expect(noteExcerpt("> [!read-aloud]\n> The door creaks")).toBe("Read Aloud\nThe door creaks");
   });
 
   it("sees a fence nested inside a callout", () => {
-    const body =
-      "> [!note] The Ambush\n> ```statblock\n> # Goblin Scout\n> ```";
-    expect(noteExcerpt(body)).toBe(
-      "Note — The Ambush\nStatblock — Goblin Scout",
-    );
+    const body = "> [!note] The Ambush\n> ```statblock\n> # Goblin Scout\n> ```";
+    expect(noteExcerpt(body)).toBe("Note — The Ambush\nStatblock — Goblin Scout");
   });
 
   it("names an image by its alt text", () => {
@@ -112,15 +95,15 @@ describe("block notation", () => {
 
 describe("inline notation", () => {
   it("strips emphasis, strikethrough and inline code", () => {
-    expect(
-      noteExcerpt("The **bridge** is *out* and ~~safe~~ per `config.toml`"),
-    ).toBe("The bridge is out and safe per config.toml");
+    expect(noteExcerpt("The **bridge** is *out* and ~~safe~~ per `config.toml`")).toBe(
+      "The bridge is out and safe per config.toml",
+    );
   });
 
   it("keeps a wikilink's brackets, and takes a markdown link's text", () => {
-    expect(
-      noteExcerpt("Ruled by [[People/Aldric|Aldric]], see [the map](map.png)"),
-    ).toBe("Ruled by [[People/Aldric|Aldric]], see the map");
+    expect(noteExcerpt("Ruled by [[People/Aldric|Aldric]], see [the map](map.png)")).toBe(
+      "Ruled by [[People/Aldric|Aldric]], see the map",
+    );
   });
 
   it("leaves underscores alone so file_names survive", () => {
@@ -133,8 +116,7 @@ describe("inline notation", () => {
 // ─── The fragment a link points at ────────────────────────────────────────────
 
 describe("a link into a section", () => {
-  const body =
-    "# Goblin Scout\n\nA small raider.\n\n## Tactics\n\nFlanks, then flees.";
+  const body = "# Goblin Scout\n\nA small raider.\n\n## Tactics\n\nFlanks, then flees.";
 
   it("opens the excerpt at the heading rather than the top of the note", () => {
     expect(noteExcerpt(body, "Tactics")).toBe("Tactics\n\nFlanks, then flees.");
@@ -150,11 +132,8 @@ describe("a link into a section", () => {
   });
 
   it("is not fooled by a fence's name line", () => {
-    const fenced =
-      "```statblock\n# Tactics\n```\n\n## Tactics\n\nFlanks, then flees.";
-    expect(noteExcerpt(fenced, "Tactics")).toBe(
-      "Tactics\n\nFlanks, then flees.",
-    );
+    const fenced = "```statblock\n# Tactics\n```\n\n## Tactics\n\nFlanks, then flees.";
+    expect(noteExcerpt(fenced, "Tactics")).toBe("Tactics\n\nFlanks, then flees.");
   });
 
   it("reads the fragment off the path the preview is given", () => {

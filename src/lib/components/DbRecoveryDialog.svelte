@@ -34,17 +34,17 @@
       <AlertDialog.Header>
         <AlertDialog.Title>This ledger's database is damaged</AlertDialog.Title>
         <AlertDialog.Description>
-          No backup exists yet. Rebuilding recovers every note from its file,
-          but scenes, pins, and map details will be lost. The damaged database
-          file is kept inside the ledger's <code>.grimoire</code> folder in
-          case you want to attempt recovery with another tool first.
+          No backup exists yet. Rebuilding recovers every note from its file, but scenes, pins, and
+          map details will be lost. The damaged database file is kept inside the ledger's <code
+            >.grimoire</code
+          > folder in case you want to attempt recovery with another tool first.
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>
         <AlertDialog.Cancel
           data-testid="db-recovery-cancel"
-          onclick={() => ledger.dismissCorruptLedger()}
-        >Cancel</AlertDialog.Cancel>
+          onclick={() => ledger.dismissCorruptLedger()}>Cancel</AlertDialog.Cancel
+        >
         <AlertDialog.Action
           data-testid="db-recovery-rebuild"
           disabled={isRebuilding}

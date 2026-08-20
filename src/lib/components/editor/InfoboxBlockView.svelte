@@ -21,12 +21,7 @@
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
   import { settleRowChange, type RowChange } from "$lib/editor/row-list";
-  import {
-    blankLabelledRow,
-    labelText,
-    oneLine,
-    type LabelledRow,
-  } from "$lib/editor/labelled-row";
+  import { blankLabelledRow, labelText, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
   import type { Infobox } from "$lib/editor/infobox-block";
 
   // The panel's own record, taken as one prop bag rather than as four named props: the
@@ -128,9 +123,7 @@
      review). The label column is a minimum plus a percentage rather than a fixed
      width, so `Population` and `Ruler` still line up. -->
 {#snippet infoboxRow(row: LabelledRow, i: number)}
-  <div
-    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2"
-  >
+  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2">
     <LinkedTextField
       value={row.label}
       onCommit={(label) => setRow(i, { label })}

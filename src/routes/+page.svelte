@@ -20,7 +20,8 @@
 
   $effect(() => {
     if (!ledger.isOpen) {
-      api.getRecentLedgers()
+      api
+        .getRecentLedgers()
         .then((ledgers) => {
           recentLedgers = ledgers;
         })
@@ -139,12 +140,9 @@
 
   function formatLedgerStats(v: RecentLedger): string {
     const parts: string[] = [];
-    if (v.note_count > 0)
-      parts.push(`${v.note_count} note${v.note_count !== 1 ? "s" : ""}`);
-    if (v.scene_count > 0)
-      parts.push(`${v.scene_count} scene${v.scene_count !== 1 ? "s" : ""}`);
-    if (v.map_count > 0)
-      parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
+    if (v.note_count > 0) parts.push(`${v.note_count} note${v.note_count !== 1 ? "s" : ""}`);
+    if (v.scene_count > 0) parts.push(`${v.scene_count} scene${v.scene_count !== 1 ? "s" : ""}`);
+    if (v.map_count > 0) parts.push(`${v.map_count} map${v.map_count !== 1 ? "s" : ""}`);
     return parts.join(" · ") || "Empty ledger";
   }
 </script>
@@ -155,9 +153,7 @@
        layout swaps to AppShell (the empty-ledger home lives in LedgerHome,
        rendered from PaneContent). -->
 
-  <div
-    class="flex flex-col items-center justify-center min-h-screen overflow-hidden relative"
-  >
+  <div class="flex flex-col items-center justify-center min-h-screen overflow-hidden relative">
     <!-- Radial glow -->
     <div
       class="pointer-events-none absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2
@@ -167,9 +163,7 @@
 
     <!-- Title -->
     <div class="text-center relative z-10 splash-fade">
-      <h1 class="font-heading text-[52px] text-primary tracking-[1px]">
-        Grimoire
-      </h1>
+      <h1 class="font-heading text-[52px] text-primary tracking-[1px]">Grimoire</h1>
       <div
         class="w-12 h-px mx-auto mt-3.5"
         style="background: linear-gradient(90deg, transparent, oklch(from var(--primary) l c h / 40%), transparent)"
@@ -180,21 +174,14 @@
       <!-- Minimal loading — title visible, content loads beneath -->
     {:else if mode === "creating"}
       <!-- ── Create new ledger form ───────────────────────────────── -->
-      <div
-        class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1"
-      >
-        <span
-          class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint"
-        >
+      <div class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1">
+        <span class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint">
           New Ledger
         </span>
 
         <!-- Ledger name -->
         <div class="flex flex-col gap-1.5">
-          <label
-            for="ledger-name"
-            class="font-sans text-[11px] text-muted-foreground"
-          >
+          <label for="ledger-name" class="font-sans text-[11px] text-muted-foreground">
             Name
           </label>
           <!-- svelte-ignore a11y_autofocus -->
@@ -219,9 +206,7 @@
 
         <!-- Storage location -->
         <div class="flex flex-col gap-1.5">
-          <span class="font-sans text-[11px] text-muted-foreground"
-            >Location</span
-          >
+          <span class="font-sans text-[11px] text-muted-foreground">Location</span>
           <button
             type="button"
             onclick={handleChooseLocation}
@@ -233,9 +218,7 @@
           >
             <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
             {#if newLedgerParent}
-              <span
-                class="font-sans text-[12px] text-foreground truncate min-w-0"
-              >
+              <span class="font-sans text-[12px] text-foreground truncate min-w-0">
                 {newLedgerParent}
               </span>
             {:else}
@@ -253,10 +236,7 @@
 
         <!-- Inline validation error -->
         {#if nameError}
-          <p
-            class="font-sans text-[11px] text-destructive leading-snug"
-            role="alert"
-          >
+          <p class="font-sans text-[11px] text-destructive leading-snug" role="alert">
             {nameError}
           </p>
         {/if}
@@ -275,9 +255,7 @@
           <Button
             size="sm"
             onclick={handleCreateLedger}
-            disabled={openingPath !== null ||
-              !newLedgerName.trim() ||
-              !newLedgerParent}
+            disabled={openingPath !== null || !newLedgerName.trim() || !newLedgerParent}
             class="flex-1 text-[11px]"
           >
             {#if openingPath === "__creating__"}
@@ -298,9 +276,7 @@
         A worldbuilding ledger for your campaigns, lore, maps, and sessions.
       </p>
 
-      <div
-        class="flex flex-col gap-2.5 mt-8 w-70 relative z-10 splash-fade-delay-2"
-      >
+      <div class="flex flex-col gap-2.5 mt-8 w-70 relative z-10 splash-fade-delay-2">
         <!-- Primary: Explore sample -->
         <Button
           onclick={handleExploreSample}
@@ -314,9 +290,7 @@
           {/if}
           <div class="text-left">
             <div class="text-sm font-semibold">Explore an example world</div>
-            <div class="text-[11px] opacity-70 font-normal">
-              A small campaign to wander
-            </div>
+            <div class="text-[11px] opacity-70 font-normal">A small campaign to wander</div>
           </div>
         </Button>
 
@@ -330,9 +304,7 @@
           <Plus class="w-4 h-4 shrink-0" />
           <div class="text-left">
             <div class="text-sm font-semibold">Create New Ledger</div>
-            <div class="text-[11px] opacity-70 font-normal">
-              Start fresh with an empty ledger
-            </div>
+            <div class="text-[11px] opacity-70 font-normal">Start fresh with an empty ledger</div>
           </div>
         </Button>
 
@@ -349,9 +321,7 @@
           {/if}
           <div class="text-left">
             <div class="text-sm font-semibold">Open Existing Ledger</div>
-            <div class="text-[11px] opacity-70 font-normal">
-              Browse for an existing ledger
-            </div>
+            <div class="text-[11px] opacity-70 font-normal">Browse for an existing ledger</div>
           </div>
         </Button>
       </div>
@@ -375,9 +345,7 @@
                        border-b border-border text-left"
               >
                 <div class="min-w-0 flex-1 opacity-50">
-                  <div
-                    class="font-heading text-[15px] font-normal text-foreground truncate"
-                  >
+                  <div class="font-heading text-[15px] font-normal text-foreground truncate">
                     {v.name}
                   </div>
                   <div
@@ -401,43 +369,35 @@
                 </button>
               </div>
             {:else}
-            <button
-              class="flex items-center justify-between py-2.5 px-3 rounded-sm
+              <button
+                class="flex items-center justify-between py-2.5 px-3 rounded-sm
                      border-b border-border text-left
                      hover:bg-(--hover-overlay) transition-colors duration-150
                      disabled:opacity-50"
-              disabled={openingPath !== null}
-              onclick={() => handleOpenRecent(v.path)}
-            >
-              <div class="min-w-0 flex-1">
-                {#if openingPath === v.path}
-                  <div class="flex items-center gap-2">
-                    <LoaderCircle
-                      class="w-3.5 h-3.5 animate-spin text-primary shrink-0"
-                    />
-                    <span
-                      class="font-heading text-[15px] font-normal text-foreground truncate"
-                    >
-                      {v.name}
-                    </span>
-                  </div>
-                {:else}
-                  <div
-                    class="font-heading text-[15px] font-normal text-foreground truncate"
-                  >
-                    {v.name}
-                  </div>
-                {/if}
-                <div class="font-mono text-[10px] text-foreground-muted mt-0.5">
-                  {formatLedgerStats(v)}
-                </div>
-              </div>
-              <div
-                class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0"
+                disabled={openingPath !== null}
+                onclick={() => handleOpenRecent(v.path)}
               >
-                {formatRelativeTime(v.last_opened)}
-              </div>
-            </button>
+                <div class="min-w-0 flex-1">
+                  {#if openingPath === v.path}
+                    <div class="flex items-center gap-2">
+                      <LoaderCircle class="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+                      <span class="font-heading text-[15px] font-normal text-foreground truncate">
+                        {v.name}
+                      </span>
+                    </div>
+                  {:else}
+                    <div class="font-heading text-[15px] font-normal text-foreground truncate">
+                      {v.name}
+                    </div>
+                  {/if}
+                  <div class="font-mono text-[10px] text-foreground-muted mt-0.5">
+                    {formatLedgerStats(v)}
+                  </div>
+                </div>
+                <div class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0">
+                  {formatRelativeTime(v.last_opened)}
+                </div>
+              </button>
             {/if}
           {/each}
         </div>

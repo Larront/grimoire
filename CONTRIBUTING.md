@@ -44,16 +44,16 @@ bun run tauri build # production bundle for your platform
 
 ## Project layout
 
-| Path | Contents |
-| :--- | :--- |
-| `src/` | SvelteKit frontend (Svelte 5 runes) |
-| `src/lib/components/ui/` | Generated shadcn-svelte primitives — **do not hand-edit** |
-| `src/lib/bindings.gen.ts` | Auto-generated TS command bindings — **do not hand-edit** (see ADR-0009) |
-| `src-tauri/src/` | Rust backend |
-| `src-tauri/src/commands/` | Tauri command handlers (the frontend ↔ backend seam) |
-| `docs/adr/` | Architecture Decision Records — read these before large changes |
-| `docs/agents/` | Deeper reference: `architecture.md`, `domain.md`, `git-workflow.md`, `conventions.md` |
-| `CONTEXT.md` | High-level project context and domain language |
+| Path                      | Contents                                                                              |
+| :------------------------ | :------------------------------------------------------------------------------------ |
+| `src/`                    | SvelteKit frontend (Svelte 5 runes)                                                   |
+| `src/lib/components/ui/`  | Generated shadcn-svelte primitives — **do not hand-edit**                             |
+| `src/lib/bindings.gen.ts` | Auto-generated TS command bindings — **do not hand-edit** (see ADR-0009)              |
+| `src-tauri/src/`          | Rust backend                                                                          |
+| `src-tauri/src/commands/` | Tauri command handlers (the frontend ↔ backend seam)                                  |
+| `docs/adr/`               | Architecture Decision Records — read these before large changes                       |
+| `docs/agents/`            | Deeper reference: `architecture.md`, `domain.md`, `git-workflow.md`, `conventions.md` |
+| `CONTEXT.md`              | High-level project context and domain language                                        |
 
 ## Coding conventions
 
@@ -71,6 +71,15 @@ These mirror [`docs/agents/conventions.md`](docs/agents/conventions.md):
   `playwright install` above). jsdom performs **no layout**, so an assertion about a
   position, a width, or one thing fitting beside another passes no matter what the
   stylesheet says. Everything else stays in jsdom, which is far faster.
+- **A jsdom test never asserts a class name.** It is the same rule as the one above,
+  reaching one step further. `expect(el.className).toContain("h-(--row-h)")` restates
+  the template rather than checking it: it breaks when the same styling moves into a
+  CSS rule, and it holds when the token behind it is retuned to something broken —
+  because jsdom never resolves the class to anything. If the claim is about a box or
+  about what a token does, it belongs in the browser project where there is a box to
+  measure. If it is about behaviour, assert the behaviour. The exception is a class
+  that _is_ the output — `ThemeWatcher` swapping `accent-crimson` for `accent-verdant`
+  on the root element is a state change that happens to be spelled as a class.
 - **Formatting** — run Prettier (`bunx prettier --write .`) before committing.
 - **Both `bun run check` and `bun run test` must pass** — CI enforces them.
 
@@ -79,11 +88,11 @@ These mirror [`docs/agents/conventions.md`](docs/agents/conventions.md):
 Grimoire uses a `main` / `next` / `feature/*` model (full detail in
 [`docs/agents/git-workflow.md`](docs/agents/git-workflow.md)):
 
-| Branch | Purpose | Stability |
-| :--- | :--- | :--- |
-| `main` | Production-ready; matches the current stable release | **Protected** |
-| `next` | Integration branch for the upcoming release | Beta / testing |
-| `feature/*` | Short-lived branches for a specific task or fix | Experimental |
+| Branch      | Purpose                                              | Stability      |
+| :---------- | :--------------------------------------------------- | :------------- |
+| `main`      | Production-ready; matches the current stable release | **Protected**  |
+| `next`      | Integration branch for the upcoming release          | Beta / testing |
+| `feature/*` | Short-lived branches for a specific task or fix      | Experimental   |
 
 **Always branch from `next`, never from `main`:**
 
@@ -122,6 +131,7 @@ local merge-and-push:
 
    Commit the result on `next`. (Tagging happens on `main` in step 4, after the
    PR merges — hence `--no-git-tag-version` here.)
+
 3. Open a PR from `next` → `main`, confirm CI passes, and merge it.
 4. Tag the release on `main` and push the tag:
 
@@ -135,7 +145,7 @@ local merge-and-push:
    installers + signed updater artifacts, emits `latest.json`, and creates a
    **draft** GitHub Release.
 6. Review the draft and **publish** it. The updater endpoint only resolves to
-   *published* (non-draft) releases, so existing installs see the update only
+   _published_ (non-draft) releases, so existing installs see the update only
    after you publish.
 
 > Updater signing keys live in the repository's `release` environment secrets and

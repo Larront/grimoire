@@ -74,17 +74,13 @@ function fenceDescriptor(info: string, body: string[]): string {
 
   if (NAME_BEARING_FENCES.has(kind)) {
     const label = kind.charAt(0).toUpperCase() + kind.slice(1);
-    const name = body
-      .map((line) => FENCE_NAME.exec(line)?.[1]?.trim())
-      .find(Boolean);
+    const name = body.map((line) => FENCE_NAME.exec(line)?.[1]?.trim()).find(Boolean);
     return name ? `${label} — ${name}` : label;
   }
 
   if (kind === "timeline") {
     const events = body.filter((line) => FENCE_NAME.test(line)).length;
-    return events
-      ? `Timeline — ${events} event${events === 1 ? "" : "s"}`
-      : "Timeline";
+    return events ? `Timeline — ${events} event${events === 1 ? "" : "s"}` : "Timeline";
   }
 
   // A GM's ```python is an ordinary code block, and saying so beats naming a
@@ -116,9 +112,7 @@ function stripInline(line: string): string {
 
 // ─── Units ────────────────────────────────────────────────────────────────────
 
-type Unit =
-  | { kind: "line"; text: string }
-  | { kind: "fence"; info: string; body: string[] };
+type Unit = { kind: "line"; text: string } | { kind: "fence"; info: string; body: string[] };
 
 /**
  * A body split into the things an excerpt reasons about: plain lines and whole
@@ -153,12 +147,7 @@ function unitsOf(body: string): Unit[] {
     i++;
     for (; i < lines.length; i++) {
       const close = FENCE_CLOSE.exec(lines[i]);
-      if (
-        close &&
-        close[1][0] === marker[0] &&
-        close[1].length >= marker.length
-      )
-        break;
+      if (close && close[1][0] === marker[0] && close[1].length >= marker.length) break;
       collected.push(lines[i]);
     }
     // An unterminated fence ends at the end of the body, as a reader would take it.
@@ -178,9 +167,7 @@ function sliceToFragment(units: Unit[], fragment: string): Unit[] {
   const want = fragment.trim().toLowerCase();
   if (!want) return units;
   const at = units.findIndex(
-    (unit) =>
-      unit.kind === "line" &&
-      HEADING.exec(unit.text)?.[1].trim().toLowerCase() === want,
+    (unit) => unit.kind === "line" && HEADING.exec(unit.text)?.[1].trim().toLowerCase() === want,
   );
   return at >= 0 ? units.slice(at) : units;
 }

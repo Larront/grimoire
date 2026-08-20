@@ -39,8 +39,11 @@ export function createPinDetailsSource(
   let loadedForMapId: number | null = null;
 
   async function refreshAllTags() {
-    try { allTags = (await api.silent.listAllTags()) ?? []; }
-    catch { allTags = []; }
+    try {
+      allTags = (await api.silent.listAllTags()) ?? [];
+    } catch {
+      allTags = [];
+    }
   }
 
   // Pin tags — keyed by pin id so pin patches (title, color…) don't refetch.
@@ -59,9 +62,18 @@ export function createPinDetailsSource(
     loadedForPinId = targetId;
     saves.reset();
     const whenCurrent = staleGuard(targetId, () => loadedForPinId);
-    api.silent.getPinTags(targetId)
-      .then((t) => whenCurrent(() => { pinTags = t; }))
-      .catch(() => whenCurrent(() => { pinTags = []; }));
+    api.silent
+      .getPinTags(targetId)
+      .then((t) =>
+        whenCurrent(() => {
+          pinTags = t;
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          pinTags = [];
+        }),
+      );
     refreshAllTags();
   });
 
@@ -73,29 +85,49 @@ export function createPinDetailsSource(
     const targetMapId = p.map_id;
     loadedForMapId = targetMapId;
     const whenCurrent = staleGuard(targetMapId, () => loadedForMapId);
-    api.silent.getPinCategoriesForMap(targetMapId)
+    api.silent
+      .getPinCategoriesForMap(targetMapId)
       // Generated `icon` is `string`; the frontend refines it to the `PinIcon`
       // union. The runtime value is always a valid PinIcon, so narrow here.
-      .then((cats) => whenCurrent(() => { categories = cats as PinCategory[]; }))
-      .catch(() => whenCurrent(() => { categories = []; }));
+      .then((cats) =>
+        whenCurrent(() => {
+          categories = cats as PinCategory[];
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          categories = [];
+        }),
+      );
   });
 
   // Linked-note preview — first ~150 chars of the note body, markdown-stripped.
   $effect(() => {
     const linked = getLinkedNote();
-    if (!linked) { notePreview = null; return; }
+    if (!linked) {
+      notePreview = null;
+      return;
+    }
     const targetPath = linked.path;
     // Keyed on the linked note's path, which lives on the caller's side rather
     // than in a `loadedFor*` of this source's own.
-    const whenCurrent = staleGuard<string | null>(targetPath, () =>
-      untrack(() => getLinkedNote())?.path ?? null,
+    const whenCurrent = staleGuard<string | null>(
+      targetPath,
+      () => untrack(() => getLinkedNote())?.path ?? null,
     );
-    api.silent.readNoteContent(targetPath)
-      .then((content) => whenCurrent(() => {
-        const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
-        notePreview = stripped.slice(0, 150) + (stripped.length > 150 ? "…" : "");
-      }))
-      .catch(() => whenCurrent(() => { notePreview = null; }));
+    api.silent
+      .readNoteContent(targetPath)
+      .then((content) =>
+        whenCurrent(() => {
+          const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
+          notePreview = stripped.slice(0, 150) + (stripped.length > 150 ? "…" : "");
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          notePreview = null;
+        }),
+      );
   });
 
   async function savePinTags(next: string[]) {
@@ -124,12 +156,24 @@ export function createPinDetailsSource(
   }
 
   return {
-    get pinTags() { return pinTags; },
-    set pinTags(v: string[]) { pinTags = v; },
-    get allTags() { return allTags; },
-    get categories() { return categories; },
-    get notePreview() { return notePreview; },
-    get saveStatus() { return saves.status; },
+    get pinTags() {
+      return pinTags;
+    },
+    set pinTags(v: string[]) {
+      pinTags = v;
+    },
+    get allTags() {
+      return allTags;
+    },
+    get categories() {
+      return categories;
+    },
+    get notePreview() {
+      return notePreview;
+    },
+    get saveStatus() {
+      return saves.status;
+    },
     savePinTags,
     savePin,
     retrySave: saves.retry,

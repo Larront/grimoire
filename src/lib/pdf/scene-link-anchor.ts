@@ -94,8 +94,11 @@ export function offsetsFromRange(
   const endDiv = owningDivIndex(textDivs, range.endContainer);
   if (startDiv === -1 || endDiv === -1) return null;
 
-  const start = itemStarts[startDiv] + localOffsetWithin(textDivs[startDiv], range.startContainer, range.startOffset);
-  const end = itemStarts[endDiv] + localOffsetWithin(textDivs[endDiv], range.endContainer, range.endOffset);
+  const start =
+    itemStarts[startDiv] +
+    localOffsetWithin(textDivs[startDiv], range.startContainer, range.startOffset);
+  const end =
+    itemStarts[endDiv] + localOffsetWithin(textDivs[endDiv], range.endContainer, range.endOffset);
   if (end <= start) return null;
   return { start, end };
 }
@@ -115,7 +118,11 @@ export function highlightRangesForOffsets(
 }
 
 /** The selected text for a `[start, end)` range — stored as the link's `quote`. */
-export function quoteForOffsets(itemStrings: readonly string[], start: number, end: number): string {
+export function quoteForOffsets(
+  itemStrings: readonly string[],
+  start: number,
+  end: number,
+): string {
   return buildPageIndex(itemStrings).text.slice(start, end);
 }
 

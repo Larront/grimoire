@@ -47,17 +47,38 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
   function loadLinks(n: Note) {
     const whenCurrent = guardOn(n.path);
     const noteId = n.id;
-    api.silent.getBacklinks(noteId)
-      .then((loaded) => whenCurrent(() => { backlinks = loaded ?? []; }))
-      .catch(() => whenCurrent(() => { backlinks = []; }));
-    api.silent.getOutboundLinks(noteId)
-      .then((loaded) => whenCurrent(() => { outboundLinks = loaded ?? []; }))
-      .catch(() => whenCurrent(() => { outboundLinks = []; }));
+    api.silent
+      .getBacklinks(noteId)
+      .then((loaded) =>
+        whenCurrent(() => {
+          backlinks = loaded ?? [];
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          backlinks = [];
+        }),
+      );
+    api.silent
+      .getOutboundLinks(noteId)
+      .then((loaded) =>
+        whenCurrent(() => {
+          outboundLinks = loaded ?? [];
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          outboundLinks = [];
+        }),
+      );
   }
 
   async function refreshAllTags() {
-    try { allTags = (await api.silent.listAllTags()) ?? []; }
-    catch { allTags = []; }
+    try {
+      allTags = (await api.silent.listAllTags()) ?? [];
+    } catch {
+      allTags = [];
+    }
   }
 
   // Fetch the whole fan-out for `n`. Split out from the note-change $effect so a
@@ -72,15 +93,44 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     aliasCollisions = [];
     saves.reset();
     const whenCurrent = guardOn(targetPath);
-    api.silent.readNoteTags(targetPath)
-      .then((loaded) => whenCurrent(() => { tags = loaded; }))
-      .catch(() => whenCurrent(() => { tags = []; tagsLoadError = true; }));
-    api.silent.getNoteAliases(noteId)
-      .then((loaded) => whenCurrent(() => { aliases = loaded ?? []; }))
-      .catch(() => whenCurrent(() => { aliases = []; aliasesLoadError = true; }));
-    api.silent.getAliasCollisions(noteId)
-      .then((cols) => whenCurrent(() => { aliasCollisions = cols ?? []; }))
-      .catch(() => whenCurrent(() => { aliasCollisions = []; }));
+    api.silent
+      .readNoteTags(targetPath)
+      .then((loaded) =>
+        whenCurrent(() => {
+          tags = loaded;
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          tags = [];
+          tagsLoadError = true;
+        }),
+      );
+    api.silent
+      .getNoteAliases(noteId)
+      .then((loaded) =>
+        whenCurrent(() => {
+          aliases = loaded ?? [];
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          aliases = [];
+          aliasesLoadError = true;
+        }),
+      );
+    api.silent
+      .getAliasCollisions(noteId)
+      .then((cols) =>
+        whenCurrent(() => {
+          aliasCollisions = cols ?? [];
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          aliasCollisions = [];
+        }),
+      );
     loadLinks(n);
     refreshAllTags();
   }
@@ -149,17 +199,39 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
   }
 
   return {
-    get tags() { return tags; },
-    set tags(v: string[]) { tags = v; },
-    get aliases() { return aliases; },
-    set aliases(v: string[]) { aliases = v; },
-    get allTags() { return allTags; },
-    get aliasCollisions() { return aliasCollisions; },
-    get backlinks() { return backlinks; },
-    get outboundLinks() { return outboundLinks; },
-    get tagsLoadError() { return tagsLoadError; },
-    get aliasesLoadError() { return aliasesLoadError; },
-    get saveStatus() { return saves.status; },
+    get tags() {
+      return tags;
+    },
+    set tags(v: string[]) {
+      tags = v;
+    },
+    get aliases() {
+      return aliases;
+    },
+    set aliases(v: string[]) {
+      aliases = v;
+    },
+    get allTags() {
+      return allTags;
+    },
+    get aliasCollisions() {
+      return aliasCollisions;
+    },
+    get backlinks() {
+      return backlinks;
+    },
+    get outboundLinks() {
+      return outboundLinks;
+    },
+    get tagsLoadError() {
+      return tagsLoadError;
+    },
+    get aliasesLoadError() {
+      return aliasesLoadError;
+    },
+    get saveStatus() {
+      return saves.status;
+    },
     saveTags,
     saveAliases,
     retrySave: saves.retry,

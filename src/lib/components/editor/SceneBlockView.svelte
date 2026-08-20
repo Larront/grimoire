@@ -27,7 +27,7 @@
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
-  
+
   // The reference's record, taken as one prop bag: the connector mounts a block with its
   // record spread over the props, so the rest element *is* the record and nothing here
   // re-lists it (#209).
@@ -63,9 +63,7 @@
 
   let searchQuery = $state("");
   const filteredScenes = $derived(
-    scenes.scenes.filter((s) =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()),
-    ),
+    scenes.scenes.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase())),
   );
 
   // The name written into the fence beside the id comes from the store, never from
@@ -138,9 +136,7 @@
     thisScene ? ACCENT_FG[thisScene.id % ACCENT_FG.length] : "var(--primary)",
   );
   const ChipIcon = $derived(
-    thisScene?.thumbnail_icon
-      ? (ICON_MAP[thisScene.thumbnail_icon] ?? Music2)
-      : Music2,
+    thisScene?.thumbnail_icon ? (ICON_MAP[thisScene.thumbnail_icon] ?? Music2) : Music2,
   );
 
   // ── Pause / Resume / Stop (parity with ScenePane) ────────────────────────
@@ -292,7 +288,9 @@
          search field. Delete on the gutter handle's menu reaches a sealed block now
          (#194), so this is a search field and nothing else. -->
     <div class="relative mb-1.5">
-      <Search class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none" />
+      <Search
+        class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none"
+      />
       <input
         type="text"
         placeholder="Search scenes…"
@@ -304,22 +302,18 @@
     </div>
 
     <!-- Scene list -->
-    <div
-      class="max-h-40 overflow-y-auto flex flex-col"
-      role="listbox"
-      aria-label="Scenes"
-    >
+    <div class="max-h-40 overflow-y-auto flex flex-col" role="listbox" aria-label="Scenes">
       {#if scenes.scenes.length === 0}
         <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">
           No scenes yet. Create one to get started.
         </p>
       {:else if filteredScenes.length === 0}
-        <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">
-          No scenes match.
-        </p>
+        <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">No scenes match.</p>
       {:else}
         {#each filteredScenes as scene (scene.id)}
-          {@const RowIcon = scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2}
+          {@const RowIcon = scene.thumbnail_icon
+            ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
+            : Music2}
           {@const rowBg = scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]}
           {@const rowFg = ACCENT_FG[scene.id % ACCENT_FG.length]}
           <button
@@ -365,40 +359,47 @@
         <Plus class="size-3.5" strokeWidth={1.75} />
       </span>
       {#if searchQuery.trim()}
-        <span>Create scene <span class="font-heading text-foreground">“{searchQuery.trim()}”</span></span>
+        <span
+          >Create scene <span class="font-heading text-foreground">“{searchQuery.trim()}”</span
+          ></span
+        >
       {:else}
         <span>Create new scene</span>
       {/if}
     </button>
   </div>
-
 {:else}
   <!-- ── Active: compact strip + expandable mixer ───────────────────────────── -->
   <div
     class="my-1 rounded-md border bg-card select-none overflow-hidden transition-colors duration-200
            {isThisScenePlaying
-             ? 'border-primary/25'
-             : isThisSceneLoading
-               ? 'border-primary/12'
-               : 'border-border/60'}"
+      ? 'border-primary/25'
+      : isThisSceneLoading
+        ? 'border-primary/12'
+        : 'border-border/60'}"
   >
     <!-- Compact strip -->
     <div class="flex items-center gap-2 px-2.5 py-2">
-
       <!-- Play / Pause / Loading (primary toggle) -->
       <button
         onclick={handlePlayPause}
         disabled={isThisSceneLoading}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
                hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label={isThisScenePlaying ? "Pause scene" : audioEngine.isScenePaused ? "Resume scene" : "Play scene"}
+        aria-label={isThisScenePlaying
+          ? "Pause scene"
+          : audioEngine.isScenePaused
+            ? "Resume scene"
+            : "Play scene"}
       >
         {#if isThisSceneLoading}
           <LoaderCircle class="size-3.5 text-muted-foreground animate-spin" />
         {:else if isThisScenePlaying}
           <Pause class="size-3 text-foreground" />
         {:else}
-          <Play class="size-3.5 {isThisSceneActive ? 'text-foreground' : 'text-muted-foreground'}" />
+          <Play
+            class="size-3.5 {isThisSceneActive ? 'text-foreground' : 'text-muted-foreground'}"
+          />
         {/if}
       </button>
 
@@ -429,7 +430,9 @@
         onclick={openInScenesTab}
         class="group flex-1 min-w-0 flex items-center gap-1 text-left
                truncate font-heading text-xs leading-tight transition-colors duration-200
-               {isThisScenePlaying ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+               {isThisScenePlaying
+          ? 'text-foreground'
+          : 'text-muted-foreground hover:text-foreground'}"
         aria-label="Open {thisScene?.name ?? 'scene'} in Scenes"
       >
         <span class="truncate">{thisScene?.name ?? "Unknown scene"}</span>
@@ -439,10 +442,22 @@
       <!-- Playing indicator -->
       {#if showBars}
         <span class="flex items-end gap-[2px] h-3 shrink-0" aria-hidden="true">
-          <span class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar" style="--bar-dur: 620ms; animation-delay: 0ms"></span>
-          <span class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar" style="--bar-dur: 780ms; animation-delay: 80ms"></span>
-          <span class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar" style="--bar-dur: 670ms; animation-delay: 160ms"></span>
-          <span class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar" style="--bar-dur: 730ms; animation-delay: 240ms"></span>
+          <span
+            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
+            style="--bar-dur: 620ms; animation-delay: 0ms"
+          ></span>
+          <span
+            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
+            style="--bar-dur: 780ms; animation-delay: 80ms"
+          ></span>
+          <span
+            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
+            style="--bar-dur: 670ms; animation-delay: 160ms"
+          ></span>
+          <span
+            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
+            style="--bar-dur: 730ms; animation-delay: 240ms"
+          ></span>
         </span>
       {/if}
 
@@ -471,7 +486,9 @@
            sweeping across the pane; this is a 4px-tall bar inside its own containing
            block, animating for 75ms while a GM drags a slider. -->
       <div class="relative flex h-3 w-20 shrink-0 items-center">
-        <div class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40">
+        <div
+          class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40"
+        >
           <div
             class="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-[width] duration-75"
             style="width: {audioEngine.masterVolume * 100}%"
@@ -541,7 +558,10 @@
             </div>
           {:else if activeSlots.length === 0}
             <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">
-              No tracks yet. <button class="underline-offset-2 hover:underline" onclick={openInScenesTab}>Open this scene</button> to add some.
+              No tracks yet. <button
+                class="underline-offset-2 hover:underline"
+                onclick={openInScenesTab}>Open this scene</button
+              > to add some.
             </p>
           {:else}
             {#each activeSlots as slot (slot.id)}
@@ -556,8 +576,10 @@
                 <div class="flex items-center gap-2 min-w-0 mb-1">
                   <span
                     class="shrink-0 inline-flex items-center justify-center min-w-12 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[9px] tracking-wide text-muted-foreground leading-none"
-                  >{isSpotify ? "Spotify" : "Local"}</span>
-                  <span class="flex-1 truncate font-sans text-xs text-foreground">{slot.label}</span>
+                    >{isSpotify ? "Spotify" : "Local"}</span
+                  >
+                  <span class="flex-1 truncate font-sans text-xs text-foreground">{slot.label}</span
+                  >
                   <button
                     onclick={() => toggleSlotPlayback(slot)}
                     disabled={busySlots.has(slot.id)}
@@ -590,7 +612,9 @@
 
                   <!-- Volume: visual track + transparent input + visible thumb -->
                   <div class="relative flex h-3 w-20 shrink-0 items-center">
-                    <div class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40">
+                    <div
+                      class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40"
+                    >
                       <div
                         class="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-[width] duration-75"
                         style="width: {displayVol * 100}%"
@@ -621,10 +645,14 @@
                       onclick={() => toggleLoop(slot)}
                       class="shrink-0 flex items-center justify-center size-5 rounded-sm
                              hover:bg-muted transition-colors"
-                      aria-label={slot.loop ? `Disable loop for ${slot.label}` : `Enable loop for ${slot.label}`}
+                      aria-label={slot.loop
+                        ? `Disable loop for ${slot.label}`
+                        : `Enable loop for ${slot.label}`}
                       aria-pressed={slot.loop}
                     >
-                      <Repeat class="size-3 {slot.loop ? 'text-primary' : 'text-muted-foreground/30'}" />
+                      <Repeat
+                        class="size-3 {slot.loop ? 'text-primary' : 'text-muted-foreground/30'}"
+                      />
                     </button>
 
                     <!-- Shuffle (Spotify playlists only) -->
@@ -633,10 +661,16 @@
                         onclick={() => toggleShuffle(slot)}
                         class="shrink-0 flex items-center justify-center size-5 rounded-sm
                                hover:bg-muted transition-colors"
-                        aria-label={slot.shuffle ? `Disable shuffle for ${slot.label}` : `Enable shuffle for ${slot.label}`}
+                        aria-label={slot.shuffle
+                          ? `Disable shuffle for ${slot.label}`
+                          : `Enable shuffle for ${slot.label}`}
                         aria-pressed={!!slot.shuffle}
                       >
-                        <Shuffle class="size-3 {slot.shuffle ? 'text-primary' : 'text-muted-foreground/30'}" />
+                        <Shuffle
+                          class="size-3 {slot.shuffle
+                            ? 'text-primary'
+                            : 'text-muted-foreground/30'}"
+                        />
                       </button>
                     {/if}
                   </div>
@@ -680,8 +714,12 @@
   }
 
   @keyframes nowPlaying {
-    from { transform: scaleY(0.2); }
-    to   { transform: scaleY(1); }
+    from {
+      transform: scaleY(0.2);
+    }
+    to {
+      transform: scaleY(1);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

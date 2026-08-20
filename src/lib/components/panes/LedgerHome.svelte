@@ -35,12 +35,8 @@
 
 <!-- ── Ledger home (new, empty ledger) ─────────────────────────────── -->
 <div class="flex flex-col items-center justify-center h-full">
-  <div
-    class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade"
-  >
-    <h1
-      class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight"
-    >
+  <div class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade">
+    <h1 class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight">
       {ledgerName}
     </h1>
 
@@ -48,11 +44,7 @@
       <p class="font-sans text-sm italic text-foreground-muted text-center">
         Every world begins with its first note.
       </p>
-      <Button
-        onclick={handleCreateFirstNote}
-        disabled={isCreatingNote}
-        class="gap-2"
-      >
+      <Button onclick={handleCreateFirstNote} disabled={isCreatingNote} class="gap-2">
         {#if isCreatingNote}
           <LoaderCircle class="w-3.5 h-3.5 animate-spin" />
           Creating...

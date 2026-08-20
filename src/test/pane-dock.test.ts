@@ -58,9 +58,7 @@ describe("NotePane dock/float presentation based on pane width", () => {
     // Toggle rail open
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
     expect(dockedRail!.getAttribute("data-state")).toBe("open");
 
@@ -80,9 +78,7 @@ describe("NotePane dock/float presentation based on pane width", () => {
     await act(() => {});
 
     // Docked aside should NOT be present (the surface is floating)
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeNull();
 
     // Floating panel should be present
@@ -102,9 +98,7 @@ describe("NotePane dock/float presentation based on pane width", () => {
     const { container } = render(AppShell);
     await act(() => {});
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
     expect(dockedRail!.getAttribute("data-state")).toBe("closed");
   });

@@ -128,8 +128,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           if (updatedNode.type !== node.type) return false;
           dom.dataset.path = updatedNode.attrs.path ?? "";
           dom.dataset.title = updatedNode.attrs.title ?? "";
-          dom.textContent =
-            updatedNode.attrs.title ?? updatedNode.attrs.path ?? "?";
+          dom.textContent = updatedNode.attrs.title ?? updatedNode.attrs.path ?? "?";
           return true;
         },
       };
@@ -199,7 +198,11 @@ export const WikiLink = Node.create<WikiLinkOptions>({
             if (node.type.name !== "wikiLink") return;
             const path = node.attrs.path as string | null;
             if (path && broken.has(path)) {
-              decos.push(Decoration.node(pos, pos + node.nodeSize, { "data-broken": "" }));
+              decos.push(
+                Decoration.node(pos, pos + node.nodeSize, {
+                  "data-broken": "",
+                }),
+              );
             }
           });
           return { broken, deco: DecorationSet.create(newState.doc, decos) };

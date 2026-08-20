@@ -64,10 +64,7 @@ class RenameInputState {
   invalid = $derived.by(() => !this.opts.validate(this.editingValue));
 
   get blurBehavior() {
-    if (
-      this.opts.blurBehavior !== undefined &&
-      this.opts.blurBehavior.current !== undefined
-    )
+    if (this.opts.blurBehavior !== undefined && this.opts.blurBehavior.current !== undefined)
       return this.opts.blurBehavior.current;
     // if the blur behavior is provided, use it
     // otherwise if the provider state is provided we assume that the user does not want to blur when the input loses focus
@@ -140,10 +137,7 @@ class RenameInputState {
           this.editingValue.length,
         );
       } else if (this.opts.fallbackSelectionBehavior.current === "all") {
-        this.opts.inputRef.current?.setSelectionRange(
-          0,
-          this.editingValue.length,
-        );
+        this.opts.inputRef.current?.setSelectionRange(0, this.editingValue.length);
       }
     }
   }

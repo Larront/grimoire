@@ -72,10 +72,7 @@ export function settleRowChange(change: RowChange, block: RowChangeOutcome): voi
  * An insert does *not* add the new row's index — whether a freshly inserted row
  * starts out expanded, selected or editing is the consumer's business.
  */
-export function remapRowIndices(
-  indices: Iterable<number>,
-  change: RowChange,
-): Set<number> {
+export function remapRowIndices(indices: Iterable<number>, change: RowChange): Set<number> {
   const out = new Set<number>();
   for (const index of indices) {
     if (change.kind === "insert") {

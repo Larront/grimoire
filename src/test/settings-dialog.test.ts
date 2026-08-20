@@ -40,9 +40,7 @@ afterEach(async () => {
 async function openSettingsDialog() {
   const result = render(AppShell);
   const rail = result.getByTestId("icon-rail");
-  await fireEvent.click(
-    within(rail).getByRole("button", { name: /^settings$/i }),
-  );
+  await fireEvent.click(within(rail).getByRole("button", { name: /^settings$/i }));
   const dialog = await result.findByRole("dialog");
   return { ...result, dialog };
 }
@@ -61,30 +59,20 @@ describe("settings dialog — open", () => {
 describe("settings dialog — theme", () => {
   it("shows Dark, Light, and System theme buttons", async () => {
     const { dialog } = await openSettingsDialog();
-    expect(
-      within(dialog).getByRole("button", { name: /^dark$/i }),
-    ).toBeTruthy();
-    expect(
-      within(dialog).getByRole("button", { name: /^light$/i }),
-    ).toBeTruthy();
-    expect(
-      within(dialog).getByRole("button", { name: /^system$/i }),
-    ).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^dark$/i })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^light$/i })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^system$/i })).toBeTruthy();
   });
 
   it("clicking Light updates userPrefersMode to light", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(
-      within(dialog).getByRole("button", { name: /^light$/i }),
-    );
+    await fireEvent.click(within(dialog).getByRole("button", { name: /^light$/i }));
     expect(userPrefersMode.current).toBe("light");
   });
 
   it("clicking Dark updates userPrefersMode to dark", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(
-      within(dialog).getByRole("button", { name: /^dark$/i }),
-    );
+    await fireEvent.click(within(dialog).getByRole("button", { name: /^dark$/i }));
     expect(userPrefersMode.current).toBe("dark");
   });
 });
@@ -123,9 +111,7 @@ describe("settings dialog — accent", () => {
 describe("settings dialog — density", () => {
   it("clicking Cozy updates ledger.density", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(
-      within(dialog).getByRole("button", { name: /^cozy$/i }),
-    );
+    await fireEvent.click(within(dialog).getByRole("button", { name: /^cozy$/i }));
     expect(ledger.density).toBe("cozy");
   });
 
@@ -133,9 +119,7 @@ describe("settings dialog — density", () => {
     const invokeSpy = vi.mocked(invoke);
     invokeSpy.mockClear();
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(
-      within(dialog).getByRole("button", { name: /^dense$/i }),
-    );
+    await fireEvent.click(within(dialog).getByRole("button", { name: /^dense$/i }));
     expect(invokeSpy).toHaveBeenCalledWith("save_density_level", {
       level: "dense",
     });
@@ -170,9 +154,7 @@ describe("settings dialog — templates section", () => {
   // Templates now live under the "Content" section tab, so navigate there first.
   async function openContentTab() {
     const opened = await openSettingsDialog();
-    await fireEvent.click(
-      within(opened.dialog).getByTestId("settings-tab-content"),
-    );
+    await fireEvent.click(within(opened.dialog).getByTestId("settings-tab-content"));
     return opened;
   }
 

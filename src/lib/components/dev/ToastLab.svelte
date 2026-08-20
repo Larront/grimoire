@@ -28,8 +28,7 @@
 
   let open = $state(false);
 
-  const REPORT_PATH =
-    "C:/Ledgers/Aurelia/.grimoire/backup/2026-08-13-143022/report.md";
+  const REPORT_PATH = "C:/Ledgers/Aurelia/.grimoire/backup/2026-08-13-143022/report.md";
 
   const cases: { label: string; hint: string; fire: () => void }[] = [
     {
@@ -40,10 +39,7 @@
     {
       label: "Error, two lines",
       hint: "icon centring on a wrapped title",
-      fire: () =>
-        toastError(
-          "Couldn't save 'Harbour Watch' — the file is open in another program",
-        ),
+      fire: () => toastError("Couldn't save 'Harbour Watch' — the file is open in another program"),
     },
     {
       label: "Success",
@@ -54,9 +50,7 @@
       label: "Undo",
       hint: "neutral, accent spine, one action",
       fire: () =>
-        toastUndo("Deleted 'Harbour Watch'", () =>
-          console.log("[toast lab] undo window elapsed"),
-        ),
+        toastUndo("Deleted 'Harbour Watch'", () => console.log("[toast lab] undo window elapsed")),
     },
     {
       label: "Import failures",
@@ -75,9 +69,7 @@
       label: "External move",
       hint: "persistent, cancel + action on their own row",
       fire: () =>
-        toastExternalMoveLinks("Harbour Watch", 4, () =>
-          toastSuccess("Backlinks updated"),
-        ),
+        toastExternalMoveLinks("Harbour Watch", 4, () => toastSuccess("Backlinks updated")),
     },
     {
       label: "Migration, clean",
@@ -128,9 +120,7 @@
       class="w-64 rounded-lg border border-dashed border-background-border bg-background-elevated p-3"
     >
       <div class="mb-2 flex items-center justify-between">
-        <span
-          class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint"
-        >
+        <span class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">
           Toast lab · dev
         </span>
         <button
@@ -154,9 +144,7 @@
         {/each}
       </div>
 
-      <div
-        class="mt-2 flex gap-1 border-t border-background-border pt-2 text-[13px]"
-      >
+      <div class="mt-2 flex gap-1 border-t border-background-border pt-2 text-[13px]">
         <button
           onclick={fireAll}
           class="flex-1 rounded px-2 py-1 text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground"
@@ -172,8 +160,7 @@
       </div>
 
       <p class="mt-2 text-[11px] leading-snug text-foreground-faint">
-        Theme, accent and density are real settings — change them in Settings and
-        this stays open.
+        Theme, accent and density are real settings — change them in Settings and this stays open.
       </p>
     </div>
   {:else}

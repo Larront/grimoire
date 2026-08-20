@@ -18,7 +18,7 @@ the Details Source status machine. Two problems followed:
   `toastError(String(e))` would surface those to a GM mid-session.
 
 An extraction of all ~80 command error strings showed the genuinely
-*GM-actionable* failures are a tiny set: a name collision (note/template rename),
+_GM-actionable_ failures are a tiny set: a name collision (note/template rename),
 an unsupported image format, and a Spotify connection failure. Everything else is
 either a bug/never-happens guard or an I/O failure the GM can't act on.
 
@@ -39,14 +39,14 @@ aborts, so a failed command never silently proceeds as if it succeeded.
 **Message resolution.** Commands stamp genuinely actionable failures with a
 stable `ERR_CODE:` prefix on the error string. The wrapper matches the prefix
 against a small `code → friendly copy` map; anything unmatched gets one calm
-generic line (*"Something went wrong — please try again."*). The raw string is
+generic line (_"Something went wrong — please try again."_). The raw string is
 logged regardless. Current codes:
 
-| Code | Sites | Friendly copy |
-| --- | --- | --- |
-| `ERR_NAME_TAKEN` | note rename, template rename | "That name is already taken." |
-| `ERR_UNSUPPORTED_IMAGE` | image assign / copy | "That image format isn't supported — use PNG, JPG, GIF, or WebP." |
-| `ERR_SPOTIFY_AUTH` | Spotify auth flow | "Couldn't connect to Spotify — please try again." |
+| Code                    | Sites                        | Friendly copy                                                     |
+| ----------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `ERR_NAME_TAKEN`        | note rename, template rename | "That name is already taken."                                     |
+| `ERR_UNSUPPORTED_IMAGE` | image assign / copy          | "That image format isn't supported — use PNG, JPG, GIF, or WebP." |
+| `ERR_SPOTIFY_AUTH`      | Spotify auth flow            | "Couldn't connect to Spotify — please try again."                 |
 
 ## Rationale
 
@@ -56,7 +56,7 @@ logged regardless. Current codes:
   try/catch — swallowing would break it. Rethrow composes: callers that need
   cleanup keep their `try/catch` (and drop their now-redundant manual toast);
   callers that don't do nothing, and an uncaught throw in an event handler is
-  harmless console noise *after* the user already saw the toast.
+  harmless console noise _after_ the user already saw the toast.
 - **Error-code convention, not an enum.** A stable `ERR_CODE:` prefix gives the
   robustness of structured errors (match a token we own, not prose) without
   changing `Result<T, String>` to a second error type across ~100 commands. The
@@ -76,5 +76,5 @@ logged regardless. Current codes:
   both Details Source modules, `add_recent_ledger`) use `api.silent`.
 - A new code is one Rust one-liner (`"ERR_FOO: …"`) plus one entry in the
   wrapper's map. No backend type change.
-- `api.silent` still logs, so "silent" suppresses only the *toast* — nothing
+- `api.silent` still logs, so "silent" suppresses only the _toast_ — nothing
   fails without a trace (the original goal).

@@ -38,9 +38,7 @@ function statblocks(editor: Editor): HTMLElement[] {
 
 /** One control inside one statblock, addressed the way a GM points at it. */
 function control(editor: Editor, index: number, label: string): HTMLElement {
-  const found = statblocks(editor)[index]?.querySelector<HTMLElement>(
-    `[aria-label="${label}"]`,
-  );
+  const found = statblocks(editor)[index]?.querySelector<HTMLElement>(`[aria-label="${label}"]`);
   expect(found, `statblock ${index + 1} has a "${label}"`).toBeTruthy();
   return found!;
 }
@@ -83,10 +81,9 @@ const ONE_KOBOLD = [
 
 /** The same note one container further down, so "at depth" is one call rather than a copy. */
 function oneDeeper(markdown: string): string {
-  return [
-    "> [!note] The Lower Halls",
-    ...markdown.split("\n").map((line) => `> ${line}`),
-  ].join("\n");
+  return ["> [!note] The Lower Halls", ...markdown.split("\n").map((line) => `> ${line}`)].join(
+    "\n",
+  );
 }
 
 // ─── Rendering at depth ───────────────────────────────────────────────────────
@@ -199,9 +196,7 @@ describe("a nested statblock is played on normally", () => {
     await hit(editor, 0, "-2");
     await fireEvent.click(control(editor, 0, "Row 2 mark 1: Prone"));
 
-    expect(saved(editor)).toBe(
-      md.replace("HP: 5/5", "HP: 3/5").replace("[ ] Prone", "[x] Prone"),
-    );
+    expect(saved(editor)).toBe(md.replace("HP: 5/5", "HP: 3/5").replace("[ ] Prone", "[x] Prone"));
   });
 });
 
@@ -211,9 +206,7 @@ describe("the structure-scoped mode works on a nested statblock", () => {
   it("puts the definitions out of reach until the pencil is pressed", async () => {
     const editor = note(ONE_KOBOLD);
 
-    expect(
-      statblocks(editor)[0].querySelector('[aria-label="Row 1 label"]'),
-    ).toBeNull();
+    expect(statblocks(editor)[0].querySelector('[aria-label="Row 1 label"]')).toBeNull();
 
     await fireEvent.click(control(editor, 0, "Edit statblock structure"));
 
@@ -348,9 +341,7 @@ describe("twelve kobolds in one callout each take damage independently", () => {
     const editor = note(ambush(12));
     await hit(editor, 11, "-5");
 
-    expect(saved(editor)).toBe(
-      ambush(12).replace(/> HP: 5\/5(\n> ```)$/, "> HP: 0/5$1"),
-    );
+    expect(saved(editor)).toBe(ambush(12).replace(/> HP: 5\/5(\n> ```)$/, "> HP: 0/5$1"));
   });
 });
 
@@ -363,9 +354,7 @@ describe("collapsing the group and collapsing one creature", () => {
     const editor = note(AMBUSH);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute(
-      "hidden",
-    );
+    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
     // Hidden, not deleted: the fences are real document content, and a collapse that
     // removed them would be a collapse that edited the note.
     expect(statblocks(editor)).toHaveLength(2);
@@ -377,9 +366,7 @@ describe("collapsing the group and collapsing one creature", () => {
     await fireEvent.click(control(editor, 0, "Collapse statblock"));
 
     expect(control(editor, 0, "Expand statblock")).toBeTruthy();
-    expect(
-      statblocks(editor)[1].querySelector('[aria-label="Collapse statblock"]'),
-    ).toBeTruthy();
+    expect(statblocks(editor)[1].querySelector('[aria-label="Collapse statblock"]')).toBeTruthy();
     expect(saved(editor)).toBe(AMBUSH);
   });
 
@@ -440,8 +427,7 @@ describe("Grimoire acquires no concept of a fight", () => {
     const editor = note("Prose.");
     const names = Object.keys(editor.schema.nodes);
 
-    expect(names.filter((name) => /encounter|roster|monster|combat|fight/i.test(name)))
-      .toEqual([]);
+    expect(names.filter((name) => /encounter|roster|monster|combat|fight/i.test(name))).toEqual([]);
   });
 
   it("gives a statblock no count, quantity or roster attribute", () => {
@@ -451,9 +437,12 @@ describe("Grimoire acquires no concept of a fight", () => {
 
     // `width` is here and is not a counterexample: it says how wide to draw one card,
     // and knows nothing about how many cards there are or that they belong to a fight.
-    expect(Object.keys(editor.schema.nodes.statblockBlock.spec.attrs ?? {}).sort()).toEqual(
-      ["name", "rows", "sections", "width"],
-    );
+    expect(Object.keys(editor.schema.nodes.statblockBlock.spec.attrs ?? {}).sort()).toEqual([
+      "name",
+      "rows",
+      "sections",
+      "width",
+    ]);
   });
 
   it("offers no duplicate-block affordance in the group's chrome", () => {
@@ -464,8 +453,7 @@ describe("Grimoire acquires no concept of a fight", () => {
       (button) => button.getAttribute("aria-label") ?? "",
     );
 
-    expect(labels.filter((label) => /duplicat|clone|copy|add creature/i.test(label)))
-      .toEqual([]);
+    expect(labels.filter((label) => /duplicat|clone|copy|add creature/i.test(label))).toEqual([]);
   });
 });
 
@@ -515,8 +503,7 @@ describe("the sample world's fight carries a real statblock fence", () => {
 describe("statblocks in one callout tile", () => {
   /** Mirrors the tiling selector in app.css. Kept in step by these cases. */
   const TILED =
-    ".callout-body > *:has(" +
-    '> [data-note-block="statblock"] ~ [data-note-block="statblock"])';
+    ".callout-body > *:has(" + '> [data-note-block="statblock"] ~ [data-note-block="statblock"])';
 
   /**
    * The body is ProseMirror's content hole, and it holds ONE wrapper element with the
@@ -528,8 +515,10 @@ describe("statblocks in one callout tile", () => {
     const body = dom(editor).querySelector(".callout-body")!;
 
     expect(body.children).toHaveLength(1);
-    expect([...body.children[0].children].map((el) => el.getAttribute("data-note-block")))
-      .toEqual(["statblock", "statblock"]);
+    expect([...body.children[0].children].map((el) => el.getAttribute("data-note-block"))).toEqual([
+      "statblock",
+      "statblock",
+    ]);
   });
 
   it("tiles two creatures in a box", () => {

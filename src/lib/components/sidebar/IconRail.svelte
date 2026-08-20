@@ -3,7 +3,13 @@
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
 
-  let { onFilesClick, onScenesClick, onSearchClick, onSettingsClick, onGraphClick }: {
+  let {
+    onFilesClick,
+    onScenesClick,
+    onSearchClick,
+    onSettingsClick,
+    onGraphClick,
+  }: {
     onFilesClick?: () => void;
     onScenesClick?: () => void;
     onSearchClick?: () => void;
@@ -40,42 +46,22 @@
     </button>
 
     <!-- Search -->
-    <button
-      type="button"
-      aria-label="Search"
-      class={btnBase}
-      onclick={onSearchClick}
-    >
+    <button type="button" aria-label="Search" class={btnBase} onclick={onSearchClick}>
       <Search class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
 
     <!-- Files -->
-    <button
-      type="button"
-      aria-label="Files"
-      class={btnBase}
-      onclick={handleFilesClick}
-    >
+    <button type="button" aria-label="Files" class={btnBase} onclick={handleFilesClick}>
       <Files class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
 
     <!-- Scenes -->
-    <button
-      type="button"
-      aria-label="Scenes"
-      class={btnBase}
-      onclick={onScenesClick}
-    >
+    <button type="button" aria-label="Scenes" class={btnBase} onclick={onScenesClick}>
       <Music2 class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
 
     <!-- Graph -->
-    <button
-      type="button"
-      aria-label="Graph"
-      class={btnBase}
-      onclick={onGraphClick}
-    >
+    <button type="button" aria-label="Graph" class={btnBase} onclick={onGraphClick}>
       <Network class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
   </div>

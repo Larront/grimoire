@@ -1,10 +1,4 @@
-import {
-  render,
-  fireEvent,
-  cleanup,
-  waitFor,
-  within,
-} from "@testing-library/svelte";
+import { render, fireEvent, cleanup, waitFor, within } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import StatblockPresetsSettings from "../lib/components/StatblockPresetsSettings.svelte";
@@ -25,8 +19,7 @@ function ledgerWith(presets: StatblockPreset[], defaultName: string | null) {
   });
 }
 
-const calls = (cmd: string) =>
-  vi.mocked(invoke).mock.calls.filter(([name]) => name === cmd);
+const calls = (cmd: string) => vi.mocked(invoke).mock.calls.filter(([name]) => name === cmd);
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
@@ -39,15 +32,10 @@ afterEach(() => {
   vi.mocked(invoke).mockResolvedValue(null);
 });
 
-async function open(
-  presets: StatblockPreset[],
-  defaultName: string | null = null,
-) {
+async function open(presets: StatblockPreset[], defaultName: string | null = null) {
   ledgerWith(presets, defaultName);
   const result = render(StatblockPresetsSettings, { props: { open: true } });
-  await waitFor(() =>
-    expect(calls("list_statblock_presets").length).toBeGreaterThan(0),
-  );
+  await waitFor(() => expect(calls("list_statblock_presets").length).toBeGreaterThan(0));
   return result;
 }
 
@@ -80,9 +68,7 @@ describe("statblock presets — the list", () => {
 
     const input = view.getByTestId("preset-rename-input");
     await fireEvent.input(input, { target: { value: "5e srd" } });
-    await waitFor(() =>
-      expect(view.getByTestId("rename-reserved")).toBeTruthy(),
-    );
+    await waitFor(() => expect(view.getByTestId("rename-reserved")).toBeTruthy());
 
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(calls("rename_statblock_preset")).toHaveLength(0);
@@ -94,9 +80,7 @@ describe("statblock presets — the list", () => {
 describe("statblock presets — the vault's default", () => {
   it("offers Blank, the shipped two and the GM's own", async () => {
     const view = await open([GOBLIN]);
-    const select = view.getByTestId(
-      "statblock-default-select",
-    ) as HTMLSelectElement;
+    const select = view.getByTestId("statblock-default-select") as HTMLSelectElement;
     await waitFor(() =>
       expect([...select.options].map((o) => o.textContent?.trim())).toEqual([
         "Blank",
@@ -109,9 +93,7 @@ describe("statblock presets — the vault's default", () => {
 
   it("choosing a preset stores the pointer", async () => {
     const view = await open([GOBLIN]);
-    const select = view.getByTestId(
-      "statblock-default-select",
-    ) as HTMLSelectElement;
+    const select = view.getByTestId("statblock-default-select") as HTMLSelectElement;
     await waitFor(() => expect(select.options.length).toBe(4));
 
     await fireEvent.change(select, { target: { value: "Goblin" } });
@@ -125,9 +107,7 @@ describe("statblock presets — the vault's default", () => {
 
   it("choosing Blank clears the pointer — blank is the absence of a preset", async () => {
     const view = await open([GOBLIN], "Goblin");
-    const select = view.getByTestId(
-      "statblock-default-select",
-    ) as HTMLSelectElement;
+    const select = view.getByTestId("statblock-default-select") as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("Goblin"));
 
     await fireEvent.change(select, { target: { value: "" } });
@@ -141,26 +121,18 @@ describe("statblock presets — the vault's default", () => {
 
   it("reports a pointer that no longer resolves as (not found)", async () => {
     const view = await open([GOBLIN], "Bugbear");
-    const select = view.getByTestId(
-      "statblock-default-select",
-    ) as HTMLSelectElement;
+    const select = view.getByTestId("statblock-default-select") as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("Bugbear"));
-    expect(
-      [...select.options].some((o) =>
-        o.textContent?.includes("Bugbear (not found)"),
-      ),
-    ).toBe(true);
+    expect([...select.options].some((o) => o.textContent?.includes("Bugbear (not found)"))).toBe(
+      true,
+    );
   });
 
   it("does not mark a resolvable pointer as missing", async () => {
     const view = await open([GOBLIN], "goblin");
-    const select = view.getByTestId(
-      "statblock-default-select",
-    ) as HTMLSelectElement;
+    const select = view.getByTestId("statblock-default-select") as HTMLSelectElement;
     await waitFor(() => expect(select.options.length).toBe(4));
-    expect(
-      [...select.options].some((o) => o.textContent?.includes("not found")),
-    ).toBe(false);
+    expect([...select.options].some((o) => o.textContent?.includes("not found"))).toBe(false);
   });
 });
 
@@ -192,9 +164,7 @@ describe("statblock presets — rename and delete", () => {
     await fireEvent.keyDown(input, { key: "Escape" });
 
     expect(calls("rename_statblock_preset")).toHaveLength(0);
-    await waitFor(() =>
-      expect(view.queryByTestId("preset-rename-input")).toBeNull(),
-    );
+    await waitFor(() => expect(view.queryByTestId("preset-rename-input")).toBeNull());
   });
 
   it("deletes a preset behind a confirmation", async () => {
@@ -216,9 +186,7 @@ describe("statblock presets — rename and delete", () => {
     await fireEvent.click(await view.findByLabelText("Delete Goblin"));
     await fireEvent.click(await view.findByTestId("preset-delete-confirm"));
 
-    await waitFor(() =>
-      expect(calls("delete_statblock_preset")).toHaveLength(1),
-    );
+    await waitFor(() => expect(calls("delete_statblock_preset")).toHaveLength(1));
     expect(calls("save_statblock_preset_default")).toHaveLength(0);
   });
 });

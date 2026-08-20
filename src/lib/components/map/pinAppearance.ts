@@ -56,10 +56,7 @@ export const CURATED_ICON_COMPONENTS = new Map<PinIcon, Component<any>>([
   ["landmark", Landmark],
 ]);
 
-export function resolvedAppearance(
-  pin: Pin,
-  cat: PinCategory | undefined,
-): ResolvedAppearance {
+export function resolvedAppearance(pin: Pin, cat: PinCategory | undefined): ResolvedAppearance {
   return {
     shape: pin.shape ?? cat?.shape ?? "pin",
     color: pin.color ?? cat?.color ?? DEFAULT_PIN_COLOR,
@@ -98,8 +95,7 @@ const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
   },
   pin: {
     svgTag: "path",
-    svgAttrs:
-      'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"',
+    svgAttrs: 'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"',
     anchor: [20, 39],
     iconOffset: { top: 7, left: 10 },
   },
@@ -138,10 +134,7 @@ const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
  * arrive as another. Change a default in `resolvedAppearance` and the ghost follows.
  */
 export function defaultAppearance(): ResolvedAppearance {
-  return resolvedAppearance(
-    { shape: null, color: null, icon: null } as unknown as Pin,
-    undefined,
-  );
+  return resolvedAppearance({ shape: null, color: null, icon: null } as unknown as Pin, undefined);
 }
 
 /** Where a pin's tooltip sits, measured from the shape's own anchor so the label clears

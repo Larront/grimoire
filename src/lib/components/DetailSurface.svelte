@@ -57,7 +57,9 @@
     class="flex w-0 shrink-0 flex-col overflow-hidden motion-reduce:transition-none
            transition-[width] duration-200 ease-linear data-[state=open]:w-[300px]"
   >
-    <div class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle">
+    <div
+      class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle"
+    >
       {@render children()}
     </div>
   </aside>

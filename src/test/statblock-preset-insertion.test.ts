@@ -13,10 +13,7 @@ import * as toast from "$lib/toast";
 
 const GOBLIN_FENCE = "```statblock\n# Goblin\nHP: 7/7\nArmor Class: 15\n```";
 
-function withStore(
-  presets: { name: string; fence: string }[],
-  def: string | null,
-) {
+function withStore(presets: { name: string; fence: string }[], def: string | null) {
   vi.mocked(invoke).mockImplementation(async (cmd: string) => {
     if (cmd === "list_statblock_presets") return presets;
     if (cmd === "get_statblock_preset_default") return def;
@@ -26,16 +23,10 @@ function withStore(
 }
 
 /** Run `/statblock <argument>` into a fresh editor and hand back its markdown. */
-async function stamp(
-  argument: string,
-): Promise<{ markdown: string; json: unknown }> {
+async function stamp(argument: string): Promise<{ markdown: string; json: unknown }> {
   const ed = new Editor({ extensions: noteExtensions(), content: "<p></p>" });
   try {
-    await filterCommands("statblock")[0].command(
-      ed,
-      { from: 1, to: 1 },
-      argument,
-    );
+    await filterCommands("statblock")[0].command(ed, { from: 1, to: 1 }, argument);
     return { markdown: ed.getMarkdown().trimEnd(), json: ed.getJSON() };
   } finally {
     ed.destroy();
@@ -100,9 +91,7 @@ describe("/statblock <name>", () => {
 
   it("stamps a blank statblock when the argument misses and there is no default", async () => {
     await withStore([{ name: "Goblin", fence: GOBLIN_FENCE }], null);
-    expect((await stamp("Bugbear")).markdown).toBe(
-      "```statblock\n# Bugbear\n```",
-    );
+    expect((await stamp("Bugbear")).markdown).toBe("```statblock\n# Bugbear\n```");
   });
 
   it("does not match a preset by prefix — Orc must not shadow Orc Warlord", async () => {
@@ -116,9 +105,7 @@ describe("/statblock <name>", () => {
     expect((await stamp("Orc Warlord")).markdown).toBe(
       "```statblock\n# Orc Warlord\nHP: 40/40\n```",
     );
-    expect((await stamp("Orc Warl")).markdown).toBe(
-      "```statblock\n# Orc Warl\n```",
-    );
+    expect((await stamp("Orc Warl")).markdown).toBe("```statblock\n# Orc Warl\n```");
   });
 
   it("can stamp a shipped preset by name", async () => {

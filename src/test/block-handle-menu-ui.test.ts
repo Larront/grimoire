@@ -21,10 +21,7 @@ vi.mock("$lib/toast", () => ({ toastError: vi.fn() }));
 import { toastError } from "$lib/toast";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import { blockStillThere, deleteBlock, type BlockTarget } from "$lib/editor/block-handle";
-import {
-  createBlockHandleLife,
-  type BlockHandleLife,
-} from "$lib/editor/block-handle-life.svelte";
+import { createBlockHandleLife, type BlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import { NodeSelection } from "@tiptap/pm/state";
 import { closeNote, note, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
@@ -76,7 +73,9 @@ function gripOn(editor: Editor, target: BlockTarget) {
   // As a hover raises it: the life-cycle is told what the pointer is over, and the grip is
   // what the editor draws for the target it then holds.
   handle.point(target);
-  const { unmount } = render(BlockHandle, { props: { editor, target, handle } });
+  const { unmount } = render(BlockHandle, {
+    props: { editor, target, handle },
+  });
   const el = document.querySelector<HTMLButtonElement>("[data-block-handle]")!;
   expect(el, "the grip is drawn").not.toBeNull();
   // `unmount` because the editor's own `{#if}` can take the grip away mid-gesture, and
@@ -103,9 +102,7 @@ const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]
  * are plain items. A selector naming only the first would quietly stop seeing the other.
  */
 const items = () =>
-  Array.from(
-    document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'),
-  );
+  Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'));
 
 /** The menu item whose label starts with a word — how a GM picks one out. */
 function item(verb: string): HTMLElement {
@@ -367,9 +364,7 @@ describe("choosing an item acts on the block the grip was on", () => {
 
   it("deletes a callout and everything in it, in one undo", async () => {
     const editor = note(
-      ["Before.", "", "> [!encounter] The Ambush", "> Two kobolds.", "", "After."].join(
-        "\n",
-      ),
+      ["Before.", "", "> [!encounter] The Ambush", "> Two kobolds.", "", "After."].join("\n"),
     );
     const { el } = grip(editor, "blockquote");
     await fireEvent.click(el);
@@ -399,7 +394,9 @@ describe("choosing an item acts on the block the grip was on", () => {
     // not happen is otherwise discovered at the paste, in another app.
     const editor = note("A sentence.");
     Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: vi.fn().mockRejectedValue(new Error("NotAllowedError")) },
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("NotAllowedError")),
+      },
       configurable: true,
     });
     const { el, handle } = grip(editor);
@@ -528,11 +525,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
   it.each([
     ["a statblock", "```statblock\n# Kobold A\nHP: 5/5\n```", "statblockBlock"],
     ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
-    [
-      "a timeline",
-      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
-      "timelineBlock",
-    ],
+    ["a timeline", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```", "timelineBlock"],
     ["an image", "![The gate](images/gate.png)", "image"],
   ])("is absent entirely on %s — not drawn dim", async (_what, md, type) => {
     // A creature is not a sentence with extra steps: there is no deciding which of its

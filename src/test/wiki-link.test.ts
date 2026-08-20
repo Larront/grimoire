@@ -1,16 +1,15 @@
 import { describe, it, expect } from "vitest";
-import {
-  parseWikiTarget,
-  stripWikiFragment,
-  wikiStem,
-} from "$lib/editor/wiki-link";
+import { parseWikiTarget, stripWikiFragment, wikiStem } from "$lib/editor/wiki-link";
 
 // ─── parseWikiTarget ──────────────────────────────────────────────────────────
 // Drives both the [[...]] input rule (stub-link escape hatch) and display titles.
 
 describe("parseWikiTarget", () => {
   it("bare name → path and title are the same", () => {
-    expect(parseWikiTarget("Blackreach")).toEqual({ path: "Blackreach", title: "Blackreach" });
+    expect(parseWikiTarget("Blackreach")).toEqual({
+      path: "Blackreach",
+      title: "Blackreach",
+    });
   });
 
   it("nested path → title is the last segment", () => {

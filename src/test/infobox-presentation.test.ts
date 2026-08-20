@@ -121,12 +121,8 @@ describe("what the float does to the prose around it", () => {
       // A panel inside a callout is in a narrower column than the note's, so the same
       // threshold has to be read off the body. Sharing the container's *name* is what
       // makes the nearest one win, rather than adding a second query with its own number.
-      expect(css).toMatch(
-        /\.tiptap \.callout-body\s*\{[^}]*container-type:\s*inline-size/,
-      );
-      expect(css).toMatch(
-        /\.tiptap \.callout-body\s*\{[^}]*container-name:\s*note-column/,
-      );
+      expect(css).toMatch(/\.tiptap \.callout-body\s*\{[^}]*container-type:\s*inline-size/);
+      expect(css).toMatch(/\.tiptap \.callout-body\s*\{[^}]*container-name:\s*note-column/);
     });
 
     it("has a member for every boxed block the schema can produce", () => {
@@ -147,9 +143,7 @@ describe("what the float does to the prose around it", () => {
     // uses, so the cap cannot drift away from what it is a cap on. Upscaling a file the
     // GM dropped in goes visibly soft, and a full-width portrait makes an inline
     // summary the dominant thing on the page.
-    expect(css).toMatch(
-      /\.infobox-thumb\s*\{[^}]*max-width:\s*calc\(var\(--infobox-float-width\)/,
-    );
+    expect(css).toMatch(/\.infobox-thumb\s*\{[^}]*max-width:\s*calc\(var\(--infobox-float-width\)/);
   });
 
   it("reflows nothing into columns at any width", () => {

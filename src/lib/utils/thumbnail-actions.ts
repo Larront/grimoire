@@ -8,7 +8,9 @@ async function deleteOldThumbnailFile(path: string | null): Promise<void> {
   try {
     const abs = await api.getAudioAbsolutePath(path);
     if (abs) await remove(abs);
-  } catch { /* non-critical */ }
+  } catch {
+    /* non-critical */
+  }
 }
 
 export async function changeThumbnail(sceneId: number): Promise<void> {

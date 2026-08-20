@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { Clapperboard, Play, Plus, Star, ExternalLink, Palette, Pencil, Trash2 } from "@lucide/svelte";
+  import {
+    Clapperboard,
+    Play,
+    Plus,
+    Star,
+    ExternalLink,
+    Palette,
+    Pencil,
+    Trash2,
+  } from "@lucide/svelte";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { api } from "$lib/api";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -128,49 +137,41 @@
       if (!activeIds.has(Number(key))) delete thumbnailUrls[Number(key)];
     }
     for (const scene of scenesWithImages) {
-      api.getAudioAbsolutePath(scene.thumbnail_path!)
-        .then((abs) => { if (abs) thumbnailUrls[scene.id] = convertFileSrc(abs); })
-        .catch(() => { delete thumbnailUrls[scene.id]; });
+      api
+        .getAudioAbsolutePath(scene.thumbnail_path!)
+        .then((abs) => {
+          if (abs) thumbnailUrls[scene.id] = convertFileSrc(abs);
+        })
+        .catch(() => {
+          delete thumbnailUrls[scene.id];
+        });
     }
   });
-
-
 </script>
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
   <div class="mx-auto w-full max-w-5xl px-8 pt-8 pb-20">
     <div class="flex items-center justify-between">
-      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">
-        All Scenes
-      </h1>
+      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">All Scenes</h1>
       <Button size="sm" onclick={createScene}>
         <Plus class="size-3.5" />
         New Scene
       </Button>
     </div>
-    <div
-      class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"
-    ></div>
+    <div class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"></div>
 
     {#if scenes.scenes.length === 0}
       <div
         data-empty-state
         class="mt-16 flex flex-col items-center justify-center py-20 text-center"
       >
-        <div
-          class="flex size-20 items-center justify-center rounded-lg bg-primary-subtle"
-        >
-          <Clapperboard
-            class="size-10 text-primary"
-            strokeWidth={1.5}
-          />
+        <div class="flex size-20 items-center justify-center rounded-lg bg-primary-subtle">
+          <Clapperboard class="size-10 text-primary" strokeWidth={1.5} />
         </div>
-        <p class="mt-6 font-heading text-xl text-foreground">
-          Set the mood
-        </p>
+        <p class="mt-6 font-heading text-xl text-foreground">Set the mood</p>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-          Create your first scene to get started. Layer ambient sounds, music,
-          and effects into a soundscape.
+          Create your first scene to get started. Layer ambient sounds, music, and effects into a
+          soundscape.
         </p>
         <Button class="mt-6" onclick={createScene}>
           <Plus class="size-3.5" />
@@ -178,13 +179,11 @@
         </Button>
       </div>
     {:else}
-      <div
-        data-scenes-grid
-        class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4"
-      >
+      <div data-scenes-grid class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
-          {@const ThumbnailIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Clapperboard}
+          {@const ThumbnailIcon =
+            (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Clapperboard}
           {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
@@ -193,13 +192,19 @@
                 data-playing={isPlaying || undefined}
                 role="button"
                 tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:ring-1 hover:ring-border {isPlaying ? 'ring-2 ring-primary' : ''}"
+                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:ring-1 hover:ring-border {isPlaying
+                  ? 'ring-2 ring-primary'
+                  : ''}"
                 onclick={() => openScene(scene)}
-                onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") openScene(scene); }}
+                onkeydown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") openScene(scene);
+                }}
               >
                 <div
                   class="relative flex aspect-[4/3] items-center justify-center"
-                  style={cardImgUrl ? `background-image: url(${cardImgUrl}); background-size: cover; background-position: center;` : `background: ${cardBg(scene)}`}
+                  style={cardImgUrl
+                    ? `background-image: url(${cardImgUrl}); background-size: cover; background-position: center;`
+                    : `background: ${cardBg(scene)}`}
                   data-has-thumbnail={scene.thumbnail_path ? true : undefined}
                 >
                   {#if cardImgUrl}
@@ -209,7 +214,9 @@
                     <ThumbnailIcon
                       class="size-10 opacity-80"
                       strokeWidth={1.5}
-                      style={cardImgUrl ? "color: white; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6))" : `color: ${cardFg(scene)}`}
+                      style={cardImgUrl
+                        ? "color: white; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6))"
+                        : `color: ${cardFg(scene)}`}
                     />
                   </span>
 
@@ -223,7 +230,10 @@
                     data-play-btn
                     aria-label="Play {scene.name}"
                     class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
-                    onclick={(e) => { e.stopPropagation(); audioEngine.playScene(scene.id); }}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      audioEngine.playScene(scene.id);
+                    }}
                   >
                     <Play class="size-3.5 fill-white text-white" />
                   </button>
@@ -235,15 +245,21 @@
                     class="truncate font-heading text-sm text-foreground"
                     inputClass="bg-transparent px-0 py-0 font-heading text-sm"
                     bind:value={
-                      () => renamingSceneId === scene.id ? renameSceneValue : scene.name,
-                      (val) => { renameSceneValue = val; }
+                      () => (renamingSceneId === scene.id ? renameSceneValue : scene.name),
+                      (val) => {
+                        renameSceneValue = val;
+                      }
                     }
                     bind:mode={
-                      () => renamingSceneId === scene.id ? "edit" : "view",
-                      (val) => { if (val === "view") renamingSceneId = null; }
+                      () => (renamingSceneId === scene.id ? "edit" : "view"),
+                      (val) => {
+                        if (val === "view") renamingSceneId = null;
+                      }
                     }
                     onSave={(val) => handleSceneRename(scene.id, val)}
-                    onCancel={() => { renamingSceneId = null; }}
+                    onCancel={() => {
+                      renamingSceneId = null;
+                    }}
                   />
                   <p class="mt-0.5 text-xs text-muted-foreground">
                     {scene.slot_count}
@@ -274,12 +290,24 @@
                   Customise
                 </ContextMenu.SubTrigger>
                 <ContextMenu.SubContent>
-                  <ContextMenu.Item onclick={() => changeThumbnail(scene.id)}>Change thumbnail</ContextMenu.Item>
+                  <ContextMenu.Item onclick={() => changeThumbnail(scene.id)}
+                    >Change thumbnail</ContextMenu.Item
+                  >
                   {#if scene.thumbnail_path}
-                    <ContextMenu.Item onclick={() => removeThumbnail(scene.id)}>Remove image</ContextMenu.Item>
+                    <ContextMenu.Item onclick={() => removeThumbnail(scene.id)}
+                      >Remove image</ContextMenu.Item
+                    >
                   {/if}
-                  <ContextMenu.Item onclick={() => { colorPickerScene = scene; }}>Change color</ContextMenu.Item>
-                  <ContextMenu.Item onclick={() => { iconPickerScene = scene; }}>Change icon</ContextMenu.Item>
+                  <ContextMenu.Item
+                    onclick={() => {
+                      colorPickerScene = scene;
+                    }}>Change color</ContextMenu.Item
+                  >
+                  <ContextMenu.Item
+                    onclick={() => {
+                      iconPickerScene = scene;
+                    }}>Change icon</ContextMenu.Item
+                  >
                 </ContextMenu.SubContent>
               </ContextMenu.Sub>
               <ContextMenu.Item onclick={() => startSceneRename(scene)}>
@@ -287,10 +315,7 @@
                 Rename
               </ContextMenu.Item>
               <ContextMenu.Separator />
-              <ContextMenu.Item
-                variant="destructive"
-                onclick={() => (deleteSceneTarget = scene)}
-              >
+              <ContextMenu.Item variant="destructive" onclick={() => (deleteSceneTarget = scene)}>
                 <Trash2 class="size-4" />
                 Delete
               </ContextMenu.Item>
@@ -304,7 +329,9 @@
 
 <Dialog.Root
   open={colorPickerScene !== null}
-  onOpenChange={(o) => { if (!o) colorPickerScene = null; }}
+  onOpenChange={(o) => {
+    if (!o) colorPickerScene = null;
+  }}
 >
   <Dialog.Content style="max-width: 18rem">
     <Dialog.Header>
@@ -322,7 +349,12 @@
           ></button>
         {/each}
       </div>
-      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyColor(colorPickerScene, null)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="self-start text-muted-foreground"
+        onclick={() => applyColor(colorPickerScene, null)}
+      >
         Reset to default
       </Button>
     </div>
@@ -331,7 +363,9 @@
 
 <Dialog.Root
   open={iconPickerScene !== null}
-  onOpenChange={(o) => { if (!o) iconPickerScene = null; }}
+  onOpenChange={(o) => {
+    if (!o) iconPickerScene = null;
+  }}
 >
   <Dialog.Content style="max-width: 22rem">
     <Dialog.Header>
@@ -350,7 +384,12 @@
           </button>
         {/each}
       </div>
-      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyIcon(iconPickerScene, null)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="self-start text-muted-foreground"
+        onclick={() => applyIcon(iconPickerScene, null)}
+      >
         Reset to default
       </Button>
     </div>
@@ -368,8 +407,8 @@
       <AlertDialog.Title>Delete scene</AlertDialog.Title>
       <AlertDialog.Description>
         Are you sure you want to delete
-        <span class="font-medium text-foreground">{deleteSceneTarget?.name}</span>?
-        This action cannot be undone.
+        <span class="font-medium text-foreground">{deleteSceneTarget?.name}</span>? This action
+        cannot be undone.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>

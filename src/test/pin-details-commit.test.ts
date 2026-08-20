@@ -143,9 +143,7 @@ async function openPinPanel() {
   const title = view.container.querySelector(
     'input[placeholder="Name this pin"]',
   ) as HTMLInputElement;
-  const description = view.container.querySelector(
-    "#pin-description",
-  ) as HTMLTextAreaElement;
+  const description = view.container.querySelector("#pin-description") as HTMLTextAreaElement;
   return { ...view, title, description };
 }
 

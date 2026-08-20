@@ -51,9 +51,7 @@ describe("sidebar responsive behaviour", () => {
     const { container } = render(AppShell);
 
     // Desktop: renders a plain div with data-slot="sidebar" that has data-state (not a Sheet)
-    const desktopSidebar = container.querySelector(
-      '[data-slot="sidebar"][data-state]',
-    );
+    const desktopSidebar = container.querySelector('[data-slot="sidebar"][data-state]');
     expect(desktopSidebar).toBeTruthy();
   });
 
@@ -154,10 +152,9 @@ describe("icon rail", () => {
     const graphBtn = within(rail).getByRole("button", { name: /^graph$/i });
     await fireEvent.click(graphBtn);
     await fireEvent.click(graphBtn);
-    const graphTabs = [
-      ...tabs.left.tabs,
-      ...(tabs.right?.tabs ?? []),
-    ].filter((t) => t.type === "graph");
+    const graphTabs = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
+      (t) => t.type === "graph",
+    );
     expect(graphTabs.length).toBe(1);
   });
 });

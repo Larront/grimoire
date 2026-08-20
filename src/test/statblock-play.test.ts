@@ -17,15 +17,27 @@ import {
 
 describe("a value declares its own playability", () => {
   it("reads N/M as a pool", () => {
-    expect(classifyValue("120/135")).toMatchObject({ kind: "pool", current: 120, max: 135 });
+    expect(classifyValue("120/135")).toMatchObject({
+      kind: "pool",
+      current: 120,
+      max: 135,
+    });
   });
 
   it("reads a pool whose halves the GM spaced out", () => {
-    expect(classifyValue("3 / 12")).toMatchObject({ kind: "pool", current: 3, max: 12 });
+    expect(classifyValue("3 / 12")).toMatchObject({
+      kind: "pool",
+      current: 3,
+      max: 12,
+    });
   });
 
   it("reads a negative half, which no clamping makes reachable", () => {
-    expect(classifyValue("-6/12")).toMatchObject({ kind: "pool", current: -6, max: 12 });
+    expect(classifyValue("-6/12")).toMatchObject({
+      kind: "pool",
+      current: -6,
+      max: 12,
+    });
   });
 
   it("leaves a bare integer inert", () => {

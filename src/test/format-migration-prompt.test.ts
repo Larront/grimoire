@@ -6,13 +6,7 @@
 // What only this seam can show is that the prompt is assembled from the plan
 // rather than written here, that a decline opens nothing, and that a partial
 // failure opens the vault and names its casualties.
-import {
-  render,
-  cleanup,
-  act,
-  fireEvent,
-  waitFor,
-} from "@testing-library/svelte";
+import { render, cleanup, act, fireEvent, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "svelte-sonner";
@@ -20,7 +14,11 @@ import FormatMigrationDialog from "../lib/components/FormatMigrationDialog.svelt
 import { ledger } from "../lib/stores/ledger.svelte";
 
 vi.mock("svelte-sonner", () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }),
+  toast: Object.assign(vi.fn(), {
+    error: vi.fn(),
+    success: vi.fn(),
+    dismiss: vi.fn(),
+  }),
   Toaster: vi.fn(),
 }));
 
@@ -102,9 +100,7 @@ describe("the consent prompt is composed from the plan", () => {
     await refuseOpen();
 
     // The prompt cannot say "23 notes" without the scan having found them.
-    const asked = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "plan_format_migration");
+    const asked = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "plan_format_migration");
     expect(asked?.[1]).toMatchObject({ path: VAULT });
 
     await waitFor(() => {
@@ -117,9 +113,7 @@ describe("the consent prompt is composed from the plan", () => {
     });
     // Nothing has been opened or rewritten yet.
     expect(ledger.isOpen).toBe(false);
-    expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).not.toContain(
-      "migrate_ledger_format",
-    );
+    expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).not.toContain("migrate_ledger_format");
   });
 
   it("carries the Timeline prose warning, named per file", async () => {
@@ -145,9 +139,7 @@ describe("the consent prompt is composed from the plan", () => {
     await refuseOpen();
 
     await waitFor(() => getByTestId("format-migration-dialog"));
-    expect(getByTestId("format-migration-dialog").textContent).not.toContain(
-      "your own writing",
-    );
+    expect(getByTestId("format-migration-dialog").textContent).not.toContain("your own writing");
   });
 
   it("counts one affected note in the singular", async () => {
@@ -155,9 +147,7 @@ describe("the consent prompt is composed from the plan", () => {
     await refuseOpen({ ...PLAN, file_count: 1 });
 
     await waitFor(() => {
-      expect(getByTestId("format-migration-dialog").textContent).toContain(
-        "1 note in this ledger",
-      );
+      expect(getByTestId("format-migration-dialog").textContent).toContain("1 note in this ledger");
     });
   });
 
@@ -205,16 +195,12 @@ describe("saying yes", () => {
     await flush();
     await flush();
 
-    const migrate = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "migrate_ledger_format");
+    const migrate = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "migrate_ledger_format");
     expect(migrate?.[1]).toMatchObject({ path: VAULT });
     expect(ledger.isOpen).toBe(true);
     expect(ledger.path).toBe(VAULT);
     expect(ledger.formatMigration).toBeNull();
-    expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).toContain(
-      "add_recent_ledger",
-    );
+    expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).toContain("add_recent_ledger");
   });
 
   it("points at the report with a toast that fades", async () => {
@@ -236,8 +222,7 @@ describe("saying yes", () => {
     const [message, options] = vi.mocked(toast).mock.calls.at(-1) ?? [];
     expect(message).toBe("23 notes updated");
     expect(
-      (options as { componentProps?: { reportPath?: string } })?.componentProps
-        ?.reportPath,
+      (options as { componentProps?: { reportPath?: string } })?.componentProps?.reportPath,
     ).toBe(`${VAULT}/.grimoire/format-backup-20260730T120000Z/migration-report.md`);
     expect((options as { duration?: number })?.duration).not.toBe(Infinity);
   });
@@ -267,8 +252,7 @@ describe("saying yes", () => {
     expect(message).toContain("1 note couldn't be updated");
     expect((options as { duration?: number })?.duration).toBe(Infinity);
     expect(
-      (options as { componentProps?: { reportPath?: string } })?.componentProps
-        ?.reportPath,
+      (options as { componentProps?: { reportPath?: string } })?.componentProps?.reportPath,
     ).toContain("migration-report.md");
   });
 
@@ -411,7 +395,9 @@ describe("what the GM is told, and when", () => {
       return null;
     });
 
-    await fireEvent.click(document.querySelector("[data-testid=format-migration-confirm]") as HTMLElement);
+    await fireEvent.click(
+      document.querySelector("[data-testid=format-migration-confirm]") as HTMLElement,
+    );
     await flush();
     await flush();
 

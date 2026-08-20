@@ -226,9 +226,7 @@ async function openCardContextMenu(container: HTMLElement) {
 
 async function clickMenuItem(label: RegExp | string): Promise<HTMLElement> {
   return waitFor(() => {
-    const items = Array.from(
-      document.body.querySelectorAll('[data-slot="context-menu-item"]'),
-    );
+    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
     const item = items.find((el) => {
       const text = el.textContent ?? "";
       return label instanceof RegExp ? label.test(text) : text.includes(label);
@@ -277,7 +275,11 @@ describe("ScenesDashboard — context menu actions", () => {
     await openCardContextMenu(container);
     const item = await clickMenuItem("Open");
     await fireEvent.click(item);
-    expect(tabs.openTab).toHaveBeenCalledWith({ type: "scene", id: 1, title: "Forest Ambience" });
+    expect(tabs.openTab).toHaveBeenCalledWith({
+      type: "scene",
+      id: 1,
+      title: "Forest Ambience",
+    });
   });
 
   it("Play calls audioEngine.playScene", async () => {
@@ -296,7 +298,9 @@ describe("ScenesDashboard — context menu actions", () => {
     const item = await clickMenuItem("Favorite");
     await fireEvent.click(item);
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("toggle_scene_favorite", { id: 1 });
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("toggle_scene_favorite", {
+        id: 1,
+      });
       expect(scenes.load).toHaveBeenCalled();
     });
   });
@@ -330,7 +334,10 @@ describe("ScenesDashboard — inline rename", () => {
     await fireEvent.input(input, { target: { value: "New Name" } });
     await fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene", { id: 1, name: "New Name" });
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene", {
+        id: 1,
+        name: "New Name",
+      });
     });
   });
 });
@@ -356,7 +363,9 @@ describe("ScenesDashboard — delete", () => {
     const item = await clickMenuItem("Delete");
     await fireEvent.click(item);
     const confirmBtn = await waitFor(() => {
-      const btn = document.body.querySelector('[role="alertdialog"] button[data-slot="alert-dialog-action"]') as HTMLElement;
+      const btn = document.body.querySelector(
+        '[role="alertdialog"] button[data-slot="alert-dialog-action"]',
+      ) as HTMLElement;
       if (!btn) throw new Error("confirm button not found");
       return btn;
     });
@@ -457,7 +466,10 @@ describe("ScenesDashboard — color picker", () => {
     });
     await fireEvent.click(swatch);
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1 }));
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1 }),
+      );
       expect(scenes.load).toHaveBeenCalled();
     });
   });
@@ -477,7 +489,10 @@ describe("ScenesDashboard — color picker", () => {
     });
     await fireEvent.click(resetBtn);
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1, thumbnailColor: null }));
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1, thumbnailColor: null }),
+      );
     });
   });
 });
@@ -509,7 +524,10 @@ describe("ScenesDashboard — icon picker", () => {
     });
     await fireEvent.click(iconBtn);
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1 }));
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1 }),
+      );
       expect(scenes.load).toHaveBeenCalled();
     });
   });
@@ -529,7 +547,10 @@ describe("ScenesDashboard — icon picker", () => {
     });
     await fireEvent.click(resetBtn);
     await waitFor(() => {
-      expect(vi.mocked(invoke)).toHaveBeenCalledWith("update_scene_thumbnail", expect.objectContaining({ id: 1, thumbnailIcon: null }));
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith(
+        "update_scene_thumbnail",
+        expect.objectContaining({ id: 1, thumbnailIcon: null }),
+      );
     });
   });
 });
@@ -552,7 +573,9 @@ describe("ScenesDashboard — thumbnail image upload", () => {
       expect(vi.mocked(open)).toHaveBeenCalledWith(
         expect.objectContaining({
           filters: expect.arrayContaining([
-            expect.objectContaining({ extensions: expect.arrayContaining(["jpg", "png", "webp"]) }),
+            expect.objectContaining({
+              extensions: expect.arrayContaining(["jpg", "png", "webp"]),
+            }),
           ]),
         }),
       );
@@ -576,14 +599,22 @@ describe("ScenesDashboard — thumbnail image upload", () => {
       });
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
-        expect.objectContaining({ id: 1, thumbnailPath: ".grimoire/thumbnails/image.jpg" }),
+        expect.objectContaining({
+          id: 1,
+          thumbnailPath: ".grimoire/thumbnails/image.jpg",
+        }),
       );
       expect(scenes.load).toHaveBeenCalled();
     });
   });
 
   it("Remove image option appears when thumbnail_path is set", async () => {
-    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    mockScenes = [
+      {
+        ...makeScene(1, "Forest", false, "2024-01-01"),
+        thumbnail_path: ".grimoire/thumbnails/img.jpg",
+      },
+    ];
     const { container } = render(ScenesDashboard);
     await openCustomiseSubmenu(container);
     const item = await clickMenuItem("Remove image");
@@ -599,7 +630,12 @@ describe("ScenesDashboard — thumbnail image upload", () => {
   });
 
   it("Remove image calls update_scene_thumbnail with thumbnailPath null and reloads", async () => {
-    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    mockScenes = [
+      {
+        ...makeScene(1, "Forest", false, "2024-01-01"),
+        thumbnail_path: ".grimoire/thumbnails/img.jpg",
+      },
+    ];
     const { container } = render(ScenesDashboard);
     await openCustomiseSubmenu(container);
     const item = await clickMenuItem("Remove image");
@@ -614,7 +650,12 @@ describe("ScenesDashboard — thumbnail image upload", () => {
   });
 
   it("card with thumbnail_path resolves absolute path via get_audio_absolute_path", async () => {
-    mockScenes = [{ ...makeScene(1, "Scene", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" }];
+    mockScenes = [
+      {
+        ...makeScene(1, "Scene", false, "2024-01-01"),
+        thumbnail_path: ".grimoire/thumbnails/img.jpg",
+      },
+    ];
     render(ScenesDashboard);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("get_audio_absolute_path", {
@@ -635,7 +676,12 @@ describe("ScenesDashboard — thumbnail icon", () => {
   });
 
   it("shows custom icon when thumbnail_icon is set", () => {
-    mockScenes = [{ ...makeScene(1, "Scene", false, "2024-01-01"), thumbnail_icon: "Skull" }];
+    mockScenes = [
+      {
+        ...makeScene(1, "Scene", false, "2024-01-01"),
+        thumbnail_icon: "Skull",
+      },
+    ];
     const { container } = render(ScenesDashboard);
     const card = container.querySelector("[data-scene-card]");
     expect(card?.querySelector("[data-thumbnail-icon='Skull']")).toBeTruthy();

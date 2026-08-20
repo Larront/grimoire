@@ -1,3 +1,10 @@
+// The Detail Section — a labelled group inside the Details Pane.
+//
+// What is asserted is what the component *decides*: the label it draws, and the hooks
+// (`data-section`, `data-slot`) the panel and its tests find sections by. The separator
+// between sections is a border and a margin declared in the class list, and jsdom has no
+// boxes to check it against — an assertion on those strings would restate the template
+// and would hold whatever the rule actually rendered as. See CONTRIBUTING.md.
 import { render, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach } from "vitest";
 import DetailSection from "../lib/components/DetailSection.svelte";
@@ -24,35 +31,5 @@ describe("DetailSection", () => {
     const { container } = render(DetailSection, { props: { label: "Test" } });
     const section = container.querySelector('[data-slot="detail-section"]');
     expect(section).toBeTruthy();
-  });
-
-  it("first section has no top border class", () => {
-    const { container } = render(DetailSection, {
-      props: { label: "Tags", first: true },
-    });
-    const section = container.querySelector('[data-slot="detail-section"]')!;
-    expect(section.className).not.toContain("border-t");
-    expect(section.className).not.toContain("pt-3");
-    expect(section.className).not.toContain("mt-3");
-  });
-
-  it("non-first sections have border-t border-background-border pt-3 mt-3", () => {
-    const { container } = render(DetailSection, {
-      props: { label: "Aliases", first: false },
-    });
-    const section = container.querySelector('[data-slot="detail-section"]')!;
-    expect(section.className).toContain("border-t");
-    expect(section.className).toContain("border-background-border");
-    expect(section.className).toContain("pt-3");
-    expect(section.className).toContain("mt-3");
-  });
-
-  it("first=true is the default when prop is omitted", () => {
-    // Without first prop, defaults to false → should have border
-    const { container } = render(DetailSection, {
-      props: { label: "Section" },
-    });
-    const section = container.querySelector('[data-slot="detail-section"]')!;
-    expect(section.className).toContain("border-t");
   });
 });

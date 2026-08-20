@@ -14,11 +14,7 @@ import { render, waitFor, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import SceneBlockView from "../lib/components/editor/SceneBlockView.svelte";
-import {
-  SceneBlock,
-  parseSceneBody,
-  serializeSceneRef,
-} from "../lib/editor/scene-block.svelte";
+import { SceneBlock, parseSceneBody, serializeSceneRef } from "../lib/editor/scene-block.svelte";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
@@ -45,8 +41,7 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 // these tests pin, and a scene block renders the same details either way.
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   // Keep in sync with the named export in audio-engine.svelte.ts
-  isPlaylistSlot: (slot: { source_id: string }) =>
-    slot.source_id.startsWith("spotify:playlist:"),
+  isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
   audioEngine: {
     playScene: vi.fn(),
     pauseScene: vi.fn(),
@@ -167,9 +162,7 @@ describe("scene reference resolution", () => {
     await waitFor(() => expect(container.textContent).toContain("Wind"));
 
     // Its identity chip takes the scene's own saved colour.
-    const chip = container.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const chip = container.querySelector('[style*="background-color"]') as HTMLElement;
     expect(chip?.getAttribute("style")).toMatch(/100.*200.*100/);
   });
 
@@ -182,9 +175,7 @@ describe("scene reference resolution", () => {
 
     // Unresolved chip falls back to the accent theme rather than the scene's
     // own colour, so a dangling reference tracks the current accent.
-    const chip = container.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const chip = container.querySelector('[style*="background-color"]') as HTMLElement;
     expect(chip?.getAttribute("style")).toContain("--primary-subtle");
   });
 
@@ -294,10 +285,7 @@ describe("slot volume", () => {
     const fill = container.querySelector('[style*="width: 60%"]');
     expect(fill).toBeTruthy();
 
-    expect(invoke).not.toHaveBeenCalledWith(
-      "update_scene_slot",
-      expect.anything(),
-    );
+    expect(invoke).not.toHaveBeenCalledWith("update_scene_slot", expect.anything());
   });
 });
 
@@ -339,11 +327,7 @@ function mountNodeView(attrs: Record<string, unknown> = { sceneId: 1 }) {
           setMeta() {
             return tr;
           },
-          setNodeMarkup(
-            pos: number,
-            _type: unknown,
-            newAttrs: Record<string, unknown>,
-          ) {
+          setNodeMarkup(pos: number, _type: unknown, newAttrs: Record<string, unknown>) {
             writes.push({ pos, attrs: newAttrs });
             return tr;
           },
@@ -383,9 +367,7 @@ describe("SceneBlock node view — slider drag", () => {
   it("a drag that continues after the pointer leaves the node view keeps tracking", () => {
     const { view, outsideEvent } = mountWithOutsideElement();
 
-    const slider = view.dom.querySelector(
-      'input[type="range"]',
-    ) as HTMLInputElement;
+    const slider = view.dom.querySelector('input[type="range"]') as HTMLInputElement;
     expect(slider).toBeTruthy();
 
     // A pointer event landing outside the node view is ProseMirror's business.
@@ -425,9 +407,7 @@ describe("SceneBlock node view — attribute write-back", () => {
     mounted = mountNodeView({ sceneId: 1 });
     const { view, writes } = mounted;
 
-    const change = view.dom.querySelector(
-      '[aria-label="Change scene"]',
-    ) as HTMLElement;
+    const change = view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement;
     await fireEvent.click(change);
 
     expect(writes).toHaveLength(1);
@@ -455,9 +435,7 @@ describe("SceneBlock node view — attribute write-back", () => {
     mounted = mountNodeView({ sceneId: 1, sceneName: "Dark Forest" });
     const { view, writes } = mounted;
 
-    await fireEvent.click(
-      view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement,
-    );
+    await fireEvent.click(view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement);
 
     expect(writes[0].attrs.sceneId).toBe(null);
     expect(writes[0].attrs.sceneName).toBe("");
@@ -470,9 +448,7 @@ describe("SceneBlock node view — attribute write-back", () => {
     mounted = mountNodeView({ sceneId: 1, sceneName: "Dark Forest" });
     const { view, writes } = mounted;
 
-    await fireEvent.click(
-      view.dom.querySelector('[aria-label="Expand mixer"]') as HTMLElement,
-    );
+    await fireEvent.click(view.dom.querySelector('[aria-label="Expand mixer"]') as HTMLElement);
 
     expect(view.dom.querySelector('[aria-label="Collapse mixer"]')).toBeTruthy();
     expect(writes).toHaveLength(0);
@@ -487,9 +463,7 @@ describe("SceneBlock node view — attribute write-back", () => {
     mounted = mountNodeView({ sceneId: 1, marker: "keep me" });
     const { view, writes } = mounted;
 
-    const change = view.dom.querySelector(
-      '[aria-label="Change scene"]',
-    ) as HTMLElement;
+    const change = view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement;
     await fireEvent.click(change);
 
     expect(writes[0].attrs.marker).toBe("keep me");
@@ -522,9 +496,7 @@ describe("the scene fence", () => {
   it("writes a reference bound to nothing as an empty fence", () => {
     // A fresh `/scene` the GM has not bound yet: `Id:` with no id after it would
     // read back as no id anyway, so it is not written.
-    expect(serializeSceneRef({ sceneId: null, sceneName: "" })).toBe(
-      "```scene\n```",
-    );
+    expect(serializeSceneRef({ sceneId: null, sceneName: "" })).toBe("```scene\n```");
   });
 
   it.each([

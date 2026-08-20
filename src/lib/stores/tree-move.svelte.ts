@@ -195,7 +195,7 @@ export async function dropIntoFolder(
     return false;
   }
 
-  const note = item.noteId === null ? null : noteMap?.get(item.noteId) ?? null;
+  const note = item.noteId === null ? null : (noteMap?.get(item.noteId) ?? null);
   try {
     await commitMove(plan, note);
     return true;

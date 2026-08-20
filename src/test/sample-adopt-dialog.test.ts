@@ -15,7 +15,14 @@ function mockSampleInvoke() {
     const args = rawArgs as Record<string, unknown> | undefined;
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: (args as { path?: string })?.path ?? SAMPLE_PATH, note_count: 10, scene_count: 0, map_count: 1, failed_imports: [], unlinked_pins: [] };
+      return {
+        path: (args as { path?: string })?.path ?? SAMPLE_PATH,
+        note_count: 10,
+        scene_count: 0,
+        map_count: 1,
+        failed_imports: [],
+        unlinked_pins: [],
+      };
     if (cmd === "adopt_sample_ledger") return ADOPT_PATH;
     if (cmd === "add_recent_ledger") return null;
     if (cmd === "close_ledger") return null;
@@ -26,7 +33,9 @@ function mockSampleInvoke() {
 vi.mocked(dialogOpen).mockResolvedValue(ADOPT_PARENT);
 
 async function flush() {
-  await act(async () => { await Promise.resolve(); });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 describe("adopt dialog — LedgerSelector", () => {
@@ -85,7 +94,9 @@ describe("adopt dialog — LedgerSelector", () => {
     fireEvent.click(getByTestId("make-mine-btn"));
     await flush();
 
-    fireEvent.input(getByPlaceholderText("My World"), { target: { value: "bad/name" } });
+    fireEvent.input(getByPlaceholderText("My World"), {
+      target: { value: "bad/name" },
+    });
     fireEvent.click(getByTestId("adopt-confirm-btn"));
     await flush();
 
@@ -99,7 +110,9 @@ describe("adopt dialog — LedgerSelector", () => {
     fireEvent.click(getByTestId("make-mine-btn"));
     await flush();
 
-    fireEvent.input(getByPlaceholderText("My World"), { target: { value: ADOPT_NAME } });
+    fireEvent.input(getByPlaceholderText("My World"), {
+      target: { value: ADOPT_NAME },
+    });
     fireEvent.click(getByTestId("adopt-confirm-btn"));
     await flush();
 
@@ -114,7 +127,9 @@ describe("adopt dialog — LedgerSelector", () => {
     fireEvent.click(getByTestId("make-mine-btn"));
     await flush();
 
-    fireEvent.input(getByPlaceholderText("My World"), { target: { value: ADOPT_NAME } });
+    fireEvent.input(getByPlaceholderText("My World"), {
+      target: { value: ADOPT_NAME },
+    });
     fireEvent.click(getByTestId("adopt-choose-location-btn"));
     await flush();
 
@@ -134,7 +149,9 @@ describe("adopt dialog — LedgerSelector", () => {
     fireEvent.click(getByTestId("make-mine-btn"));
     await flush();
 
-    fireEvent.input(getByPlaceholderText("My World"), { target: { value: ADOPT_NAME } });
+    fireEvent.input(getByPlaceholderText("My World"), {
+      target: { value: ADOPT_NAME },
+    });
     fireEvent.click(getByTestId("adopt-choose-location-btn"));
     await flush();
 
@@ -155,7 +172,9 @@ describe("adopt dialog — LedgerSelector", () => {
     fireEvent.click(getByTestId("make-mine-btn"));
     await flush();
 
-    fireEvent.input(getByPlaceholderText("My World"), { target: { value: ADOPT_NAME } });
+    fireEvent.input(getByPlaceholderText("My World"), {
+      target: { value: ADOPT_NAME },
+    });
     fireEvent.click(getByTestId("adopt-choose-location-btn"));
     await flush();
 

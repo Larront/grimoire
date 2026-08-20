@@ -10,9 +10,7 @@
   let recentLedgers = $state<RecentLedger[]>([]);
 
   const ledgerName = $derived(
-    ledger.path
-      ? (ledger.path.replace(/\\/g, "/").split("/").pop() ?? "Untitled")
-      : "No ledger"
+    ledger.path ? (ledger.path.replace(/\\/g, "/").split("/").pop() ?? "Untitled") : "No ledger",
   );
 
   async function handleToggle() {
@@ -55,10 +53,12 @@
     <button
       type="button"
       data-testid="make-mine-btn"
-      onclick={() => { adoptOpen = true; }}
+      onclick={() => {
+        adoptOpen = true;
+      }}
       class={cn(
         buttonVariants({ variant: "ghost", size: "sm" }),
-        "w-full justify-start gap-2 px-2 text-xs text-primary/70 hover:text-primary"
+        "w-full justify-start gap-2 px-2 text-xs text-primary/70 hover:text-primary",
       )}
     >
       <Heart class="size-3.5 shrink-0" />
@@ -75,7 +75,7 @@
       onclick={handleToggle}
       class={cn(
         buttonVariants({ variant: "ghost", size: "sm" }),
-        "w-full justify-start gap-2 px-2 text-left"
+        "w-full justify-start gap-2 px-2 text-left",
       )}
     >
       <FolderOpen class="size-3.5 shrink-0 text-muted-foreground" />
@@ -83,7 +83,7 @@
       <ChevronDown
         class={cn(
           "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
-          open && "rotate-180"
+          open && "rotate-180",
         )}
       />
     </button>
@@ -99,7 +99,7 @@
             role="menuitem"
             class={cn(
               buttonVariants({ variant: "ghost", size: "sm" }),
-              "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
+              "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)",
             )}
             onclick={() => switchLedger(v.path)}
           >
@@ -117,7 +117,7 @@
           role="menuitem"
           class={cn(
             buttonVariants({ variant: "ghost", size: "sm" }),
-            "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)"
+            "w-full justify-start gap-2 rounded-none px-3 text-(--font-body)",
           )}
           onclick={openNewLedger}
         >

@@ -207,9 +207,7 @@ export function parseInfoboxBody(body: string): Infobox {
  * way the meta stays empty and the row below stays a row.
  */
 export function serializeInfobox(infobox: Infobox): string {
-  const rowLines = infobox.rows
-    .map(serializeLabelledRow)
-    .filter((line) => line.trim() !== "");
+  const rowLines = infobox.rows.map(serializeLabelledRow).filter((line) => line.trim() !== "");
   const first = rowLines.length ? rowLines[0] : null;
 
   const lines: string[] = [];

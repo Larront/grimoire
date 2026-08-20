@@ -13,21 +13,21 @@ and the migration ticket ([#155](https://github.com/Larront/grimoire/issues/155)
 
 Three blocks, three different answers to almost every question. Side by side:
 
-| | **Image** | **Scene** | **Timeline** |
-|---|---|---|---|
-| Extension file | `src/lib/editor/image-block.ts` (214 ln) | `scene-block.svelte.ts` (129 ln) | `timeline-block.ts` (258 ln) |
-| Base | `Image.extend()` from `@tiptap/extension-image` | `Node.create()` | `Node.create()` |
-| Node name | `image` (inherited) | `sceneBlock` | `timelineBlock` |
-| `group` / `atom` | `block`, **not** atom | `block`, `atom: true` | `block`, `atom: true` |
-| Attrs | `src`, `alt` (inherited) + `align`, `width` | `sceneId: number\|null`, `expanded: bool` | `events: TimelineEvent[]` |
-| `parseHTML` | inherited (`<img>`) | `[{ tag: "scene-block" }]` | `[{ tag: "timeline-block" }]` |
-| `renderHTML` | inherited + `data-align`/`data-width` | `<scene-block data-id data-expanded>` | `<timeline-block data-events="<uri-encoded JSON>">` |
-| `renderMarkdown` | `![alt](src){align=… width=…}` | **raw HTML string**, verbatim | ` ```timeline ` fence |
-| Load preprocessor | `preprocessImageAttrs` | **none** | `preprocessTimelineBlocks` |
-| Node view | imperative `mount()` of `ImageBlockView` | imperative `mount()` of `SceneBlockView` | imperative `mount()` of `TimelineBlockView` |
-| Selection handling | `selectNode`/`deselectNode` → `setSelected()` | none | none |
-| Insertion | slash command → Tauri file dialog → `insertImageFromFile`; also paste + drop | slash command → `insertContent` with null attrs | slash command → `insertContent` with one blank event |
-| Tests | `image-block.test.ts`, `image-lightbox.test.ts`, `image-replace.test.ts` | **none** | `timeline-block.test.ts` |
+|                    | **Image**                                                                    | **Scene**                                       | **Timeline**                                         |
+| ------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| Extension file     | `src/lib/editor/image-block.ts` (214 ln)                                     | `scene-block.svelte.ts` (129 ln)                | `timeline-block.ts` (258 ln)                         |
+| Base               | `Image.extend()` from `@tiptap/extension-image`                              | `Node.create()`                                 | `Node.create()`                                      |
+| Node name          | `image` (inherited)                                                          | `sceneBlock`                                    | `timelineBlock`                                      |
+| `group` / `atom`   | `block`, **not** atom                                                        | `block`, `atom: true`                           | `block`, `atom: true`                                |
+| Attrs              | `src`, `alt` (inherited) + `align`, `width`                                  | `sceneId: number\|null`, `expanded: bool`       | `events: TimelineEvent[]`                            |
+| `parseHTML`        | inherited (`<img>`)                                                          | `[{ tag: "scene-block" }]`                      | `[{ tag: "timeline-block" }]`                        |
+| `renderHTML`       | inherited + `data-align`/`data-width`                                        | `<scene-block data-id data-expanded>`           | `<timeline-block data-events="<uri-encoded JSON>">`  |
+| `renderMarkdown`   | `![alt](src){align=… width=…}`                                               | **raw HTML string**, verbatim                   | ` ```timeline ` fence                                |
+| Load preprocessor  | `preprocessImageAttrs`                                                       | **none**                                        | `preprocessTimelineBlocks`                           |
+| Node view          | imperative `mount()` of `ImageBlockView`                                     | imperative `mount()` of `SceneBlockView`        | imperative `mount()` of `TimelineBlockView`          |
+| Selection handling | `selectNode`/`deselectNode` → `setSelected()`                                | none                                            | none                                                 |
+| Insertion          | slash command → Tauri file dialog → `insertImageFromFile`; also paste + drop | slash command → `insertContent` with null attrs | slash command → `insertContent` with one blank event |
+| Tests              | `image-block.test.ts`, `image-lightbox.test.ts`, `image-replace.test.ts`     | **none**                                        | `timeline-block.test.ts`                             |
 
 ### Node view protocol — identical in all three
 
@@ -71,27 +71,27 @@ protocol all three genuinely share.
 - **Timeline**: plain `dom.contains(event.target)` (`timeline-block.ts:244`).
 - **Image**: lets `mousedown` through so ProseMirror can node-select the image (needed for the
   `selectNode` toolbar), and returns `true` unconditionally while a resize drag is live, signalled by a
-  `data-resizing` attribute the *view* sets on the *extension's* dom root (`image-block.ts:126-131`,
+  `data-resizing` attribute the _view_ sets on the _extension's_ dom root (`image-block.ts:126-131`,
   `ImageBlockView.svelte:145-147`). That attribute is a cross-layer back-channel — the view reaches up
   through `closest("[data-image-block]")` to talk to the node view.
 - **Scene**: tracks `isDraggingSlider` with a dom-level `mousedown` listener plus a window `mouseup`,
   because a range-input drag whose pointer strays outside `dom` would otherwise be killed by
   ProseMirror's document-level handler (`scene-block.svelte.ts:90-114`, with a comment saying exactly this).
 
-These are the same bug — *a pointer drag that leaves the node view* — solved twice, independently, in
+These are the same bug — _a pointer drag that leaves the node view_ — solved twice, independently, in
 two different places (extension closure vs. DOM attribute). That is duplication with a shared cause,
 not essential divergence.
 
 ### Slash-command registration
 
 One flat `SLASH_COMMANDS` array in `slash-command.ts:39-170`, grouped `Text` / `List` / `Insert`, each
-entry `{ group, label, keywords, icon, command }` where `icon` is a Lucide *name string* resolved to a
+entry `{ group, label, keywords, icon, command }` where `icon` is a Lucide _name string_ resolved to a
 component in `SlashCommandMenu.svelte`. The file's own comment says "Add future custom node commands
 here — no other file needs to change" (`slash-command.ts:37`) — and that holds: registration is already
 centralised and cheap. Filtering is a case-insensitive substring match over label + keywords
 (`filterCommands`, `slash-command.ts:178`).
 
-The one wrinkle: Image's command is `async` and opens a Tauri dialog *after* `deleteRange(range)`
+The one wrinkle: Image's command is `async` and opens a Tauri dialog _after_ `deleteRange(range)`
 (`slash-command.ts:153-168`), so the command contract is `void | boolean | Promise<void>`
 (`slash-command.ts:15-18`). Any block needing a picker before insertion follows that shape.
 
@@ -105,13 +105,13 @@ Three storage strategies:
 
 1. **Timeline — content in markdown.** ` ```timeline ` fence, labelled lines, blank-line-separated
    records (`serializeTimelineEvents`, `timeline-block.ts:141`; parsed by `parseTimelineBody:112`).
-   ADR-0007 argues this explicitly: "A Timeline Event's data *is* the note content (unlike a Scene,
+   ADR-0007 argues this explicitly: "A Timeline Event's data _is_ the note content (unlike a Scene,
    which a block references by SQLite id)… an opaque `<timeline>` HTML blob (the Scene-block approach)
    would degrade to unreadable soup in any other tool."
 
 2. **Scene — reference by SQLite id in Grimoire-only HTML.**
    `<scene-block data-id="7" data-expanded="false"></scene-block>` written verbatim into the markdown
-   (`scene-block.svelte.ts:51-57`). The *content* (the scene, its slots, volumes, loop flags) lives in
+   (`scene-block.svelte.ts:51-57`). The _content_ (the scene, its slots, volumes, loop flags) lives in
    SQLite and is fetched by the view (`SceneBlockView.svelte:82-97`).
 
 3. **Image — reference by path in portable markdown.** `![alt](src){align=… width=…}`
@@ -120,11 +120,11 @@ Three storage strategies:
 
 **Was the Scene/Timeline split considered? Yes — ADR-0007 §Why states the reference-vs-content
 distinction as the deciding reason, and lists "Opaque HTML block" as a rejected option for Timeline.**
-So the *axis* (reference vs. content) is a deliberate, documented design decision, not drift.
+So the _axis_ (reference vs. content) is a deliberate, documented design decision, not drift.
 
 **Which side is Image on? The reference side — and it is the counter-example that shows Scene's
 serialization is drift even if its data model isn't.** Image is a reference (to a file), exactly like
-Scene is a reference (to a scene row). But Image encodes its reference in *portable, standard markdown*
+Scene is a reference (to a scene row). But Image encodes its reference in _portable, standard markdown_
 that Obsidian and VS Code render natively, with the Grimoire-only part (align/width) confined to a
 trailing `{…}` attr block that degrades to visible-but-harmless text. Scene encodes an equally simple
 reference — one integer and one boolean — as an HTML tag no other tool understands.
@@ -133,7 +133,7 @@ Nothing about "this is a reference" forces opaque HTML. The honest reading:
 
 - **Essential divergence:** reference-vs-content is real, and the three blocks genuinely sit on both
   sides of it. Any pattern must carry both.
-- **Non-essential divergence:** *how* a reference is written to disk. Scene predates ADR-0007 and was
+- **Non-essential divergence:** _how_ a reference is written to disk. Scene predates ADR-0007 and was
   never revisited against it. A ` ```scene ` fence (`Scene: 7` / `Expanded: false`) or a
   `![[scene:7]]`-style embed would satisfy the same requirement portably. This is squarely the
   migration ticket's business.
@@ -144,7 +144,7 @@ and — for a note open in two panes or synced by another tool — is an externa
 Timeline keeps the analogous state (`expandedSet`, `editingIndex`) purely in the component
 (`TimelineBlockView.svelte:60-63`), and Image keeps `_selected` / `_lightboxOpen` in the view
 (`ImageBlockView.svelte:43-44`). Scene is the outlier, and this matters directly to the Statblock work:
-"HP you decrement" is durable play-state that *should* persist, while "which section is collapsed" is not
+"HP you decrement" is durable play-state that _should_ persist, while "which section is collapsed" is not
 — the pattern needs a stated rule for which side of that line a given piece of state falls on.
 
 ### Preprocessing is an unmanaged pipeline
@@ -152,7 +152,9 @@ Timeline keeps the analogous state (`expandedSet`, `editingIndex`) purely in the
 `Editor.svelte:106` reads:
 
 ```js
-const preprocessed = preprocessWikiLinks(preprocessImageAttrs(preprocessTimelineBlocks(initialContent)));
+const preprocessed = preprocessWikiLinks(
+  preprocessImageAttrs(preprocessTimelineBlocks(initialContent)),
+);
 ```
 
 Three hand-composed string transforms, order-significant, called in exactly one place, with no registry.
@@ -181,7 +183,7 @@ Honest count of what is copy-pasted, most-to-least worth absorbing:
 1. **The mount/unmount/setAttrs node-view bridge** (~35 lines × 3). The `…ViewExports` interface, the
    `mount` + cast, `update()` guard + `setAttrs` forward, `destroy()` + `unmount`. Nearly identical in
    all three; the only real variation is the props passed and the `setAttrs` signature — which is
-   *positional* in all three (`setAttrs(align, width, src, alt)`), so it re-breaks every time an attr is
+   _positional_ in all three (`setAttrs(align, width, src, alt)`), so it re-breaks every time an attr is
    added. An object-shaped `setAttrs(attrs)` would remove the churn.
 2. **The `_`-prefixed `$state` mirror + `svelte-ignore state_referenced_locally`** (~5-10 lines × 3).
    Pure ceremony forced by item 1.
@@ -204,12 +206,13 @@ Honest count of what is copy-pasted, most-to-least worth absorbing:
    **Any new block with free-text fields — Infobox values, Statblock ability text, Encounter notes —
    inherits this whole problem.** Wikilinks in block fields are the single strongest argument for a
    shared pattern, and are worth more than the node-view boilerplate.
+
 5. **Hover-revealed row controls** (up/down nudge, delete, insertion points) —
    `TimelineBlockView.svelte:258-358`. Not yet duplicated, but Statblock field lists and Encounter
-   rosters need exactly this. It's the first thing that *will* be copy-pasted if nothing absorbs it.
+   rosters need exactly this. It's the first thing that _will_ be copy-pasted if nothing absorbs it.
 6. **The pointer-drag-escapes-the-node-view fix** (§1) — solved twice, two ways.
 
-Explicitly *not* duplication: slash-command registration is already a single array; block-specific
+Explicitly _not_ duplication: slash-command registration is already a single array; block-specific
 styling is genuinely per-block.
 
 ---
@@ -220,7 +223,7 @@ Detail for [#155](https://github.com/Larront/grimoire/issues/155) to spec agains
 
 **Timeline** — cheapest. Already fenced-markdown, already atom, already has a preprocessor and
 round-trip tests. Would move to a shared node-view factory and a shared parse/serialize registration.
-Its wikilink rendering and `[[` autocomplete would be *deleted* and replaced with the shared field
+Its wikilink rendering and `[[` autocomplete would be _deleted_ and replaced with the shared field
 primitive; that is the substantive part, and the risk is behavioural regression in the
 default-to-known-while-pending policy (`TimelineBlockView.svelte:9-17`) which is deliberately different
 from `Editor.svelte`'s. Both behaviours are currently correct for their surface; the shared version must
@@ -236,6 +239,7 @@ exists to serve.
 
 **Scene** — the one that actually changes. Three separable pieces, and the migration ticket should size
 them separately:
+
 1. Serialization: opaque HTML → portable form. Needs a migration path for existing notes (a load-time
    reader for the legacy `<scene-block …>` tag, kept indefinitely — external tools and old files will
    keep producing it) and an update to the sample-ledger fixture, which hand-authors
@@ -256,19 +260,19 @@ Load-bearing behaviours a naive abstraction would damage. Each is a hard constra
    `src-tauri/src/commands/links.rs:27-53` strips frontmatter and then scans raw text for `[[…]]`, with
    no markdown parsing and no fence awareness. This is why ADR-0007 says timeline wikilinks are "indexed
    for free" — Link Index, Backlinks, Graph, and rename-rewrite all reach into the fence.
-   **Consequence:** any block that stores wikilinks *as literal `[[…]]` text in the note body* gets full
+   **Consequence:** any block that stores wikilinks _as literal `[[…]]` text in the note body_ gets full
    link-graph participation with zero backend work. Any block that stores them encoded (URI-encoded JSON
    in an attribute, base64, an id reference) becomes **invisible to the link graph** — links vanish from
-   backlinks and are silently missed by rename-rewrite. Note that `renderHTML` for Timeline *does*
+   backlinks and are silently missed by rename-rewrite. Note that `renderHTML` for Timeline _does_
    URI-encode its events (`timeline-block.ts:201`) — that's fine, because that HTML never reaches disk;
    only `renderMarkdown` does. A pattern that unified `renderHTML` and `renderMarkdown` would break this
    silently and catastrophically.
    Corollary: `!` before `[[` marks an embed and is skipped (`links.rs:33`), so an embed-style block
-   syntax (`![[scene:7]]`) would *not* pollute the link index — potentially useful.
+   syntax (`![[scene:7]]`) would _not_ pollute the link index — potentially useful.
 
 2. **Rename-rewrite edits raw note bytes.** Phase B of `note_mutation`'s `rename` rewrites `[[old path]]`
    in other notes via `commit_many` (CONTEXT.md §Write-and-Reconcile Envelope). It is a text rewrite over
-   the file. A block whose serialized form embeds a wikilink inside a *quoted or encoded* field will
+   the file. A block whose serialized form embeds a wikilink inside a _quoted or encoded_ field will
    either be missed or be corrupted by that rewrite. Fenced plain text is safe; JSON-in-an-attribute
    is not.
 
@@ -287,7 +291,7 @@ Load-bearing behaviours a naive abstraction would damage. Each is a hard constra
    (`Editor.svelte:199-222`) exist so a Conflict Banner decision isn't clobbered. A block that persists
    through its own channel (as Scene does for slot state) bypasses that guarantee entirely — writes land
    while the banner is up. Currently acceptable because scene slots aren't note content; a Statblock
-   writing play-state out-of-band would *not* be.
+   writing play-state out-of-band would _not_ be.
 
 5. **Image paths are ledger-relative and resolved through the backend.** `src` is relative to
    `ledger/images/` (ADR-0001), resolved at render time by `api.getImageAbsolutePath` + `convertFileSrc`

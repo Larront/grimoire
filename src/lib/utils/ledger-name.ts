@@ -6,10 +6,7 @@ export const MISSING_LOCATION_ERROR = "Please choose a storage location.";
  * "creating" form and the sample-adopt dialog). Returns an error message,
  * or null when valid.
  */
-export function validateLedgerName(
-  name: string,
-  parent: string | null,
-): string | null {
+export function validateLedgerName(name: string, parent: string | null): string | null {
   const trimmed = name.trim();
 
   if (!trimmed) {

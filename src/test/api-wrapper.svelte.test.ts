@@ -52,7 +52,10 @@ describe("Command Wrapper — api.* (toast surface)", () => {
   it("resolves each known code to its own copy", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const cases: [string, string][] = [
-      ["ERR_UNSUPPORTED_IMAGE: .bmp", "That image format isn't supported — use PNG, JPG, GIF, or WebP."],
+      [
+        "ERR_UNSUPPORTED_IMAGE: .bmp",
+        "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
+      ],
       ["ERR_SPOTIFY_AUTH: State mismatch", "Couldn't connect to Spotify — please try again."],
       [
         "ERR_FORMAT_AHEAD: vault notes are on format 2, this Grimoire only reads 1",

@@ -156,7 +156,10 @@ describe("MapPane — selection persists to the per-pane store", () => {
 
 describe("MapPane — restore on mount", () => {
   it("restores a saved pin selection and shows its panel", async () => {
-    paneDetailState.setMapSelection("left", MAP_ID, { pinId: 2, annotationId: null });
+    paneDetailState.setMapSelection("left", MAP_ID, {
+      pinId: 2,
+      annotationId: null,
+    });
 
     const { getByTestId, container } = await renderPane("left");
 
@@ -176,9 +179,9 @@ describe("MapPane — restore on mount", () => {
 
     const second = await renderPane("left");
     expect(second.getByTestId("map-canvas-stub").getAttribute("data-selected-pin")).toBe("1");
-    expect(
-      second.container.querySelector('[data-slot="detail-panel"]')!.textContent,
-    ).toContain("Harbor");
+    expect(second.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
+      "Harbor",
+    );
   });
 });
 
@@ -196,7 +199,11 @@ describe("MapPane — same map in both panes holds independent selections", () =
     expect(paneDetailState.getMapSelection("right", MAP_ID).pinId).toBe(2);
 
     // Each pane shows its own floating panel — two open at once.
-    expect(left.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain("Harbor");
-    expect(right.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain("Keep");
+    expect(left.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
+      "Harbor",
+    );
+    expect(right.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
+      "Keep",
+    );
   });
 });

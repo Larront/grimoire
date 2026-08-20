@@ -2,10 +2,7 @@ import Image from "@tiptap/extension-image";
 import { api } from "$lib/api";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
-import {
-  createBlockNodeView,
-  type BlockView,
-} from "$lib/editor/node-view-connector";
+import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,14 +100,12 @@ export const ImageBlock = Image.extend({
       ...this.parent?.(),
       align: {
         default: "center",
-        parseHTML: (el) =>
-          (el as HTMLElement).getAttribute("data-align") ?? "center",
+        parseHTML: (el) => (el as HTMLElement).getAttribute("data-align") ?? "center",
         renderHTML: (attrs) => ({ "data-align": attrs.align }),
       },
       width: {
         default: "100%",
-        parseHTML: (el) =>
-          (el as HTMLElement).getAttribute("data-width") ?? "100%",
+        parseHTML: (el) => (el as HTMLElement).getAttribute("data-width") ?? "100%",
         renderHTML: (attrs) => ({ "data-width": attrs.width }),
       },
     };
@@ -160,7 +155,13 @@ export const ImageBlock = Image.extend({
     return createBlockNodeView<ImageAttrs, ImageBlockViewExports>({
       component: ImageBlockView,
       domAttrs: { "data-image-block": "", "data-note-block": "image" },
-      defaults: { src: "", alt: "", align: "center", width: "100%", title: null },
+      defaults: {
+        src: "",
+        alt: "",
+        align: "center",
+        width: "100%",
+        title: null,
+      },
       drawsOwnSelection: true,
       props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
@@ -170,11 +171,13 @@ export const ImageBlock = Image.extend({
 
       // Image's use of the connector's event hole: a mousedown must reach
       // ProseMirror so it can select this node, and a resize drag must not.
-      stopEvent: ({ dom }) => (event) => {
-        if (dom.hasAttribute("data-resizing")) return true;
-        if (event.type === "mousedown") return false;
-        return undefined;
-      },
+      stopEvent:
+        ({ dom }) =>
+        (event) => {
+          if (dom.hasAttribute("data-resizing")) return true;
+          if (event.type === "mousedown") return false;
+          return undefined;
+        },
     });
   },
 });
@@ -197,10 +200,7 @@ function mimeToExt(type: string): string {
   return map[type] ?? "png";
 }
 
-export async function insertImageFromHandle(
-  file: File,
-  editor: Editor,
-): Promise<void> {
+export async function insertImageFromHandle(file: File, editor: Editor): Promise<void> {
   const filePath = (file as File & { path?: string }).path;
   let src: string;
 
@@ -208,10 +208,7 @@ export async function insertImageFromHandle(
     src = await api.copyImageFile(filePath);
   } else {
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    src = await api.saveImageBytes(
-      bytes,
-      file.name || `pasted-image.${mimeToExt(file.type)}`,
-    );
+    src = await api.saveImageBytes(bytes, file.name || `pasted-image.${mimeToExt(file.type)}`);
   }
 
   editor
@@ -224,10 +221,7 @@ export async function insertImageFromHandle(
     .run();
 }
 
-export async function insertImageFromFile(
-  absolutePath: string,
-  editor: Editor,
-): Promise<void> {
+export async function insertImageFromFile(absolutePath: string, editor: Editor): Promise<void> {
   const src = await api.copyImageFile(absolutePath);
   editor
     .chain()

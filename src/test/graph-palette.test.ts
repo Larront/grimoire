@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import {
-  VIZ_SLOTS,
-  assignTagSlots,
-  resolveTagColor,
-  mutedColor,
-} from "../lib/graph-palette";
+import { VIZ_SLOTS, assignTagSlots, resolveTagColor, mutedColor } from "../lib/graph-palette";
 
 /*
   The module exists because two surfaces disagreed: the graph painted a tag from the ramp
@@ -33,14 +28,8 @@ const noExplicitColors = () => false;
 
 describe("assignTagSlots", () => {
   it("assigns slots in sorted order, not the order tags arrive", () => {
-    const fromOneOrder = assignTagSlots(
-      ["quest", "npc", "location"],
-      noExplicitColors,
-    );
-    const fromAnother = assignTagSlots(
-      ["location", "quest", "npc"],
-      noExplicitColors,
-    );
+    const fromOneOrder = assignTagSlots(["quest", "npc", "location"], noExplicitColors);
+    const fromAnother = assignTagSlots(["location", "quest", "npc"], noExplicitColors);
     expect([...fromOneOrder]).toEqual([...fromAnother]);
     expect(fromOneOrder.get("location")).toBe(0);
     expect(fromOneOrder.get("npc")).toBe(1);
@@ -59,10 +48,7 @@ describe("assignTagSlots", () => {
   });
 
   it("skips tags that carry an explicit colour", () => {
-    const slots = assignTagSlots(
-      ["alpha", "beta", "gamma"],
-      (tag) => tag === "beta",
-    );
+    const slots = assignTagSlots(["alpha", "beta", "gamma"], (tag) => tag === "beta");
     expect(slots.has("beta")).toBe(false);
     // ...and the tags around it close up rather than leaving a hole.
     expect(slots.get("alpha")).toBe(0);
@@ -70,9 +56,7 @@ describe("assignTagSlots", () => {
   });
 
   it("leaves tags past the ramp unassigned rather than cycling", () => {
-    const many = Array.from({ length: VIZ_SLOTS + 4 }, (_, i) =>
-      String(i).padStart(2, "0"),
-    );
+    const many = Array.from({ length: VIZ_SLOTS + 4 }, (_, i) => String(i).padStart(2, "0"));
     const slots = assignTagSlots(many, noExplicitColors);
     expect(slots.size).toBe(VIZ_SLOTS);
     // No two tags share a slot — the collision the old cycling assignment produced.

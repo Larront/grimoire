@@ -7,10 +7,7 @@ import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
-import {
-  DEFAULT_STATBLOCK_WIDTH,
-  type StatblockSection,
-} from "$lib/editor/statblock-block";
+import { DEFAULT_STATBLOCK_WIDTH, type StatblockSection } from "$lib/editor/statblock-block";
 import type { LabelledRow } from "$lib/editor/labelled-row";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
@@ -26,8 +23,7 @@ const SECTIONS: StatblockSection[] = [
   { heading: "Actions", entries: [{ name: "Bite", body: "+4 to hit, 1d6." }] },
 ];
 
-const calls = (cmd: string) =>
-  vi.mocked(invoke).mock.calls.filter(([name]) => name === cmd);
+const calls = (cmd: string) => vi.mocked(invoke).mock.calls.filter(([name]) => name === cmd);
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
@@ -91,10 +87,7 @@ describe("save shape as preset", () => {
     await fireEvent.click(view.getByTestId("preset-save-btn"));
 
     await waitFor(() => expect(calls("save_statblock_preset")).toHaveLength(1));
-    const [, args] = calls("save_statblock_preset")[0] as [
-      string,
-      Record<string, string>,
-    ];
+    const [, args] = calls("save_statblock_preset")[0] as [string, Record<string, string>];
     expect(args.name).toBe("Goblin Scout");
     expect(args.fence).toContain("HP: 3/12");
   });
@@ -104,10 +97,7 @@ describe("save shape as preset", () => {
     await fireEvent.click(view.getByTestId("preset-save-btn"));
 
     await waitFor(() => expect(calls("save_statblock_preset")).toHaveLength(1));
-    const [, args] = calls("save_statblock_preset")[0] as [
-      string,
-      Record<string, string>,
-    ];
+    const [, args] = calls("save_statblock_preset")[0] as [string, Record<string, string>];
     expect(args.fence).toContain("HP: 3/12");
     expect(args.fence).toContain("Wounds: [x][ ][ ]");
     expect(args.fence).not.toContain("12/12");
@@ -118,9 +108,7 @@ describe("save shape as preset", () => {
     const input = view.getByTestId("preset-name-input");
     await fireEvent.input(input, { target: { value: "   " } });
 
-    expect(
-      (view.getByTestId("preset-save-btn") as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((view.getByTestId("preset-save-btn") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("warns that a name already in the store will be saved over", async () => {
@@ -131,9 +119,7 @@ describe("save shape as preset", () => {
     );
     const view = await openDialog();
     await waitFor(() =>
-      expect(view.getByTestId("preset-replaces").textContent).toContain(
-        "Goblin Scout",
-      ),
+      expect(view.getByTestId("preset-replaces").textContent).toContain("Goblin Scout"),
     );
   });
 
@@ -146,13 +132,9 @@ describe("save shape as preset", () => {
     });
 
     await waitFor(() =>
-      expect(view.getByTestId("preset-reserved").textContent).toContain(
-        "built-in",
-      ),
+      expect(view.getByTestId("preset-reserved").textContent).toContain("built-in"),
     );
-    expect(
-      (view.getByTestId("preset-save-btn") as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect((view.getByTestId("preset-save-btn") as HTMLButtonElement).disabled).toBe(true);
 
     await fireEvent.click(view.getByTestId("preset-save-btn"));
     expect(calls("save_statblock_preset")).toHaveLength(0);

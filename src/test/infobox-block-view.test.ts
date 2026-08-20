@@ -26,7 +26,12 @@ const HARBOR: LabelledRow[] = [
 ];
 
 function panel(
-  props: { title?: string; image?: string; imageAlt?: string; rows?: LabelledRow[] } = {},
+  props: {
+    title?: string;
+    image?: string;
+    imageAlt?: string;
+    rows?: LabelledRow[];
+  } = {},
 ) {
   const onCommit = vi.fn();
   const rendered = render(InfoboxBlockView, {
@@ -68,7 +73,9 @@ describe("an Infobox draws its facts", () => {
   });
 
   it("draws a wikilink in a row label too, because the scanner already filed it", () => {
-    const { container } = panel({ rows: [{ label: "[[Ash]]", value: "the Captain" }] });
+    const { container } = panel({
+      rows: [{ label: "[[Ash]]", value: "the Captain" }],
+    });
     expect(container.querySelectorAll("[data-wiki-link]")).toHaveLength(1);
   });
 
@@ -118,7 +125,10 @@ describe("an Infobox's thumbnail", () => {
 
   it("draws the image the panel points at", async () => {
     imagesResolve();
-    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour at dusk" });
+    const { container } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour at dusk",
+    });
 
     await waitFor(() => {
       expect(container.querySelector("[data-infobox-image]")).toHaveAttribute(
@@ -140,7 +150,10 @@ describe("an Infobox's thumbnail", () => {
 
   it("labels the image with the same text, so it is not caption-only", async () => {
     imagesResolve();
-    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour at dusk" });
+    const { container } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour at dusk",
+    });
 
     await waitFor(() => {
       expect(container.querySelector("[data-infobox-image]")).toHaveAttribute(
@@ -178,7 +191,10 @@ describe("an Infobox's thumbnail", () => {
     // copy, or something renamed to `.png`. Watching the path alone would leave the
     // browser's broken-image glyph in a panel that had said nothing was wrong.
     imagesResolve();
-    const { container } = panel({ image: "images/truncated.png", imageAlt: "The harbour" });
+    const { container } = panel({
+      image: "images/truncated.png",
+      imageAlt: "The harbour",
+    });
 
     await waitFor(() => {
       expect(container.querySelector("[data-infobox-image]")).toBeTruthy();
@@ -235,7 +251,10 @@ describe("an Infobox's thumbnail", () => {
   it("replaces a missing image without touching its caption", async () => {
     imagesMissing();
     vi.mocked(open).mockResolvedValue("C:/Users/gm/Pictures/portrait.png");
-    const { container, onCommit } = panel({ image: "images/gone.png", imageAlt: "The harbour" });
+    const { container, onCommit } = panel({
+      image: "images/gone.png",
+      imageAlt: "The harbour",
+    });
 
     await waitFor(() => {
       expect(container.querySelector("[data-infobox-image-replace]")).toBeTruthy();
@@ -280,7 +299,10 @@ describe("an Infobox's thumbnail", () => {
     // Stacked, the thumbnail holds its floated size rather than growing with the
     // panel — a stylesheet rule on this hook, asserted in infobox-presentation.test.ts.
     imagesResolve();
-    const { container } = panel({ image: "images/harbor.png", imageAlt: "The harbour" });
+    const { container } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
 
     expect(container.querySelector(".infobox-thumb")).toBeTruthy();
   });
@@ -378,25 +400,37 @@ describe("editing an Infobox", () => {
   it("commits an edited value", async () => {
     const { getByLabelText, onCommit } = panel();
     await fireEvent.click(getByLabelText("Row 1 value"));
-    await fireEvent.input(getByLabelText("Row 1 value"), { target: { value: "4,300" } });
+    await fireEvent.input(getByLabelText("Row 1 value"), {
+      target: { value: "4,300" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 value"));
 
-    expect(committed(onCommit).rows[0]).toEqual({ label: "Population", value: "4,300" });
+    expect(committed(onCommit).rows[0]).toEqual({
+      label: "Population",
+      value: "4,300",
+    });
   });
 
   it("commits an edited label", async () => {
     const { getByLabelText, onCommit } = panel();
     await fireEvent.click(getByLabelText("Row 1 label"));
-    await fireEvent.input(getByLabelText("Row 1 label"), { target: { value: "Souls" } });
+    await fireEvent.input(getByLabelText("Row 1 label"), {
+      target: { value: "Souls" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 label"));
 
-    expect(committed(onCommit).rows[0]).toEqual({ label: "Souls", value: "4,200" });
+    expect(committed(onCommit).rows[0]).toEqual({
+      label: "Souls",
+      value: "4,200",
+    });
   });
 
   it("keeps a colon out of a label, which the format cannot represent", async () => {
     const { getByLabelText, onCommit } = panel();
     await fireEvent.click(getByLabelText("Row 1 label"));
-    await fireEvent.input(getByLabelText("Row 1 label"), { target: { value: "Souls: total" } });
+    await fireEvent.input(getByLabelText("Row 1 label"), {
+      target: { value: "Souls: total" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 label"));
 
     expect(committed(onCommit).rows[0].label).toBe("Souls total");
@@ -416,7 +450,9 @@ describe("editing an Infobox", () => {
   it("commits an edited title", async () => {
     const { getByLabelText, onCommit } = panel();
     await fireEvent.click(getByLabelText("Infobox title"));
-    await fireEvent.input(getByLabelText("Infobox title"), { target: { value: "The Docks" } });
+    await fireEvent.input(getByLabelText("Infobox title"), {
+      target: { value: "The Docks" },
+    });
     await fireEvent.blur(getByLabelText("Infobox title"));
 
     expect(committed(onCommit)).toEqual({
@@ -430,7 +466,9 @@ describe("editing an Infobox", () => {
   it("takes a title the GM adds to a panel that had none", async () => {
     const { getByLabelText, onCommit } = panel({ title: "" });
     await fireEvent.click(getByLabelText("Infobox title"));
-    await fireEvent.input(getByLabelText("Infobox title"), { target: { value: "Harbor's End" } });
+    await fireEvent.input(getByLabelText("Infobox title"), {
+      target: { value: "Harbor's End" },
+    });
     await fireEvent.blur(getByLabelText("Infobox title"));
 
     expect(committed(onCommit).title).toBe("Harbor's End");
@@ -444,28 +482,36 @@ describe("editing an Infobox", () => {
 
 describe("an Infobox has nothing that plays", () => {
   it("draws a pool-shaped value as the characters it is", () => {
-    const { getByLabelText } = panel({ rows: [{ label: "Garrison", value: "43/59" }] });
+    const { getByLabelText } = panel({
+      rows: [{ label: "Garrison", value: "43/59" }],
+    });
     expect(getByLabelText("Row 1 value")).toHaveTextContent("43/59");
   });
 
   it("opens a pool-shaped value for typing rather than changing it", async () => {
     // The gesture that would decrement a Statblock's pool edits text here — which is
     // the whole difference, asserted rather than asserted about.
-    const { getByLabelText } = panel({ rows: [{ label: "Garrison", value: "43/59" }] });
+    const { getByLabelText } = panel({
+      rows: [{ label: "Garrison", value: "43/59" }],
+    });
     await fireEvent.click(getByLabelText("Row 1 value"));
 
     expect(getByLabelText("Row 1 value")).toHaveValue("43/59");
   });
 
   it("draws a mark-track-shaped value as the characters it is", () => {
-    const { getByLabelText } = panel({ rows: [{ label: "Wounds", value: "[ ][x][ ]" }] });
+    const { getByLabelText } = panel({
+      rows: [{ label: "Wounds", value: "[ ][x][ ]" }],
+    });
     expect(getByLabelText("Row 1 value")).toHaveTextContent("[ ][x][ ]");
   });
 
   it("offers no control beyond the fields and the Row List's own", () => {
     // Every button in the panel is either a field opened for typing or one of the Row
     // List's order controls. Nothing mutates a value in place.
-    const { container, getAllByLabelText } = panel({ rows: [{ label: "HP", value: "3/12" }] });
+    const { container, getAllByLabelText } = panel({
+      rows: [{ label: "HP", value: "3/12" }],
+    });
     const labels = [...container.querySelectorAll("button")].map((b) =>
       b.getAttribute("aria-label"),
     );
@@ -499,7 +545,10 @@ describe("an Infobox has nothing that plays", () => {
   it("offers the image control only while there is no image, and never both", () => {
     // The two controls share the title's row, so the row cannot grow: a panel with a
     // thumbnail has Replace and Remove on the thumbnail itself.
-    const withImage = panel({ image: "images/harbor.png", imageAlt: "The harbour" });
+    const withImage = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
     expect(withImage.queryByLabelText("Add image")).toBeNull();
     expect(withImage.getByLabelText("Replace image")).toBeTruthy();
     cleanup();
@@ -529,7 +578,10 @@ describe("an Infobox follows the document", () => {
   });
 
   it("opens the row a fresh insert asks it to", async () => {
-    const { getByLabelText, component } = panel({ title: "", rows: [{ label: "", value: "" }] });
+    const { getByLabelText, component } = panel({
+      title: "",
+      rows: [{ label: "", value: "" }],
+    });
 
     (component as unknown as { focusRow: (i: number) => void }).focusRow(0);
     await Promise.resolve();

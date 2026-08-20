@@ -56,9 +56,7 @@ describe("right rail responsive behaviour", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
   });
 
@@ -76,9 +74,7 @@ describe("right rail responsive behaviour", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container, getByTestId } = render(AppShell);
 
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(rail.getAttribute("data-state")).toBe("closed");
 
     await fireEvent.click(getByTestId("left-rail-trigger"));
@@ -98,9 +94,7 @@ describe("right rail responsive behaviour", () => {
 
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
-    const overlayRail = document.body.querySelector(
-      '[data-slot="right-rail"][data-mobile="true"]',
-    );
+    const overlayRail = document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]');
     expect(overlayRail).toBeTruthy();
   });
 });
@@ -119,24 +113,16 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     // Open sidebar overlay first (Ctrl+\)
     await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
     expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
+      document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]'),
     ).toBeTruthy();
 
     // Open right rail overlay
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
     // Sidebar overlay should now be closed, right rail overlay open
+    expect(document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]')).toBeFalsy();
     expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
-    ).toBeFalsy();
-    expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
+      document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]'),
     ).toBeTruthy();
   });
 
@@ -151,24 +137,16 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     // Open right rail overlay first
     await fireEvent.click(getByTestId("left-rail-trigger"));
     expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
+      document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]'),
     ).toBeTruthy();
 
     // Open sidebar overlay (Ctrl+\)
     await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
 
     // Right rail should now be closed, sidebar overlay open
+    expect(document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]')).toBeFalsy();
     expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
-    ).toBeFalsy();
-    expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
+      document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]'),
     ).toBeTruthy();
   });
 
@@ -181,9 +159,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
-    const sidebar = container.querySelector(
-      '[data-slot="sidebar"][data-state]',
-    );
+    const sidebar = container.querySelector('[data-slot="sidebar"][data-state]');
     const rail = container.querySelector('[data-slot="right-rail"]');
 
     expect(sidebar).toBeTruthy();
@@ -241,9 +217,7 @@ describe("which panes offer a details toggle", () => {
     });
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { container } = render(AppShell);
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(rail).toBeNull();
   });
 
@@ -256,18 +230,14 @@ describe("which panes offer a details toggle", () => {
     const { container, getByTestId } = render(AppShell);
 
     await fireEvent.click(getByTestId("left-rail-trigger"));
-    const railWhileNote = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const railWhileNote = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(railWhileNote.getAttribute("data-state")).toBe("open");
 
     // Switch this pane to a map — the note pane unmounts and its rail with it.
     await act(() => {
       tabs.openTab({ type: "map", id: 2, title: "Map" });
     });
-    expect(
-      container.querySelector('[data-slot="right-rail"][data-mobile="false"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-slot="right-rail"][data-mobile="false"]')).toBeNull();
   });
 
   it("the rail is open again on the way back, because the pane keeps its surface", async () => {
@@ -287,9 +257,7 @@ describe("which panes offer a details toggle", () => {
     });
 
     // The latch lives on the pane slot, not on the note pane's mount.
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(rail.getAttribute("data-state")).toBe("open");
   });
 
@@ -309,9 +277,7 @@ describe("which panes offer a details toggle", () => {
       tabs.setFocusedPane("right");
     });
 
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(rail.getAttribute("data-state")).toBe("open");
   });
 
@@ -327,13 +293,9 @@ describe("which panes offer a details toggle", () => {
     await fireEvent.click(getByTestId("left-rail-trigger"));
     await fireEvent.click(getByTestId("right-rail-trigger"));
 
-    const rails = container.querySelectorAll(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const rails = container.querySelectorAll('[data-slot="right-rail"][data-mobile="false"]');
     expect(rails.length).toBe(2);
-    expect(
-      Array.from(rails).every((r) => r.getAttribute("data-state") === "open"),
-    ).toBe(true);
+    expect(Array.from(rails).every((r) => r.getAttribute("data-state") === "open")).toBe(true);
   });
 
   it("in a note|map split only the note pane's trigger appears, whichever pane has focus", () => {
@@ -378,9 +340,7 @@ const testNote: Note = {
   modified_at: "2026-01-01T00:00:00Z",
 };
 
-async function openRailWithNote(
-  invokeImpl: (cmd: string, args?: unknown) => unknown,
-) {
+async function openRailWithNote(invokeImpl: (cmd: string, args?: unknown) => unknown) {
   vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === "read_note_content") return "";
     return invokeImpl(cmd, args);
@@ -428,7 +388,13 @@ describe("right rail — aliases section", () => {
       if (cmd === "read_note_tags") return [];
       if (cmd === "list_all_tags") return [];
       if (cmd === "get_alias_collisions")
-        return [{ alias: "Captain Ash", other_note_id: 2, other_note_title: "Ash Note" }];
+        return [
+          {
+            alias: "Captain Ash",
+            other_note_id: 2,
+            other_note_title: "Ash Note",
+          },
+        ];
       return null;
     });
     await act(() => {});
@@ -448,9 +414,7 @@ describe("right rail — aliases section", () => {
       return null;
     });
     await act(() => {});
-    expect(
-      container.querySelector('[data-slot="alias-collision-warning"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-slot="alias-collision-warning"]')).toBeNull();
   });
 
   it("aliases section is positioned between tags and folder sections", async () => {
@@ -466,9 +430,7 @@ describe("right rail — aliases section", () => {
     });
     await act(() => {});
     const sections = container.querySelectorAll("[data-section]");
-    const sectionNames = Array.from(sections).map((s) =>
-      s.getAttribute("data-section"),
-    );
+    const sectionNames = Array.from(sections).map((s) => s.getAttribute("data-section"));
     const tagsIdx = sectionNames.indexOf("tags");
     const aliasesIdx = sectionNames.indexOf("aliases");
     const folderIdx = sectionNames.indexOf("folder");
@@ -527,7 +489,9 @@ describe("right rail — backlinks section", () => {
       return defaultInvokeImpl(cmd);
     });
     await act(() => {});
-    const folderEl = container.querySelector('[data-slot="backlink-row"] [data-slot="link-folder"]');
+    const folderEl = container.querySelector(
+      '[data-slot="backlink-row"] [data-slot="link-folder"]',
+    );
     expect(folderEl).toBeTruthy();
     expect(folderEl!.textContent).toContain("Characters");
   });
@@ -727,15 +691,23 @@ describe("right rail — refresh after save", () => {
     let backlinkCallCount = 0;
     let outboundCallCount = 0;
     const { container } = await openRailWithNote(async (cmd: string) => {
-      if (cmd === "get_backlinks") { backlinkCallCount++; return []; }
-      if (cmd === "get_outbound_links") { outboundCallCount++; return []; }
+      if (cmd === "get_backlinks") {
+        backlinkCallCount++;
+        return [];
+      }
+      if (cmd === "get_outbound_links") {
+        outboundCallCount++;
+        return [];
+      }
       return defaultInvokeImpl(cmd);
     });
     await act(() => {});
     const beforeBacklink = backlinkCallCount;
     const beforeOutbound = outboundCallCount;
 
-    await act(() => { linksTick.bump(); });
+    await act(() => {
+      linksTick.bump();
+    });
 
     expect(backlinkCallCount).toBeGreaterThan(beforeBacklink);
     expect(outboundCallCount).toBeGreaterThan(beforeOutbound);

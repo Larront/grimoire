@@ -50,8 +50,8 @@ describe("DetailPanel", () => {
     });
     const btn = container.querySelector("button") as HTMLElement;
     // Find the retry button specifically
-    const retryBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Save failed"),
+    const retryBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Save failed"),
     ) as HTMLElement;
     expect(retryBtn).toBeTruthy();
     await fireEvent.click(retryBtn);

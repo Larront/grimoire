@@ -185,10 +185,7 @@ interface NodeViewArgs {
  * anything null or unset. Applied on the way *out* to the view only — the
  * document keeps whatever it holds, so a default never becomes a write.
  */
-function withDefaults<R extends BlockRecord>(
-  attrs: Record<string, unknown>,
-  defaults?: R,
-): R {
+function withDefaults<R extends BlockRecord>(attrs: Record<string, unknown>, defaults?: R): R {
   const out: Record<string, unknown> = { ...attrs };
   for (const [key, value] of Object.entries(defaults ?? {})) {
     if (out[key] === undefined || out[key] === null) out[key] = value;
@@ -214,10 +211,7 @@ function withDefaults<R extends BlockRecord>(
  * `doc` is optional because a real transaction always carries one and a test stub need
  * not.
  */
-function nodeAtOrNull(
-  doc: ProseMirrorNode | undefined,
-  pos: number,
-): ProseMirrorNode | null {
+function nodeAtOrNull(doc: ProseMirrorNode | undefined, pos: number): ProseMirrorNode | null {
   if (!doc || pos < 0 || pos > doc.content.size) return null;
   return doc.nodeAt(pos);
 }
@@ -228,10 +222,9 @@ function nodeAtOrNull(
  * Builds a block's node view from its spec. The return value is what
  * `addNodeView()` hands TipTap.
  */
-export function createBlockNodeView<
-  R extends BlockRecord,
-  V extends BlockView<R> = BlockView<R>,
->(spec: BlockNodeViewSpec<R, V>) {
+export function createBlockNodeView<R extends BlockRecord, V extends BlockView<R> = BlockView<R>>(
+  spec: BlockNodeViewSpec<R, V>,
+) {
   const sealed = (spec.mode ?? "sealed") === "sealed";
 
   return ({ node, editor, getPos }: NodeViewArgs) => {
@@ -372,8 +365,7 @@ export function createBlockNodeView<
       nodeView.contentDOM = contentDOM;
       // Everything outside the hole is the block's own rendering, which
       // ProseMirror must not try to read back as document content.
-      nodeView.ignoreMutation = (mutation) =>
-        !contentDOM.contains(mutation.target);
+      nodeView.ignoreMutation = (mutation) => !contentDOM.contains(mutation.target);
     }
 
     if (spec.drawsOwnSelection) {

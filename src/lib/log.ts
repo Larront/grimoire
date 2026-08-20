@@ -9,14 +9,14 @@ const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 function forward(level: "error" | "warn" | "info", message: string): void {
   if (!inTauri) return;
-  import("@tauri-apps/plugin-log")
-    .then((log) => log[level](message))
-    .catch(() => {});
+  import("@tauri-apps/plugin-log").then((log) => log[level](message)).catch(() => {});
 }
 
 function stringify(parts: unknown[]): string {
   return parts
-    .map((p) => (p instanceof Error ? (p.stack ?? p.message) : typeof p === "string" ? p : JSON.stringify(p)))
+    .map((p) =>
+      p instanceof Error ? (p.stack ?? p.message) : typeof p === "string" ? p : JSON.stringify(p),
+    )
     .join(" ");
 }
 

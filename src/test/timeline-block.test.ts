@@ -34,12 +34,17 @@ describe("parseTimelineBody", () => {
 
   it("title + single description line", () => {
     expect(parseTimelineBody("# The Shattering\n\nThe council voted.")).toEqual([
-      { date: "", title: "The Shattering", description: "The council voted." },
+      {
+        date: "",
+        title: "The Shattering",
+        description: "The council voted.",
+      },
     ]);
   });
 
   it("all fields — title, date, multi-line description", () => {
-    const body = "# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\nIt began the war.";
+    const body =
+      "# The Shattering\nDate: 3rd of Frostfall\n\nThe council voted.\nIt began the war.";
     expect(parseTimelineBody(body)).toEqual([
       {
         date: "3rd of Frostfall",
@@ -102,10 +107,12 @@ describe("parseTimelineBody", () => {
   });
 
   it("wikilinks in title and date survive", () => {
-    expect(
-      parseTimelineBody("# [[The Shattering]]\nDate: [[Calendar#Frostfall]]"),
-    ).toEqual([
-      { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "" },
+    expect(parseTimelineBody("# [[The Shattering]]\nDate: [[Calendar#Frostfall]]")).toEqual([
+      {
+        date: "[[Calendar#Frostfall]]",
+        title: "[[The Shattering]]",
+        description: "",
+      },
     ]);
   });
 
@@ -142,7 +149,11 @@ describe("parseTimelineBody", () => {
     // this unambiguous: `Date:` counts only immediately under the heading.
     const result = parseTimelineBody("# Alpha\n\nDate: only a description line");
     expect(result).toEqual([
-      { date: "", title: "Alpha", description: "Date: only a description line" },
+      {
+        date: "",
+        title: "Alpha",
+        description: "Date: only a description line",
+      },
     ]);
   });
 
@@ -236,7 +247,11 @@ describe("serializeTimelineEvents", () => {
 
   it("wikilinks in values are preserved verbatim", () => {
     const events: TimelineEvent[] = [
-      { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "" },
+      {
+        date: "[[Calendar#Frostfall]]",
+        title: "[[The Shattering]]",
+        description: "",
+      },
     ];
     const output = serializeTimelineEvents(events);
     expect(output).toContain("# [[The Shattering]]");
@@ -249,7 +264,11 @@ describe("serializeTimelineEvents", () => {
     // Migration]] applies the same rule (and warns about it) because migrating
     // *is* parsing the old grammar and serializing the new one.
     const events: TimelineEvent[] = [
-      { date: "", title: "Alpha", description: "# Not a new event\nordinary line" },
+      {
+        date: "",
+        title: "Alpha",
+        description: "# Not a new event\nordinary line",
+      },
     ];
     expect(serializeTimelineEvents(events)).toBe(
       "```timeline\n# Alpha\n\n # Not a new event\nordinary line\n```",
@@ -288,7 +307,11 @@ describe("round-trip", () => {
 
   it("all fields", () => {
     const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted.\nIt began the war." },
+      {
+        date: "3rd of Frostfall",
+        title: "The Shattering",
+        description: "The council voted.\nIt began the war.",
+      },
     ];
     expect(roundTrip(events)).toEqual(events);
   });
@@ -304,21 +327,33 @@ describe("round-trip", () => {
 
   it("pipes and colons in values survive", () => {
     const events: TimelineEvent[] = [
-      { date: "Year 812: dawn", title: "[[path|display]] event", description: "A note: something." },
+      {
+        date: "Year 812: dawn",
+        title: "[[path|display]] event",
+        description: "A note: something.",
+      },
     ];
     expect(roundTrip(events)).toEqual(events);
   });
 
   it("wikilinks survive", () => {
     const events: TimelineEvent[] = [
-      { date: "[[Calendar#Frostfall]]", title: "[[The Shattering]]", description: "See [[Highvale]]." },
+      {
+        date: "[[Calendar#Frostfall]]",
+        title: "[[The Shattering]]",
+        description: "See [[Highvale]].",
+      },
     ];
     expect(roundTrip(events)).toEqual(events);
   });
 
   it("description lines that look like Date:/Title: labels survive", () => {
     const events: TimelineEvent[] = [
-      { date: "", title: "Alpha", description: "Title: a quote\nDate: yesterday" },
+      {
+        date: "",
+        title: "Alpha",
+        description: "Title: a quote\nDate: yesterday",
+      },
       { date: "", title: "", description: "Date: starts with a label" },
     ];
     expect(roundTrip(events)).toEqual(events);
@@ -333,7 +368,11 @@ describe("round-trip", () => {
         title: "The Order Takes the Keep",
         description: "They finished the walls before the first frost.\n\nThe library came later.",
       },
-      { date: "Year 7", title: "The War Begins", description: "Three city-states." },
+      {
+        date: "Year 7",
+        title: "The War Begins",
+        description: "Three city-states.",
+      },
     ];
     const result = roundTrip(events);
     expect(result).toHaveLength(2);
@@ -354,8 +393,20 @@ describe("round-trip", () => {
       [{ date: "", title: "Alpha", description: "" }],
       [{ date: "Year 1", title: "Alpha", description: "" }],
       [{ date: "", title: "Alpha", description: "One line." }],
-      [{ date: "Year 1", title: "Alpha", description: "One.\n\nTwo.\n\nThree." }],
-      [{ date: "Year 1: dawn", title: "[[A|B]]", description: "Title: x\nDate: y" }],
+      [
+        {
+          date: "Year 1",
+          title: "Alpha",
+          description: "One.\n\nTwo.\n\nThree.",
+        },
+      ],
+      [
+        {
+          date: "Year 1: dawn",
+          title: "[[A|B]]",
+          description: "Title: x\nDate: y",
+        },
+      ],
       [{ date: "", title: "  padded  ", description: "  indented line" }],
       [{ date: "", title: "Alpha", description: "#hashtag not a heading" }],
       [
@@ -371,11 +422,19 @@ describe("round-trip", () => {
 
   it("serialize → parse → serialize is stable (idempotent)", () => {
     const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted.\n\nTwice." },
+      {
+        date: "3rd of Frostfall",
+        title: "The Shattering",
+        description: "The council voted.\n\nTwice.",
+      },
       { date: "", title: "Midwinter March", description: "" },
       // The one value the serializer normalises — so stability has to be shown
       // *through* that normalisation, not around it.
-      { date: "", title: "Heading trouble", description: "# looks like an event" },
+      {
+        date: "",
+        title: "Heading trouble",
+        description: "# looks like an event",
+      },
     ];
     const md1 = serializeTimelineEvents(events);
     const md2 = serializeTimelineEvents(parseTimelineBody(fenceBody(md1)));
@@ -408,7 +467,9 @@ describe("round-trip", () => {
 
   it("edit event: mutating a field round-trips with updated value", () => {
     const events: TimelineEvent[] = [{ date: "", title: "Old title", description: "" }];
-    const edited = events.map((e, i) => (i === 0 ? { ...e, title: "New title", date: "Year 1" } : e));
+    const edited = events.map((e, i) =>
+      i === 0 ? { ...e, title: "New title", date: "Year 1" } : e,
+    );
     const result = roundTrip(edited);
     expect(result[0].title).toBe("New title");
     expect(result[0].date).toBe("Year 1");
@@ -433,7 +494,11 @@ describe("TimelineBlock renderMarkdown", () => {
 
   it("serializes node attrs to the fenced timeline block", () => {
     const events: TimelineEvent[] = [
-      { date: "3rd of Frostfall", title: "The Shattering", description: "The council voted." },
+      {
+        date: "3rd of Frostfall",
+        title: "The Shattering",
+        description: "The council voted.",
+      },
     ];
     expect(renderMarkdown!({ attrs: { events } })).toBe(serializeTimelineEvents(events));
   });
@@ -443,7 +508,11 @@ describe("TimelineBlock renderMarkdown", () => {
 
 describe("createBlankEvent", () => {
   it("returns an event with all fields empty", () => {
-    expect(createBlankEvent()).toEqual({ date: "", title: "", description: "" });
+    expect(createBlankEvent()).toEqual({
+      date: "",
+      title: "",
+      description: "",
+    });
   });
 
   it("returns a new object each call (no shared reference)", () => {

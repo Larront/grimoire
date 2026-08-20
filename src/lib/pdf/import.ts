@@ -13,10 +13,7 @@ export function isPdfFile(file: File): boolean {
 
 /** Import a dropped PDF into the ledger at `targetFolder` (ledger-relative;
  *  `""` = ledger root). Returns the new ledger-relative path. */
-export async function importPdfFromHandle(
-  file: File,
-  targetFolder: string,
-): Promise<string> {
+export async function importPdfFromHandle(file: File, targetFolder: string): Promise<string> {
   const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
   return api.savePdfBytes(bytes, file.name, targetFolder);
 }

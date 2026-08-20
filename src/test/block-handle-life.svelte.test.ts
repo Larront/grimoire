@@ -12,10 +12,7 @@
 // through the real grip in `block-handle-menu-ui.test.ts` — which is the pair this module
 // exists to be the interface of.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  createBlockHandleLife,
-  HANDLE_HIDE_MS,
-} from "$lib/editor/block-handle-life.svelte";
+import { createBlockHandleLife, HANDLE_HIDE_MS } from "$lib/editor/block-handle-life.svelte";
 import type { BlockTarget } from "$lib/editor/block-handle";
 
 // The life-cycle holds a target and never looks inside it; these stand for two blocks.

@@ -1,7 +1,7 @@
-import { untrack } from 'svelte';
-import { ledger } from './ledger.svelte';
+import { untrack } from "svelte";
+import { ledger } from "./ledger.svelte";
 
-type PaneId = 'left' | 'right';
+type PaneId = "left" | "right";
 
 export interface MapSelection {
   pinId: number | null;

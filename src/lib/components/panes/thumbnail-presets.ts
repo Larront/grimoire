@@ -1,4 +1,15 @@
-import { Skull, Flame, Shield, Wand2, Swords, Moon, Crown, Eye, ScrollText, BookOpen } from "@lucide/svelte";
+import {
+  Skull,
+  Flame,
+  Shield,
+  Wand2,
+  Swords,
+  Moon,
+  Crown,
+  Eye,
+  ScrollText,
+  BookOpen,
+} from "@lucide/svelte";
 import { ACCENT_PRESETS } from "$lib/entity-colors";
 
 /*

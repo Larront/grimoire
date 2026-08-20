@@ -41,11 +41,7 @@ const SAMPLE_DOM = blockDom<Sample>({
 
 describe("a block's DOM table", () => {
   it("declares one node attribute per field of the record, with its default", () => {
-    expect(Object.keys(SAMPLE_DOM.attributes)).toEqual([
-      "title",
-      "count",
-      "tags",
-    ]);
+    expect(Object.keys(SAMPLE_DOM.attributes)).toEqual(["title", "count", "tags"]);
     expect(SAMPLE_DOM.defaults).toEqual({
       title: "Untitled",
       count: 0,
@@ -62,11 +58,7 @@ describe("a block's DOM table", () => {
 
     // `howMany` is the entry's own name, which is what lets Scene keep the `data-id` it
     // has always written while the record calls the field `sceneId`.
-    expect(Object.keys(written)).toEqual([
-      "data-title",
-      "data-how-many",
-      "data-tags",
-    ]);
+    expect(Object.keys(written)).toEqual(["data-title", "data-how-many", "data-tags"]);
   });
 
   it("reads back what it wrote, for every kind of field", () => {
@@ -95,10 +87,7 @@ describe("a block's DOM table", () => {
   it("stands in the default for an entry the element does not carry", () => {
     const bare = document.createElement("div");
     const read = Object.fromEntries(
-      Object.entries(SAMPLE_DOM.attributes).map(([field, spec]) => [
-        field,
-        spec.parseHTML(bare),
-      ]),
+      Object.entries(SAMPLE_DOM.attributes).map(([field, spec]) => [field, spec.parseHTML(bare)]),
     );
     expect(read).toEqual(SAMPLE_DOM.defaults);
   });
@@ -140,10 +129,7 @@ const schema: Schema = getSchema(noteExtensions());
  * Serialized and parsed with ProseMirror's own DOM machinery against the app's real
  * schema, so the element under test is the one the clipboard actually carries.
  */
-function throughTheDOM(
-  type: string,
-  attrs: Record<string, unknown>,
-): Record<string, unknown> {
+function throughTheDOM(type: string, attrs: Record<string, unknown>): Record<string, unknown> {
   const node = schema.nodes[type].create(attrs);
   const host = document.createElement("div");
   host.appendChild(DOMSerializer.fromSchema(schema).serializeNode(node));

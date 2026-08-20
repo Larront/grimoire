@@ -53,8 +53,12 @@ function mount(getAnnotation: () => MapAnnotation | null): AnnotationDetailsSour
   cleanup = $effect.root(() => {
     source = createAnnotationDetailsSource(
       getAnnotation,
-      (saved) => { applied.push(saved); },
-      (id) => { removed.push(id); },
+      (saved) => {
+        applied.push(saved);
+      },
+      (id) => {
+        removed.push(id);
+      },
     );
   });
   flushSync();
@@ -78,7 +82,10 @@ describe("annotation Details Source — saves", () => {
     mockCommands({ update_annotation: saved });
     const source = mount(() => baseAnnotation);
 
-    await source.saveAnnotation({ ...baseAnnotation, label: "New Quarter" } as MapAnnotation);
+    await source.saveAnnotation({
+      ...baseAnnotation,
+      label: "New Quarter",
+    } as MapAnnotation);
     expect(callsFor("update_annotation")).toHaveLength(1);
     expect(applied).toEqual([saved]);
     expect(source.saveStatus).toBe("saved");
@@ -93,7 +100,10 @@ describe("annotation Details Source — saves", () => {
 
     // Awaited from a bare `onblur` in AnnotationDetails — must never reject.
     await expect(
-      source.saveAnnotation({ ...baseAnnotation, label: "New Quarter" } as MapAnnotation),
+      source.saveAnnotation({
+        ...baseAnnotation,
+        label: "New Quarter",
+      } as MapAnnotation),
     ).resolves.toBeUndefined();
     expect(source.saveStatus).toBe("error");
     expect(applied).toEqual([]);
@@ -102,7 +112,10 @@ describe("annotation Details Source — saves", () => {
   it("retrySave re-attempts a failed save", async () => {
     mockCommands({}, ["update_annotation"]);
     const source = mount(() => baseAnnotation);
-    await source.saveAnnotation({ ...baseAnnotation, label: "New Quarter" } as MapAnnotation);
+    await source.saveAnnotation({
+      ...baseAnnotation,
+      label: "New Quarter",
+    } as MapAnnotation);
     expect(source.saveStatus).toBe("error");
 
     const saved = { ...baseAnnotation, label: "New Quarter" } as MapAnnotation;
@@ -139,7 +152,10 @@ describe("annotation Details Source — status ownership", () => {
     mockCommands({}, ["update_annotation"]);
     let annotation = $state<MapAnnotation | null>(baseAnnotation);
     const source = mount(() => annotation);
-    await source.saveAnnotation({ ...baseAnnotation, label: "x" } as MapAnnotation);
+    await source.saveAnnotation({
+      ...baseAnnotation,
+      label: "x",
+    } as MapAnnotation);
     expect(source.saveStatus).toBe("error");
 
     annotation = { ...baseAnnotation, id: 2 } as MapAnnotation;

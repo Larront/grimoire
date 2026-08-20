@@ -52,9 +52,7 @@ describe("ledger store — exploreSample", () => {
 
     await ledger.exploreSample();
 
-    const openCall = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "open_ledger");
+    const openCall = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "open_ledger");
     expect(openCall).toBeDefined();
     expect(openCall![1]).toEqual({ path: SAMPLE_PATH });
   });

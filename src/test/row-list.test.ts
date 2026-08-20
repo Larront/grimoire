@@ -63,9 +63,7 @@ describe("settleRowChange", () => {
 
 describe("remapRowIndices", () => {
   it("insert shifts indices at or after it down the list", () => {
-    expect([...remapRowIndices([0, 1, 3], { kind: "insert", index: 1 })]).toEqual(
-      [0, 2, 4],
-    );
+    expect([...remapRowIndices([0, 1, 3], { kind: "insert", index: 1 })]).toEqual([0, 2, 4]);
   });
 
   it("insert does not add the new row's own index", () => {
@@ -73,9 +71,7 @@ describe("remapRowIndices", () => {
   });
 
   it("delete drops its own index and pulls later ones up", () => {
-    expect(
-      [...remapRowIndices([0, 1, 2], { kind: "delete", index: 1 })].sort(),
-    ).toEqual([0, 1]);
+    expect([...remapRowIndices([0, 1, 2], { kind: "delete", index: 1 })].sort()).toEqual([0, 1]);
   });
 
   it("delete leaves earlier indices alone", () => {
@@ -95,9 +91,9 @@ describe("remapRowIndices", () => {
   });
 
   it("a longer move shifts every index it displaced", () => {
-    expect(
-      [...remapRowIndices([0, 1, 2, 3], { kind: "move", from: 0, to: 2 })].sort(),
-    ).toEqual([0, 1, 2, 3]);
+    expect([...remapRowIndices([0, 1, 2, 3], { kind: "move", from: 0, to: 2 })].sort()).toEqual([
+      0, 1, 2, 3,
+    ]);
     expect([...remapRowIndices([0], { kind: "move", from: 0, to: 2 })]).toEqual([2]);
     expect([...remapRowIndices([2], { kind: "move", from: 0, to: 2 })]).toEqual([1]);
     expect([...remapRowIndices([3], { kind: "move", from: 0, to: 2 })]).toEqual([3]);
@@ -247,7 +243,9 @@ describe("RowList controls", () => {
   });
 
   it("deleting the only row empties the list rather than leaving a husk", async () => {
-    const { getByLabelText, component } = render(RowListFixture, { rows: ["alpha"] });
+    const { getByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha"],
+    });
     await fireEvent.click(getByLabelText("Delete thing"));
 
     expect(component.rowsNow()).toEqual([]);

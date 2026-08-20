@@ -21,10 +21,7 @@
   import { Check } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import { placeMenu } from "$lib/utils/anchored-menu";
-  import type {
-    BlockHandleCommand,
-    BlockHandleMenuSection,
-  } from "$lib/editor/block-handle-menu";
+  import type { BlockHandleCommand, BlockHandleMenuSection } from "$lib/editor/block-handle-menu";
 
   interface Props {
     sections: BlockHandleMenuSection[];
@@ -152,9 +149,7 @@
   onkeydown={handleKeydown}
 >
   {#each sections as section, s (section.title ?? "actions")}
-    {@const offset = sections
-      .slice(0, s)
-      .reduce((n, earlier) => n + earlier.items.length, 0)}
+    {@const offset = sections.slice(0, s).reduce((n, earlier) => n + earlier.items.length, 0)}
     <!-- The heading is `aria-hidden` and names the group instead: read as a stray line of
          text between menu items it would be noise, and read as the group's name it is the
          verb the seven items below it are missing. -->

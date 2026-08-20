@@ -257,7 +257,7 @@ Footer icon (bottom, smaller / subdued):
 
 Each content area has a tab bar. Tabs persist open documents
 
-**Split view:** Left/right only, maximum 2 panes. Each pane has its own independent tab bar. The split is a fixed 50/50 — there is no draggable divider (ADR-0006, *Amendments*). No top/bottom splits. No more than 2 panes.
+**Split view:** Left/right only, maximum 2 panes. Each pane has its own independent tab bar. The split is a fixed 50/50 — there is no draggable divider (ADR-0006, _Amendments_). No top/bottom splits. No more than 2 panes.
 
 Primary use case: note open on left, map open on right during a live session.
 

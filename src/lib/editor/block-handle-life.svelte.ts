@@ -387,9 +387,7 @@ export function createBlockHandleLife(
       try {
         if (editor && acting) await runBlockHandleAction(editor, acting, command);
       } catch {
-        toastError(
-          actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"),
-        );
+        toastError(actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"));
       } finally {
         release();
       }

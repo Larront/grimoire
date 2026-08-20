@@ -5,11 +5,7 @@
 
   import { noteExtensions } from "$lib/editor/note-extensions";
   import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
-  import {
-    wikiBrokenLinkKey,
-    parseWikiTarget,
-    stripWikiFragment,
-  } from "$lib/editor/wiki-link";
+  import { wikiBrokenLinkKey, parseWikiTarget, stripWikiFragment } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 

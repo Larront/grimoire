@@ -43,10 +43,12 @@
 {prose}<!--
   No whitespace before the button, so the space below is the only one and the
   underline never starts on a leading space.
---> <button
+-->
+<button
   type="button"
   onclick={reveal}
   title={reportPath}
   aria-label={`Show ${name} in the file manager`}
   class="rounded-sm px-0.5 font-mono text-[13px] text-foreground underline decoration-foreground-faint underline-offset-2 transition-[background-color,text-decoration-color] duration-150 ease-out hover:bg-hover-overlay hover:decoration-foreground"
->{name}</button>
+  >{name}</button
+>

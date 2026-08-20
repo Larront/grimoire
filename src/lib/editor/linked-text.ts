@@ -58,6 +58,8 @@ export function splitLinkedText(text: string): LinkedTextSegment[] {
  */
 export function wikiTargetsIn(text: string): string[] {
   return splitLinkedText(text)
-    .filter((segment): segment is Extract<LinkedTextSegment, { kind: "link" }> => segment.kind === "link")
+    .filter(
+      (segment): segment is Extract<LinkedTextSegment, { kind: "link" }> => segment.kind === "link",
+    )
     .map((segment) => segment.path);
 }

@@ -1,45 +1,41 @@
 <script lang="ts">
-  import { setMode, userPrefersMode } from 'mode-watcher';
-  import { api } from '$lib/api';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
-  import { Button } from '$lib/components/ui/button';
-  import { Tabs } from 'bits-ui';
-  import { ledger, type AccentPreset, type DensityLevel } from '$lib/stores/ledger.svelte';
-  import { ACCENT_PRESETS } from '$lib/entity-colors';
-  import { appPrefs } from '$lib/stores/app-prefs.svelte';
-  import { templates } from '$lib/stores/templates.svelte';
-  import { toastSuccess, toastError } from '$lib/toast';
-  import { dialogs } from '$lib/stores/overlay.svelte';
-  import StatblockPresetsSettings from '$lib/components/StatblockPresetsSettings.svelte';
-  import {
-    getSpotifyStatus,
-    connectSpotify,
-    disconnectSpotify,
-  } from '$lib/utils/spotify-auth';
-  import type { SpotifyAuthStatus } from '$lib/types/ledger';
-  import { LoaderCircle } from '@lucide/svelte';
+  import { setMode, userPrefersMode } from "mode-watcher";
+  import { api } from "$lib/api";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Button } from "$lib/components/ui/button";
+  import { Tabs } from "bits-ui";
+  import { ledger, type AccentPreset, type DensityLevel } from "$lib/stores/ledger.svelte";
+  import { ACCENT_PRESETS } from "$lib/entity-colors";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
+  import { templates } from "$lib/stores/templates.svelte";
+  import { toastSuccess, toastError } from "$lib/toast";
+  import { dialogs } from "$lib/stores/overlay.svelte";
+  import StatblockPresetsSettings from "$lib/components/StatblockPresetsSettings.svelte";
+  import { getSpotifyStatus, connectSpotify, disconnectSpotify } from "$lib/utils/spotify-auth";
+  import type { SpotifyAuthStatus } from "$lib/types/ledger";
+  import { LoaderCircle } from "@lucide/svelte";
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
-  let section = $state('appearance');
+  let section = $state("appearance");
 
   // App version for the About footer — resolved from the Tauri runtime so it
   // can never drift from the shipped bundle (issue #117).
   let appVersion = $state<string | null>(null);
   $effect(() => {
-    if (open && appVersion === null && '__TAURI_INTERNALS__' in window) {
-      import('@tauri-apps/api/app')
+    if (open && appVersion === null && "__TAURI_INTERNALS__" in window) {
+      import("@tauri-apps/api/app")
         .then(({ getVersion }) => getVersion())
-        .then((v) => { appVersion = v; })
+        .then((v) => {
+          appVersion = v;
+        })
         .catch(() => {});
     }
   });
 
   function openExternal(url: string) {
-    import('@tauri-apps/plugin-opener')
-      .then(({ openUrl }) => openUrl(url))
-      .catch(() => {});
+    import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(url)).catch(() => {});
   }
 
   let authStatus = $state<SpotifyAuthStatus | null>(null);
@@ -55,13 +51,13 @@
     try {
       await api.restoreBuiltinTemplates();
       await templates.load();
-      toastSuccess('Default templates restored');
+      toastSuccess("Default templates restored");
       restoreDialogOpen = false;
     } catch (e) {
       // Surface the failure — a silent close would leave the GM believing the
       // defaults were reset when they weren't. The confirm dialog still closes
       // (bits-ui Action), but the toast makes the failure visible so they can retry.
-      console.error('restore templates failed:', e);
+      console.error("restore templates failed:", e);
       toastError("Couldn't restore templates. Please try again.");
     } finally {
       isRestoring = false;
@@ -72,9 +68,13 @@
     if (open && !hasLoadedSpotify) {
       hasLoadedSpotify = true;
       getSpotifyStatus()
-        .then((s) => { authStatus = s; })
+        .then((s) => {
+          authStatus = s;
+        })
         .catch(() => {})
-        .finally(() => { isAuthLoading = false; });
+        .finally(() => {
+          isAuthLoading = false;
+        });
     }
   });
 
@@ -94,7 +94,7 @@
       await disconnectSpotify();
       authStatus = null;
     } catch (e) {
-      console.error('spotify disconnect failed:', e);
+      console.error("spotify disconnect failed:", e);
       toastError("Couldn't disconnect Spotify. Please try again.");
     }
   }
@@ -111,35 +111,36 @@
     built from `ACCENT_PRESETS` now, and `accent-${p.name}` types itself into the store's
     `AccentPreset` union — so a preset added there and forgotten here no longer compiles.
   */
-  const ACCENT_OPTIONS: { value: AccentPreset; label: string }[] = ACCENT_PRESETS.map(
-    (p) => ({ value: `accent-${p.name}`, label: p.label }),
-  );
+  const ACCENT_OPTIONS: { value: AccentPreset; label: string }[] = ACCENT_PRESETS.map((p) => ({
+    value: `accent-${p.name}`,
+    label: p.label,
+  }));
 
-  const THEME_MODES: { value: 'dark' | 'light' | 'system'; label: string }[] = [
-    { value: 'dark',   label: 'Dark'   },
-    { value: 'light',  label: 'Light'  },
-    { value: 'system', label: 'System' },
+  const THEME_MODES: { value: "dark" | "light" | "system"; label: string }[] = [
+    { value: "dark", label: "Dark" },
+    { value: "light", label: "Light" },
+    { value: "system", label: "System" },
   ];
 
   const DENSITY_LEVELS: { value: DensityLevel; label: string }[] = [
-    { value: 'cozy',     label: 'Cozy'     },
-    { value: 'balanced', label: 'Balanced' },
-    { value: 'dense',    label: 'Dense'    },
+    { value: "cozy", label: "Cozy" },
+    { value: "balanced", label: "Balanced" },
+    { value: "dense", label: "Dense" },
   ];
 
   const SECTIONS: { value: string; label: string }[] = [
-    { value: 'appearance',   label: 'Appearance'   },
-    { value: 'content',      label: 'Content'      },
-    { value: 'statblocks',   label: 'Statblocks'   },
-    { value: 'integrations', label: 'Integrations' },
-    { value: 'about',        label: 'About'        },
+    { value: "appearance", label: "Appearance" },
+    { value: "content", label: "Content" },
+    { value: "statblocks", label: "Statblocks" },
+    { value: "integrations", label: "Integrations" },
+    { value: "about", label: "About" },
   ];
 
   const segmentedBtn = (active: boolean) =>
     `px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
       active
-        ? 'bg-primary text-primary-foreground font-medium'
-        : 'text-foreground-muted hover:text-foreground'
+        ? "bg-primary text-primary-foreground font-medium"
+        : "text-foreground-muted hover:text-foreground"
     }`;
 </script>
 
@@ -152,7 +153,9 @@
 {/snippet}
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-2xl w-full h-[80vh] max-h-[560px] flex flex-col p-0 gap-0 overflow-hidden">
+  <Dialog.Content
+    class="sm:max-w-2xl w-full h-[80vh] max-h-[560px] flex flex-col p-0 gap-0 overflow-hidden"
+  >
     <Dialog.Header class="px-5 pt-5 pb-3 border-b border-border shrink-0 text-left">
       <Dialog.Title>Settings</Dialog.Title>
       <Dialog.Description class="sr-only">
@@ -178,13 +181,12 @@
 
       <!-- ── Panel ────────────────────────────────────────────────── -->
       <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-
         <!-- Appearance -->
         <Tabs.Content value="appearance" class="outline-none">
           <div class="flex flex-col divide-y divide-border">
             <!-- Theme -->
             <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-              {@render field('Theme', 'Light, Dark, or System')}
+              {@render field("Theme", "Light, Dark, or System")}
               <div
                 role="group"
                 aria-label="Theme"
@@ -195,15 +197,15 @@
                     type="button"
                     aria-pressed={userPrefersMode.current === mode.value}
                     class={segmentedBtn(userPrefersMode.current === mode.value)}
-                    onclick={() => setMode(mode.value)}
-                  >{mode.label}</button>
+                    onclick={() => setMode(mode.value)}>{mode.label}</button
+                  >
                 {/each}
               </div>
             </div>
 
             <!-- Accent -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field('Accent', 'Choose a colour preset')}
+              {@render field("Accent", "Choose a colour preset")}
               <div class="flex items-center gap-2 shrink-0">
                 {#each ACCENT_OPTIONS as preset (preset.value)}
                   <button
@@ -213,7 +215,10 @@
                     aria-pressed={ledger.accent === preset.value}
                     onclick={() => ledger.setAccent(preset.value)}
                     style="background-color: var(--primary)"
-                    class="{preset.value} size-6 rounded-full ring-offset-background transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent === preset.value ? 'ring-2 ring-ring ring-offset-1' : 'opacity-70 hover:opacity-100'}"
+                    class="{preset.value} size-6 rounded-full ring-offset-background transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent ===
+                    preset.value
+                      ? 'ring-2 ring-ring ring-offset-1'
+                      : 'opacity-70 hover:opacity-100'}"
                   ></button>
                 {/each}
               </div>
@@ -221,7 +226,7 @@
 
             <!-- Density -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field('Density', 'Layout compactness')}
+              {@render field("Density", "Layout compactness")}
               <div
                 role="group"
                 aria-label="Density"
@@ -232,15 +237,15 @@
                     type="button"
                     aria-pressed={ledger.density === level.value}
                     class={segmentedBtn(ledger.density === level.value)}
-                    onclick={() => ledger.setDensity(level.value)}
-                  >{level.label}</button>
+                    onclick={() => ledger.setDensity(level.value)}>{level.label}</button
+                  >
                 {/each}
               </div>
             </div>
 
             <!-- Reduce Motion -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field('Reduce Motion', 'Disable animations and transitions')}
+              {@render field("Reduce Motion", "Disable animations and transitions")}
               <button
                 type="button"
                 role="switch"
@@ -248,10 +253,14 @@
                 aria-label="Reduce Motion"
                 data-testid="reduce-motion-toggle"
                 onclick={() => appPrefs.setReduceMotion(!appPrefs.reduceMotion)}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.reduceMotion ? 'bg-primary' : 'bg-input'}"
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.reduceMotion
+                  ? 'bg-primary'
+                  : 'bg-input'}"
               >
                 <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.reduceMotion ? 'translate-x-4' : 'translate-x-0'} {appPrefs.reduceMotion ? '' : 'transition-transform'}"
+                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.reduceMotion
+                    ? 'translate-x-4'
+                    : 'translate-x-0'} {appPrefs.reduceMotion ? '' : 'transition-transform'}"
                 ></span>
               </button>
             </div>
@@ -263,7 +272,10 @@
           <div class="flex flex-col divide-y divide-border">
             <!-- Confirm before updating links on rename -->
             <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-              {@render field('Confirm before updating links on rename', 'Ask before rewriting wikilinks when a note is renamed')}
+              {@render field(
+                "Confirm before updating links on rename",
+                "Ask before rewriting wikilinks when a note is renamed",
+              )}
               <button
                 type="button"
                 role="switch"
@@ -271,36 +283,46 @@
                 aria-label="Confirm before updating links on rename"
                 data-testid="confirm-rename-links-toggle"
                 onclick={() => appPrefs.setConfirmRenameLinks(!appPrefs.confirmRenameLinks)}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.confirmRenameLinks ? 'bg-primary' : 'bg-input'}"
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.confirmRenameLinks
+                  ? 'bg-primary'
+                  : 'bg-input'}"
               >
                 <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.confirmRenameLinks ? 'translate-x-4' : 'translate-x-0'} {appPrefs.confirmRenameLinks ? '' : 'transition-transform'}"
+                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.confirmRenameLinks
+                    ? 'translate-x-4'
+                    : 'translate-x-0'} {appPrefs.confirmRenameLinks ? '' : 'transition-transform'}"
                 ></span>
               </button>
             </div>
 
             <!-- Restore built-in templates -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field('Built-in templates', 'Reset the four built-in templates to their original content. Custom templates are left untouched.')}
+              {@render field(
+                "Built-in templates",
+                "Reset the four built-in templates to their original content. Custom templates are left untouched.",
+              )}
               <Button
                 variant="outline"
                 size="sm"
                 class="shrink-0"
                 data-testid="restore-templates-btn"
-                onclick={() => (restoreDialogOpen = true)}
-              >Restore defaults</Button>
+                onclick={() => (restoreDialogOpen = true)}>Restore defaults</Button
+              >
             </div>
 
             <!-- Tags -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field('Tags', 'View all tags with usage counts')}
+              {@render field("Tags", "View all tags with usage counts")}
               <Button
                 variant="outline"
                 size="sm"
                 class="shrink-0"
                 data-testid="open-tag-manager-btn"
-                onclick={() => { open = false; dialogs.tagManagerOpen = true; }}
-              >Manage</Button>
+                onclick={() => {
+                  open = false;
+                  dialogs.tagManagerOpen = true;
+                }}>Manage</Button
+              >
             </div>
           </div>
         </Tabs.Content>
@@ -315,17 +337,22 @@
           <div class="flex flex-col divide-y divide-border">
             {#if isAuthLoading}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-                {@render field('Spotify', 'Checking connection…')}
+                {@render field("Spotify", "Checking connection…")}
                 <LoaderCircle class="size-4 shrink-0 animate-spin text-foreground-muted" />
               </div>
             {:else if authStatus?.is_connected}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-                {@render field('Spotify', 'Connected · Premium required for in-app playback')}
-                <Button variant="outline" size="sm" class="shrink-0" onclick={handleDisconnect}>Disconnect</Button>
+                {@render field("Spotify", "Connected · Premium required for in-app playback")}
+                <Button variant="outline" size="sm" class="shrink-0" onclick={handleDisconnect}
+                  >Disconnect</Button
+                >
               </div>
             {:else}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-                {@render field('Spotify', 'Add tracks and playlists to your scenes. Requires Spotify Premium.')}
+                {@render field(
+                  "Spotify",
+                  "Add tracks and playlists to your scenes. Requires Spotify Premium.",
+                )}
                 <Button size="sm" class="shrink-0" onclick={handleConnect} disabled={isConnecting}>
                   {#if isConnecting}
                     <LoaderCircle class="size-3.5 animate-spin" />
@@ -344,27 +371,29 @@
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-4">
               <span class="text-(--font-body) text-foreground">
-                Grimoire {appVersion ? `v${appVersion}` : ''}
+                Grimoire {appVersion ? `v${appVersion}` : ""}
               </span>
               <button
                 type="button"
                 class="text-(--font-ui) text-foreground-muted underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                onclick={() => openExternal('https://github.com/Larront/grimoire/issues')}
-              >Report a bug</button>
+                onclick={() => openExternal("https://github.com/Larront/grimoire/issues")}
+                >Report a bug</button
+              >
             </div>
             <span class="text-(--font-ui) text-foreground-muted">
               Free software under
               <button
                 type="button"
                 class="underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                onclick={() => openExternal('https://www.gnu.org/licenses/gpl-3.0.html')}
-              >GPL-3.0</button>
+                onclick={() => openExternal("https://www.gnu.org/licenses/gpl-3.0.html")}
+                >GPL-3.0</button
+              >
               · source on
               <button
                 type="button"
                 class="underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                onclick={() => openExternal('https://github.com/Larront/grimoire')}
-              >GitHub</button>
+                onclick={() => openExternal("https://github.com/Larront/grimoire")}>GitHub</button
+              >
             </span>
             <span class="text-(--font-ui) text-foreground-muted">
               Sample audio by Kevin MacLeod (incompetech.com, CC-BY 4.0) and CC0 contributors.
@@ -376,19 +405,18 @@
                  than behind a link because a desktop app that needs the network to be
                  licence-compliant is a bad trade. -->
             <span class="text-(--font-ui) text-foreground-muted" data-testid="srd-attribution">
-              This work includes material taken from the System Reference Document 5.1
-              (“SRD 5.1”) by Wizards of the Coast LLC and available at
-              https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1
-              is licensed under the Creative Commons Attribution 4.0 International
-              License available at https://creativecommons.org/licenses/by/4.0/legalcode.
+              This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”)
+              by Wizards of the Coast LLC and available at
+              https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed
+              under the Creative Commons Attribution 4.0 International License available at
+              https://creativecommons.org/licenses/by/4.0/legalcode.
             </span>
             <span class="text-(--font-ui) text-foreground-muted">
-              The SRD 5.1 material has been modified: it was reshaped into structured
-              field labels for a statblock preset.
+              The SRD 5.1 material has been modified: it was reshaped into structured field labels
+              for a statblock preset.
             </span>
           </div>
         </Tabs.Content>
-
       </div>
     </Tabs.Root>
   </Dialog.Content>
@@ -402,9 +430,8 @@
       <AlertDialog.Header>
         <AlertDialog.Title>Restore default templates?</AlertDialog.Title>
         <AlertDialog.Description>
-          This overwrites the four built-in templates (NPC, Location, Session Log,
-          Encounter) with their original content. Any custom templates you've
-          created are left untouched.
+          This overwrites the four built-in templates (NPC, Location, Session Log, Encounter) with
+          their original content. Any custom templates you've created are left untouched.
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>

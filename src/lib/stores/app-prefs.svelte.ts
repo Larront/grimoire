@@ -47,10 +47,7 @@ function createAppPrefs() {
   function migrateLegacyKeys(): boolean {
     if (typeof window === "undefined") return false;
     let migrated = false;
-    for (const [pref, key] of Object.entries(LEGACY_KEYS) as [
-      keyof AppPrefsData,
-      string,
-    ][]) {
+    for (const [pref, key] of Object.entries(LEGACY_KEYS) as [keyof AppPrefsData, string][]) {
       const value = window.localStorage.getItem(key);
       if (value === null) continue;
       migrated = true;

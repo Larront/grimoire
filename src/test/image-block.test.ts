@@ -31,54 +31,124 @@ describe("isImageFile", () => {
 
 describe("serializeImageNode", () => {
   it("no attrs, no caption → ![](src)", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "center", width: "100%" } }))
-      .toBe("![](images/a.png)");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: null,
+          align: "center",
+          width: "100%",
+        },
+      }),
+    ).toBe("![](images/a.png)");
   });
 
   it("caption only → ![caption](src) (no attrs block)", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "100%" } }))
-      .toBe("![portrait](images/a.png)");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: "portrait",
+          align: "center",
+          width: "100%",
+        },
+      }),
+    ).toBe("![portrait](images/a.png)");
   });
 
   it("align only → ![](src){align=left}", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "left", width: "100%" } }))
-      .toBe("![](images/a.png){align=left}");
+    expect(
+      serializeImageNode({
+        attrs: { src: "images/a.png", alt: null, align: "left", width: "100%" },
+      }),
+    ).toBe("![](images/a.png){align=left}");
   });
 
   it("width only → ![](src){width=60%}", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: null, align: "center", width: "60%" } }))
-      .toBe("![](images/a.png){width=60%}");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: null,
+          align: "center",
+          width: "60%",
+        },
+      }),
+    ).toBe("![](images/a.png){width=60%}");
   });
 
   it("caption + align → ![caption](src){align=right}", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "right", width: "100%" } }))
-      .toBe("![portrait](images/a.png){align=right}");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: "portrait",
+          align: "right",
+          width: "100%",
+        },
+      }),
+    ).toBe("![portrait](images/a.png){align=right}");
   });
 
   it("caption + width → ![caption](src){width=50%}", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "center", width: "50%" } }))
-      .toBe("![portrait](images/a.png){width=50%}");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: "portrait",
+          align: "center",
+          width: "50%",
+        },
+      }),
+    ).toBe("![portrait](images/a.png){width=50%}");
   });
 
   it("caption + align + width → ![caption](src){align=left width=75%}", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "portrait", align: "left", width: "75%" } }))
-      .toBe("![portrait](images/a.png){align=left width=75%}");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: "portrait",
+          align: "left",
+          width: "75%",
+        },
+      }),
+    ).toBe("![portrait](images/a.png){align=left width=75%}");
   });
 
   it("empty string alt treated same as null", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" } }))
-      .toBe("![](images/a.png)");
+    expect(
+      serializeImageNode({
+        attrs: { src: "images/a.png", alt: "", align: "center", width: "100%" },
+      }),
+    ).toBe("![](images/a.png)");
   });
 
   it("special chars in caption are preserved exactly", () => {
     const caption = 'café [brackets] (parens) "quotes"';
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: caption, align: "center", width: "100%" } }))
-      .toBe(`![${caption}](images/a.png)`);
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: caption,
+          align: "center",
+          width: "100%",
+        },
+      }),
+    ).toBe(`![${caption}](images/a.png)`);
   });
 
   it("unicode caption survives", () => {
-    expect(serializeImageNode({ attrs: { src: "images/a.png", alt: "人物の肖像", align: "left", width: "60%" } }))
-      .toBe("![人物の肖像](images/a.png){align=left width=60%}");
+    expect(
+      serializeImageNode({
+        attrs: {
+          src: "images/a.png",
+          alt: "人物の肖像",
+          align: "left",
+          width: "60%",
+        },
+      }),
+    ).toBe("![人物の肖像](images/a.png){align=left width=60%}");
   });
 });
 
@@ -91,7 +161,14 @@ describe("serializeImageNode", () => {
 describe("ImageBlock renderMarkdown", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderMarkdown = (ImageBlock.config as any).renderMarkdown as
-    | ((node: { attrs: { src: string; alt: string | null; align: string; width: string } }) => string)
+    | ((node: {
+        attrs: {
+          src: string;
+          alt: string | null;
+          align: string;
+          width: string;
+        };
+      }) => string)
     | undefined;
 
   it("exposes a renderMarkdown serializer (the field @tiptap/markdown reads)", () => {
@@ -99,7 +176,12 @@ describe("ImageBlock renderMarkdown", () => {
   });
 
   it("serializes align/width attrs that would otherwise be lost", () => {
-    const attrs = { src: "images/a.png", alt: "portrait", align: "left", width: "75%" };
+    const attrs = {
+      src: "images/a.png",
+      alt: "portrait",
+      align: "left",
+      width: "75%",
+    };
     expect(renderMarkdown!({ attrs })).toBe("![portrait](images/a.png){align=left width=75%}");
   });
 });

@@ -14,9 +14,7 @@ describe("parseFrontmatter", () => {
   });
 
   it("CRLF: extracts tags and strips the block from the body", () => {
-    const { tags, body } = parseFrontmatter(
-      "---\r\ntags: [npc, allied]\r\n---\r\nBody text\r\n",
-    );
+    const { tags, body } = parseFrontmatter("---\r\ntags: [npc, allied]\r\n---\r\nBody text\r\n");
     expect(tags).toEqual(["npc", "allied"]);
     expect(body).toBe("Body text\r\n");
   });

@@ -153,10 +153,7 @@ export function blockHandleMenuSections(
  * to say about those is that the block is unchanged: naming the clipboard for a Delete
  * sends the GM to check a permission that had nothing to do with it.
  */
-export function actionFailureMessage(
-  command: BlockHandleCommand,
-  what: string,
-): string {
+export function actionFailureMessage(command: BlockHandleCommand, what: string): string {
   if (typeof command !== "string") return `Couldn't turn that ${what} into anything.`;
   switch (command) {
     case "copy":

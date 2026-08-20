@@ -45,7 +45,9 @@ describe("DB recovery dialog (issue #116)", () => {
 
     expect(ledger.corruptLedgerPath).toBe(CORRUPT_PATH);
     await waitFor(() => {
-      expect(getByTestId("db-recovery-dialog").textContent).toContain(
+      // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
+      // the formatter's business, not this assertion's.
+      expect(getByTestId("db-recovery-dialog").textContent?.replace(/\s+/g, " ")).toContain(
         "scenes, pins, and map details will be lost",
       );
     });

@@ -89,7 +89,9 @@ describe("SceneLinkBubble — Play wiring", () => {
 describe("SceneLinkBubble — master volume", () => {
   it("sets global master volume when the slider moves", async () => {
     const { getByLabelText } = renderBubble();
-    await fireEvent.input(getByLabelText("Master volume"), { target: { value: "0.4" } });
+    await fireEvent.input(getByLabelText("Master volume"), {
+      target: { value: "0.4" },
+    });
     expect(audioEngine.setMasterVolume).toHaveBeenCalledWith(0.4);
   });
 });

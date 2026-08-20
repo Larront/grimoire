@@ -19,7 +19,7 @@ Render PDFs with **PDF.js (`pdfjs-dist`)** — pure JS/canvas — behind a Grimo
 
 - **Cross-platform identity.** PDF.js renders identically on every webview; the native path is broken on Linux and flaky on macOS, which is disqualifying for a tool shipped to all three.
 - **Viewer control.** We own the chrome, so the viewer reads as Grimoire (restrained, themed) rather than a grey browser toolbar — and we set the initial state we want (100% zoom by default, not fit-width).
-- **Roadmap fit.** PDF.js's text layer gives in-tab find and text selection for free, and is the natural substrate for the future annotation feature. (PDF full-text *indexing* for global search is separate, Rust-side text extraction.)
+- **Roadmap fit.** PDF.js's text layer gives in-tab find and text selection for free, and is the natural substrate for the future annotation feature. (PDF full-text _indexing_ for global search is separate, Rust-side text extraction.)
 
 ## Consequences
 

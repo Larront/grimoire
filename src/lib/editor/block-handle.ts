@@ -181,7 +181,11 @@ function blockChildren(
     // A non-leaf node's content starts one position after the node itself.
     const pos = parent.pos + 1 + offset;
     const dom = blockElementAt(view, pos);
-    if (dom) children.push({ target: { pos, node: child }, box: dom.getBoundingClientRect() });
+    if (dom)
+      children.push({
+        target: { pos, node: child },
+        box: dom.getBoundingClientRect(),
+      });
   });
   return children;
 }
@@ -216,11 +220,7 @@ function blockChildAtHeight(
 }
 
 /** The block child of `parent` nearest the height `top`, whether or not it covers it. */
-function nearestBlockChild(
-  view: EditorView,
-  parent: BlockTarget,
-  top: number,
-): BlockTarget | null {
+function nearestBlockChild(view: EditorView, parent: BlockTarget, top: number): BlockTarget | null {
   let best: { target: BlockTarget; distance: number } | null = null;
   for (const { target, box } of blockChildren(view, parent)) {
     const distance = Math.max(box.top - top, top - box.bottom, 0);
@@ -243,11 +243,7 @@ function nearestBlockChild(
  * is exactly what the gutter hover disregards. Inside the prose the x still decides, because
  * statblocks tile two to a row and two cards at the same height are not the same block.
  */
-export function innermostAtHeight(
-  view: EditorView,
-  target: BlockTarget,
-  top: number,
-): BlockTarget {
+export function innermostAtHeight(view: EditorView, target: BlockTarget, top: number): BlockTarget {
   // Terminates on its own: every step descends a level, and an atom has no block children.
   let current = target;
   for (let child = blockChildAtHeight(view, current, top); child; ) {
@@ -509,10 +505,7 @@ export function canTurnInto(node: ProseMirrorNode): boolean {
  * or a heading below level 3 — and where the target has gone stale, which is the same
  * "nothing to tick, and nothing to refuse" the menu wants from both.
  */
-export function turnIntoKindOf(
-  doc: ProseMirrorNode,
-  target: BlockTarget,
-): TurnIntoKind | null {
+export function turnIntoKindOf(doc: ProseMirrorNode, target: BlockTarget): TurnIntoKind | null {
   if (!blockStillThere(doc, target)) return null;
   const { node } = target;
   if (!canTurnInto(node)) return null;
@@ -562,11 +555,7 @@ function isInListItem($pos: ResolvedPos): boolean {
  * plainly did. ProseMirror rebuilds the doc node only when a transaction changes it, so
  * comparing identity across the call answers what the caller actually asked.
  */
-export function turnInto(
-  editor: Editor,
-  target: BlockTarget,
-  kind: TurnIntoKind,
-): boolean {
+export function turnInto(editor: Editor, target: BlockTarget, kind: TurnIntoKind): boolean {
   if (!blockStillThere(editor.state.doc, target)) return false;
   if (!canTurnInto(target.node)) return false;
 
@@ -903,7 +892,10 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
   // the centring term in `handlePlacement` and hang the whole grip below the rule, reading
   // as the next paragraph's.
   const box = dom.getBoundingClientRect();
-  return { top: box.top, height: Math.min(box.height, lineHeightOf(dom) || handleHeight) };
+  return {
+    top: box.top,
+    height: Math.min(box.height, lineHeightOf(dom) || handleHeight),
+  };
 }
 
 /**
@@ -929,7 +921,11 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
 function leadingEdgeOf(view: EditorView, dom: HTMLElement, blockLeft: number): number {
   let edge = blockLeft;
   const prose = view.dom as HTMLElement;
-  for (let el = dom.parentElement; el && el !== prose && prose.contains(el); el = el.parentElement) {
+  for (
+    let el = dom.parentElement;
+    el && el !== prose && prose.contains(el);
+    el = el.parentElement
+  ) {
     edge = Math.min(edge, el.getBoundingClientRect().left);
   }
   return edge;
@@ -1039,7 +1035,10 @@ export const BlockHandle = Extension.create<BlockHandleOptions>({
           const column = noteColumn(view);
           const move = (event: MouseEvent) => {
             onTarget(
-              targetFromPointer(view, { left: event.clientX, top: event.clientY }),
+              targetFromPointer(view, {
+                left: event.clientX,
+                top: event.clientY,
+              }),
               view,
             );
           };

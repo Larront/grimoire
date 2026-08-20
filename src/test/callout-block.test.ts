@@ -103,40 +103,64 @@ describe("the header line", () => {
 
   it("writes the type alone when there is no title", () => {
     expect(
-      calloutHeaderLine({ calloutType: "warning", calloutTitle: null, foldMarker: null }),
+      calloutHeaderLine({
+        calloutType: "warning",
+        calloutTitle: null,
+        foldMarker: null,
+      }),
     ).toBe("> [!warning]");
   });
 
   it("preserves the GM's casing", () => {
-    expect(calloutHeaderLine({ calloutType: "Warning", calloutTitle: null, foldMarker: null })).toBe(
-      "> [!Warning]",
-    );
+    expect(
+      calloutHeaderLine({
+        calloutType: "Warning",
+        calloutTitle: null,
+        foldMarker: null,
+      }),
+    ).toBe("> [!Warning]");
   });
 
   it("replays a fold marker it did not write", () => {
     expect(
-      calloutHeaderLine({ calloutType: "warning", calloutTitle: "Careful", foldMarker: "-" }),
+      calloutHeaderLine({
+        calloutType: "warning",
+        calloutTitle: "Careful",
+        foldMarker: "-",
+      }),
     ).toBe("> [!warning]- Careful");
   });
 
   it("is nothing at all for an ordinary quote", () => {
-    expect(calloutHeaderLine({ calloutType: null, calloutTitle: null, foldMarker: null })).toBe(
-      null,
-    );
+    expect(
+      calloutHeaderLine({
+        calloutType: null,
+        calloutTitle: null,
+        foldMarker: null,
+      }),
+    ).toBe(null);
   });
 
   // The tokenizer accepts a line only when this function would reproduce it, so
   // these are the shapes it must not quietly tidy on the way back out.
   it("writes a title's own whitespace back untouched", () => {
     expect(
-      calloutHeaderLine({ calloutType: "note", calloutTitle: "Trailing  ", foldMarker: null }),
+      calloutHeaderLine({
+        calloutType: "note",
+        calloutTitle: "Trailing  ",
+        foldMarker: null,
+      }),
     ).toBe("> [!note] Trailing  ");
   });
 
   it("writes an empty title as no title at all", () => {
-    expect(calloutHeaderLine({ calloutType: "note", calloutTitle: "", foldMarker: null })).toBe(
-      "> [!note]",
-    );
+    expect(
+      calloutHeaderLine({
+        calloutType: "note",
+        calloutTitle: "",
+        foldMarker: null,
+      }),
+    ).toBe("> [!note]");
   });
 });
 
@@ -146,7 +170,10 @@ describe("the header line", () => {
 // What the element must already carry is enough for the stylesheet: the type
 // under Obsidian's own `data-callout` name, and the displayed title.
 
-function html(attrs: Partial<Record<string, unknown>>, body = "The eastern crossing fell."): string {
+function html(
+  attrs: Partial<Record<string, unknown>>,
+  body = "The eastern crossing fell.",
+): string {
   return generateHTML(
     {
       type: "doc",
@@ -198,7 +225,11 @@ describe("the callout element", () => {
   });
 
   it("leaves an ordinary quote an ordinary blockquote", () => {
-    const rendered = html({ calloutType: null, calloutTitle: null, foldMarker: null });
+    const rendered = html({
+      calloutType: null,
+      calloutTitle: null,
+      foldMarker: null,
+    });
 
     expect(rendered).not.toContain("data-callout");
   });
@@ -206,7 +237,11 @@ describe("the callout element", () => {
   // Copy and paste inside the app goes out to HTML and comes back, so the
   // element has to carry everything the file does — and nothing it does not.
   it("survives a copy and paste with its type, title and marker", () => {
-    const attrs = { calloutType: "Warning", calloutTitle: "The bridge is out", foldMarker: "-" };
+    const attrs = {
+      calloutType: "Warning",
+      calloutTitle: "The bridge is out",
+      foldMarker: "-",
+    };
     const pasted = generateJSON(html(attrs), noteExtensions()).content?.[0];
 
     expect(pasted.attrs).toMatchObject(attrs);
@@ -250,7 +285,10 @@ describe("the /callout picker", () => {
   // runs a real editor: what it proves is that choosing an entry lands the GM
   // inside a callout of that type whose file form is the header line alone.
   it("wraps the cursor's paragraph in a callout of the chosen type", () => {
-    const editor = new Editor({ extensions: noteExtensions(), content: "<p>Mind the gap.</p>" });
+    const editor = new Editor({
+      extensions: noteExtensions(),
+      content: "<p>Mind the gap.</p>",
+    });
     const encounter = filterCommands("encounter")[0];
 
     try {
@@ -268,7 +306,10 @@ describe("the /callout picker", () => {
   });
 
   it("writes no title and no fold marker for a freshly picked callout", () => {
-    const editor = new Editor({ extensions: noteExtensions(), content: "<p></p>" });
+    const editor = new Editor({
+      extensions: noteExtensions(),
+      content: "<p></p>",
+    });
     const warning = filterCommands("warning")[0];
 
     try {

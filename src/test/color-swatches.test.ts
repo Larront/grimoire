@@ -2,7 +2,9 @@ import { render, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import ColorSwatches from "$lib/components/ColorSwatches.svelte";
 
-afterEach(() => { cleanup(); });
+afterEach(() => {
+  cleanup();
+});
 
 const PRESETS = ["#ff0000", "#00ff00", "#0000ff"];
 

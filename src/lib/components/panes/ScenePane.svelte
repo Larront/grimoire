@@ -31,10 +31,7 @@
     ChevronLeft,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
-  import {
-    getSpotifyStatus,
-    connectSpotify,
-  } from "$lib/utils/spotify-auth";
+  import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
@@ -42,7 +39,7 @@
 
   interface Props {
     sceneId: number;
-    pane: 'left' | 'right';
+    pane: "left" | "right";
   }
   let { sceneId, pane }: Props = $props();
 
@@ -51,16 +48,23 @@
 
   // ---- Hero header ----
 
-  let heroColor = $derived(scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0]);
+  let heroColor = $derived(
+    scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0],
+  );
   let heroIconColor = $derived(scene ? ACCENT_FG[scene.id % 5] : ACCENT_FG[0]);
   let thumbnailUrl = $state<string | null>(null);
 
   $effect(() => {
     const path = scene?.thumbnail_path;
     if (path) {
-      api.getAudioAbsolutePath(path)
-        .then((abs) => { thumbnailUrl = convertFileSrc(abs); })
-        .catch(() => { thumbnailUrl = null; });
+      api
+        .getAudioAbsolutePath(path)
+        .then((abs) => {
+          thumbnailUrl = convertFileSrc(abs);
+        })
+        .catch(() => {
+          thumbnailUrl = null;
+        });
     } else {
       thumbnailUrl = null;
     }
@@ -96,7 +100,7 @@
   $effect(() => {
     if (scene) {
       const name = scene.name;
-      untrack(() => tabs.updateTabTitle('scene', sceneId, name));
+      untrack(() => tabs.updateTabTitle("scene", sceneId, name));
     }
   });
 
@@ -155,12 +159,8 @@
   });
 
   // ---- Playback derived state ----
-  let isThisScenePlaying = $derived(
-    scene !== null && audioEngine.isScenePlaying(scene.id)
-  );
-  let isThisSceneLoading = $derived(
-    audioEngine.loadingSceneId === scene?.id
-  );
+  let isThisScenePlaying = $derived(scene !== null && audioEngine.isScenePlaying(scene.id));
+  let isThisSceneLoading = $derived(audioEngine.loadingSceneId === scene?.id);
 
   // ---- Play / Stop ----
   async function handlePlayStop() {
@@ -343,13 +343,9 @@
     }
   }
 
-  function parseSpotifyInput(
-    input: string,
-  ): { uri: string; type: string; id: string } | null {
+  function parseSpotifyInput(input: string): { uri: string; type: string; id: string } | null {
     // Accept Spotify URLs: https://open.spotify.com/track/ID?si=...
-    const urlMatch = input.match(
-      /open\.spotify\.com\/(track|playlist|album)\/([A-Za-z0-9]+)/,
-    );
+    const urlMatch = input.match(/open\.spotify\.com\/(track|playlist|album)\/([A-Za-z0-9]+)/);
     if (urlMatch) {
       return {
         uri: `spotify:${urlMatch[1]}:${urlMatch[2]}`,
@@ -359,9 +355,7 @@
     }
     // Accept raw URIs: spotify:track:ID, spotify:playlist:ID, spotify:album:ID
     // Also handles playlist_v2 by normalizing to playlist
-    const uriMatch = input.match(
-      /^spotify:(track|playlist(?:_v2)?|album):([A-Za-z0-9]+)$/,
-    );
+    const uriMatch = input.match(/^spotify:(track|playlist(?:_v2)?|album):([A-Za-z0-9]+)$/);
     if (uriMatch) {
       const type = uriMatch[1].replace("playlist_v2", "playlist");
       return {
@@ -377,7 +371,7 @@
 
   let canAdd = $derived(
     addLabel.trim() !== "" &&
-      (addTab === "local" ? (!!addSourcePath || !!addDroppedFile) : !!parsedSpotifyInput)
+      (addTab === "local" ? !!addSourcePath || !!addDroppedFile : !!parsedSpotifyInput),
   );
 
   function resetAddDialog() {
@@ -467,7 +461,12 @@
         if (!addLabel.trim()) {
           try {
             const token = await api.spotifyGetAccessToken();
-            const apiType = parsed.type === "track" ? "tracks" : parsed.type === "playlist" ? "playlists" : "albums";
+            const apiType =
+              parsed.type === "track"
+                ? "tracks"
+                : parsed.type === "playlist"
+                  ? "playlists"
+                  : "albums";
             const fields = parsed.type === "playlist" ? "?fields=name" : "";
             const res = await fetch(`https://api.spotify.com/v1/${apiType}/${parsed.id}${fields}`, {
               headers: { Authorization: `Bearer ${token}` },
@@ -516,10 +515,14 @@
     <div
       data-hero-header
       class="group relative flex min-h-52 flex-col justify-end overflow-hidden"
-      style="background-color: {heroColor}; {thumbnailUrl ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;` : ''}"
+      style="background-color: {heroColor}; {thumbnailUrl
+        ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;`
+        : ''}"
     >
       <!-- Gradient overlay for legibility (stronger on images) -->
-      <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
+      <div
+        class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
+      ></div>
 
       <!-- Icon — always rendered per ADR-0002 -->
       <div
@@ -530,12 +533,16 @@
         <HeroIcon
           class="size-14 opacity-70"
           strokeWidth={1.5}
-          style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))' : ''}"
+          style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl
+            ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))'
+            : ''}"
         />
       </div>
 
       <!-- Thumbnail edit buttons (visible on hover) -->
-      <div class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div
+        class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+      >
         <button
           data-edit-thumbnail-btn
           class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
@@ -578,7 +585,9 @@
           data-scene-name
           bind:value={draftName}
           class="font-heading w-full bg-transparent border-none outline-none p-0 text-3xl leading-tight tracking-tight placeholder:opacity-40 focus:ring-0"
-          style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)' : ''}"
+          style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl
+            ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)'
+            : ''}"
           placeholder="Untitled Scene"
           onblur={commitName}
           onkeydown={handleNameKeydown}
@@ -595,7 +604,7 @@
           size="sm"
           class="text-muted-foreground"
           aria-label="All Scenes"
-          onclick={() => tabs.openTab({ type: 'scenes', id: 0, title: 'All Scenes' })}
+          onclick={() => tabs.openTab({ type: "scenes", id: 0, title: "All Scenes" })}
         >
           <ChevronLeft class="size-3.5" />
           All Scenes
@@ -630,7 +639,6 @@
             Play Scene
           </Button>
         {/if}
-
       </div>
 
       <!-- Master volume -->
@@ -659,146 +667,150 @@
     <!-- SLOT LIST -->
     <div class="mx-auto w-full max-w-3xl px-8 pt-6 pb-20">
       {#if slotsLoading}
-          <div class="space-y-3">
-            {#each { length: 3 } as _, i (i)}
-              <div class="h-14 animate-pulse rounded-lg bg-muted"></div>
-            {/each}
+        <div class="space-y-3">
+          {#each { length: 3 } as _, i (i)}
+            <div class="h-14 animate-pulse rounded-lg bg-muted"></div>
+          {/each}
+        </div>
+      {:else if slots.length === 0}
+        <!-- Empty state -->
+        <div class="flex flex-col items-center justify-center py-20">
+          <div class="flex size-14 items-center justify-center rounded-lg bg-primary/10">
+            <Music2 class="size-7 text-primary/60" strokeWidth={1.5} />
           </div>
-        {:else if slots.length === 0}
-          <!-- Empty state -->
-          <div class="flex flex-col items-center justify-center py-20">
-            <div
-              class="flex size-14 items-center justify-center rounded-lg bg-primary/10"
-            >
-              <Music2 class="size-7 text-primary/60" strokeWidth={1.5} />
-            </div>
-            <h2 class="mt-5 font-sans text-lg font-semibold text-foreground">
-              No tracks yet
-            </h2>
-            <p
-              class="mt-2 max-w-sm text-center text-sm text-muted-foreground"
-            >
-              Add audio tracks to build your soundscape. Layer ambient sounds,
-              music, and effects.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              class="mt-5"
-              onclick={() => (addDialogOpen = true)}
-            >
-              <Plus class="size-3.5" />
-              Add Track
-            </Button>
-          </div>
-        {:else}
-          <div class="space-y-2">
-            {#each slots as slot (slot.id)}
-              <ContextMenu.Root>
-                <ContextMenu.Trigger>
-                  <div
-                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/50 hover:bg-card transition-colors"
-                  >
-                    <!-- Playback group: skip-back · play/pause · skip-forward -->
-                    <div class="flex shrink-0 items-center gap-1">
-                      {#if isPlaylistSlot(slot)}
-                        {#if isThisScenePlaying}
-                          <Button data-slot-skip-controls variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipPrev()}>
-                            <SkipBack class="size-3.5" />
-                          </Button>
-                        {:else}
-                          <div data-slot-skip-controls class="flex size-7 shrink-0 items-center justify-center">
-                            <SkipBack class="size-3.5 text-muted-foreground/30" />
-                          </div>
-                        {/if}
-                      {:else}
-                        <div class="size-7 shrink-0"></div>
-                      {/if}
-
+          <h2 class="mt-5 font-sans text-lg font-semibold text-foreground">No tracks yet</h2>
+          <p class="mt-2 max-w-sm text-center text-sm text-muted-foreground">
+            Add audio tracks to build your soundscape. Layer ambient sounds, music, and effects.
+          </p>
+          <Button variant="outline" size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
+            <Plus class="size-3.5" />
+            Add Track
+          </Button>
+        </div>
+      {:else}
+        <div class="space-y-2">
+          {#each slots as slot (slot.id)}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                <div
+                  class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/50 hover:bg-card transition-colors"
+                >
+                  <!-- Playback group: skip-back · play/pause · skip-forward -->
+                  <div class="flex shrink-0 items-center gap-1">
+                    {#if isPlaylistSlot(slot)}
                       {#if isThisScenePlaying}
-                        <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => toggleSlotPlayback(slot.id)}>
-                          {#if audioEngine.isSlotPlaying(slot.id)}
-                            <Pause class="size-3.5 text-foreground" />
-                          {:else}
-                            <Play class="size-3.5 text-foreground" />
-                          {/if}
+                        <Button
+                          data-slot-skip-controls
+                          variant="ghost"
+                          size="icon"
+                          class="size-7 shrink-0"
+                          onclick={() => audioEngine.skipPrev()}
+                        >
+                          <SkipBack class="size-3.5" />
+                        </Button>
+                      {:else}
+                        <div
+                          data-slot-skip-controls
+                          class="flex size-7 shrink-0 items-center justify-center"
+                        >
+                          <SkipBack class="size-3.5 text-muted-foreground/30" />
+                        </div>
+                      {/if}
+                    {:else}
+                      <div class="size-7 shrink-0"></div>
+                    {/if}
+
+                    {#if isThisScenePlaying}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-7 shrink-0"
+                        onclick={() => toggleSlotPlayback(slot.id)}
+                      >
+                        {#if audioEngine.isSlotPlaying(slot.id)}
+                          <Pause class="size-3.5 text-foreground" />
+                        {:else}
+                          <Play class="size-3.5 text-foreground" />
+                        {/if}
+                      </Button>
+                    {:else}
+                      <div class="flex size-7 shrink-0 items-center justify-center">
+                        <Play class="size-3.5 text-muted-foreground/30" />
+                      </div>
+                    {/if}
+
+                    {#if isPlaylistSlot(slot)}
+                      {#if isThisScenePlaying}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          class="size-7 shrink-0"
+                          onclick={() => audioEngine.skipNext()}
+                        >
+                          <SkipForward class="size-3.5" />
                         </Button>
                       {:else}
                         <div class="flex size-7 shrink-0 items-center justify-center">
-                          <Play class="size-3.5 text-muted-foreground/30" />
+                          <SkipForward class="size-3.5 text-muted-foreground/30" />
                         </div>
                       {/if}
+                    {:else}
+                      <div class="size-7 shrink-0"></div>
+                    {/if}
+                  </div>
 
-                      {#if isPlaylistSlot(slot)}
-                        {#if isThisScenePlaying}
-                          <Button variant="ghost" size="icon" class="size-7 shrink-0" onclick={() => audioEngine.skipNext()}>
-                            <SkipForward class="size-3.5" />
-                          </Button>
-                        {:else}
-                          <div class="flex size-7 shrink-0 items-center justify-center">
-                            <SkipForward class="size-3.5 text-muted-foreground/30" />
-                          </div>
-                        {/if}
-                      {:else}
-                        <div class="size-7 shrink-0"></div>
-                      {/if}
-                    </div>
+                  <!-- Source indicator -->
+                  <span
+                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
+                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span
+                  >
 
-                    <!-- Source indicator -->
-                    <span
-                      class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
-                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span>
-
-                    <!-- Label (renameable) -->
-                    <div class="min-w-0 flex-1">
-                      <Rename.Root
-                        this="span"
-                        class="truncate text-sm text-foreground"
-                        inputClass="bg-transparent px-0 py-0 text-sm"
-                        bind:value={
-                          () =>
-                            renamingSlotId === slot.id
-                              ? renameSlotValue
-                              : slot.label,
-                          (val) => {
-                            renameSlotValue = val;
-                          }
+                  <!-- Label (renameable) -->
+                  <div class="min-w-0 flex-1">
+                    <Rename.Root
+                      this="span"
+                      class="truncate text-sm text-foreground"
+                      inputClass="bg-transparent px-0 py-0 text-sm"
+                      bind:value={
+                        () => (renamingSlotId === slot.id ? renameSlotValue : slot.label),
+                        (val) => {
+                          renameSlotValue = val;
                         }
-                        bind:mode={
-                          () =>
-                            renamingSlotId === slot.id ? "edit" : "view",
-                          (val) => {
-                            if (val === "view") renamingSlotId = null;
-                          }
+                      }
+                      bind:mode={
+                        () => (renamingSlotId === slot.id ? "edit" : "view"),
+                        (val) => {
+                          if (val === "view") renamingSlotId = null;
                         }
-                        onSave={(val) => handleSlotRename(slot.id, val)}
-                        onCancel={() => {
-                          renamingSlotId = null;
-                        }}
-                      />
-                    </div>
+                      }
+                      onSave={(val) => handleSlotRename(slot.id, val)}
+                      onCancel={() => {
+                        renamingSlotId = null;
+                      }}
+                    />
+                  </div>
 
-                    <!-- Volume slider -->
-                    <div class="relative flex shrink-0 items-center">
-                      <div class="relative h-1 w-24 rounded-full bg-muted">
-                        <div
-                          class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-                          style="width: {slot.volume * 100}%"
-                        ></div>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={slot.volume}
-                        class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        oninput={(e) => handleSlotVolumeInput(slot, e)}
-                        onchange={(e) => handleSlotVolumeChange(slot, e)}
-                      />
+                  <!-- Volume slider -->
+                  <div class="relative flex shrink-0 items-center">
+                    <div class="relative h-1 w-24 rounded-full bg-muted">
+                      <div
+                        class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
+                        style="width: {slot.volume * 100}%"
+                      ></div>
                     </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={slot.volume}
+                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                      oninput={(e) => handleSlotVolumeInput(slot, e)}
+                      onchange={(e) => handleSlotVolumeChange(slot, e)}
+                    />
+                  </div>
 
-                    <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
+                  <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
                          which measures about 1.6:1 on Iron Dark — under the 3:1 that
                          WCAG 1.4.11 asks of a control's own graphics, and reading as
                          disabled when the control is live and one click from changing
@@ -807,71 +819,68 @@
 
                          `aria-pressed` because these are toggles and were announcing
                          state only through a label that changed underneath. -->
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="size-7 shrink-0"
-                      aria-label="Loop"
-                      aria-pressed={!!slot.loop}
-                      onclick={() => toggleLoop(slot)}
-                    >
-                      <Repeat
-                        class="size-3.5 {slot.loop
-                          ? 'text-primary'
-                          : 'text-muted-foreground'}"
-                      />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="size-7 shrink-0"
-                      aria-label="Shuffle"
-                      aria-pressed={!!slot.shuffle}
-                      onclick={() => toggleShuffle(slot)}
-                    >
-                      <Shuffle
-                        class="size-3.5 {!!slot.shuffle
-                          ? 'text-primary'
-                          : 'text-muted-foreground'}"
-                      />
-                    </Button>
-
-                  </div>
-                </ContextMenu.Trigger>
-                <ContextMenu.Content>
-                  <ContextMenu.Item onclick={() => startSlotRename(slot)}>
-                    <Pencil class="size-4" />
-                    Rename
-                  </ContextMenu.Item>
-                  <ContextMenu.Separator />
-                  <ContextMenu.Item
-                    variant="destructive"
-                    onclick={() => (deleteSlotTarget = slot)}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-7 shrink-0"
+                    aria-label="Loop"
+                    aria-pressed={!!slot.loop}
+                    onclick={() => toggleLoop(slot)}
                   >
-                    <Trash2 class="size-4" />
-                    Delete
-                  </ContextMenu.Item>
-                </ContextMenu.Content>
-              </ContextMenu.Root>
-            {/each}
-          </div>
+                    <Repeat
+                      class="size-3.5 {slot.loop ? 'text-primary' : 'text-muted-foreground'}"
+                    />
+                  </Button>
 
-          <!-- Add track button -->
-          <button
-            onclick={() => (addDialogOpen = true)}
-            class="w-full mt-3 py-3 rounded-lg border border-dashed border-border/60 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
-          >
-            <Plus class="size-4 inline" />
-            Add Track
-          </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-7 shrink-0"
+                    aria-label="Shuffle"
+                    aria-pressed={!!slot.shuffle}
+                    onclick={() => toggleShuffle(slot)}
+                  >
+                    <Shuffle
+                      class="size-3.5 {!!slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
+                    />
+                  </Button>
+                </div>
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => startSlotRename(slot)}>
+                  <Pencil class="size-4" />
+                  Rename
+                </ContextMenu.Item>
+                <ContextMenu.Separator />
+                <ContextMenu.Item variant="destructive" onclick={() => (deleteSlotTarget = slot)}>
+                  <Trash2 class="size-4" />
+                  Delete
+                </ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/each}
+        </div>
+
+        <!-- Add track button -->
+        <button
+          onclick={() => (addDialogOpen = true)}
+          class="w-full mt-3 py-3 rounded-lg border border-dashed border-border/60 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
+        >
+          <Plus class="size-4 inline" />
+          Add Track
+        </button>
       {/if}
     </div>
   {/if}
 </div>
 
 <!-- Color picker dialog -->
-<Dialog.Root open={colorPickerOpen} onOpenChange={(o) => { colorPickerOpen = o; }}>
+<Dialog.Root
+  open={colorPickerOpen}
+  onOpenChange={(o) => {
+    colorPickerOpen = o;
+  }}
+>
   <Dialog.Content style="max-width: 18rem">
     <Dialog.Header>
       <Dialog.Title>Choose color</Dialog.Title>
@@ -888,7 +897,12 @@
           ></button>
         {/each}
       </div>
-      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyColor(null)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="self-start text-muted-foreground"
+        onclick={() => applyColor(null)}
+      >
         Reset to default
       </Button>
     </div>
@@ -896,7 +910,12 @@
 </Dialog.Root>
 
 <!-- Icon picker dialog -->
-<Dialog.Root open={iconPickerOpen} onOpenChange={(o) => { iconPickerOpen = o; }}>
+<Dialog.Root
+  open={iconPickerOpen}
+  onOpenChange={(o) => {
+    iconPickerOpen = o;
+  }}
+>
   <Dialog.Content style="max-width: 22rem">
     <Dialog.Header>
       <Dialog.Title>Choose icon</Dialog.Title>
@@ -914,7 +933,12 @@
           </button>
         {/each}
       </div>
-      <Button variant="ghost" size="sm" class="self-start text-muted-foreground" onclick={() => applyIcon(null)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="self-start text-muted-foreground"
+        onclick={() => applyIcon(null)}
+      >
         Reset to default
       </Button>
     </div>
@@ -970,9 +994,7 @@
           >
             <Music2 class="size-4 text-primary/60" />
             <span class="flex-1 truncate text-foreground">{addFileName}</span>
-            <Button variant="ghost" size="xs" onclick={handleFilePick}
-              >Change</Button
-            >
+            <Button variant="ghost" size="xs" onclick={handleFilePick}>Change</Button>
           </div>
         {:else}
           <button
@@ -1003,18 +1025,11 @@
           <div
             class="flex flex-col items-center gap-3 rounded-lg bg-card/50 border border-border p-6 text-center"
           >
-            <span class="text-sm text-foreground font-medium">
-              Connect Spotify to add tracks
-            </span>
+            <span class="text-sm text-foreground font-medium"> Connect Spotify to add tracks </span>
             <span class="text-xs text-muted-foreground max-w-[280px]">
-              Link your Spotify Premium account to add tracks and playlists to
-              your scenes.
+              Link your Spotify Premium account to add tracks and playlists to your scenes.
             </span>
-            <Button
-              size="sm"
-              onclick={handleInlineSpotifyConnect}
-              disabled={isSpotifyConnecting}
-            >
+            <Button size="sm" onclick={handleInlineSpotifyConnect} disabled={isSpotifyConnecting}>
               {#if isSpotifyConnecting}
                 <LoaderCircle class="size-3.5 animate-spin" />
                 Connecting...
@@ -1028,10 +1043,7 @@
           </div>
         {:else}
           <div>
-            <label
-              for="add-spotify-uri"
-              class="text-xs text-muted-foreground mb-1.5 block"
-            >
+            <label for="add-spotify-uri" class="text-xs text-muted-foreground mb-1.5 block">
               Spotify URI
             </label>
             <Input
@@ -1047,7 +1059,8 @@
     <!-- Shared fields -->
     <div class="space-y-3 pt-3">
       <div>
-        <label for="add-track-label" class="text-xs text-muted-foreground mb-1.5 block">Label</label>
+        <label for="add-track-label" class="text-xs text-muted-foreground mb-1.5 block">Label</label
+        >
         <Input id="add-track-label" bind:value={addLabel} placeholder="Track name" />
       </div>
       <div class="flex items-center gap-4">
@@ -1056,11 +1069,7 @@
           Loop
         </label>
         <label class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            bind:checked={addShuffle}
-            class="accent-primary"
-          />
+          <input type="checkbox" bind:checked={addShuffle} class="accent-primary" />
           Shuffle
         </label>
       </div>
@@ -1070,10 +1079,7 @@
       <Dialog.Close>
         <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
       </Dialog.Close>
-      <Button
-        onclick={handleAddTrack}
-        disabled={!canAdd || isAdding}
-      >
+      <Button onclick={handleAddTrack} disabled={!canAdd || isAdding}>
         {#if isAdding}Adding...{:else}Add{/if}
       </Button>
     </Dialog.Footer>
@@ -1092,9 +1098,8 @@
       <AlertDialog.Title>Delete track</AlertDialog.Title>
       <AlertDialog.Description>
         Are you sure you want to delete
-        <span class="font-medium text-foreground"
-          >{deleteSlotTarget?.label}</span
-        >? This action cannot be undone.
+        <span class="font-medium text-foreground">{deleteSlotTarget?.label}</span>? This action
+        cannot be undone.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>

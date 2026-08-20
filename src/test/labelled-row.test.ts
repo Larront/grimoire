@@ -79,9 +79,7 @@ describe("parseLabelledRow", () => {
 
 describe("serializeLabelledRow", () => {
   it("writes label, colon, space, value", () => {
-    expect(serializeLabelledRow({ label: "Population", value: "4,200" })).toBe(
-      "Population: 4,200",
-    );
+    expect(serializeLabelledRow({ label: "Population", value: "4,200" })).toBe("Population: 4,200");
   });
 
   it("writes no trailing space for an empty value", () => {
@@ -95,9 +93,7 @@ describe("serializeLabelledRow", () => {
   it("shields an unlabelled value that holds a colon with a leading colon", () => {
     // Without the marker the line would read back as a label — the one place the
     // format's own splitting rule can turn a value into something else.
-    expect(serializeLabelledRow({ label: "", value: "see: the ledger" })).toBe(
-      ": see: the ledger",
-    );
+    expect(serializeLabelledRow({ label: "", value: "see: the ledger" })).toBe(": see: the ledger");
   });
 
   it("writes an empty row as an empty line", () => {

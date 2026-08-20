@@ -59,11 +59,7 @@ export interface MenuPlacement {
  * bottom of the window still shows its first item, which is the one the GM is most
  * likely to want. Flipping such a menu would clip its first item instead.
  */
-export function menuPlacement(
-  anchor: MenuAnchor,
-  box: MenuBox,
-  viewport: Viewport,
-): MenuPlacement {
+export function menuPlacement(anchor: MenuAnchor, box: MenuBox, viewport: Viewport): MenuPlacement {
   const above = anchor.anchorTop ?? anchor.y;
 
   const fitsBelow = anchor.y + box.height + MARGIN <= viewport.height;
