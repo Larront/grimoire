@@ -63,3 +63,19 @@ export function wikiTargetsIn(text: string): string[] {
     )
     .map((segment) => segment.path);
 }
+
+/**
+ * A value as it reads on screen — every link replaced by its title, nothing else
+ * changed.
+ *
+ * The third member of this family, beside the segments a field draws and the
+ * targets it primes: what a *reader* of the value sees, for the places that need
+ * the line as prose rather than as a drawing. The Quick Notes Pane echoes it into
+ * an undo toast and matches a filter against it (#232) — a GM types what is on
+ * screen, and on screen a link is its title.
+ */
+export function linkedPlainText(text: string): string {
+  return splitLinkedText(text)
+    .map((segment) => (segment.kind === "text" ? segment.text : segment.title))
+    .join("");
+}

@@ -53,6 +53,9 @@ export const commands = {
 	 *  swaps. Returns the updated row.
 	 */
 	updatePdfSceneLink: (id: number, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("update_pdf_scene_link", { id, sceneId }),
+	createQuickNote: (body: string) => __TAURI_INVOKE<QuickNote>("create_quick_note", { body }),
+	updateQuickNote: (id: number, body: string) => __TAURI_INVOKE<QuickNote>("update_quick_note", { id, body }),
+	deleteQuickNote: (id: number) => __TAURI_INVOKE<number>("delete_quick_note", { id }),
 	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
@@ -129,6 +132,7 @@ export const commands = {
 	getTagGraphStyles: () => __TAURI_INVOKE<{ [key in string]: TagGraphStyleResponse }>("get_tag_graph_styles"),
 	getTagUsageCounts: () => __TAURI_INVOKE<TagUsageEntry[]>("get_tag_usage_counts"),
 	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
+	listQuickNotes: () => __TAURI_INVOKE<QuickNote[]>("list_quick_notes"),
 	listStatblockPresets: () => __TAURI_INVOKE<StatblockPreset[]>("list_statblock_presets"),
 	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
 	/**
@@ -532,6 +536,12 @@ export type PinCategory = {
 	icon: string,
 	color: string,
 	shape: string,
+};
+
+export type QuickNote = {
+	id: number,
+	body: string,
+	captured_at: string,
 };
 
 export type RecentEntityResult = {

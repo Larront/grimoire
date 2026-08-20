@@ -1136,6 +1136,29 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
+  it("Capture a Quick Note opens the dialog and closes palette", async () => {
+    dialogs.quickNoteOpen = false;
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "capture";
+    await fireEvent.input(input);
+    await flush();
+
+    // The keystroke is not the only way in: a shortcut has to be reachable from
+    // here too (docs/design-system.md §Keyboard & Accessibility).
+    const item = document.body.querySelector(
+      '[data-testid="cmd-capture-quick-note"]',
+    ) as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(dialogs.quickNoteOpen).toBe(true);
+    expect(searchPalette.open).toBe(false);
+    dialogs.quickNoteOpen = false;
+  });
+
   it("Open Settings sets dialogs.settingsOpen and closes palette", async () => {
     render(AppSearch);
     await openPalette();
@@ -2269,5 +2292,59 @@ describe("command palette – Open graph view", () => {
       (t) => t.type === "graph",
     );
     expect(allGraphTabs.length).toBe(1);
+  });
+});
+
+// ── Open Quick Notes command (#230) ───────────────────────────────────────────
+
+describe("command palette – Open Quick Notes", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+    tabs.closeAll("left");
+    if (tabs.right) tabs.closeAll("right");
+  });
+
+  // The Commands group draws three at a time, so this one is reached by typing —
+  // the same as most of the palette. Its no-typing home is the rail icon and the
+  // sidebar button (#233).
+  async function findCommand() {
+    const input = getSearchInput();
+    input.value = "quick";
+    await fireEvent.input(input);
+    await flush();
+    return document.body.querySelector('[data-testid="cmd-open-quick-notes"]') as HTMLElement;
+  }
+
+  it("appears when searching for it", async () => {
+    render(AppSearch);
+    await openPalette();
+    expect(await findCommand()).toBeTruthy();
+  });
+
+  it("selecting it opens the pane in a tab and closes the palette", async () => {
+    render(AppSearch);
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("quickNotes");
+    expect(tabs.activeTab?.title).toBe("Quick Notes");
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("opens one tab, never two", async () => {
+    render(AppSearch);
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    const panes = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
+      (t) => t.type === "quickNotes",
+    );
+    expect(panes.length).toBe(1);
   });
 });

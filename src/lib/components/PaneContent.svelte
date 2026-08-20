@@ -8,6 +8,7 @@
   import ScenesDashboard from "./panes/ScenesDashboard.svelte";
   import TemplatePane from "./panes/TemplatePane.svelte";
   import GraphPane from "./panes/GraphPane.svelte";
+  import QuickNotesPane from "./panes/QuickNotesPane.svelte";
   import PdfPane from "./panes/PdfPane.svelte";
 
   interface Props {
@@ -65,6 +66,8 @@
     {/key}
   {:else if activeTab.type === "graph"}
     <GraphPane />
+  {:else if activeTab.type === "quickNotes"}
+    <QuickNotesPane />
   {/if}
 
   <!-- Drop zone overlay when the other pane already exists -->

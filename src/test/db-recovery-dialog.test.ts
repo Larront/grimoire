@@ -47,8 +47,10 @@ describe("DB recovery dialog (issue #116)", () => {
     await waitFor(() => {
       // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
       // the formatter's business, not this assertion's.
+      // Quick Notes are database-only (ADR-0018), so a rebuild takes them too — a GM
+      // deciding whether to rebuild has to be told that before they choose.
       expect(getByTestId("db-recovery-dialog").textContent?.replace(/\s+/g, " ")).toContain(
-        "scenes, pins, and map details will be lost",
+        "scenes, pins, map details, and Quick Notes will be lost",
       );
     });
   });

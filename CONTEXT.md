@@ -317,7 +317,7 @@ _Avoid_: "welcome screen," "start page," "home" (the empty-ledger home is a sepa
 
 ### Sample Ledger
 
-A bundled, pre-populated example ledger the app copies to disk so a first-time GM can explore a living world — interlinked notes, a map, a timeline, a few scenes — before building their own. Surfaced via the _Explore an example world_ action on the first-time Splash. Tool-voice noun; user-facing copy always says "world," never "sample ledger."
+A bundled, pre-populated example ledger the app copies to disk so a first-time GM can explore a living world — interlinked notes, a map, a timeline, a few scenes, one parked Quick Note — before building their own. Surfaced via the _Explore an example world_ action on the first-time Splash. Tool-voice noun; user-facing copy always says "world," never "sample ledger."
 _Avoid_: "demo ledger," "template ledger" (a Template produces a single note, not a ledger), "tutorial" (it teaches by exploration, not a guided tour).
 
 ### PDF

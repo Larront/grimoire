@@ -6,7 +6,7 @@
 // function's job is to say where the links are, and nothing here escapes, quotes or
 // encodes anything, because nothing downstream concatenates markup.
 import { describe, it, expect } from "vitest";
-import { splitLinkedText, wikiTargetsIn } from "$lib/editor/linked-text";
+import { splitLinkedText, wikiTargetsIn, linkedPlainText } from "$lib/editor/linked-text";
 
 describe("splitLinkedText", () => {
   it("returns nothing for an empty string", () => {
@@ -80,5 +80,23 @@ describe("wikiTargetsIn", () => {
 
   it("collects nothing from text with no links", () => {
     expect(wikiTargetsIn("4,200")).toEqual([]);
+  });
+});
+
+describe("linkedPlainText", () => {
+  it("reads a value the way a field draws it, links as their titles", () => {
+    expect(linkedPlainText("ask [[People/Vale.md]] about the toll")).toBe(
+      "ask Vale about the toll",
+    );
+  });
+
+  it("takes an alias over the path's stem, as the drawing does", () => {
+    expect(linkedPlainText("ask [[People/Vale.md|the captain]] first")).toBe(
+      "ask the captain first",
+    );
+  });
+
+  it("hands plain text back unchanged", () => {
+    expect(linkedPlainText("no links here")).toBe("no links here");
   });
 });

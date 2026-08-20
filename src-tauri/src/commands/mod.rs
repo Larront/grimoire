@@ -10,6 +10,7 @@ pub mod media;
 pub mod notes;
 pub mod pdf_scene_links;
 pub mod preferences;
+pub mod quick_notes;
 pub mod recent;
 pub mod recent_ledgers;
 pub mod sample;

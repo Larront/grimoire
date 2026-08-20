@@ -16,6 +16,7 @@
     LayoutTemplate,
     FileDown,
     Network,
+    NotebookPen,
     BookOpen,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
@@ -174,6 +175,22 @@
     tabs.openTab({ type: "graph", id: 0, title: "Graph" });
   }
 
+  // One tab, never two: `openTab`'s dedup switches to the pane wherever it is
+  // already open, across both panes, exactly as the Graph does.
+  function cmdOpenQuickNotes() {
+    searchPalette.open = false;
+    tabs.openTab({ type: "quickNotes", id: 0, title: "Quick Notes" });
+  }
+
+  // The dialog's shortcut is `Ctrl/Cmd+Shift+N`, and a shortcut must also be
+  // reachable from here (docs/design-system.md §Keyboard & Accessibility) — the palette is
+  // where a GM looks for a thing whose key they have not learned yet. It sets the
+  // same flag the keystroke does: one surface, two ways in.
+  function cmdCaptureQuickNote() {
+    searchPalette.open = false;
+    dialogs.quickNoteOpen = true;
+  }
+
   function cmdOpenSettings() {
     searchPalette.open = false;
     dialogs.settingsOpen = true;
@@ -297,6 +314,20 @@
       noteOnly: false,
       icon: Network,
       action: cmdOpenGraphView,
+    },
+    {
+      label: "Open Quick Notes",
+      testid: "cmd-open-quick-notes",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdOpenQuickNotes,
+    },
+    {
+      label: "Capture a Quick Note",
+      testid: "cmd-capture-quick-note",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdCaptureQuickNote,
     },
     {
       label: "Create note from template",
