@@ -11,6 +11,15 @@
 // midnight in another timezone would put it under tomorrow's.
 import type { QuickNote } from "$lib/bindings.gen";
 
+/**
+ * Which way round the list reads (#232).
+ *
+ * `"newest"` is the pen's default — the day a GM wants is almost always the one
+ * they are in. `"oldest"` exists because clearing a list is work you do from the
+ * bottom: the thought that has been waiting longest is the one to deal with next.
+ */
+export type CaptureOrder = "newest" | "oldest";
+
 /** One day's worth of captured thoughts, as the pane draws it. */
 export interface CaptureDay {
   /** The local calendar day as `YYYY-MM-DD` — the group's identity and sort key. */
@@ -56,17 +65,27 @@ function dayLabel(date: Date, now: Date): string {
 }
 
 /**
- * Quick Notes grouped by the day they were captured — **newest day first,
- * chronological within a day.**
+ * Quick Notes grouped by the day they were captured — by default **newest day
+ * first, chronological within a day.**
  *
  * The two directions are deliberate and not a slip: the day a GM wants is
  * almost always the one they are in, so it sits at the top; inside a day the
  * thoughts read in the order they arrived, because consecutive captures are
  * usually the same train of thought.
  *
+ * `order` flips **both** axes together (#232). Reversing only the day headings
+ * would leave a list that reads backwards at one scale and forwards at the other,
+ * and a GM working from the bottom of the pen would still meet each day's thoughts
+ * newest-first. Sorting is a claim about the drawn list only: nothing here mutates
+ * or writes what the ledger holds.
+ *
  * `now` is a parameter so "Today" is a claim a test can pin.
  */
-export function groupByCaptureDay(notes: QuickNote[], now: Date = new Date()): CaptureDay[] {
+export function groupByCaptureDay(
+  notes: QuickNote[],
+  now: Date = new Date(),
+  order: CaptureOrder = "newest",
+): CaptureDay[] {
   const byDay = new Map<string, QuickNote[]>();
   for (const note of notes) {
     const key = dayKey(new Date(note.captured_at));
@@ -75,8 +94,15 @@ export function groupByCaptureDay(notes: QuickNote[], now: Date = new Date()): C
     else byDay.set(key, [note]);
   }
 
+  // The default reads days newest-first but each day's notes oldest-first, so the
+  // two axes run opposite ways — and "reverse" means reversing the drawn list, not
+  // one scale of it. One sign per axis, derived from the same order, is what keeps
+  // them from disagreeing.
+  const daySign = order === "newest" ? -1 : 1;
+  const noteSign = -daySign;
+
   return [...byDay.entries()]
-    .sort(([a], [b]) => b.localeCompare(a))
+    .sort(([a], [b]) => daySign * a.localeCompare(b))
     .map(([key, dayNotes]) => ({
       key,
       label: dayLabel(new Date(dayNotes[0].captured_at), now),
@@ -84,7 +110,7 @@ export function groupByCaptureDay(notes: QuickNote[], now: Date = new Date()): C
       // appended to it — but a group that only holds when its input is sorted is
       // a group whose ordering claim lives somewhere else.
       notes: [...dayNotes].sort(
-        (a, b) => a.captured_at.localeCompare(b.captured_at) || a.id - b.id,
+        (a, b) => noteSign * (a.captured_at.localeCompare(b.captured_at) || a.id - b.id),
       ),
     }));
 }

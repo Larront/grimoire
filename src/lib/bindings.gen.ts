@@ -54,6 +54,8 @@ export const commands = {
 	 */
 	updatePdfSceneLink: (id: number, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("update_pdf_scene_link", { id, sceneId }),
 	createQuickNote: (body: string) => __TAURI_INVOKE<QuickNote>("create_quick_note", { body }),
+	updateQuickNote: (id: number, body: string) => __TAURI_INVOKE<QuickNote>("update_quick_note", { id, body }),
+	deleteQuickNote: (id: number) => __TAURI_INVOKE<number>("delete_quick_note", { id }),
 	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),

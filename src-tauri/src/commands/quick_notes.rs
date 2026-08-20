@@ -59,6 +59,41 @@ pub fn insert_quick_note(conn: &mut SqliteConnection, body: &str) -> Result<Quic
         .map_err(|e| e.to_string())
 }
 
+/// Rewrite one captured line, leaving its capture time alone.
+///
+/// An edit is a correction to a thought, not a re-parking of it: moving the stamp
+/// would move the row out from under the day heading the GM is reading it below, so
+/// a typo fixed on Tuesday does not drag Monday's thought into today.
+///
+/// The same blank refusal as capture, for the same reason — and it is why *forget*
+/// is a separate verb: a GM who wants the line gone deletes it, rather than
+/// emptying it into a row that reads as nothing.
+pub fn rewrite_quick_note(
+    conn: &mut SqliteConnection,
+    id: i32,
+    body: &str,
+) -> Result<QuickNote, String> {
+    let body = body.trim();
+    if body.is_empty() {
+        return Err("ERR_EMPTY_QUICK_NOTE: a Quick Note needs some text".into());
+    }
+    diesel::update(quick_notes::table.find(id))
+        .set(quick_notes::body.eq(body))
+        .returning(QuickNote::as_returning())
+        .get_result(conn)
+        .map_err(|e| e.to_string())
+}
+
+/// Forget one captured line.
+///
+/// Returns the number of rows removed, as the ledger's other deletes do, so a
+/// caller can tell a delete from a no-op on a row that had already gone. Nothing
+/// is deferred here: the undo window lives in the frontend, and by the time this
+/// runs the GM has let it elapse.
+pub fn remove_quick_note(conn: &mut SqliteConnection, id: i32) -> QueryResult<usize> {
+    diesel::delete(quick_notes::table.find(id)).execute(conn)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn list_quick_notes(ledger: State<AppLedger>) -> Result<Vec<QuickNote>, String> {
@@ -71,6 +106,26 @@ pub fn list_quick_notes(ledger: State<AppLedger>) -> Result<Vec<QuickNote>, Stri
 #[specta::specta]
 pub fn create_quick_note(body: String, ledger: State<AppLedger>) -> Result<QuickNote, String> {
     with_open_ledger(&ledger, |l| insert_quick_note(l.conn, &body))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_quick_note(
+    id: i32,
+    body: String,
+    ledger: State<AppLedger>,
+) -> Result<QuickNote, String> {
+    with_open_ledger(&ledger, |l| rewrite_quick_note(l.conn, id, &body))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_quick_note(id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
+    with_open_ledger(&ledger, |l| {
+        remove_quick_note(l.conn, id)
+            .map(|n| n as u32)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[cfg(test)]
@@ -167,5 +222,64 @@ mod tests {
             .map(|n| n.body)
             .collect();
         assert_eq!(bodies, vec!["typed first", "typed second"]);
+    }
+
+    #[test]
+    fn update_rewrites_the_line_and_keeps_its_stamp() {
+        let mut conn = setup_db();
+        let note = insert_quick_note(&mut conn, "the marsh fires spred west").unwrap();
+        captured_at(&mut conn, note.id, "2026-08-18T21:40:00+00:00");
+
+        let edited =
+            rewrite_quick_note(&mut conn, note.id, "the marsh fires spread west").expect("update");
+        assert_eq!(edited.body, "the marsh fires spread west");
+        // The stamp is untouched, so the row stays under the day it was captured.
+        assert_eq!(edited.captured_at, "2026-08-18T21:40:00+00:00");
+
+        let stored = load_quick_notes(&mut conn).unwrap();
+        assert_eq!(stored.len(), 1, "an edit rewrites, it does not add");
+        assert_eq!(stored[0].body, "the marsh fires spread west");
+    }
+
+    #[test]
+    fn update_trims_and_refuses_a_blank_line() {
+        let mut conn = setup_db();
+        let note = insert_quick_note(&mut conn, "the marsh fires").unwrap();
+
+        let edited = rewrite_quick_note(&mut conn, note.id, "  the marsh fires spread  ").unwrap();
+        assert_eq!(edited.body, "the marsh fires spread");
+
+        let err = rewrite_quick_note(&mut conn, note.id, "   ").unwrap_err();
+        assert!(err.starts_with("ERR_EMPTY_QUICK_NOTE"), "{err}");
+        // Emptying the box is not how a thought is forgotten — the line stands.
+        assert_eq!(
+            load_quick_notes(&mut conn).unwrap()[0].body,
+            "the marsh fires spread",
+        );
+    }
+
+    #[test]
+    fn update_refuses_a_row_that_is_not_there() {
+        let mut conn = setup_db();
+        assert!(rewrite_quick_note(&mut conn, 404, "a thought").is_err());
+    }
+
+    #[test]
+    fn delete_forgets_one_line_and_leaves_the_rest() {
+        let mut conn = setup_db();
+        let first = insert_quick_note(&mut conn, "first").unwrap();
+        insert_quick_note(&mut conn, "second").unwrap();
+
+        assert_eq!(remove_quick_note(&mut conn, first.id).unwrap(), 1);
+        let bodies: Vec<String> = load_quick_notes(&mut conn)
+            .unwrap()
+            .into_iter()
+            .map(|n| n.body)
+            .collect();
+        assert_eq!(bodies, vec!["second"]);
+
+        // A second delete of the same row is a no-op rather than an error: an undo
+        // window can elapse over a row that is already gone.
+        assert_eq!(remove_quick_note(&mut conn, first.id).unwrap(), 0);
     }
 }

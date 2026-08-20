@@ -66,6 +66,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             create_pdf_scene_link,
             update_pdf_scene_link,
             create_quick_note,
+            update_quick_note,
+            delete_quick_note,
             create_pin,
             create_pin_category,
             create_scene,
@@ -386,6 +388,8 @@ pub fn run() {
             // Quick Notes (ADR-0018 — rows, invisible to every derived index)
             list_quick_notes,
             create_quick_note,
+            update_quick_note,
+            delete_quick_note,
         ])
         .setup(|_app| {
             #[cfg(target_os = "windows")]
