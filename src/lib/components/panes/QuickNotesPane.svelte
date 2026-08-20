@@ -25,12 +25,26 @@
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import WikiCaptureBox from "$lib/components/editor/WikiCaptureBox.svelte";
 
-  const days = $derived(groupByCaptureDay(quickNotes.notes));
+  // The day the pane thinks it is, re-read when the local day turns over. A
+  // session that crosses midnight is the ordinary case here, and without this the
+  // heading over yesterday's thoughts still reads "Today" while a fresh capture
+  // opens a second, correctly dated group beside it.
+  let today = $state(new Date());
+
+  $effect(() => {
+    const midnight = new Date(today);
+    midnight.setHours(24, 0, 0, 0);
+    const timer = setTimeout(() => (today = new Date()), midnight.getTime() - Date.now());
+    return () => clearTimeout(timer);
+  });
+
+  const days = $derived(groupByCaptureDay(quickNotes.notes, today));
 
   async function capture(body: string) {
-    // The capture box has already cleared, and the store refuses a blank line;
-    // a failed write has toasted for itself by the time this catch runs.
-    await quickNotes.capture(body).catch(() => {});
+    // Deliberately un-caught: `api` has already told the GM the write failed, and
+    // the rejection is what puts the line back in the box — a thought that never
+    // reached the ledger exists nowhere else.
+    await quickNotes.capture(body);
   }
 
   /**

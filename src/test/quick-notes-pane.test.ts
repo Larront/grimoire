@@ -48,7 +48,11 @@ beforeEach(() => {
     if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
     if (cmd === "search_notes") return Promise.resolve(SEARCH_RESULTS);
     if (cmd === "create_quick_note") {
-      const created = note(rows.length + 1, String((args as { body?: string })?.body), new Date().toISOString());
+      const created = note(
+        rows.length + 1,
+        String((args as { body?: string })?.body),
+        new Date().toISOString(),
+      );
       rows = [...rows, created];
       return Promise.resolve(created);
     }
@@ -200,6 +204,118 @@ describe("Quick Notes Pane — staying put", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-quick-note]")).toHaveLength(1));
     expect(document.querySelector("[data-quick-note]")?.textContent).toContain(
       "check what she'd have heard",
+    );
+  });
+});
+
+describe("Quick Notes Pane — a write that fails", () => {
+  it("puts the line back in the box, because the thought exists nowhere else", async () => {
+    await open();
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_quick_notes") return Promise.resolve([]);
+      if (cmd === "create_quick_note") return Promise.reject(new Error("ERR_DB_LOCKED: busy"));
+      return Promise.resolve(null);
+    });
+
+    const box = captureBox();
+    await fireEvent.input(box, { target: { value: "the marsh fires spread west" } });
+    await fireEvent.keyDown(box, { key: "Enter" });
+
+    await waitFor(() => expect(captureBox().value).toBe("the marsh fires spread west"));
+    expect(document.querySelectorAll("[data-quick-note]")).toHaveLength(0);
+  });
+
+  it("keeps the next thought the GM started typing over the failed one", async () => {
+    await open();
+    let rejectWrite: (reason: Error) => void = () => {};
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_quick_notes") return Promise.resolve([]);
+      if (cmd === "create_quick_note")
+        return new Promise((_, reject) => {
+          rejectWrite = reject;
+        });
+      return Promise.resolve(null);
+    });
+
+    const box = captureBox();
+    await fireEvent.input(box, { target: { value: "first thought" } });
+    await fireEvent.keyDown(box, { key: "Enter" });
+    // The write is still in flight and the GM has moved on.
+    await fireEvent.input(captureBox(), { target: { value: "second thought" } });
+    rejectWrite(new Error("ERR_DB_LOCKED: busy"));
+
+    await waitFor(() => expect(captureBox().value).toBe("second thought"));
+  });
+});
+
+describe("Quick Notes Pane — the `[[` dropdown's exits", () => {
+  it("closes when the box is left, since the box itself never unmounts", async () => {
+    await open();
+    const box = captureBox();
+    await fireEvent.input(box, { target: { value: "ask [[mi" } });
+    await waitFor(() => expect(document.querySelector('[role="listbox"]')).toBeTruthy());
+
+    await fireEvent.blur(box);
+    await waitFor(() => expect(document.querySelector('[role="listbox"]')).toBeNull());
+  });
+
+  it("ignores a search that lands after the line was committed", async () => {
+    await open();
+    let landSearch: (items: unknown[]) => void = () => {};
+    vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
+      if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
+      if (cmd === "search_notes")
+        return new Promise((resolveSearch) => {
+          landSearch = resolveSearch as (items: unknown[]) => void;
+        });
+      if (cmd === "create_quick_note") {
+        const created = note(
+          rows.length + 1,
+          String((args as { body?: string })?.body),
+          new Date().toISOString(),
+        );
+        rows = [...rows, created];
+        return Promise.resolve(created);
+      }
+      return Promise.resolve(null);
+    });
+
+    const box = captureBox();
+    await fireEvent.input(box, { target: { value: "ask [[mi" } });
+    // Committed before the query came back: the line lands, and the late result
+    // must not open a menu over the empty box and claim the next Enter.
+    await fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("create_quick_note", { body: "ask [[mi" }),
+    );
+    landSearch(SEARCH_RESULTS);
+
+    await waitFor(() => expect(captureBox().value).toBe(""));
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
+});
+
+describe("Quick Notes Pane — a session that crosses midnight", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("re-labels the day when the local day turns over", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-19T23:59:30"));
+    rows = [note(1, "the marsh fires", "2026-08-19T21:40:00")];
+    await quickNotes.load();
+    render(QuickNotesPane);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector('[data-capture-day="2026-08-19"]')?.textContent).toContain(
+      "Today",
+    );
+
+    // Past midnight, with nothing else touching the list: the heading must move
+    // on by itself, or a GM mid-session reads yesterday's thoughts as today's.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(document.querySelector('[data-capture-day="2026-08-19"]')?.textContent).toContain(
+      "Yesterday",
     );
   });
 });
