@@ -16,6 +16,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
+  import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
@@ -71,6 +72,9 @@
       onSearchClick={() => (searchPalette.open = true)}
       onSettingsClick={() => (dialogs.settingsOpen = true)}
       onGraphClick={() => tabs.openTab({ type: "graph", id: 0, title: "Graph" })}
+      onQuickNotesClick={() =>
+        tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" })}
+      quickNoteCount={quickNotes.count}
     />
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />

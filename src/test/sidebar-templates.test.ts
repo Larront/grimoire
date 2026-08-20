@@ -48,6 +48,18 @@ vi.mock("../lib/stores/scenes.svelte", () => ({
   },
 }));
 
+vi.mock("../lib/stores/quick-notes.svelte", () => ({
+  quickNotes: {
+    get notes() {
+      return [];
+    },
+    get count() {
+      return 0;
+    },
+    load: vi.fn(),
+  },
+}));
+
 vi.mock("../lib/stores/templates.svelte", () => ({
   templates: {
     get templates() {

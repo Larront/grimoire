@@ -19,6 +19,7 @@
     Star,
     Music2,
     Volume2,
+    Inbox,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap, TemplateEntry } from "$lib/types/ledger";
@@ -26,6 +27,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
+  import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
@@ -509,6 +511,39 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
+
+    <!-- Quick Notes: one button, and deliberately no list (#233). The pane and
+         the dialog are already the two surfaces a Quick Note has; a third list
+         here would want its own edit and delete affordances, or be a tease
+         without them. The badge carries the same count the rail icon shows, and
+         is absent — never a `0` — when the pen is empty. -->
+    <Sidebar.Group>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton>
+              {#snippet child({ props })}
+                <button
+                  type="button"
+                  {...props}
+                  data-testid="sidebar-quick-notes"
+                  onclick={() =>
+                    tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" })}
+                >
+                  <Inbox class="size-4" />
+                  Quick Notes
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+            {#if quickNotes.count > 0}
+              <Sidebar.MenuBadge data-testid="sidebar-quick-notes-count">
+                {quickNotes.count}
+              </Sidebar.MenuBadge>
+            {/if}
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
   </Sidebar.Content>
 
   <Sidebar.Footer>

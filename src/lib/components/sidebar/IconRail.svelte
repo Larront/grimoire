@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search, Files, Music2, Settings, Network } from "@lucide/svelte";
+  import { Search, Files, Music2, Settings, Network, Inbox } from "@lucide/svelte";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
 
@@ -9,12 +9,19 @@
     onSearchClick,
     onSettingsClick,
     onGraphClick,
+    onQuickNotesClick,
+    quickNoteCount = 0,
   }: {
     onFilesClick?: () => void;
     onScenesClick?: () => void;
     onSearchClick?: () => void;
     onSettingsClick?: () => void;
     onGraphClick?: () => void;
+    onQuickNotesClick?: () => void;
+    /** How many [[Quick Note]]s the ledger holds (#233). Zero draws no badge at
+     *  all rather than a `0`, following the Scene Player panel's rule that
+     *  sidebar furniture stays quiet until it has something to say. */
+    quickNoteCount?: number;
   } = $props();
 
   const sidebar = useSidebar();
@@ -64,6 +71,29 @@
     <button type="button" aria-label="Graph" class={btnBase} onclick={onGraphClick}>
       <Network class="size-(--icon-rail-icon)" strokeWidth={1.5} />
     </button>
+
+    <!-- Quick Notes: an inbox, and the badge is what is still in it. One click
+         opens the pane; there is no sidebar step, as Graph has none. -->
+    <div class="relative">
+      <button
+        type="button"
+        aria-label={quickNoteCount > 0 ? `Quick Notes — ${quickNoteCount} held` : "Quick Notes"}
+        class={btnBase}
+        data-testid="rail-quick-notes"
+        onclick={onQuickNotesClick}
+      >
+        <Inbox class="size-(--icon-rail-icon)" strokeWidth={1.5} />
+      </button>
+      {#if quickNoteCount > 0}
+        <span
+          data-testid="rail-quick-notes-count"
+          aria-hidden="true"
+          class="pointer-events-none absolute -top-0.5 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10.5px] leading-none font-medium text-primary-foreground tabular-nums select-none"
+        >
+          {quickNoteCount}
+        </span>
+      {/if}
+    </div>
   </div>
 
   <!-- Bottom: settings (subdued) -->

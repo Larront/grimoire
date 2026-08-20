@@ -19,6 +19,7 @@ describe("File tree skeleton", () => {
       if (cmd === "get_notes") return [];
       if (cmd === "get_maps") return [];
       if (cmd === "get_scenes_with_slot_counts") return [];
+      if (cmd === "list_quick_notes") return [];
       // Never resolve file tree — keeps treeLoading true
       if (cmd === "get_file_tree") return new Promise(() => {});
       return null;

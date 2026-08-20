@@ -222,8 +222,9 @@ The sidebar collapses to a narrow icon rail — the grid responds accordingly.
 3. **Pinned section** — star icon, flat list of starred/pinned notes (collapsible)
 4. **Recent section** — clock icon, up to 5 recently opened notes (collapsible)
 5. **Campaign tree** — folder icon, hierarchical file tree (collapsible, with "+" to create)
-6. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
-7. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
+6. **Quick Notes** — one button with the same count as the rail icon's badge, and deliberately no list: the Quick Notes pane and dialog are the only two surfaces a Quick Note has
+7. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
+8. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
 
 **Icon Rail (collapsed state)** — 48px wide, contains:
 
@@ -233,6 +234,8 @@ Main icons (top):
 - Search icon — triggers Command Palette
 - Files icon — expands sidebar and activates the file tree section
 - Scenes icon — opens the scenes page
+- Graph icon — opens the graph pane
+- Quick Notes icon — an inbox; opens the Quick Notes pane in one click. Carries a count badge of every Quick Note in the ledger, **absent entirely at zero** (never a `0`), following the Scene Player panel's rule that sidebar furniture stays quiet until it has something to say.
 
 Footer icon (bottom, smaller / subdued):
 
