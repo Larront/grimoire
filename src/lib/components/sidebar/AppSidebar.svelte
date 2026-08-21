@@ -49,6 +49,7 @@
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import { shell } from "$lib/utils/shell-actions";
+  import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY } from "./strip-classes";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -64,35 +65,17 @@
   const sidebarState = useSidebar();
 
   /**
-   * Icon size on the collapsed strip.
+   * Open the sidebar and bring a section into view.
    *
-   * `--icon-rail-icon` is the token the deleted `IconRail` drew at — 20px, and
-   * 22 or 18 as the GM's density says. A row's expanded icon is `size-4`, which
-   * is right beside a label and too small alone in a 48px square, so the strip
-   * keeps the size it has always had. Important, because `Sidebar.MenuButton`
-   * sets `[&_svg]:size-4` on every descendant.
+   * What a stand-in on the collapsed strip does (#226): it reveals the group it
+   * stands for rather than navigating somewhere, so Files and Scenes answer a
+   * click the same way. Scrolled after the expansion has been laid out, or the
+   * section is measured at the width it is leaving.
    */
-  const STRIP_ICON = "size-(--icon-rail-icon)!";
-
-  /** A row that shows in both states: `size-4` beside its label, the strip's size
-   *  once the label is gone. */
-  const ROW_ICON = "size-4 group-data-[collapsible=icon]:size-(--icon-rail-icon)!";
-
-  /** A row's label, which the 48px strip has no room for. */
-  const ROW_LABEL = "group-data-[collapsible=icon]:hidden";
-
-  /**
-   * Open the sidebar and bring the file tree into view.
-   *
-   * The collapsed strip's Files icon (#226). Scrolled after the expansion has
-   * been laid out, or the section is measured at the width it is leaving.
-   */
-  function revealFiles() {
+  function reveal(sectionId: string) {
     sidebarState.setOpen(true);
     requestAnimationFrame(() => {
-      document
-        .getElementById("sidebar-files-section")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 
@@ -389,14 +372,14 @@
              15rem matches the default content width, so at that width this is a
              no-op. The file tree below still uses the full width. -->
         <div class="mx-auto w-full max-w-[15rem]">
-          <div class="group-data-[collapsible=icon]:hidden">
+          <div class={EXPANDED_ONLY}>
             <AppSearch />
           </div>
           <!-- Creating is an expanded-sidebar act. `Ctrl/Cmd+N` (#227) covers the
                common case from anywhere, and four more icons would be the least
                session-critical controls doubling the strip's weight. -->
           <div
-            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50 group-data-[collapsible=icon]:hidden"
+            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50 {EXPANDED_ONLY}"
           >
             <Tooltip.Root delayDuration={600}>
               <Tooltip.Trigger
@@ -464,18 +447,21 @@
       together and read as a set while Graph and Quick Notes stood apart. Every
       entry on the strip is its own button, spaced like its neighbours.
 
-      Search is a bar expanded and an icon collapsed. Files leaves an icon that
-      expands and scrolls to the tree, which is the one entry whose behaviour
-      genuinely changes: the old rail's Files button only opened the sidebar and
-      stopped there. Scenes keeps the rail's behaviour exactly — it opens the All
-      Scenes tab.
+      Search is a bar expanded and an icon collapsed. Files and Scenes both
+      expand the sidebar and scroll to their group: a stand-in stands for a
+      surface, so it should hand that surface over rather than pick one
+      destination out of it. Both behaviours changed here — the old rail's Files
+      button opened the sidebar and stopped, and its Scenes button went straight
+      to the All Scenes tab, which is still a row away once expanded.
     -->
     {@render strip("sidebar-search-icon", "Search", Search, shell.openSearch)}
-    {@render strip("sidebar-files-standin", "Files", Files, revealFiles)}
-    {@render strip("sidebar-scenes-standin", "Scenes", Music2, shell.openScenes)}
+    {@render strip("sidebar-files-standin", "Files", Files, () => reveal("sidebar-files-section"))}
+    {@render strip("sidebar-scenes-standin", "Scenes", Music2, () =>
+      reveal("sidebar-scenes-section"),
+    )}
 
     <!-- Files section -->
-    <div id="sidebar-files-section" class="group-data-[collapsible=icon]:hidden">
+    <div id="sidebar-files-section" class={EXPANDED_ONLY}>
       <Collapsible.Root open class="group/collapsible">
         <Sidebar.Group>
           <Sidebar.GroupLabel>
@@ -549,76 +535,78 @@
     </div>
 
     <!-- Scenes section. Hidden wholesale when collapsed, as Files is: the strip's
-         Scenes stand-in above already carries the one destination the rail had,
-         and drawing All Scenes there too would be the same entry twice. -->
-    <Collapsible.Root open class="group/collapsible group-data-[collapsible=icon]:hidden">
-      <Sidebar.Group>
-        <Sidebar.GroupLabel>
-          {#snippet child({ props })}
-            <Collapsible.Trigger {...props}>
-              Scenes
-              <ChevronDown
-                class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-              />
-            </Collapsible.Trigger>
-          {/snippet}
-        </Sidebar.GroupLabel>
-        <Collapsible.Content forceMount>
-          {#snippet child({ props, open })}
-            {#if open}
-              <div {...props} transition:slide>
-                <Sidebar.GroupContent>
-                  <Sidebar.Menu>
-                    <Sidebar.MenuItem>
-                      <Sidebar.MenuButton>
-                        {#snippet child({ props })}
-                          <button
-                            type="button"
-                            {...props}
-                            data-testid="sidebar-scenes"
-                            onclick={shell.openScenes}
-                          >
-                            <LayoutList class="size-4" />
-                            All Scenes
-                          </button>
-                        {/snippet}
-                      </Sidebar.MenuButton>
-                    </Sidebar.MenuItem>
-                    {#each favoriteScenes as scene (scene.id)}
+         Scenes stand-in above expands the sidebar and scrolls here, so this is
+         the surface it hands over. -->
+    <div id="sidebar-scenes-section" class={EXPANDED_ONLY}>
+      <Collapsible.Root open class="group/collapsible">
+        <Sidebar.Group>
+          <Sidebar.GroupLabel>
+            {#snippet child({ props })}
+              <Collapsible.Trigger {...props}>
+                Scenes
+                <ChevronDown
+                  class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
+                />
+              </Collapsible.Trigger>
+            {/snippet}
+          </Sidebar.GroupLabel>
+          <Collapsible.Content forceMount>
+            {#snippet child({ props, open })}
+              {#if open}
+                <div {...props} transition:slide>
+                  <Sidebar.GroupContent>
+                    <Sidebar.Menu>
                       <Sidebar.MenuItem>
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
-                            {@const isPlaying = scene.id === activeSceneDisplayId}
                             <button
                               type="button"
                               {...props}
-                              data-scene-playing={isPlaying || undefined}
-                              onclick={() =>
-                                tabs.navigateOpen({
-                                  type: "scene",
-                                  id: scene.id,
-                                  title: scene.name,
-                                })}
+                              data-testid="sidebar-scenes"
+                              onclick={shell.openScenes}
                             >
-                              {#if isPlaying}
-                                <Volume2 class="size-4 text-primary" />
-                              {:else}
-                                <Star class="size-4 fill-primary/30 text-primary" />
-                              {/if}
-                              <span class="truncate">{scene.name}</span>
+                              <LayoutList class="size-4" />
+                              All Scenes
                             </button>
                           {/snippet}
                         </Sidebar.MenuButton>
                       </Sidebar.MenuItem>
-                    {/each}
-                  </Sidebar.Menu>
-                </Sidebar.GroupContent>
-              </div>
-            {/if}
-          {/snippet}
-        </Collapsible.Content>
-      </Sidebar.Group>
-    </Collapsible.Root>
+                      {#each favoriteScenes as scene (scene.id)}
+                        <Sidebar.MenuItem>
+                          <Sidebar.MenuButton>
+                            {#snippet child({ props })}
+                              {@const isPlaying = scene.id === activeSceneDisplayId}
+                              <button
+                                type="button"
+                                {...props}
+                                data-scene-playing={isPlaying || undefined}
+                                onclick={() =>
+                                  tabs.navigateOpen({
+                                    type: "scene",
+                                    id: scene.id,
+                                    title: scene.name,
+                                  })}
+                              >
+                                {#if isPlaying}
+                                  <Volume2 class="size-4 text-primary" />
+                                {:else}
+                                  <Star class="size-4 fill-primary/30 text-primary" />
+                                {/if}
+                                <span class="truncate">{scene.name}</span>
+                              </button>
+                            {/snippet}
+                          </Sidebar.MenuButton>
+                        </Sidebar.MenuItem>
+                      {/each}
+                    </Sidebar.Menu>
+                  </Sidebar.GroupContent>
+                </div>
+              {/if}
+            {/snippet}
+          </Collapsible.Content>
+        </Sidebar.Group>
+      </Collapsible.Root>
+    </div>
 
     <!-- Graph sits under the Scenes group rather than inside it (#235). It opens
          a tab as those rows do, but it is not a scene and does not belong to
@@ -637,7 +625,7 @@
                   onclick={shell.openGraph}
                 >
                   <Network class={ROW_ICON} strokeWidth={1.5} />
-                  <span class={ROW_LABEL}>Graph</span>
+                  <span class={EXPANDED_ONLY}>Graph</span>
                 </button>
               {/snippet}
             </Sidebar.MenuButton>
@@ -649,9 +637,17 @@
     <!-- Quick Notes: one button, and deliberately no list (#233). The pane and
          the dialog are already the two surfaces a Quick Note has; a third list
          here would want its own edit and delete affordances, or be a tease
-         without them. The badge carries the same count the rail icon shows, and
-         is absent — never a `0` — when the pen is empty. -->
-    <Sidebar.Group>
+         without them. The badge is absent — never a `0` — when the pen is empty.
+
+         Expanded only, unlike Graph and Settings beside it. The strip is 48px
+         and the count has to be legible on it, which means a pill small enough
+         to clear a 20px glyph inside a 32px button — about 14px, carrying two
+         digits. That is a number a GM squints at, so the honest version of it is
+         no number at all: `Ctrl/Cmd+Shift+N` still catches a thought from
+         anywhere, so nothing is unreachable while collapsed, only unlisted —
+         which is what Templates already accepts. Diverges from #226's collapsed
+         order and its "legible collapsed and expanded" criterion, on purpose. -->
+    <Sidebar.Group class={EXPANDED_ONLY}>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           <Sidebar.MenuItem>
@@ -664,21 +660,13 @@
                   aria-label="Quick Notes"
                   onclick={shell.openQuickNotes}
                 >
-                  <Inbox class={ROW_ICON} strokeWidth={1.5} />
-                  <span class={ROW_LABEL}>Quick Notes</span>
+                  <Inbox class="size-4" strokeWidth={1.5} />
+                  <span class={EXPANDED_ONLY}>Quick Notes</span>
                 </button>
               {/snippet}
             </Sidebar.MenuButton>
-            <!-- The library hides a menu badge in icon mode, which would delete
-                 the count in exactly the state it most needs to be read (#226).
-                 Overridden, and re-shaped: the right-aligned number expanded, the
-                 corner pill collapsed — two presentations of one number, both
-                 already drawn before the rail went away. -->
             {#if quickNotes.count > 0}
-              <Sidebar.MenuBadge
-                data-testid="sidebar-quick-notes-count"
-                class="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:top-0.5 group-data-[collapsible=icon]:right-1.5 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:min-w-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-full group-data-[collapsible=icon]:bg-sidebar-accent group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:text-[10.5px] group-data-[collapsible=icon]:leading-none group-data-[collapsible=icon]:text-sidebar-accent-foreground/80 group-data-[collapsible=icon]:ring-1 group-data-[collapsible=icon]:ring-sidebar"
-              >
+              <Sidebar.MenuBadge data-testid="sidebar-quick-notes-count">
                 {quickNotes.count}
               </Sidebar.MenuBadge>
             {/if}
@@ -693,7 +681,7 @@
          opens occasionally is not session furniture. The mini player and the
          ledger selector are both rows of text and controls with nothing to
          narrow to, so they go with it. -->
-    <Collapsible.Root class="group/collapsible group-data-[collapsible=icon]:hidden">
+    <Collapsible.Root class="group/collapsible {EXPANDED_ONLY}">
       <Sidebar.Group class="py-0">
         <Sidebar.GroupLabel class="font-normal opacity-50">
           {#snippet child({ props })}
@@ -783,7 +771,7 @@
         </Collapsible.Content>
       </Sidebar.Group>
     </Collapsible.Root>
-    <div class="group-data-[collapsible=icon]:hidden">
+    <div class={EXPANDED_ONLY}>
       <MiniPlayer />
       <LedgerSelector />
     </div>
@@ -811,7 +799,7 @@
               onclick={shell.openSettings}
             >
               <Settings class={ROW_ICON} strokeWidth={1.5} />
-              <span class={ROW_LABEL}>Settings</span>
+              <span class={EXPANDED_ONLY}>Settings</span>
             </button>
           {/snippet}
         </Sidebar.MenuButton>

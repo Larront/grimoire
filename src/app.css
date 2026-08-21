@@ -368,7 +368,7 @@
   --font-body: 14px;
   --font-ui: 13px;
   --pad-x: 12px;
-  --icon-rail-icon: 20px;
+  --strip-icon: 20px;
   --tab-bar-h: 40px;
 }
 
@@ -377,7 +377,7 @@
   --font-body: 15px;
   --font-ui: 13.5px;
   --pad-x: 16px;
-  --icon-rail-icon: 22px;
+  --strip-icon: 22px;
   --tab-bar-h: 48px;
 }
 
@@ -386,7 +386,7 @@
   --font-body: 13px;
   --font-ui: 11.5px;
   --pad-x: 8px;
-  --icon-rail-icon: 18px;
+  --strip-icon: 18px;
   --tab-bar-h: 32px;
 }
 

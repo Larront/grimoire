@@ -5,7 +5,7 @@ import AppShell from "../lib/components/AppShell.svelte";
 import LedgerSelector from "../lib/components/sidebar/LedgerSelector.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
-import { SIDEBAR_STATE_STORAGE_KEY } from "../lib/components/ui/sidebar/constants";
+import { SIDEBAR_STATE_STORAGE_KEY } from "$lib/utils/sidebar-state";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
   matches: false,
@@ -146,7 +146,11 @@ async function collapse() {
 }
 
 describe("the collapsed sidebar", () => {
-  it("is the 3rem strip when collapsed, and is not when expanded", async () => {
+  // Named for what it asserts, not for the width. jsdom lays nothing out, so a
+  // title promising 3rem would be a claim this file cannot make (see
+  // `docs/agents/conventions.md`) — `data-collapsible="icon"` is the state the
+  // stylesheet keys the 3rem off, and the state is what is checkable here.
+  it("reports the icon-collapsible state when collapsed, and not when expanded", async () => {
     render(AppShell);
     const el = document.querySelector('[data-slot="sidebar"]') as HTMLElement;
     expect(el.getAttribute("data-state")).toBe("expanded");
@@ -167,6 +171,19 @@ describe("the collapsed sidebar", () => {
     await fireEvent.click(within(sidebar).getByTestId("sidebar-files-standin"));
 
     await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("expanded"));
+  });
+
+  // The other stand-in answers a click the same way (#226). It used to open the
+  // All Scenes tab instead, which is the one row a GM reaches once expanded — a
+  // stand-in hands over the surface it stands for rather than choosing for them.
+  it("keeps Scenes reachable, as an icon that expands and reveals the group", async () => {
+    render(AppShell);
+    const sidebar = await collapse();
+
+    await fireEvent.click(within(sidebar).getByTestId("sidebar-scenes-standin"));
+
+    await waitFor(() => expect(sidebar.getAttribute("data-state")).toBe("expanded"));
+    expect(tabs.left.tabs.filter((t) => t.type === "scenes")).toHaveLength(0);
   });
 
   it("keeps Graph reachable, and it opens the Graph tab", async () => {
@@ -192,21 +209,27 @@ describe("the collapsed sidebar", () => {
     expect(graphTabs).toHaveLength(1);
   });
 
-  it("carries Search, Scenes, Quick Notes and Settings too", async () => {
+  it("carries Search, Scenes and Settings too", async () => {
     render(AppShell);
     const sidebar = await collapse();
 
-    // The stand-ins are the strip's own controls; Quick Notes, Graph and Settings
-    // are ordinary rows that become their icons.
+    // The stand-ins are the strip's own controls; Graph and Settings are
+    // ordinary rows that become their icons.
     expect(within(sidebar).getByTestId("sidebar-search-icon")).toBeTruthy();
     expect(within(sidebar).getByTestId("sidebar-scenes-standin")).toBeTruthy();
-    expect(within(sidebar).getByTestId("sidebar-quick-notes")).toBeTruthy();
     expect(within(sidebar).getByTestId("sidebar-settings")).toBeTruthy();
   });
 
   // What the collapsed strip *hides* — the create toolbar, the file tree, the
-  // scene favourites, Templates, the mini player — is decided by CSS that jsdom
-  // does not load, so it is not asserted here. It is a screenshot's job, not
-  // this file's; asserting the class names instead would only restate the
-  // implementation.
+  // scene favourites, Templates, the mini player, and now Quick Notes — is
+  // decided by CSS that jsdom does not load, so it is not asserted here. It is a
+  // screenshot's job, not this file's; asserting the class names instead would
+  // only restate the implementation.
+  //
+  // Quick Notes is the newest of those and the one that reads as a regression if
+  // you only skim: it is expanded-only on purpose. A count legible on a 48px
+  // strip needs a pill small enough to clear a 20px glyph in a 32px button, and
+  // at ~14px a two-digit number is something a GM squints at. `Ctrl/Cmd+Shift+N`
+  // still catches a thought while collapsed, so nothing is unreachable — only
+  // unlisted, as Templates already is.
 });
