@@ -5,6 +5,7 @@
   import * as Rename from "$lib/components/ui/rename";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
+  import { cn } from "$lib/utils";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { onMount, setContext, type ComponentProps } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
@@ -61,6 +62,24 @@
   setContext<Map<number, Note>>("noteMap", noteMap);
 
   const sidebarState = useSidebar();
+
+  /**
+   * Icon size on the collapsed strip.
+   *
+   * `--icon-rail-icon` is the token the deleted `IconRail` drew at — 20px, and
+   * 22 or 18 as the GM's density says. A row's expanded icon is `size-4`, which
+   * is right beside a label and too small alone in a 48px square, so the strip
+   * keeps the size it has always had. Important, because `Sidebar.MenuButton`
+   * sets `[&_svg]:size-4` on every descendant.
+   */
+  const STRIP_ICON = "size-(--icon-rail-icon)";
+
+  /** A row that shows in both states: `size-4` beside its label, the strip's size
+   *  once the label is gone. */
+  const ROW_ICON = "size-4 group-data-[collapsible=icon]:size-(--icon-rail-icon)!";
+
+  /** A row's label, which the 48px strip has no room for. */
+  const ROW_LABEL = "group-data-[collapsible=icon]:hidden";
 
   /**
    * Open the sidebar and bring the file tree into view.
@@ -347,29 +366,9 @@
              15rem matches the default content width, so at that width this is a
              no-op. The file tree below still uses the full width. -->
         <div class="mx-auto w-full max-w-[15rem]">
-          <!-- The bar cannot be 48px, so collapsed it is the icon it always had.
-               Same destination, same handler: `AppSearch` is a button onto the
-               palette, not a field. -->
           <div class="group-data-[collapsible=icon]:hidden">
             <AppSearch />
           </div>
-          <Sidebar.Menu class="hidden group-data-[collapsible=icon]:block">
-            <Sidebar.MenuItem>
-              <Sidebar.MenuButton>
-                {#snippet child({ props })}
-                  <button
-                    type="button"
-                    {...props}
-                    data-testid="sidebar-search-icon"
-                    aria-label="Search"
-                    onclick={shell.openSearch}
-                  >
-                    <Search class="size-4" strokeWidth={1.5} />
-                  </button>
-                {/snippet}
-              </Sidebar.MenuButton>
-            </Sidebar.MenuItem>
-          </Sidebar.Menu>
           <!-- Creating is an expanded-sidebar act. `Ctrl/Cmd+N` (#227) covers the
                common case from anywhere, and four more icons would be the least
                session-critical controls doubling the strip's weight. -->
@@ -435,27 +434,67 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <!-- Files, collapsed: the tree cannot narrow to 48px, so it leaves an icon
-         behind that expands and brings the GM to it. This is the one entry whose
-         behaviour genuinely changes — the rail's Files button only ever opened
-         the sidebar and stopped there. -->
-    <Sidebar.Menu class="hidden group-data-[collapsible=icon]:block">
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton>
-          {#snippet child({ props })}
-            <button
-              type="button"
-              {...props}
-              data-testid="sidebar-files-standin"
-              aria-label="Files"
-              onclick={revealFiles}
-            >
-              <Files class="size-4" strokeWidth={1.5} />
-            </button>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
+    <!--
+      The stand-ins: what the collapsed strip shows in place of surfaces that
+      cannot be 48px wide. A `Sidebar.Group` rather than a bare `Sidebar.Menu`,
+      because the group is what carries the `p-2` every other row is inset by —
+      without it these sit flush against the edge while their neighbours do not.
+
+      Search is a bar expanded and an icon collapsed. Files leaves an icon that
+      expands and scrolls to the tree, which is the one entry whose behaviour
+      genuinely changes: the old rail's Files button only opened the sidebar and
+      stopped there. Scenes keeps the rail's behaviour exactly — it opens the All
+      Scenes tab — so the group behind it needs no forcing open.
+    -->
+    <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
+      <Sidebar.Menu>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-search-icon"
+                aria-label="Search"
+                onclick={shell.openSearch}
+              >
+                <Search class={STRIP_ICON} strokeWidth={1.5} />
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-files-standin"
+                aria-label="Files"
+                onclick={revealFiles}
+              >
+                <Files class={STRIP_ICON} strokeWidth={1.5} />
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-scenes-standin"
+                aria-label="Scenes"
+                onclick={shell.openScenes}
+              >
+                <Music2 class={STRIP_ICON} strokeWidth={1.5} />
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
+    </Sidebar.Group>
 
     <!-- Files section -->
     <div id="sidebar-files-section" class="group-data-[collapsible=icon]:hidden">
@@ -531,8 +570,10 @@
       </Collapsible.Root>
     </div>
 
-    <!-- Scenes section -->
-    <Collapsible.Root open class="group/collapsible">
+    <!-- Scenes section. Hidden wholesale when collapsed, as Files is: the strip's
+         Scenes stand-in above already carries the one destination the rail had,
+         and drawing All Scenes there too would be the same entry twice. -->
+    <Collapsible.Root open class="group/collapsible group-data-[collapsible=icon]:hidden">
       <Sidebar.Group>
         <Sidebar.GroupLabel>
           {#snippet child({ props })}
@@ -546,10 +587,7 @@
         </Sidebar.GroupLabel>
         <Collapsible.Content forceMount>
           {#snippet child({ props, open })}
-            <!-- Forced open while the sidebar is collapsed: a GM who folded the
-                   Scenes accordion away meant to hide a list, not to take Scenes
-                   and Graph off the strip that replaced the rail. -->
-            {#if open || sidebarState.state === "collapsed"}
+            {#if open}
               <div {...props} transition:slide>
                 <Sidebar.GroupContent>
                   <Sidebar.Menu>
@@ -568,33 +606,8 @@
                         {/snippet}
                       </Sidebar.MenuButton>
                     </Sidebar.MenuItem>
-                    <!-- Graph lives here rather than in a list of its own (#235):
-                         it opens a tab, exactly as its neighbours do, and it is
-                         the same kind of thing as they are. Until #226 it is also
-                         still on the rail — two ways to one destination at two
-                         widths, which every other rail entry already is. -->
-                    <Sidebar.MenuItem>
-                      <Sidebar.MenuButton>
-                        {#snippet child({ props })}
-                          <button
-                            type="button"
-                            {...props}
-                            data-testid="sidebar-graph"
-                            onclick={shell.openGraph}
-                          >
-                            <Network class="size-4" />
-                            Graph
-                          </button>
-                        {/snippet}
-                      </Sidebar.MenuButton>
-                    </Sidebar.MenuItem>
-                    <!-- The favourites are the Scenes group's *list*, and a list
-                         cannot be 48px. All Scenes and Graph above are ordinary
-                         menu items and become their icons, which is what the
-                         rail carried — so the group keeps its two entries and
-                         loses only what it could not draw. -->
                     {#each favoriteScenes as scene (scene.id)}
-                      <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
+                      <Sidebar.MenuItem>
                         <Sidebar.MenuButton>
                           {#snippet child({ props })}
                             {@const isPlaying = scene.id === activeSceneDisplayId}
@@ -629,6 +642,32 @@
       </Sidebar.Group>
     </Collapsible.Root>
 
+    <!-- Graph sits under the Scenes group rather than inside it (#235). It opens
+         a tab as those rows do, but it is not a scene and does not belong to
+         their list — a peer of the groups, like Quick Notes below it. -->
+    <Sidebar.Group>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton>
+              {#snippet child({ props })}
+                <button
+                  type="button"
+                  {...props}
+                  data-testid="sidebar-graph"
+                  aria-label="Graph"
+                  onclick={shell.openGraph}
+                >
+                  <Network class={ROW_ICON} strokeWidth={1.5} />
+                  <span class={ROW_LABEL}>Graph</span>
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+
     <!-- Quick Notes: one button, and deliberately no list (#233). The pane and
          the dialog are already the two surfaces a Quick Note has; a third list
          here would want its own edit and delete affordances, or be a tease
@@ -644,10 +683,11 @@
                   type="button"
                   {...props}
                   data-testid="sidebar-quick-notes"
+                  aria-label="Quick Notes"
                   onclick={shell.openQuickNotes}
                 >
-                  <Inbox class="size-4" />
-                  Quick Notes
+                  <Inbox class={ROW_ICON} strokeWidth={1.5} />
+                  <span class={ROW_LABEL}>Quick Notes</span>
                 </button>
               {/snippet}
             </Sidebar.MenuButton>
@@ -776,16 +816,24 @@
       <Sidebar.MenuItem>
         <Sidebar.MenuButton>
           {#snippet child({ props })}
+            <!-- `class` merged into the button's own rather than set beside it:
+                 an attribute after `{...props}` replaces what the spread put
+                 there, which cost this button every `MenuButton` style it has —
+                 including the `overflow-hidden` that keeps a label out of a 48px
+                 square. The label is hidden outright now regardless. -->
             <button
               type="button"
               {...props}
               data-testid="sidebar-settings"
               aria-label="Settings"
-              class="text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              class={cn(
+                String(props.class ?? ""),
+                "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+              )}
               onclick={shell.openSettings}
             >
-              <Settings class="size-4" strokeWidth={1.5} />
-              Settings
+              <Settings class={ROW_ICON} strokeWidth={1.5} />
+              <span class={ROW_LABEL}>Settings</span>
             </button>
           {/snippet}
         </Sidebar.MenuButton>

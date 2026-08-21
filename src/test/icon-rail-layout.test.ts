@@ -173,8 +173,7 @@ describe("the collapsed sidebar", () => {
     render(AppShell);
     const sidebar = await collapse();
 
-    const graphBtn = within(sidebar).getByRole("button", { name: /^graph$/i });
-    await fireEvent.click(graphBtn);
+    await fireEvent.click(within(sidebar).getByTestId("sidebar-graph"));
 
     expect(tabs.left.tabs.filter((t) => t.type === "graph")).toHaveLength(1);
   });
@@ -182,7 +181,7 @@ describe("the collapsed sidebar", () => {
   it("opens one Graph tab however many times it is pressed", async () => {
     render(AppShell);
     const sidebar = await collapse();
-    const graphBtn = within(sidebar).getByRole("button", { name: /^graph$/i });
+    const graphBtn = within(sidebar).getByTestId("sidebar-graph");
 
     await fireEvent.click(graphBtn);
     await fireEvent.click(graphBtn);
@@ -197,8 +196,10 @@ describe("the collapsed sidebar", () => {
     render(AppShell);
     const sidebar = await collapse();
 
+    // The stand-ins are the strip's own controls; Quick Notes, Graph and Settings
+    // are ordinary rows that become their icons.
     expect(within(sidebar).getByTestId("sidebar-search-icon")).toBeTruthy();
-    expect(within(sidebar).getByTestId("sidebar-scenes")).toBeTruthy();
+    expect(within(sidebar).getByTestId("sidebar-scenes-standin")).toBeTruthy();
     expect(within(sidebar).getByTestId("sidebar-quick-notes")).toBeTruthy();
     expect(within(sidebar).getByTestId("sidebar-settings")).toBeTruthy();
   });
