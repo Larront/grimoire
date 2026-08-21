@@ -17,7 +17,7 @@
   import { ledger, failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
-  import { shell } from "$lib/utils/shell-actions";
+  import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
@@ -28,6 +28,12 @@
   // it has one, so adding a pane type never means editing this file.
   const leftSurface = paneSurface("left");
   const rightSurface = paneSurface("right");
+
+  // Collapsed-or-expanded is the shell's to remember, not the generated
+  // provider's. Read once here, at the same moment `SidebarState`'s constructor
+  // reads the width, so the strip is painted in its remembered state rather than
+  // settling into it (#226).
+  let sidebarOpen = $state(readSidebarOpen());
 
   // The palette's _Create note_ path, unchanged (#227). The GM has been told by
   // the toast the write already raised; this is the shell, with nowhere of its
@@ -86,7 +92,7 @@
 <!-- No rail, and no offset for one: the sidebar collapses to the strip that used
      to be `IconRail`, at the same 3rem, in the same place (#226). -->
 <div class="relative">
-  <Sidebar.Provider>
+  <Sidebar.Provider bind:open={sidebarOpen} onOpenChange={persistSidebarOpen}>
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
     <FailedImportsDialog

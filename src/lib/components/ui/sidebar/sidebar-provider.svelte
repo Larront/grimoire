@@ -2,15 +2,12 @@
   import * as Tooltip from "$lib/components/ui/tooltip/index.js";
   import { cn, type WithElementRef } from "$lib/utils.js";
   import type { HTMLAttributes } from "svelte/elements";
-  import { SIDEBAR_WIDTH_ICON, persistSidebarOpen, readSidebarOpen } from "./constants.js";
+  import { SIDEBAR_WIDTH_ICON } from "./constants.js";
   import { setSidebar } from "./context.svelte.js";
 
   let {
     ref = $bindable(null),
-    // Read once, at the same moment the width is (`SidebarState`'s constructor),
-    // so the strip is painted at its remembered size in its remembered state
-    // rather than settling into it (#226).
-    open = $bindable(readSidebarOpen()),
+    open = $bindable(true),
     onOpenChange = () => {},
     class: className,
     style,
@@ -26,7 +23,10 @@
     setOpen: (value: boolean) => {
       open = value;
       onOpenChange(value);
-      persistSidebarOpen(value);
+      // Upstream also writes a `sidebar:state` cookie here. Nothing in this repo
+      // reads it — it wants a SvelteKit server that does not exist — and the
+      // state is remembered in localStorage by whoever owns `open` instead
+      // (`$lib/utils/sidebar-state`, #226).
     },
   });
 </script>

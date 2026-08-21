@@ -11,12 +11,12 @@ import { invoke } from "@tauri-apps/api/core";
 import AppShell from "$lib/components/AppShell.svelte";
 import { ledger } from "$lib/stores/ledger.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
+import { SIDEBAR_WIDTH_MIN_PX } from "$lib/components/ui/sidebar/constants";
 import {
   SIDEBAR_STATE_STORAGE_KEY,
-  SIDEBAR_WIDTH_MIN_PX,
   readSidebarOpen,
   persistSidebarOpen,
-} from "$lib/components/ui/sidebar/constants";
+} from "$lib/utils/sidebar-state";
 
 vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }),
@@ -87,9 +87,16 @@ describe("reading a state that is not there", () => {
   });
 
   it("is expanded when the stored value is junk, rather than collapsed by accident", () => {
+    // Only the string this module writes for collapsed may mean collapsed.
+    // Anything else — corrupted, half-written, or left by an older build — must
+    // read expanded: the strip is not a state to start a GM in by accident.
     localStorage.setItem(SIDEBAR_STATE_STORAGE_KEY, "yes");
-    // Anything that is not the string "true" reads false, so junk must not be
-    // able to mean collapsed — it is the state a GM would not have chosen.
+    expect(readSidebarOpen()).toBe(true);
+  });
+
+  it("is collapsed only for the value it writes for collapsed", () => {
+    persistSidebarOpen(false);
+    expect(localStorage.getItem(SIDEBAR_STATE_STORAGE_KEY)).toBe("false");
     expect(readSidebarOpen()).toBe(false);
   });
 });
