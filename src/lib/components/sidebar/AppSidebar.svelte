@@ -1,8 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as Rename from "$lib/components/ui/rename";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
@@ -15,12 +13,7 @@
     FolderPlus,
     MapPinPlus,
     ChevronDown,
-    LayoutList,
-    LayoutTemplate,
-    Plus,
-    Star,
     Music2,
-    Volume2,
     Inbox,
     Network,
     Settings,
@@ -28,16 +21,13 @@
     Files,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
-  import type { FileNode, Note, Map as LedgerMap, TemplateEntry } from "$lib/types/ledger";
+  import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
   import { ledger, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
-  import { scenes } from "$lib/stores/scenes.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { templates } from "$lib/stores/templates.svelte";
-  import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import { toastUndo, toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
+  import { toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import {
@@ -53,6 +43,8 @@
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
+  import SidebarScenes from "./SidebarScenes.svelte";
+  import SidebarTemplates from "./SidebarTemplates.svelte";
 
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
@@ -78,11 +70,6 @@
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
-
-  // Favorite scenes from real data
-  const favoriteScenes = $derived(scenes.scenes.filter((s) => s.favorited));
-
-  const activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
 
   async function refresh() {
     if (!ledger.isOpen) return;
@@ -250,65 +237,6 @@
     } catch (e) {
       console.error("create folder failed:", e);
     }
-  }
-
-  async function handleCreateTemplate() {
-    try {
-      const entry = await api.createTemplate();
-      await templates.load();
-      tabs.openTab({
-        type: "template",
-        id: 0,
-        title: entry.display_name,
-        badge: "Template",
-        templatePath: entry.path,
-      });
-    } catch (e) {
-      console.error("create_template failed:", e);
-    }
-  }
-
-  function openTemplate(tmpl: TemplateEntry) {
-    tabs.openTab({
-      type: "template",
-      id: 0,
-      title: tmpl.display_name,
-      badge: "Template",
-      templatePath: tmpl.path,
-    });
-  }
-
-  let renamingTemplatePath = $state<string | null>(null);
-  let renameTemplateValue = $state("");
-
-  function startRenameTemplate(tmpl: TemplateEntry) {
-    renameTemplateValue = tmpl.display_name;
-    renamingTemplatePath = tmpl.path;
-  }
-
-  async function handleRenameTemplate(tmpl: TemplateEntry, newName: string): Promise<boolean> {
-    if (!newName.trim() || newName === tmpl.display_name) {
-      renamingTemplatePath = null;
-      return false;
-    }
-    try {
-      await api.renameTemplate(tmpl.path, newName.trim());
-      const newPath = tmpl.path.replace(/[^/]+\.md$/, `${newName.trim()}.md`);
-      tabs.updateTemplateTab(tmpl.path, newName.trim(), newPath);
-      await templates.load();
-      renamingTemplatePath = null;
-      return true;
-    } catch (e) {
-      console.error("rename template failed:", e);
-      return false;
-    }
-  }
-
-  function deleteTemplate(tmpl: TemplateEntry) {
-    toastUndo(`"${tmpl.display_name}" deleted`, async () => {
-      await api.deleteTemplate(tmpl.path);
-      await templates.load();
-    });
   }
 </script>
 
@@ -533,80 +461,7 @@
         </Sidebar.Group>
       </Collapsible.Root>
     </div>
-
-    <!-- Scenes section. Hidden wholesale when collapsed, as Files is: the strip's
-         Scenes stand-in above expands the sidebar and scrolls here, so this is
-         the surface it hands over. -->
-    <div id="sidebar-scenes-section" class={EXPANDED_ONLY}>
-      <Collapsible.Root open class="group/collapsible">
-        <Sidebar.Group>
-          <Sidebar.GroupLabel>
-            {#snippet child({ props })}
-              <Collapsible.Trigger {...props}>
-                Scenes
-                <ChevronDown
-                  class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-                />
-              </Collapsible.Trigger>
-            {/snippet}
-          </Sidebar.GroupLabel>
-          <Collapsible.Content forceMount>
-            {#snippet child({ props, open })}
-              {#if open}
-                <div {...props} transition:slide>
-                  <Sidebar.GroupContent>
-                    <Sidebar.Menu>
-                      <Sidebar.MenuItem>
-                        <Sidebar.MenuButton>
-                          {#snippet child({ props })}
-                            <button
-                              type="button"
-                              {...props}
-                              data-testid="sidebar-scenes"
-                              onclick={shell.openScenes}
-                            >
-                              <LayoutList class="size-4" />
-                              All Scenes
-                            </button>
-                          {/snippet}
-                        </Sidebar.MenuButton>
-                      </Sidebar.MenuItem>
-                      {#each favoriteScenes as scene (scene.id)}
-                        <Sidebar.MenuItem>
-                          <Sidebar.MenuButton>
-                            {#snippet child({ props })}
-                              {@const isPlaying = scene.id === activeSceneDisplayId}
-                              <button
-                                type="button"
-                                {...props}
-                                data-scene-playing={isPlaying || undefined}
-                                onclick={() =>
-                                  tabs.navigateOpen({
-                                    type: "scene",
-                                    id: scene.id,
-                                    title: scene.name,
-                                  })}
-                              >
-                                {#if isPlaying}
-                                  <Volume2 class="size-4 text-primary" />
-                                {:else}
-                                  <Star class="size-4 fill-primary/30 text-primary" />
-                                {/if}
-                                <span class="truncate">{scene.name}</span>
-                              </button>
-                            {/snippet}
-                          </Sidebar.MenuButton>
-                        </Sidebar.MenuItem>
-                      {/each}
-                    </Sidebar.Menu>
-                  </Sidebar.GroupContent>
-                </div>
-              {/if}
-            {/snippet}
-          </Collapsible.Content>
-        </Sidebar.Group>
-      </Collapsible.Root>
-    </div>
+    <SidebarScenes />
 
     <!-- Graph sits under the Scenes group rather than inside it (#235). It opens
          a tab as those rows do, but it is not a scene and does not belong to
@@ -677,100 +532,10 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <!-- Templates gets no icon: it had no rail entry, and a footer accordion a GM
-         opens occasionally is not session furniture. The mini player and the
-         ledger selector are both rows of text and controls with nothing to
-         narrow to, so they go with it. -->
-    <Collapsible.Root class="group/collapsible {EXPANDED_ONLY}">
-      <Sidebar.Group class="py-0">
-        <Sidebar.GroupLabel class="font-normal opacity-50">
-          {#snippet child({ props })}
-            <Collapsible.Trigger {...props}>
-              Templates
-              <ChevronDown
-                class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-              />
-            </Collapsible.Trigger>
-          {/snippet}
-        </Sidebar.GroupLabel>
-        <Collapsible.Content forceMount>
-          {#snippet child({ props, open })}
-            {#if open}
-              <div {...props} transition:slide>
-                <Sidebar.GroupContent>
-                  {#if templates.isLoading && templates.templates.length === 0}
-                    <div class="space-y-1 px-2">
-                      <Sidebar.MenuSkeleton showIcon />
-                      <Sidebar.MenuSkeleton showIcon />
-                    </div>
-                  {:else}
-                    <Sidebar.Menu>
-                      {#each templates.templates as tmpl (tmpl.path)}
-                        <ContextMenu.Root>
-                          <ContextMenu.Trigger>
-                            <Sidebar.MenuButton
-                              data-testid="template-row-{tmpl.display_name}"
-                              onclick={() => openTemplate(tmpl)}
-                            >
-                              <LayoutTemplate class="size-4 shrink-0 text-muted-foreground" />
-                              <Rename.Root
-                                this="span"
-                                class="flex-1 truncate text-sm"
-                                bind:value={
-                                  () =>
-                                    renamingTemplatePath === tmpl.path
-                                      ? renameTemplateValue
-                                      : tmpl.display_name,
-                                  (val) => {
-                                    renameTemplateValue = val;
-                                  }
-                                }
-                                bind:mode={
-                                  () => (renamingTemplatePath === tmpl.path ? "edit" : "view"),
-                                  (val) => {
-                                    if (val === "view") renamingTemplatePath = null;
-                                  }
-                                }
-                                blurBehavior="exit"
-                                onSave={(val) => handleRenameTemplate(tmpl, val)}
-                                onCancel={() => (renamingTemplatePath = null)}
-                              />
-                            </Sidebar.MenuButton>
-                          </ContextMenu.Trigger>
-                          <ContextMenu.Portal>
-                            <ContextMenu.Content>
-                              <ContextMenu.Item onSelect={() => startRenameTemplate(tmpl)}
-                                >Rename</ContextMenu.Item
-                              >
-                              <ContextMenu.Separator />
-                              <ContextMenu.Item
-                                variant="destructive"
-                                onSelect={() => deleteTemplate(tmpl)}
-                                >Delete Template</ContextMenu.Item
-                              >
-                            </ContextMenu.Content>
-                          </ContextMenu.Portal>
-                        </ContextMenu.Root>
-                      {/each}
-                      <Sidebar.MenuItem>
-                        <Sidebar.MenuButton
-                          class="text-muted-foreground/50 hover:text-muted-foreground"
-                          onclick={handleCreateTemplate}
-                          data-testid="new-template-btn"
-                        >
-                          <Plus class="size-4 shrink-0" strokeWidth={1.5} />
-                          <span>New template</span>
-                        </Sidebar.MenuButton>
-                      </Sidebar.MenuItem>
-                    </Sidebar.Menu>
-                  {/if}
-                </Sidebar.GroupContent>
-              </div>
-            {/if}
-          {/snippet}
-        </Collapsible.Content>
-      </Sidebar.Group>
-    </Collapsible.Root>
+    <!-- Templates keeps its own hiding rule; see `SidebarTemplates`. The mini
+         player and the ledger selector are both rows of text and controls with
+         nothing to narrow to, so they go when the strip does. -->
+    <SidebarTemplates />
     <div class={EXPANDED_ONLY}>
       <MiniPlayer />
       <LedgerSelector />
