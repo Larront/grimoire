@@ -72,7 +72,7 @@
    * keeps the size it has always had. Important, because `Sidebar.MenuButton`
    * sets `[&_svg]:size-4` on every descendant.
    */
-  const STRIP_ICON = "size-(--icon-rail-icon)";
+  const STRIP_ICON = "size-(--icon-rail-icon)!";
 
   /** A row that shows in both states: `size-4` beside its label, the strip's size
    *  once the label is gone. */
@@ -330,6 +330,29 @@
 </script>
 
 <!--
+  One entry on the collapsed strip: its own group, so it is spaced exactly as
+  Graph and Quick Notes are, and its own button. Rendered only when collapsed —
+  these stand in for surfaces the expanded sidebar draws in full.
+-->
+{#snippet strip(testid: string, label: string, Icon: typeof Search, onclick: () => void)}
+  <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
+    <Sidebar.GroupContent>
+      <Sidebar.Menu>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <button type="button" {...props} data-testid={testid} aria-label={label} {onclick}>
+                <Icon class={STRIP_ICON} strokeWidth={1.5} />
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
+    </Sidebar.GroupContent>
+  </Sidebar.Group>
+{/snippet}
+
+<!--
   The sidebar collapses to the rail rather than off-canvas beside one (#226).
   `SIDEBAR_WIDTH_ICON` is 3rem, which is the width the deleted `IconRail` was, in
   the place it stood — so collapsing lands a GM exactly where they used to be.
@@ -436,65 +459,20 @@
 
     <!--
       The stand-ins: what the collapsed strip shows in place of surfaces that
-      cannot be 48px wide. A `Sidebar.Group` rather than a bare `Sidebar.Menu`,
-      because the group is what carries the `p-2` every other row is inset by —
-      without it these sit flush against the edge while their neighbours do not.
+      cannot be 48px wide. One `Sidebar.Group` each, not one group holding three
+      — the group is what carries the `p-2`, so three rows sharing one sat tight
+      together and read as a set while Graph and Quick Notes stood apart. Every
+      entry on the strip is its own button, spaced like its neighbours.
 
       Search is a bar expanded and an icon collapsed. Files leaves an icon that
       expands and scrolls to the tree, which is the one entry whose behaviour
       genuinely changes: the old rail's Files button only opened the sidebar and
       stopped there. Scenes keeps the rail's behaviour exactly — it opens the All
-      Scenes tab — so the group behind it needs no forcing open.
+      Scenes tab.
     -->
-    <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
-      <Sidebar.Menu>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton>
-            {#snippet child({ props })}
-              <button
-                type="button"
-                {...props}
-                data-testid="sidebar-search-icon"
-                aria-label="Search"
-                onclick={shell.openSearch}
-              >
-                <Search class={STRIP_ICON} strokeWidth={1.5} />
-              </button>
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton>
-            {#snippet child({ props })}
-              <button
-                type="button"
-                {...props}
-                data-testid="sidebar-files-standin"
-                aria-label="Files"
-                onclick={revealFiles}
-              >
-                <Files class={STRIP_ICON} strokeWidth={1.5} />
-              </button>
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton>
-            {#snippet child({ props })}
-              <button
-                type="button"
-                {...props}
-                data-testid="sidebar-scenes-standin"
-                aria-label="Scenes"
-                onclick={shell.openScenes}
-              >
-                <Music2 class={STRIP_ICON} strokeWidth={1.5} />
-              </button>
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-      </Sidebar.Menu>
-    </Sidebar.Group>
+    {@render strip("sidebar-search-icon", "Search", Search, shell.openSearch)}
+    {@render strip("sidebar-files-standin", "Files", Files, revealFiles)}
+    {@render strip("sidebar-scenes-standin", "Scenes", Music2, shell.openScenes)}
 
     <!-- Files section -->
     <div id="sidebar-files-section" class="group-data-[collapsible=icon]:hidden">
