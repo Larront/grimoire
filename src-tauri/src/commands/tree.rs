@@ -1,8 +1,7 @@
-use crate::commands::links::rewrite_backlinks_on_rename_on_conn;
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
-use crate::ledger::AppLedger;
+use crate::ledger::{ledger_path, with_open_ledger, AppLedger};
 use diesel::prelude::*;
 use diesel::sql_query;                // used in rename_folder (Task 4)
 use diesel::sql_types::Text;          // used in rename_folder (Task 4)
@@ -126,25 +125,23 @@ pub fn build_file_tree(
 #[tauri::command]
 #[specta::specta]
 pub fn get_file_tree(ledger: State<AppLedger>) -> Result<FileNode, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        // Build note map — the ledger is locked for the whole closure; do not call
+        // get_notes as a sub-command (double-locking AppLedger's Mutex would deadlock).
+        let note_list = notes.load::<Note>(l.conn).map_err(|e| e.to_string())?;
+        let note_map: HashMap<String, i32> = note_list
+            .into_iter()
+            .map(|n| (n.path, n.id))
+            .collect();
 
-    // Build note map — acquire mutex once; do not call get_notes as a sub-command
-    // (double-locking AppLedger's Mutex would deadlock).
-    let note_list = notes.load::<Note>(conn).map_err(|e| e.to_string())?;
-    let note_map: HashMap<String, i32> = note_list
-        .into_iter()
-        .map(|n| (n.path, n.id))
-        .collect();
+        let map_list = maps::table.load::<Map>(l.conn).map_err(|e| e.to_string())?;
+        let map_map: HashMap<String, (i32, String)> = map_list
+            .into_iter()
+            .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
+            .collect();
 
-    let map_list = maps::table.load::<Map>(conn).map_err(|e| e.to_string())?;
-    let map_map: HashMap<String, (i32, String)> = map_list
-        .into_iter()
-        .filter_map(|m| m.image_path.map(|ip| (ip, (m.id, m.title))))
-        .collect();
-
-    Ok(build_file_tree(&ledger_path, "", &note_map, &map_map))
+        Ok(build_file_tree(l.path, "", &note_map, &map_map))
+    })
 }
 
 // ── create_folder ──────────────────────────────────────────────────────────
@@ -157,9 +154,8 @@ pub fn create_folder_inner(ledger_path: &Path, folder_path: &str) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub fn create_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.as_ref().ok_or("No ledger open")?.clone();
-    drop(state); // release lock before filesystem op
+    // `ledger_path` releases the lock before the filesystem op.
+    let ledger_path = ledger_path(&ledger)?;
     create_folder_inner(&ledger_path, &folder_path)
 }
 
@@ -169,6 +165,7 @@ pub fn delete_folder_inner(
     ledger_path: &Path,
     folder_path: &str,
     conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
 ) -> Result<(), String> {
     // Delete files first — if this succeeds and the DB step fails, the user
     // sees stale tree entries (recoverable). Reverse order (ghost notes in DB
@@ -176,16 +173,74 @@ pub fn delete_folder_inner(
     fs::remove_dir_all(ledger_path.join(folder_path))
         .map_err(|e| format!("remove_dir_all: {}", e))?;
 
-    let like_pattern = format!("{}/%" , folder_path);
-    diesel::delete(notes.filter(path.like(&like_pattern)))
+    let prefix = format!("{}/", folder_path);
+    let like_pattern = format!("{}%", prefix);
+
+    // `LIKE` is the coarse filter, never the answer: SQLite matches it
+    // case-insensitively over ASCII and reads `_` as "any one character", so
+    // deleting `session_notes` also selects a sibling `session-notes` whose files
+    // are still on disk. Rows are chosen by an exact prefix here and then deleted
+    // by id, so what is destroyed is only ever what was inspected.
+    let doomed_notes: Vec<Note> = notes
+        .filter(path.like(&like_pattern))
+        .load::<Note>(conn)
+        .map_err(|e| format!("query folder notes: {}", e))?
+        .into_iter()
+        .filter(|n| n.path.starts_with(&prefix))
+        .collect();
+
+    let doomed_maps: Vec<Map> = maps::table
+        .filter(maps::image_path.like(&like_pattern))
+        .load::<Map>(conn)
+        .map_err(|e| format!("query folder maps: {}", e))?
+        .into_iter()
+        .filter(|m| {
+            m.image_path
+                .as_deref()
+                .is_some_and(|p| p.starts_with(&prefix))
+        })
+        .collect();
+
+    // Dropping the rows does not take the Derived Index with them. Two of the four
+    // follow by cascade; `note_tags` is keyed by path with no foreign key, and the
+    // Search Index is not SQLite at all, so both survive their notes and keep
+    // answering `search_all` until the ledger is reopened. The Ledger Watcher cannot
+    // heal it either — it looks the row up, finds it already gone, and reports
+    // `Notify::Nothing`. Maps carry a Search Index document of their own, on the
+    // same terms.
+    //
+    // These clears must run while the rows still exist, so they are provably not
+    // leaning on the cascade.
+    let note_keys: Vec<(i32, String)> = doomed_notes
+        .iter()
+        .map(|n| (n.id, n.path.clone()))
+        .collect();
+    let reconcile = crate::note_index::remove_many(conn, index, &note_keys);
+
+    let map_ids: Vec<i32> = doomed_maps.iter().map(|m| m.id).collect();
+    // An empty folder holds no maps, so it must not report a miss it did not have.
+    if !map_ids.is_empty() {
+        let what = format!("removal of {} map(s)", map_ids.len());
+        crate::search::best_effort(index, &what, |idx| {
+            crate::search::remove_maps_batch(idx, &map_ids)
+        });
+    }
+
+    // The rows go regardless of how the reconcile fared. Returning early here would
+    // leave the ledger in the state the ordering at the top of this function exists
+    // to avoid: the files gone from disk and every row still standing.
+    diesel::delete(notes.filter(id.eq_any(doomed_notes.iter().map(|n| n.id))))
         .execute(conn)
         .map_err(|e| format!("db delete: {}", e))?;
 
-    // Remove maps whose image lives within the deleted folder
-    let map_like = format!("{}/%" , folder_path);
-    diesel::delete(maps::table.filter(maps::image_path.like(&map_like)))
+    diesel::delete(maps::table.filter(maps::id.eq_any(&map_ids)))
         .execute(conn)
         .map_err(|e| format!("db delete maps: {}", e))?;
+
+    // Only now is the reconcile's own failure — a SQLite error clearing the derived
+    // rows, never a Search Index miss, which `best_effort` has already swallowed and
+    // logged — allowed to end the command. Held until here for the reason above.
+    reconcile?;
 
     Ok(())
 }
@@ -193,10 +248,9 @@ pub fn delete_folder_inner(
 #[tauri::command]
 #[specta::specta]
 pub fn delete_folder(folder_path: String, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    delete_folder_inner(&ledger_path, &folder_path, conn)
+    with_open_ledger(&ledger, |l| {
+        delete_folder_inner(l.path, &folder_path, l.conn, l.index)
+    })
 }
 
 // ── rename_folder / move_folder ─────────────────────────────────────────────
@@ -337,17 +391,60 @@ pub fn move_folder_inner(
     relocate_folder_inner(ledger_path, old_path, &new_path, conn, index)
 }
 
+/// Re-key `table.column` from `old_prefix` onto `new_prefix`, for the rows whose
+/// value actually starts with `old_prefix`. `table` and `column` are interpolated
+/// into the statement and so must stay literals — the one call site in
+/// [`relocate_folder_inner`] is the only one, and it takes no GM input.
+///
+/// The rewrite is anchored to the *leading* prefix, the same form and for the same
+/// reason as [`crate::commands::pdf_scene_links::rewrite_pdf_path_prefix`]: a blanket
+/// `REPLACE` rewrites every occurrence, so a folder whose name repeats inside its own
+/// subtree (`a/a/world.jpg`) has its interior segment rewritten too and the row lands
+/// at `b/b/world.jpg`, where the file is at `b/a/world.jpg`.
+///
+/// The `SUBSTR(col, 1, ?) = ?` guard is what makes that anchoring safe. `LIKE` is
+/// case-insensitive over ASCII and reads `_` as a single-character wildcard, so
+/// `LIKE 'session_notes/%'` also matches a sibling folder `session-notes` — and
+/// cutting a fixed number of characters off a path that never carried the prefix
+/// corrupts it. The blanket `REPLACE` this form replaced was self-limiting (no
+/// literal match, no change); a positional rewrite has to say so itself.
+fn rekey_leading_prefix(
+    conn: &mut SqliteConnection,
+    table: &str,
+    column: &str,
+    old_prefix: &str,
+    new_prefix: &str,
+) -> QueryResult<usize> {
+    let like_pattern = format!("{}%", old_prefix);
+    // SQLite SUBSTR is 1-based and counts characters; +1 starts just past the
+    // matched prefix, so `chars().count()` is the length that lines up with it.
+    let prefix_len = old_prefix.chars().count() as i32;
+    sql_query(format!(
+        "UPDATE {table} SET {column} = ? || SUBSTR({column}, ?) \
+         WHERE {column} LIKE ? AND SUBSTR({column}, 1, ?) = ?"
+    ))
+    .bind::<Text, _>(new_prefix)
+    .bind::<diesel::sql_types::Integer, _>(prefix_len + 1)
+    .bind::<Text, _>(&like_pattern)
+    .bind::<diesel::sql_types::Integer, _>(prefix_len)
+    .bind::<Text, _>(old_prefix)
+    .execute(conn)
+}
+
 /// Carry a folder from `old_path` to `new_path` along with everything keyed by a
-/// path underneath it: descendant note `path`/`parent_path`, map `image_path`,
-/// PDF Scene-links, note_tags, the search index, and the full-path wikilinks
-/// pointing into it. Returns the number of notes whose links were rewritten, for
-/// the "N notes updated" toast.
+/// path underneath it. Returns the number of notes whose links were rewritten,
+/// for the "N notes updated" toast.
+///
+/// The notes are [`crate::note_mutation::relocate_folder`]'s: their rows, their
+/// files, the wikilinks pointing into them, and the directory move itself, in the
+/// order the Write-and-Reconcile Envelope states once for every set-shaped
+/// write. What is left here is the two path-keyed things that are not notes and
+/// so have no envelope to join — map images and PDF Scene-links, both of which
+/// travelled with the directory and would otherwise be orphaned.
 ///
 /// A rename and a move both land here — they differ only in which half of the
 /// destination path their caller changed — so the re-keying story is written
-/// once. Callers resolve *and refuse* their destination before calling: step 2
-/// below points links at the new path, so a relocation that failed at step 3
-/// would leave every link aimed at a folder that never appeared.
+/// once. Callers resolve *and refuse* their destination first.
 pub fn relocate_folder_inner(
     ledger_path: &Path,
     old_path: &str,
@@ -355,118 +452,19 @@ pub fn relocate_folder_inner(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
 ) -> Result<usize, String> {
-    // Nothing was asked for: a rename to the name it already has, or a move into
-    // the folder it already sits in. Leaving the filesystem alone is the whole
-    // job — `fs::rename` of a directory onto itself is not portable.
-    if old_path == new_path {
-        return Ok(0);
-    }
+    let updated_count =
+        crate::note_mutation::relocate_folder(conn, index, ledger_path, old_path, new_path)?;
 
     let old_prefix = format!("{}/", old_path);
     let new_prefix = format!("{}/", new_path);
-    let like_pattern = format!("{}%", old_prefix);
 
-    // 1. Collect descendant note paths before touching disk so we can compute
-    //    (old_path, new_path) pairs for the link rewrite step below.
-    let descendant_paths: Vec<String> = notes
-        .filter(path.like(&like_pattern))
-        .select(path)
-        .load(conn)
-        .map_err(|e| format!("query descendants: {}", e))?;
-
-    // 2. Rewrite full-path wikilinks pointing at each moved note BEFORE the
-    //    filesystem rename so that source files are still readable at their DB
-    //    paths. Bare-stem links are left untouched by rewrite_backlinks_on_rename_on_conn
-    //    (stem doesn't change on a folder move, so owns_stem is always false).
-    let mut all_backlink_rewrites: Vec<crate::note_index::ReconcileManyItem> = Vec::new();
-    for old_note_path in &descendant_paths {
-        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
-        let rewrites =
-            rewrite_backlinks_on_rename_on_conn(ledger_path, conn, old_note_path, &new_note_path)?;
-        for (note, content) in rewrites {
-            all_backlink_rewrites.push(crate::note_index::ReconcileManyItem {
-                note,
-                content,
-                prev_path: None,
-            });
-        }
-    }
-    let updated_count = all_backlink_rewrites.len();
-
-    // 3. Rename directory on disk. Individual .md files move atomically with
-    //    the folder — no per-file renames are needed.
-    fs::rename(ledger_path.join(old_path), ledger_path.join(new_path))
-        .map_err(|e| format!("rename dir: {}", e))?;
-
-    // 4. Update `path` for all descendant notes.
-    sql_query("UPDATE notes SET path = REPLACE(path, ?, ?) WHERE path LIKE ?")
-        .bind::<Text, _>(&old_prefix)
-        .bind::<Text, _>(&new_prefix)
-        .bind::<Text, _>(&like_pattern)
-        .execute(conn)
-        .map_err(|e| format!("update paths: {}", e))?;
-
-    // 5a. Update `parent_path` — exact match (direct children: parent_path = old_path).
-    //     These rows' parent_path is "creatures" (no slash), not matched by LIKE "creatures/%",
-    //     so must be handled separately.
-    sql_query("UPDATE notes SET parent_path = ? WHERE parent_path = ?")
-        .bind::<Text, _>(new_path)
-        .bind::<Text, _>(old_path)
-        .execute(conn)
-        .map_err(|e| format!("update parent exact: {}", e))?;
-
-    // 5b. Update `parent_path` — prefix match (deeper nesting: parent_path LIKE old_path/%).
-    sql_query(
-        "UPDATE notes SET parent_path = REPLACE(parent_path, ?, ?) WHERE parent_path LIKE ?",
-    )
-    .bind::<Text, _>(&old_prefix)
-    .bind::<Text, _>(&new_prefix)
-    .bind::<Text, _>(&like_pattern)
-    .execute(conn)
-    .map_err(|e| format!("update parent prefix: {}", e))?;
-
-    // 6. Update image_path for maps inside the renamed folder.
-    sql_query("UPDATE maps SET image_path = REPLACE(image_path, ?, ?) WHERE image_path LIKE ?")
-        .bind::<Text, _>(&old_prefix)
-        .bind::<Text, _>(&new_prefix)
-        .bind::<Text, _>(&like_pattern)
-        .execute(conn)
+    rekey_leading_prefix(conn, "maps", "image_path", &old_prefix, &new_prefix)
         .map_err(|e| format!("update map paths: {}", e))?;
 
-    // 6b. Re-key Scene-links for PDFs inside the renamed folder. PDFs are
-    //     path-addressed (ADR-0011), so a folder move relocates them on disk with
-    //     the atomic dir rename above; their links must follow or be orphaned.
+    // PDFs are path-addressed (ADR-0011), so the atomic dir rename above has
+    // already relocated them on disk; their Scene-links must follow.
     crate::commands::pdf_scene_links::rewrite_pdf_path_prefix(conn, &old_prefix, &new_prefix)
         .map_err(|e| format!("update pdf scene-link paths: {}", e))?;
-
-    // 7. Load moved notes (now at new paths) and build reconcile items so their
-    //    note_tags are re-keyed and Tantivy is updated. prev_path triggers the
-    //    old-path note_tags clear in write_facets.
-    let mut moved_items: Vec<crate::note_index::ReconcileManyItem> =
-        Vec::with_capacity(descendant_paths.len());
-    for old_note_path in &descendant_paths {
-        let new_note_path = old_note_path.replacen(&old_prefix, &new_prefix, 1);
-        let note: Note = notes
-            .filter(path.eq(&new_note_path))
-            .first(conn)
-            .map_err(|e| format!("load moved note '{new_note_path}': {e}"))?;
-        let content = fs::read_to_string(ledger_path.join(&new_note_path))
-            .unwrap_or_default();
-        moved_items.push(crate::note_index::ReconcileManyItem {
-            note,
-            content,
-            prev_path: Some(old_note_path.clone()),
-        });
-    }
-
-    // 8. Route all index writes through reconcile_many — one atomic SQLite tx,
-    //    one Tantivy commit for backlink sources + moved notes.
-    let mut all_items = all_backlink_rewrites;
-    all_items.extend(moved_items);
-    if !all_items.is_empty() {
-        let outcome = crate::note_index::reconcile_many(conn, index, &all_items)?;
-        crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
-    }
 
     Ok(updated_count)
 }
@@ -478,14 +476,11 @@ pub fn rename_folder(
     new_name: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    // Cast the internal usize count to i32 at the command seam: specta forbids
-    // BigInt-style types in exported bindings, and link counts are always small.
-    rename_folder_inner(&ledger_path, &old_path, &new_name, conn, index).map(|n| n as i32)
+    with_open_ledger(&ledger, |l| {
+        // Cast the internal usize count to i32 at the command seam: specta forbids
+        // BigInt-style types in exported bindings, and link counts are always small.
+        rename_folder_inner(l.path, &old_path, &new_name, l.conn, l.index).map(|n| n as i32)
+    })
 }
 
 #[tauri::command]
@@ -495,12 +490,9 @@ pub fn move_folder(
     dest_folder: String,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    move_folder_inner(&ledger_path, &old_path, &dest_folder, conn, index).map(|n| n as i32)
+    with_open_ledger(&ledger, |l| {
+        move_folder_inner(l.path, &old_path, &dest_folder, l.conn, l.index).map(|n| n as i32)
+    })
 }
 
 #[cfg(test)]
@@ -733,6 +725,30 @@ mod tests {
         .unwrap();
     }
 
+    fn insert_note_tag(conn: &mut SqliteConnection, note_path: &str, tag: &str) {
+        conn.batch_execute(&format!(
+            "INSERT OR IGNORE INTO note_tags (note_path, tag) VALUES ('{}', '{}');",
+            note_path, tag
+        ))
+        .unwrap();
+    }
+
+    /// Every path still carrying a tag row, sorted — `note_tags` has no foreign
+    /// key, so this is what survives a `notes` delete unless something clears it.
+    fn note_tag_paths(conn: &mut SqliteConnection) -> Vec<String> {
+        #[derive(diesel::QueryableByName)]
+        struct PathRow {
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            note_path: String,
+        }
+        diesel::sql_query("SELECT note_path FROM note_tags ORDER BY note_path")
+            .load::<PathRow>(conn)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.note_path)
+            .collect()
+    }
+
     #[derive(diesel::QueryableByName)]
     struct CountRow {
         #[diesel(sql_type = diesel::sql_types::BigInt)]
@@ -818,7 +834,7 @@ mod tests {
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
 
-        delete_folder_inner(dir.path(), "creatures", &mut conn).unwrap();
+        delete_folder_inner(dir.path(), "creatures", &mut conn, None).unwrap();
 
         assert!(!folder.exists());
         let remaining: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
@@ -836,7 +852,7 @@ mod tests {
         insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
         insert_note(&mut conn, 2, "top-level.md", None);
 
-        delete_folder_inner(dir.path(), "creatures", &mut conn).unwrap();
+        delete_folder_inner(dir.path(), "creatures", &mut conn, None).unwrap();
 
         let remaining: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(remaining.len(), 1);
@@ -853,11 +869,88 @@ mod tests {
         let mut conn = test_conn();
         insert_map(&mut conn, "maps-folder/world.jpg", "World Map");
 
-        delete_folder_inner(dir.path(), "maps-folder", &mut conn).unwrap();
+        delete_folder_inner(dir.path(), "maps-folder", &mut conn, None).unwrap();
 
         assert!(!folder.exists());
         let remaining: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
         assert!(remaining.is_empty());
+    }
+
+    /// The `notes` row going away does not take the Derived Index with it: of the
+    /// four indexes only two cascade, and `note_tags` (keyed by path, no foreign
+    /// key) is one of the two that do not. Without an explicit clear the deleted
+    /// folder's tags keep arriving as facets from `search_all`.
+    #[test]
+    fn delete_folder_clears_derived_index_rows_for_its_notes() {
+        let dir = TempDir::new().unwrap();
+        let folder = dir.path().join("creatures");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("dragon.md"), "---\ntags: [beast]\n---\n").unwrap();
+        fs::write(dir.path().join("top-level.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "creatures/dragon.md", Some("creatures"));
+        insert_note(&mut conn, 2, "top-level.md", None);
+        insert_note_tag(&mut conn, "creatures/dragon.md", "beast");
+        insert_note_tag(&mut conn, "top-level.md", "keep-me");
+
+        delete_folder_inner(dir.path(), "creatures", &mut conn, None).unwrap();
+
+        // The deleted folder's tags are gone; the bystander's survive.
+        assert_eq!(note_tag_paths(&mut conn), vec!["top-level.md".to_string()]);
+    }
+
+    /// A map carries a Search Index document of its own, so a folder holding a map
+    /// image has to reconcile the index too — the note path is not the only one.
+    /// The empty schema makes that removal fail, and the point of the test is what
+    /// happens next: the rows still go. A search write is best-effort and healed by
+    /// the rebuild at the next open (#205), so letting it strand the delete
+    /// half-done would be the far worse outcome.
+    #[test]
+    fn a_failed_map_index_removal_does_not_strand_the_folder_delete() {
+        let dir = TempDir::new().unwrap();
+        let folder = dir.path().join("maps-folder");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("world.jpg"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_map(&mut conn, "maps-folder/world.jpg", "World Map");
+
+        let bad_index =
+            tantivy::Index::create_in_ram(tantivy::schema::Schema::builder().build());
+        delete_folder_inner(dir.path(), "maps-folder", &mut conn, Some(&bad_index)).unwrap();
+
+        let remaining: i64 = maps::table.count().get_result(&mut conn).unwrap();
+        assert_eq!(remaining, 0, "the map row must go even when its index write failed");
+        assert!(!folder.exists(), "the folder must go even when its index write failed");
+    }
+
+    /// SQLite's `LIKE` is case-insensitive over ASCII and reads `_` as "any one
+    /// character", so `path LIKE 'session_notes/%'` also matches a sibling folder
+    /// called `session-notes`. Selecting rows to destroy with it alone would take
+    /// the sibling's rows with them, and the sibling's files are still on disk.
+    #[test]
+    fn delete_folder_leaves_a_sibling_the_like_pattern_matches_alone() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("session_notes")).unwrap();
+        fs::create_dir(dir.path().join("session-notes")).unwrap();
+        fs::write(dir.path().join("session_notes/a.md"), "").unwrap();
+        fs::write(dir.path().join("session-notes/b.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "session_notes/a.md", Some("session_notes"));
+        insert_note(&mut conn, 2, "session-notes/b.md", Some("session-notes"));
+        insert_note_tag(&mut conn, "session-notes/b.md", "keep-me");
+        insert_map(&mut conn, "session-notes/world.jpg", "World Map");
+
+        delete_folder_inner(dir.path(), "session_notes", &mut conn, None).unwrap();
+
+        let remaining: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].path, "session-notes/b.md");
+        assert_eq!(note_tag_paths(&mut conn), vec!["session-notes/b.md".to_string()]);
+        let maps_left: Vec<Map> = maps::table.load::<Map>(&mut conn).unwrap();
+        assert_eq!(maps_left.len(), 1, "the sibling's map must survive");
     }
 
     // ── rename_folder tests ───────────────────────────────────────────────
@@ -1305,5 +1398,94 @@ mod tests {
         // All old-path link rows must be gone
         let stale_count = count_links_where(&mut conn, "target_path LIKE 'creatures/%'");
         assert_eq!(stale_count, 0, "no stale rows pointing to old folder path");
+    }
+
+    // ── prefix re-keying ──────────────────────────────────────────────────
+    //
+    // A folder whose name repeats inside its own subtree is where a blanket
+    // REPLACE goes wrong and only the *leading* prefix is right: renaming `a` to
+    // `b` makes `a/a/x.md` into `b/a/x.md`, not `b/b/x.md`. Notes are re-keyed
+    // one at a time inside the envelope now, so there is only one computation
+    // left to be right; the map rows below still cross the seam these tests
+    // guard, where a path is computed by SQL and read back by Rust.
+
+    #[test]
+    fn rename_folder_re_keys_a_repeated_name_by_leading_prefix_only() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("a/a")).unwrap();
+        fs::write(dir.path().join("a/a/x.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a/a/x.md", Some("a/a"));
+
+        rename_folder_inner(dir.path(), "a", "b", &mut conn, None).unwrap();
+
+        let row: Note = notes.first::<Note>(&mut conn).unwrap();
+        assert_eq!(row.path, "b/a/x.md");
+        assert_eq!(row.parent_path.as_deref(), Some("b/a"));
+    }
+
+    /// `parent_path` needs one more level of nesting than `path` does before a
+    /// repeated folder name can be got wrong, so it is worth its own case: the
+    /// envelope derives a moved note's parent from where the note landed, which
+    /// is the same computation the path itself got.
+    #[test]
+    fn rename_folder_re_keys_a_deeper_repeated_parent_path_by_prefix_only() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("a/a/a")).unwrap();
+        fs::write(dir.path().join("a/a/a/y.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a/a/a/y.md", Some("a/a/a"));
+
+        rename_folder_inner(dir.path(), "a", "b", &mut conn, None).unwrap();
+
+        let row: Note = notes.first::<Note>(&mut conn).unwrap();
+        assert_eq!(row.path, "b/a/a/y.md");
+        assert_eq!(row.parent_path.as_deref(), Some("b/a/a"));
+    }
+
+    /// The mirror of the delete case: `LIKE` alone selects the sibling too, and a
+    /// prefix rewrite anchored by length would then cut the same number of
+    /// characters off a path that never carried the prefix — turning
+    /// `session-notes/b.md` into `archive/b.md` while the file stays where it is.
+    /// The old blanket `REPLACE` was self-limiting here (no literal match, no
+    /// change), so the guard has to be explicit now that the rewrite is positional.
+    #[test]
+    fn rename_folder_leaves_a_sibling_the_like_pattern_matches_alone() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("session_notes")).unwrap();
+        fs::create_dir(dir.path().join("session-notes")).unwrap();
+        fs::write(dir.path().join("session_notes/a.md"), "").unwrap();
+        fs::write(dir.path().join("session-notes/b.md"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "session_notes/a.md", Some("session_notes"));
+        insert_note(&mut conn, 2, "session-notes/b.md", Some("session-notes"));
+        insert_map(&mut conn, "session-notes/world.jpg", "World Map");
+
+        rename_folder_inner(dir.path(), "session_notes", "archive", &mut conn, None).unwrap();
+
+        let mut paths: Vec<String> = notes.select(path).load(&mut conn).unwrap();
+        paths.sort();
+        assert_eq!(paths, vec!["archive/a.md", "session-notes/b.md"]);
+
+        let row: Map = maps::table.first::<Map>(&mut conn).unwrap();
+        assert_eq!(row.image_path.as_deref(), Some("session-notes/world.jpg"));
+    }
+
+    #[test]
+    fn rename_folder_re_keys_a_repeated_name_in_a_map_image_path_by_prefix_only() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("a/a")).unwrap();
+        fs::write(dir.path().join("a/a/world.jpg"), "").unwrap();
+
+        let mut conn = test_conn();
+        insert_map(&mut conn, "a/a/world.jpg", "World Map");
+
+        rename_folder_inner(dir.path(), "a", "b", &mut conn, None).unwrap();
+
+        let row: Map = maps::table.first::<Map>(&mut conn).unwrap();
+        assert_eq!(row.image_path.as_deref(), Some("b/a/world.jpg"));
     }
 }

@@ -47,14 +47,13 @@
     ChevronDown,
     FoldHorizontal,
     Pencil,
-    Trash2,
     UnfoldHorizontal,
   } from "@lucide/svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
-  import type { RowChange } from "$lib/editor/row-list";
+  import { settleRowChange, type RowChange } from "$lib/editor/row-list";
   import { blankLabelledRow, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
   import {
     applyArithmetic,
@@ -73,34 +72,25 @@
     type Statblock,
     type StatblockEntry,
     type StatblockSection,
-    type StatblockWidth,
   } from "$lib/editor/statblock-block";
 
+  // The creature's record, taken as one prop bag rather than as four named props: the
+  // connector mounts a block with its record spread over the props, so the rest element
+  // *is* the record and nothing here re-lists its fields (#209). A fifth attribute arrives
+  // without a line changing in this file.
   let {
-    name,
-    rows,
-    sections,
-    width,
     onCommit,
-    onRemove,
-  }: {
-    name: string;
-    rows: LabelledRow[];
-    sections: StatblockSection[];
-    width: StatblockWidth;
+    ...attrs
+  }: Statblock & {
     onCommit: (block: Statblock) => void;
-    /** Takes the whole block out of the note. Offered in edit mode only — see below. */
-    onRemove?: () => void;
   } = $props();
 
+  // The editable copy. One record rather than one mirror per field, which is what makes
+  // `setAttrs` below total: an undo hands over a whole creature, so there is no field it
+  // can leave behind holding a stale value for the next commit to write back — the silent
+  // loss #209 named.
   // svelte-ignore state_referenced_locally
-  let _name = $state(name);
-  // svelte-ignore state_referenced_locally
-  let _rows = $state<LabelledRow[]>(rows);
-  // svelte-ignore state_referenced_locally
-  let _sections = $state<StatblockSection[]>(sections);
-  // svelte-ignore state_referenced_locally
-  let _width = $state<StatblockWidth>(width);
+  let block = $state<Statblock>({ ...attrs });
 
   /**
    * View state, both of it. Neither is ever handed to `onCommit`, and `setAttrs` leaves
@@ -123,18 +113,12 @@
   let focus = $state<FocusTarget | null>(null);
 
   const rowFocused = (index: number) => focus?.level === "row" && focus.index === index;
-  const sectionFocused = (index: number) =>
-    focus?.level === "section" && focus.index === index;
+  const sectionFocused = (index: number) => focus?.level === "section" && focus.index === index;
   const entryFocused = (section: number, index: number) =>
     focus?.level === "entry" && focus.section === section && focus.index === index;
 
   function commit() {
-    onCommit({
-      name: _name,
-      rows: $state.snapshot(_rows) as LabelledRow[],
-      sections: $state.snapshot(_sections) as StatblockSection[],
-      width: _width,
-    });
+    onCommit($state.snapshot(block) as Statblock);
   }
 
   /**
@@ -145,12 +129,12 @@
    * structure mode to do it.
    */
   function toggleWidth() {
-    _width = _width === "narrow" ? "comfortable" : "narrow";
+    block.width = block.width === "narrow" ? "comfortable" : "narrow";
     commit();
   }
 
   function setName(next: string) {
-    _name = next;
+    block.name = next;
     commit();
   }
 
@@ -177,24 +161,22 @@
   // ── The header ──────────────────────────────────────────────────────────────
 
   function setRow(index: number, patch: Partial<LabelledRow>) {
-    _rows[index] = { ..._rows[index], ...patch };
+    block.rows[index] = { ...block.rows[index], ...patch };
     focus = null;
     commit();
   }
 
-  // Order changes come from the Row List, which owns the controls and the arithmetic.
-  // What is decided here is which of them reaches the document: a move and a delete at
-  // once, but a freshly inserted row is empty and serializes to nothing at all, so it
-  // waits — it becomes a document write when the GM types into it. The same rule holds
-  // one and two levels down, for a section and for an entry.
+  // Order changes come from the Row List, which owns the controls and the splicing.
+  // Whether one of them reaches the document is `settleRowChange`'s rule, stated once
+  // there and the same at all three depths; what differs here is only which level of the
+  // creature the focus names.
   function handleRowChange(next: LabelledRow[], change: RowChange) {
-    _rows = next;
+    block.rows = next;
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "row", index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "row", index }),
+      commit,
+    });
   }
 
   // ── Play ────────────────────────────────────────────────────────────────────
@@ -221,7 +203,7 @@
     // Enter commits and closes the input, which in some browsers blurs it on the way
     // out. Without this the hit would land twice, and the second one is invisible.
     if (poolRow !== index) return;
-    const value = classifyValue(_rows[index].value);
+    const value = classifyValue(block.rows[index].value);
     poolRow = null;
     if (value.kind !== "pool") return;
     const next = applyArithmetic(value.current, poolDraft);
@@ -232,7 +214,7 @@
   }
 
   function toggleMark(index: number, mark: number) {
-    const value = classifyValue(_rows[index].value);
+    const value = classifyValue(block.rows[index].value);
     if (value.kind !== "track") return;
     const marks: Mark[] = value.marks.map((m, i) =>
       i === mark ? { ...m, checked: !m.checked } : m,
@@ -242,45 +224,43 @@
 
   /** What a collapsed statblock keeps: the rows a GM can play on, in their order. */
   const playableRows = $derived(
-    _rows.map((row, index) => ({ row, index })).filter(({ row }) => isPlayable(row.value)),
+    block.rows.map((row, index) => ({ row, index })).filter(({ row }) => isPlayable(row.value)),
   );
 
   // ── Sections ────────────────────────────────────────────────────────────────
 
   function setHeading(index: number, heading: string) {
-    _sections[index] = { ..._sections[index], heading };
+    block.sections[index] = { ...block.sections[index], heading };
     focus = null;
     commit();
   }
 
   function handleSectionChange(next: StatblockSection[], change: RowChange) {
-    _sections = next;
+    block.sections = next;
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "section", index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "section", index }),
+      commit,
+    });
   }
 
   // ── Entries ─────────────────────────────────────────────────────────────────
 
   function setEntry(section: number, index: number, patch: Partial<StatblockEntry>) {
-    const entries = [..._sections[section].entries];
+    const entries = [...block.sections[section].entries];
     entries[index] = { ...entries[index], ...patch };
-    _sections[section] = { ..._sections[section], entries };
+    block.sections[section] = { ...block.sections[section], entries };
     focus = null;
     commit();
   }
 
   function handleEntryChange(section: number, next: StatblockEntry[], change: RowChange) {
-    _sections[section] = { ..._sections[section], entries: next };
+    block.sections[section] = { ...block.sections[section], entries: next };
     focus = null;
-    if (change.kind === "insert") {
-      focus = { level: "entry", section, index: change.index };
-      return;
-    }
-    commit();
+    settleRowChange(change, {
+      focus: (index) => (focus = { level: "entry", section, index }),
+      commit,
+    });
   }
 
   // ── Saving the shape ────────────────────────────────────────────────────────
@@ -294,24 +274,23 @@
 
   function saveShapeAsPreset() {
     capturedFence = serializeStatblock({
-      name: _name,
-      rows: $state.snapshot(_rows) as LabelledRow[],
-      sections: $state.snapshot(_sections) as StatblockSection[],
+      name: block.name,
+      rows: $state.snapshot(block.rows) as LabelledRow[],
+      sections: $state.snapshot(block.sections) as StatblockSection[],
       // Width travels with the shape, because it is part of what the GM is keeping: a
       // preset made from a narrowed creature stamps narrowed creatures, which is what
       // building a preset off one member of a tiled encounter is for.
-      width: _width,
+      width: block.width,
     });
     savingPreset = true;
   }
 
-  export function setAttrs(attrs: Statblock) {
-    _name = attrs.name;
-    _rows = attrs.rows;
-    _sections = attrs.sections;
-    // Width is document state, so it comes back with the rest of it — an undo of a
-    // narrowing has to redraw the card, not just rewrite the fence underneath it.
-    _width = asStatblockWidth(attrs.width);
+  export function setAttrs(next: Statblock) {
+    // The whole record, width included — width is document state, so an undo of a
+    // narrowing has to redraw the card and not just rewrite the fence underneath it. It
+    // is still read through `asStatblockWidth`, because a card pasted from elsewhere may
+    // carry a word this version has no drawing for.
+    block = { ...next, width: asStatblockWidth(next.width) };
     focus = null;
     poolRow = null;
   }
@@ -495,9 +474,7 @@
      which is where the maximum becomes reachable at all. `pr-14` reserves the gutter
      the Row List's controls sit in. -->
 {#snippet headerRow(row: LabelledRow, i: number)}
-  <div
-    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px"
-  >
+  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px">
     {@render rowLabel(row, i, true)}
     <LinkedTextField
       value={row.value}
@@ -540,10 +517,15 @@
   class="statblock-block group/block relative my-2 select-none rounded-lg border border-l-[3px]
          border-border bg-card/40 px-3 py-2"
   class:statblock-editing={editing}
-  data-width={_width}
+  data-width={block.width}
   contenteditable="false"
   onkeydown={handleKeydown}
 >
+  <!-- The block's own controls: collapse, width, preset, and the way into and out of the
+       mode. Everything here is the *statblock's* business and nothing else's — a delete
+       is not, so there is no trash can, the way there is none on an infobox or a
+       timeline. The gutter handle's menu deletes anything (#194), and a block drawing
+       chrome its siblings deleted is the drift ADR-0016 §8 exists to prevent (#219). -->
   <div
     class="absolute top-1 right-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity
            duration-150 motion-reduce:transition-none group-hover/block:opacity-100
@@ -572,10 +554,10 @@
       type="button"
       class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      aria-label={_width === "narrow" ? "Widen statblock" : "Narrow statblock"}
+      aria-label={block.width === "narrow" ? "Widen statblock" : "Narrow statblock"}
       onclick={toggleWidth}
     >
-      {#if _width === "narrow"}
+      {#if block.width === "narrow"}
         <UnfoldHorizontal size={13} />
       {:else}
         <FoldHorizontal size={13} />
@@ -591,17 +573,6 @@
       <Bookmark size={13} />
     </button>
     {#if editing}
-      {#if onRemove}
-        <button
-          type="button"
-          class="rounded p-0.5 text-muted-foreground hover:text-destructive cursor-pointer
-                 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          aria-label="Remove statblock"
-          onclick={onRemove}
-        >
-          <Trash2 size={13} />
-        </button>
-      {/if}
       <button
         type="button"
         class="rounded p-0.5 text-primary hover:text-foreground cursor-pointer
@@ -625,23 +596,22 @@
   </div>
 
   <!-- The name, with the gutter the control row above sits in reserved on its right so a
-       long name never runs under the icons. One step tighter in each mode since the grip
-       moved out to the gutter (#193) and left the row a button shorter. The numbers are
-       the same ones the row already used at each length rather than a fresh guess: edit
-       mode's five buttons are exactly what view mode held at `pr-24` before this change,
-       and view mode is now four. -->
+       long name never runs under the icons. One number rather than one per mode, because
+       the two modes now draw the same *count*: the trash the mode used to add went with
+       the rest of the per-block delete chrome (#219), so edit mode's collapse, width,
+       preset and tick are four buttons against view mode's collapse, width, preset and
+       pencil. `pr-20` is the width four already had, not a fresh guess. -->
   <LinkedTextField
-    value={_name}
+    value={block.name}
     onCommit={setName}
     restrict={oneLine}
     readonly={!editing}
     ariaLabel="Statblock name"
     placeholder="Unnamed statblock"
-    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1
-           {editing ? 'pr-24' : 'pr-20'}"
+    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-20"
   />
 
-  {#if !collapsed && _rows.length === 0}
+  {#if !collapsed && block.rows.length === 0}
     <div class="font-sans text-xs italic text-muted-foreground mb-1">No header rows yet</div>
   {/if}
 
@@ -656,7 +626,7 @@
     </div>
   {:else if editing}
     <RowList
-      rows={_rows}
+      rows={block.rows}
       row={headerRow}
       noun="row"
       createRow={blankLabelledRow}
@@ -664,7 +634,7 @@
     />
 
     <RowList
-      rows={_sections}
+      rows={block.sections}
       row={statblockSection}
       noun="section"
       createRow={blankStatblockSection}
@@ -673,12 +643,12 @@
   {:else}
     <div class="statblock-split">
       <div class="statblock-stats">
-        {#each _rows as row, i (i)}
+        {#each block.rows as row, i (i)}
           {@render viewRow(row, i)}
         {/each}
       </div>
       <div class="statblock-reference">
-        {#each _sections as section, s (s)}
+        {#each block.sections as section, s (s)}
           <div class="pt-2">
             {@render sectionHeading(section, s, false)}
             {#each section.entries as entry, i (i)}
@@ -691,7 +661,7 @@
   {/if}
 </div>
 
-<SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={_name} />
+<SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={block.name} />
 
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state

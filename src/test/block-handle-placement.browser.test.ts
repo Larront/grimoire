@@ -14,12 +14,9 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mount, unmount, tick } from "svelte";
 import { Editor } from "@tiptap/core";
 import { noteExtensions } from "$lib/editor/note-extensions";
-import {
-  blockTargetAt,
-  targetFromCoords,
-  type BlockTarget,
-} from "$lib/editor/block-handle";
+import { blockTargetAt, targetFromCoords, type BlockTarget } from "$lib/editor/block-handle";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
+import { createBlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import "../app.css";
 
 // The narrowest a note pane realistically gets: a window split in two, inside an app
@@ -90,14 +87,7 @@ function pointerAt(editor: Editor, point: { left: number; top: number }): BlockT
 async function grip(editor: Editor, target: BlockTarget): Promise<DOMRect> {
   handle = mount(BlockHandle, {
     target: document.body,
-    props: {
-      editor,
-      target,
-      onHold: () => {},
-      onPin: () => {},
-      onRetarget: () => {},
-      onRelease: () => {},
-    },
+    props: { editor, target, handle: createBlockHandleLife(() => editor) },
   });
   await tick();
   const el = document.querySelector("[data-block-handle]");
@@ -142,18 +132,12 @@ describe("the grip beside a block", () => {
     const target = pointerAt(editor, inside(firstBlock(editor)));
     const rect = await grip(editor, target);
 
-    const hit = document.elementFromPoint(
-      rect.left + rect.width / 2,
-      rect.top + rect.height / 2,
-    );
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     expect(hit?.closest("[data-block-handle]")).not.toBeNull();
   });
 
   it("tracks the pointer down the note, block by block", async () => {
-    const { editor } = openNote(
-      "First paragraph.\n\n## A heading\n\nThird paragraph.",
-      WIDE_PANE,
-    );
+    const { editor } = openNote("First paragraph.\n\n## A heading\n\nThird paragraph.", WIDE_PANE);
     const blocks = Array.from(editor.view.dom.children);
 
     const top = pointerAt(editor, inside(blocks[0]));
@@ -281,11 +265,7 @@ describe("the grip beside a block", () => {
 
   it.each([
     ["an infobox", "```infobox\nPopulation: 4,200\n```", "infoboxBlock"],
-    [
-      "a timeline",
-      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
-      "timelineBlock",
-    ],
+    ["a timeline", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```", "timelineBlock"],
     ["a scene", "```scene\n# The Tavern\nId: 7\n```", "sceneBlock"],
     ["an image", "![The gate](images/gate.png)", "image"],
   ])(
@@ -319,13 +299,9 @@ describe("the grip beside a block", () => {
     // gives the creature — and the grip then has to fit inside the callout's own padding
     // rather than out in the note's margin.
     const { editor, pane } = openNote(
-      [
-        "> [!encounter] The Ambush",
-        "> ```statblock",
-        "> # Kobold A",
-        "> HP: 5/5",
-        "> ```",
-      ].join("\n"),
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join(
+        "\n",
+      ),
       WIDE_PANE,
     );
     const card = editor.view.dom.querySelector("[data-note-block='statblock']");
@@ -563,7 +539,10 @@ describe("reaching for the grip", () => {
   it("answers nothing for a pointer up in the note's title", () => {
     const { column, title, last } = open("The lower halls are flooded.");
     const box = title.getBoundingClientRect();
-    pointerAtColumn(column, { left: box.left + 20, top: box.top + box.height / 2 });
+    pointerAtColumn(column, {
+      left: box.left + 20,
+      top: box.top + box.height / 2,
+    });
     expect(last()).toBeNull();
   });
 });
@@ -587,10 +566,7 @@ describe("the gutter", () => {
     // than resolved, so a `rem` in the stylesheet becomes a sub-pixel gap in the maths
     // and every "clear of the prose" assertion still passes.
     expect(gap).toBeCloseTo(parseFloat(styles.getPropertyValue("--block-handle-gap")), 1);
-    expect(rect.width).toBeCloseTo(
-      parseFloat(styles.getPropertyValue("--block-handle-size")),
-      1,
-    );
+    expect(rect.width).toBeCloseTo(parseFloat(styles.getPropertyValue("--block-handle-size")), 1);
     expect(gutter).toBeGreaterThanOrEqual(rect.width + gap);
   });
 });

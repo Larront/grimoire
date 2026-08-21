@@ -1,6 +1,6 @@
 use crate::db::models::{Map, NewMap, AssignImageChangeset, MapAnnotation, NewMapAnnotation, Pin, NewPin, PinCategory, NewPinCategory};
 use crate::db::schema::{map_annotations, maps, pin_categories, pins};
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger, OpenLedger};
 use base64::Engine;
 use chrono::Utc;
 use diesel::prelude::*;
@@ -77,9 +77,11 @@ pub fn move_map_image_inner(
 #[tauri::command]
 #[specta::specta]
 pub fn move_map(map_id: i32, dest_folder: String, ledger: State<AppLedger>) -> Result<Map, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| move_map_inner(l, map_id, &dest_folder))
+}
+
+fn move_map_inner(l: OpenLedger, map_id: i32, dest_folder: &str) -> Result<Map, String> {
+    let OpenLedger { path: ledger_path, conn, index } = l;
 
     let m: Map = maps::table
         .find(map_id)
@@ -89,20 +91,26 @@ pub fn move_map(map_id: i32, dest_folder: String, ledger: State<AppLedger>) -> R
     // unreachable from the tree — it is still worth refusing plainly.
     let image_path = m.image_path.ok_or("This map has no image to move")?;
 
-    let new_image_path = move_map_image_inner(&ledger_path, &image_path, &dest_folder)?;
+    let new_image_path = move_map_image_inner(ledger_path, &image_path, dest_folder)?;
     if new_image_path == image_path {
         return maps::table.find(map_id).first(conn).map_err(|e| e.to_string());
     }
 
     let modified_at = Utc::now().to_rfc3339();
-    diesel::update(maps::table.find(map_id))
+    let moved: Map = diesel::update(maps::table.find(map_id))
         .set((
             maps::image_path.eq(&new_image_path),
             maps::modified_at.eq(&modified_at),
         ))
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // The title did not move but `modified_at` did, and the map's document holds
+    // it — see the rule above `index_map` in `search.rs`.
+    crate::search::map_indexed(index, &moved);
+
+    Ok(moved)
 }
 
 // ── Map commands ─────────────────────────────────────────────────────────────
@@ -115,35 +123,44 @@ pub fn create_map(
     dest_path: String,
     ledger: State<AppLedger>,
 ) -> Result<Map, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        create_map_inner(l, &title, &source_image_path, &dest_path)
+    })
+}
 
-    let source = std::path::Path::new(&source_image_path);
+fn create_map_inner(
+    l: OpenLedger,
+    title: &str,
+    source_image_path: &str,
+    dest_path: &str,
+) -> Result<Map, String> {
+    let OpenLedger { path: ledger_path, conn, index } = l;
+
+    let source = std::path::Path::new(source_image_path);
     let ext = source
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
         .to_lowercase();
 
-    let initial_dest = ledger_path.join(&dest_path);
+    let initial_dest = ledger_path.join(dest_path);
     let parent_dir = initial_dest.parent().ok_or("Cannot determine parent directory")?;
     fs::create_dir_all(parent_dir).map_err(|e| e.to_string())?;
 
-    let (_, dest_full) = resolve_map_filename(&title, &ext, parent_dir);
-    fs::copy(&source_image_path, &dest_full).map_err(|e| e.to_string())?;
+    let (_, dest_full) = resolve_map_filename(title, &ext, parent_dir);
+    fs::copy(source_image_path, &dest_full).map_err(|e| e.to_string())?;
 
     let (img_width, img_height) =
         image::image_dimensions(&dest_full).map_err(|e| e.to_string())?;
 
     let resolved_path = dest_full
-        .strip_prefix(&ledger_path)
+        .strip_prefix(ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
 
     let new_map = NewMap {
-        title: &title,
+        title,
         image_path: Some(&resolved_path),
         image_width: Some(img_width as i32),
         image_height: Some(img_height as i32),
@@ -155,9 +172,7 @@ pub fn create_map(
         .get_result(conn)
         .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &created);
-    }
+    crate::search::map_indexed(index, &created);
 
     Ok(created)
 }
@@ -165,27 +180,24 @@ pub fn create_map(
 #[tauri::command]
 #[specta::specta]
 pub fn create_map_empty(title: String, ledger: State<AppLedger>) -> Result<Map, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        let new_map = NewMap {
+            title: &title,
+            image_path: None,
+            image_width: None,
+            image_height: None,
+        };
 
-    let new_map = NewMap {
-        title: &title,
-        image_path: None,
-        image_width: None,
-        image_height: None,
-    };
+        let created: Map = diesel::insert_into(maps::table)
+            .values(&new_map)
+            .returning(Map::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    let created: Map = diesel::insert_into(maps::table)
-        .values(&new_map)
-        .returning(Map::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+        crate::search::map_indexed(l.index, &created);
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &created);
-    }
-
-    Ok(created)
+        Ok(created)
+    })
 }
 
 #[tauri::command]
@@ -196,9 +208,18 @@ pub fn assign_map_image(
     dest_folder: Option<String>,
     ledger: State<AppLedger>,
 ) -> Result<Map, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        assign_map_image_inner(l, map_id, &source_image_path, dest_folder.as_deref())
+    })
+}
+
+fn assign_map_image_inner(
+    l: OpenLedger,
+    map_id: i32,
+    source_image_path: &str,
+    dest_folder: Option<&str>,
+) -> Result<Map, String> {
+    let OpenLedger { path: ledger_path, conn, index } = l;
 
     let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
 
@@ -210,29 +231,29 @@ pub fn assign_map_image(
         }
     }
 
-    let source = std::path::Path::new(&source_image_path);
+    let source = std::path::Path::new(source_image_path);
     let ext = source
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
         .to_lowercase();
 
-    let dest_dir = match dest_folder.as_deref().filter(|s| !s.is_empty()) {
+    let dest_dir = match dest_folder.filter(|s| !s.is_empty()) {
         Some(folder) => {
             let dir = ledger_path.join(folder);
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             dir
         }
-        None => ledger_path.clone(),
+        None => ledger_path.to_path_buf(),
     };
     let (_, dest_full) = resolve_map_filename(&m.title, &ext, &dest_dir);
-    fs::copy(&source_image_path, &dest_full).map_err(|e| e.to_string())?;
+    fs::copy(source_image_path, &dest_full).map_err(|e| e.to_string())?;
 
     let (img_width, img_height) =
         image::image_dimensions(&dest_full).map_err(|e| e.to_string())?;
 
     let resolved_path = dest_full
-        .strip_prefix(&ledger_path)
+        .strip_prefix(ledger_path)
         .map_err(|e| e.to_string())?
         .to_string_lossy()
         .replace('\\', "/");
@@ -246,89 +267,93 @@ pub fn assign_map_image(
         modified_at: &modified_at,
     };
 
-    diesel::update(maps::table.find(map_id))
+    let assigned: Map = diesel::update(maps::table.find(map_id))
         .set(&changeset)
         .returning(Map::as_returning())
         .get_result(conn)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // An image is not searchable text, but the stamp beside it is part of the
+    // map's document — see the rule above `index_map` in `search.rs`.
+    crate::search::map_indexed(index, &assigned);
+
+    Ok(assigned)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_maps(ledger: State<AppLedger>) -> Result<Vec<Map>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    maps::table.load::<Map>(conn).map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        maps::table.load::<Map>(l.conn).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_map(map: Map, ledger: State<AppLedger>) -> Result<Map, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let updated: Map = diesel::update(maps::table.find(map.id))
-        .set(&map)
-        .returning(Map::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        let updated: Map = diesel::update(maps::table.find(map.id))
+            .set(&map)
+            .returning(Map::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::index_map(index, &updated);
-    }
+        crate::search::map_indexed(l.index, &updated);
 
-    Ok(updated)
+        Ok(updated)
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_map(map_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-
-    let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
-    if let Some(ref ip) = m.image_path {
-        let full_path = ledger_path.join(ip);
-        if full_path.exists() {
-            fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+    with_open_ledger(&ledger, |l| {
+        let m: Map = maps::table
+            .find(map_id)
+            .first(l.conn)
+            .map_err(|e| e.to_string())?;
+        if let Some(ref ip) = m.image_path {
+            let full_path = l.path.join(ip);
+            if full_path.exists() {
+                fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+            }
         }
-    }
-    let deleted = diesel::delete(maps::table.find(map_id))
-        .execute(conn)
-        .map_err(|e| e.to_string())?;
+        let deleted = diesel::delete(maps::table.find(map_id))
+            .execute(l.conn)
+            .map_err(|e| e.to_string())?;
 
-    if let Some(index) = &state.search_index {
-        let _ = crate::search::remove_map(index, map_id);
-    }
+        crate::search::map_unindexed(l.index, &m);
 
-    Ok(deleted as u32)
+        Ok(deleted as u32)
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_map_image_data_url(map_id: i32, ledger: State<AppLedger>) -> Result<String, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
+    with_open_ledger(&ledger, |l| {
+        let m: Map = maps::table
+            .find(map_id)
+            .first(l.conn)
+            .map_err(|e| e.to_string())?;
+        let image_path = m.image_path.ok_or("Map has no image assigned")?;
+        let full_path = l.path.join(&image_path);
+        let bytes = fs::read(&full_path).map_err(|e| e.to_string())?;
 
-    let m: Map = maps::table.find(map_id).first(conn).map_err(|e| e.to_string())?;
-    let image_path = m.image_path.ok_or("Map has no image assigned")?;
-    let full_path = ledger_path.join(&image_path);
-    let bytes = fs::read(&full_path).map_err(|e| e.to_string())?;
+        let ext = Path::new(&image_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png")
+            .to_lowercase();
+        let mime = match ext.as_str() {
+            "jpg" | "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            _ => "image/png",
+        };
 
-    let ext = Path::new(&image_path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("png")
-        .to_lowercase();
-    let mime = match ext.as_str() {
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        _ => "image/png",
-    };
-
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:{};base64,{}", mime, b64))
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok(format!("data:{};base64,{}", mime, b64))
+    })
 }
 
 // ── Pin commands ──────────────────────────────────────────────────────────────
@@ -336,12 +361,12 @@ pub fn get_map_image_data_url(map_id: i32, ledger: State<AppLedger>) -> Result<S
 #[tauri::command]
 #[specta::specta]
 pub fn get_pins(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<Pin>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    pins::table
-        .filter(pins::map_id.eq(map_id))
-        .load::<Pin>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        pins::table
+            .filter(pins::map_id.eq(map_id))
+            .load::<Pin>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -356,45 +381,45 @@ pub fn create_pin(
     note_id: Option<i32>,
     ledger: State<AppLedger>,
 ) -> Result<Pin, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let new_pin = NewPin {
-        map_id,
-        x,
-        y,
-        title: &title,
-        description: description.as_deref(),
-        category_id,
-        note_id,
-    };
-    diesel::insert_into(pins::table)
-        .values(&new_pin)
-        .returning(Pin::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        let new_pin = NewPin {
+            map_id,
+            x,
+            y,
+            title: &title,
+            description: description.as_deref(),
+            category_id,
+            note_id,
+        };
+        diesel::insert_into(pins::table)
+            .values(&new_pin)
+            .returning(Pin::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_pin(pin: Pin, ledger: State<AppLedger>) -> Result<Pin, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(pins::table.find(pin.id))
-        .set(&pin)
-        .returning(Pin::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(pins::table.find(pin.id))
+            .set(&pin)
+            .returning(Pin::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pin(pin_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(pins::table.find(pin_id))
-        .execute(conn)
-        .map(|n| n as u32)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(pins::table.find(pin_id))
+            .execute(l.conn)
+            .map(|n| n as u32)
+            .map_err(|e| e.to_string())
+    })
 }
 
 // ── Category commands ─────────────────────────────────────────────────────────
@@ -402,11 +427,11 @@ pub fn delete_pin(pin_id: i32, ledger: State<AppLedger>) -> Result<u32, String> 
 #[tauri::command]
 #[specta::specta]
 pub fn get_pin_categories(ledger: State<AppLedger>) -> Result<Vec<PinCategory>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    pin_categories::table
-        .load::<PinCategory>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        pin_categories::table
+            .load::<PinCategory>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 pub fn get_pin_categories_for_map_from_conn(
@@ -429,9 +454,9 @@ pub fn get_pin_categories_for_map(
     map_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<Vec<PinCategory>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_pin_categories_for_map_from_conn(map_id, conn)
+    with_open_ledger(&ledger, |l| {
+        get_pin_categories_for_map_from_conn(map_id, l.conn)
+    })
 }
 
 #[tauri::command]
@@ -443,47 +468,47 @@ pub fn create_pin_category(
     color: String,
     ledger: State<AppLedger>,
 ) -> Result<PinCategory, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let new_cat = NewPinCategory {
-        map_id,
-        name: &name,
-        icon: &icon,
-        color: &color,
-        // Not the column's `'circle'` default, for the reason the seeded categories avoid it:
-        // a circle is anchored on its own centre, so it sits on top of the place it marks.
-        // A category made here can be changed to one afterwards — `update_pin_category` takes
-        // the whole row, shape included — which is the right way round for a default.
-        shape: "pin",
-    };
-    diesel::insert_into(pin_categories::table)
-        .values(&new_cat)
-        .returning(PinCategory::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        let new_cat = NewPinCategory {
+            map_id,
+            name: &name,
+            icon: &icon,
+            color: &color,
+            // Not the column's `'circle'` default, for the reason the seeded categories avoid it:
+            // a circle is anchored on its own centre, so it sits on top of the place it marks.
+            // A category made here can be changed to one afterwards — `update_pin_category` takes
+            // the whole row, shape included — which is the right way round for a default.
+            shape: "pin",
+        };
+        diesel::insert_into(pin_categories::table)
+            .values(&new_cat)
+            .returning(PinCategory::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_pin_category(category: PinCategory, ledger: State<AppLedger>) -> Result<PinCategory, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(pin_categories::table.find(category.id))
-        .set(&category)
-        .returning(PinCategory::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(pin_categories::table.find(category.id))
+            .set(&category)
+            .returning(PinCategory::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pin_category(category_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(pin_categories::table.find(category_id))
-        .execute(conn)
-        .map(|n| n as u32)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(pin_categories::table.find(category_id))
+            .execute(l.conn)
+            .map(|n| n as u32)
+            .map_err(|e| e.to_string())
+    })
 }
 
 // ── Annotation commands ───────────────────────────────────────────────────────
@@ -491,12 +516,12 @@ pub fn delete_pin_category(category_id: i32, ledger: State<AppLedger>) -> Result
 #[tauri::command]
 #[specta::specta]
 pub fn get_annotations(map_id: i32, ledger: State<AppLedger>) -> Result<Vec<MapAnnotation>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    map_annotations::table
-        .filter(map_annotations::map_id.eq(map_id))
-        .load::<MapAnnotation>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        map_annotations::table
+            .filter(map_annotations::map_id.eq(map_id))
+            .load::<MapAnnotation>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 // NOTE: not #[specta::specta] — 14 params exceeds tauri-specta's SpectaFn arity
@@ -518,51 +543,51 @@ pub fn create_annotation(
     opacity: f32,
     ledger: State<AppLedger>,
 ) -> Result<MapAnnotation, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    let new_ann = NewMapAnnotation {
-        map_id,
-        kind: &kind,
-        x,
-        y,
-        x2,
-        y2,
-        radius,
-        label: label.as_deref(),
-        color: &color,
-        stroke_color: &stroke_color,
-        stroke_width,
-        font_size,
-        opacity,
-    };
-    diesel::insert_into(map_annotations::table)
-        .values(&new_ann)
-        .returning(MapAnnotation::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        let new_ann = NewMapAnnotation {
+            map_id,
+            kind: &kind,
+            x,
+            y,
+            x2,
+            y2,
+            radius,
+            label: label.as_deref(),
+            color: &color,
+            stroke_color: &stroke_color,
+            stroke_width,
+            font_size,
+            opacity,
+        };
+        diesel::insert_into(map_annotations::table)
+            .values(&new_ann)
+            .returning(MapAnnotation::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn update_annotation(annotation: MapAnnotation, ledger: State<AppLedger>) -> Result<MapAnnotation, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(map_annotations::table.find(annotation.id))
-        .set(&annotation)
-        .returning(MapAnnotation::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(map_annotations::table.find(annotation.id))
+            .set(&annotation)
+            .returning(MapAnnotation::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result<u32, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(map_annotations::table.find(annotation_id))
-        .execute(conn)
-        .map(|n| n as u32)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(map_annotations::table.find(annotation_id))
+            .execute(l.conn)
+            .map(|n| n as u32)
+            .map_err(|e| e.to_string())
+    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -1,36 +1,31 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
+  import { onLedgerEvents } from "$lib/ledger/events";
   import { api } from "$lib/api";
-  import { MediaQuery } from "svelte/reactivity";
-  import { fly } from "svelte/transition";
   import { notes } from "$lib/stores/notes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
-  import { linksTick } from "$lib/stores/links-tick.svelte";
   import { toastSuccess } from "$lib/toast";
   import { LoaderCircle, FileWarning } from "@lucide/svelte";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import { parseWikiTarget } from "$lib/editor/wiki-link";
   import Editor from "$lib/components/editor/Editor.svelte";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import * as Sheet from "$lib/components/ui/sheet/index.js";
-  import type { RightRailState } from "$lib/stores/right-rail.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import DetailSurface from "$lib/components/DetailSurface.svelte";
   import NoteDetails from "$lib/components/NoteDetails.svelte";
   import { createNoteDetailsSource } from "$lib/details/note-details-source.svelte";
-  import { getDockMode, floatTransition } from "$lib/utils/dock-threshold";
+  import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import type { Note } from "$lib/types/ledger";
 
   interface Props {
     noteId: number;
     rename?: boolean;
-    pane: 'left' | 'right';
+    pane: "left" | "right";
     tabIndex: number;
-    rail?: RightRailState;
   }
-  let { noteId, rename, pane, tabIndex, rail }: Props = $props();
+  let { noteId, rename, pane, tabIndex }: Props = $props();
 
   let liveNote = $derived(notes.notes.find((n) => n.id === noteId) ?? null);
   // When this note's file is deleted externally the notes store drops its row —
@@ -185,28 +180,21 @@
     }
   }
 
-  onMount(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const unlisten = Promise.all([
-      listen<{ path: string }>("note:content-changed", (event) =>
-        handleExternalChange(event.payload.path),
-      ),
-      listen<{ path: string }>("note:removed", (event) =>
-        handleExternalRemove(event.payload.path),
-      ),
+  onMount(() =>
+    onLedgerEvents({
+      "note:content-changed": ({ path }) => handleExternalChange(path),
+      "note:removed": ({ path }) => handleExternalRemove(path),
       // Bulk external change (git checkout, cloud sync): the backend rebuilt the
       // whole ledger under one coarse event. This note's file may be among the
-      // rewritten ones, so reload its content (clean-buffer gated) and details.
-      listen("ledger:rebuilt", () => {
+      // rewritten ones, so reload its content (clean-buffer gated). The Details
+      // Source subscribes to the same event for its own refetch — the pane no
+      // longer relays it (#212).
+      "ledger:rebuilt": () => {
         if (!note) return;
         handleExternalChange(note.path);
-        details.reload();
-      }),
-    ]);
-    return () => {
-      void unlisten.then((fns) => fns.forEach((fn) => fn()));
-    };
-  });
+      },
+    }),
+  );
 
   // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
@@ -227,7 +215,7 @@
   $effect(() => {
     if (note) {
       const title = note.title;
-      untrack(() => tabs.updateTabTitle('note', noteId, title));
+      untrack(() => tabs.updateTabTitle("note", noteId, title));
     }
   });
 
@@ -342,28 +330,25 @@
     const target = notes.notes.find((n) => n.id === editorNoteId);
     if (!target) return;
     try {
+      // No linksTick.bump() here: the bump belongs to the write path, and the
+      // Command Wrapper does it for every command that rewrites note bodies
+      // (#212). This one used to be the only caller that remembered.
       await api.writeNoteContent(target.path, markdown);
-      linksTick.bump();
     } catch (e) {
       console.error("content save failed:", e);
     }
   }
 
-  // ── Pane width measurement (dock vs float decision) ─────────────────────
-  const reducedMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
+  // ── Detail surface ───────────────────────────────────────────────────────
+  // The surface belongs to the pane slot, not to this note: it is what keeps a
+  // rail the GM opened open as they navigate from note to note. A note's surface
+  // is user-toggled (so the pane's header row shows a trigger) and docks or
+  // floats on the pane's measured width (ADR-0006 §2, §3).
+  const surface = $derived(paneSurface(pane));
+  $effect(() => surface.claim({ toggleable: true, alwaysFloat: false }));
+
   let containerEl = $state<HTMLDivElement | undefined>(undefined);
-  let paneWidth = $state(0);
-
-  $effect(() => {
-    if (!containerEl) return;
-    const ro = new ResizeObserver((entries) => {
-      paneWidth = entries[0]?.contentRect.width ?? 0;
-    });
-    ro.observe(containerEl);
-    return () => ro.disconnect();
-  });
-
-  const isDocked = $derived(getDockMode(paneWidth) === "docked");
+  $effect(() => (containerEl ? surface.measure(containerEl) : undefined));
 
   // ── Detail panel state ───────────────────────────────────────────────────
   // The Details Source owns the fetch fan-out, refresh invariants, and the
@@ -371,19 +356,24 @@
   const details = createNoteDetailsSource(() => note);
 
   function navigateToNote(id: number, title: string) {
-    tabs.openTab({ type: 'note', id, title });
+    tabs.openTab({ type: "note", id, title });
   }
 
   async function createStubNote(targetPath: string) {
     const { title } = parseWikiTarget(targetPath);
     const newNote = await api.createNote(title, targetPath, null);
     await notes.load();
-    tabs.openTab({ type: 'note', id: newNote.id, title: newNote.title });
+    tabs.openTab({ type: "note", id: newNote.id, title: newNote.title });
   }
 </script>
 
-{#snippet detailPanel(onclose: () => void)}
-  <DetailPanel title="Details" {onclose} saveStatus={details.saveStatus} onRetrySave={details.retrySave}>
+{#snippet detailPanel()}
+  <DetailPanel
+    title="Details"
+    onclose={surface.toggle}
+    saveStatus={details.saveStatus}
+    onRetrySave={details.retrySave}
+  >
     <NoteDetails
       {note}
       bind:tags={details.tags}
@@ -411,8 +401,8 @@
         <AlertDialog.Title>Update linked notes?</AlertDialog.Title>
         <AlertDialog.Description>
           {pendingBacklinkCount}
-          {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note.
-          Update their wikilinks to the new name?
+          {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note. Update their wikilinks
+          to the new name?
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>
@@ -423,8 +413,8 @@
           onclick={handleRenameOnly}
           class="inline-flex items-center justify-center rounded-md text-sm font-medium
                  border border-border bg-background hover:bg-accent hover:text-accent-foreground
-                 h-9 px-4 py-2 transition-colors"
-        >Rename only</button>
+                 h-9 px-4 py-2 transition-colors">Rename only</button
+        >
         <AlertDialog.Action onclick={handleRenameAndUpdate} data-testid="rename-update-btn">
           Rename + Update
         </AlertDialog.Action>
@@ -476,7 +466,8 @@
                 class="inline-flex h-7 items-center rounded-md border border-border bg-background
                        px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
                        transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Reload from disk</button>
+                >Reload from disk</button
+              >
               <button
                 type="button"
                 data-testid="conflict-keep"
@@ -484,7 +475,8 @@
                 class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
                        text-primary-foreground hover:bg-primary/90 transition-colors
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Keep my version</button>
+                >Keep my version</button
+              >
             </div>
           </div>
         {/if}
@@ -502,8 +494,7 @@
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
               <p class="text-xs text-muted-foreground">
-                This note's file was deleted outside Grimoire. Your unsaved copy
-                is still here.
+                This note's file was deleted outside Grimoire. Your unsaved copy is still here.
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
@@ -514,7 +505,8 @@
                 class="inline-flex h-7 items-center rounded-md border border-border bg-background
                        px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
                        transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Close</button>
+                >Close</button
+              >
               <button
                 type="button"
                 data-testid="deleted-recreate"
@@ -522,7 +514,8 @@
                 class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
                        text-primary-foreground hover:bg-primary/90 transition-colors
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >Save to recreate</button>
+                >Save to recreate</button
+              >
             </div>
           </div>
         {/if}
@@ -540,9 +533,7 @@
             onblur={commitTitle}
             onkeydown={handleTitleKeydown}
           />
-          <div
-            class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"
-          ></div>
+          <div class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"></div>
           {#if loadError}
             <!-- No Editor mounts in this state, so no autosave can recreate
                  the missing file. -->
@@ -551,8 +542,8 @@
               class="flex flex-col items-start gap-3 text-muted-foreground"
             >
               <p class="text-sm leading-relaxed max-w-prose">
-                This note couldn't be read — its file may have been moved or
-                deleted outside Grimoire.
+                This note couldn't be read — its file may have been moved or deleted outside
+                Grimoire.
               </p>
               <button
                 type="button"
@@ -560,11 +551,17 @@
                 onclick={closeThisTab}
                 class="text-sm text-primary underline-offset-2 hover:underline
                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-              >Close tab</button>
+                >Close tab</button
+              >
             </div>
           {:else if body !== null}
             {#key reloadTick}
-              <Editor bind:this={editorApi} initialContent={body} onSave={handleSave} {highlightQuery} />
+              <Editor
+                bind:this={editorApi}
+                initialContent={body}
+                onSave={handleSave}
+                {highlightQuery}
+              />
             {/key}
           {/if}
         </div>
@@ -572,51 +569,9 @@
     {/if}
   </div>
 
-  <!-- Docked detail panel — visible when pane is wide enough (≥820px) -->
-  {#if rail && !rail.isMobile && isDocked}
-    <aside
-      data-slot="right-rail"
-      data-mobile="false"
-      data-state={rail.open ? 'open' : 'closed'}
-      class="flex w-0 shrink-0 flex-col overflow-hidden motion-reduce:transition-none transition-[width] duration-200 ease-linear data-[state=open]:w-[300px]"
-    >
-      <div class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle">
-        {@render detailPanel(rail.toggle)}
-      </div>
-    </aside>
-  {/if}
-
-  <!-- Floating detail panel — visible when pane is narrow (<820px, non-mobile).
-       Guard paneWidth > 0 avoids a brief flash before the ResizeObserver fires. -->
-  {#if rail?.open && !rail.isMobile && !isDocked && paneWidth > 0}
-    <div
-      data-float="true"
-      transition:fly={floatTransition(reducedMotion.current)}
-      class="absolute top-4 right-4 z-50 w-80 bg-background rounded-lg shadow-2xl
-             border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
-    >
-      {@render detailPanel(rail.toggle)}
-    </div>
-  {/if}
+  <!-- Docked rail, floating overlay or mobile sheet — the surface decides which
+       from the pane's measured width (ADR-0006 §2). -->
+  <DetailSurface {surface} open={surface.visible} onclose={surface.toggle}>
+    {@render detailPanel()}
+  </DetailSurface>
 </div>
-
-<!-- Mobile sheet overlay (always present when rail is mobile, regardless of note load state) -->
-{#if rail?.isMobile}
-  <Sheet.Root
-    bind:open={() => rail.openMobile, (v) => rail.setOpenMobile(v)}
-  >
-    <Sheet.Content
-      side="right"
-      data-slot="right-rail"
-      data-mobile="true"
-      class="w-[300px] p-0 [&>button]:hidden"
-      showCloseButton={false}
-    >
-      <Sheet.Header class="sr-only">
-        <Sheet.Title>Details panel</Sheet.Title>
-        <Sheet.Description>Document metadata and details.</Sheet.Description>
-      </Sheet.Header>
-      {@render detailPanel(() => rail?.setOpenMobile(false))}
-    </Sheet.Content>
-  </Sheet.Root>
-{/if}

@@ -2,17 +2,19 @@
   import type { AnnotationKind } from "$lib/types/ledger";
 
   export const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: 'Text Label',
-    rect: 'Rectangle',
-    circle: 'Circle',
+    text: "Text Label",
+    rect: "Rectangle",
+    circle: "Circle",
   };
 </script>
 
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { MapAnnotation } from "$lib/types/ledger";
   import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
+  import { ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
 
   interface Props {
     annotation: MapAnnotation;
@@ -24,21 +26,34 @@
 
   let { annotation, unlocked = false, onToggleLock, onUpdate, onDelete }: Props = $props();
 
-  let draftLabel = $state('');
+  let draftLabel = $state("");
+
+  // The row the draft was loaded from — see the same field on PinDetails: the
+  // `annotation` prop is null by the time teardown runs when the panel closes
+  // by deselection.
+  let editing: MapAnnotation | null = null;
 
   $effect(() => {
-    draftLabel = annotation.label ?? '';
+    editing = annotation;
+    draftLabel = annotation.label ?? "";
   });
 
+  // Patches `editing` rather than `annotation` — see the same note on PinDetails.
   async function save(patch: Partial<MapAnnotation>) {
-    await onUpdate({ ...annotation, ...patch });
+    if (!editing) return;
+    await onUpdate({ ...editing, ...patch });
   }
 
-  const PRESET_COLORS = [
-    '#e2e8f0', '#94a3b8', '#f8fafc',
-    '#2dd4bf', '#38bdf8', '#a78bfa',
-    '#f97316', '#fb7185', '#4ade80',
-  ];
+  // Commits on teardown as well as on blur, for the reason and in the shape
+  // PinDetails does (#201) — the label is the same kind of free-text field on
+  // the same floating panel, destroyed by the same tab change.
+  function commitLabel() {
+    if (!editing) return;
+    if (draftLabel === (editing.label ?? "")) return;
+    save({ label: draftLabel || "Label" });
+  }
+
+  onDestroy(commitLabel);
 </script>
 
 <!-- Kind row -->
@@ -51,7 +66,9 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock annotation" : "Unlock to drag"}
     class="p-1.5 rounded-md transition-colors cursor-pointer
-           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked
+      ? 'text-primary hover:text-primary/70'
+      : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-3.5 h-3.5" />
@@ -61,7 +78,7 @@
   </button>
 </div>
 
-{#if annotation.kind === 'text'}
+{#if annotation.kind === "text"}
   <!-- Label (text only) -->
   <DetailSection label="Label" sectionKey="label">
     <!-- svelte-ignore a11y_autofocus -->
@@ -69,12 +86,9 @@
       id="ann-label"
       autofocus
       bind:value={draftLabel}
-      onblur={() => {
-        if (draftLabel !== (annotation.label ?? ''))
-          save({ label: draftLabel || 'Label' });
-      }}
+      onblur={commitLabel}
       onkeydown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLElement).blur();
+        if (e.key === "Enter") (e.target as HTMLElement).blur();
       }}
       class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
              font-mono text-[10px] text-foreground outline-none focus:border-primary"
@@ -97,7 +111,10 @@
   </DetailSection>
 {:else}
   <!-- Opacity (shapes only) -->
-  <DetailSection label="Fill Opacity — {Math.round(annotation.opacity * 100)}%" sectionKey="opacity">
+  <DetailSection
+    label="Fill Opacity — {Math.round(annotation.opacity * 100)}%"
+    sectionKey="opacity"
+  >
     <input
       id="ann-opacity"
       type="range"
@@ -114,17 +131,17 @@
   <DetailSection label="Stroke" sectionKey="stroke">
     <ColorSwatches
       value={annotation.stroke_color}
-      presets={PRESET_COLORS}
+      presets={ENTITY_COLOR_PRESETS}
       onchange={(color) => save({ stroke_color: color })}
     />
   </DetailSection>
 {/if}
 
 <!-- Fill / text color -->
-<DetailSection label={annotation.kind === 'text' ? 'Text Color' : 'Fill Color'} sectionKey="color">
+<DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
   <ColorSwatches
     value={annotation.color}
-    presets={PRESET_COLORS}
+    presets={ENTITY_COLOR_PRESETS}
     onchange={(color) => save({ color })}
   />
 </DetailSection>

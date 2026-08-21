@@ -44,6 +44,7 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import SceneBlockView from "$lib/components/editor/SceneBlockView.svelte";
 import { createBlockNodeView } from "$lib/editor/node-view-connector";
+import { blockDom, textAttr } from "$lib/editor/block-attrs";
 import { fenceInfo } from "$lib/editor/fence-claim";
 import { oneLine } from "$lib/editor/labelled-row";
 
@@ -59,9 +60,30 @@ export interface SceneRef {
   sceneName: string;
 }
 
+/**
+ * How the reference crosses the DOM, declared once (#209): the schema's attributes, the
+ * `data-*` a copied reference travels as, and the node view's stand-ins are all read off
+ * this table. Both entries keep the `data-id` / `data-name` they have always written,
+ * which is what the `dataset` name is for — the record's field names are Grimoire's, the
+ * element's are the clipboard's.
+ */
+const SCENE_DOM = blockDom<SceneRef>({
+  sceneId: {
+    dataset: "id",
+    default: null,
+    write: (id) => (id === null ? "" : String(id)),
+    read: (raw) => {
+      if (!raw) return null;
+      const n = Number(raw);
+      return isNaN(n) ? null : n;
+    },
+  },
+  sceneName: textAttr("", "name"),
+});
+
 /** What `/scene` inserts: a reference bound to nothing, so the picker opens. */
 export function blankSceneRef(): SceneRef {
-  return { sceneId: null, sceneName: "" };
+  return { ...SCENE_DOM.defaults };
 }
 
 // ─── Grammar ──────────────────────────────────────────────────────────────────
@@ -156,25 +178,11 @@ export const SceneBlock = Node.create({
   // not allow it, however the selection was made.
   draggable: true,
 
+  // Both attributes read themselves back off the DOM: copying a reference inside the
+  // editor goes out through `renderHTML` and back in through here, and an attribute that
+  // only writes is one a copy-paste drops. Both directions come off the one table above.
   addAttributes() {
-    return {
-      // Both read themselves back off the DOM: copying a reference inside the
-      // editor goes out through `renderHTML` and back in through here, and an
-      // attribute that only writes is one a copy-paste drops.
-      sceneId: {
-        default: null,
-        parseHTML: (el) => {
-          const raw = (el as HTMLElement).dataset.id;
-          if (!raw) return null;
-          const n = Number(raw);
-          return isNaN(n) ? null : n;
-        },
-      },
-      sceneName: {
-        default: "",
-        parseHTML: (el) => (el as HTMLElement).dataset.name ?? "",
-      },
-    };
+    return SCENE_DOM.attributes;
   },
 
   // The editor's *DOM* form, which is the clipboard and nothing else — never a
@@ -189,13 +197,7 @@ export const SceneBlock = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     return [
       "scene-ref",
-      mergeAttributes(
-        {
-          "data-id": node.attrs.sceneId ?? "",
-          "data-name": node.attrs.sceneName ?? "",
-        },
-        HTMLAttributes,
-      ),
+      mergeAttributes(SCENE_DOM.dataset(node.attrs as SceneRef), HTMLAttributes),
     ];
   },
 
@@ -215,11 +217,11 @@ export const SceneBlock = Node.create({
   },
 
   addNodeView() {
-    return createBlockNodeView({
+    return createBlockNodeView<SceneRef>({
       component: SceneBlockView,
       class: "scene-block-wrapper",
       domAttrs: { "data-note-block": "scene" },
-      defaults: { sceneId: null, sceneName: "" },
+      defaults: SCENE_DOM.defaults,
       props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
       }),

@@ -107,7 +107,7 @@ Findings worth recording for the next contributor:
   in `$lib/api` with an object argument. A 15th typed command would need the same
   treatment, or a struct-arg refactor.
 - **BigInt guard.** specta forbids exporting `usize`/`i64`/`u64`. Row-count
-  command returns were changed `usize → u32`; count *fields* on returned structs
+  command returns were changed `usize → u32`; count _fields_ on returned structs
   keep their Diesel type with a `#[specta(type = i32)]` render override. All such
   values are well within JS-safe integer range.
 - **Float nullability.** specta renders `f32`/`f64` as `number | null` (guarding

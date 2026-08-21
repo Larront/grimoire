@@ -124,6 +124,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    quick_notes (id) {
+        id -> Integer,
+        body -> Text,
+        captured_at -> Text,
+    }
+}
+
+diesel::table! {
     scene_slots (id) {
         id -> Integer,
         scene_id -> Integer,
@@ -188,6 +196,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     pin_categories,
     pin_tags,
     pins,
+    quick_notes,
     recent_entities,
     scene_slots,
     scenes,

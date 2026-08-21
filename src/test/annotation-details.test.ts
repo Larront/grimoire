@@ -16,8 +16,8 @@ const baseAnnotation = {
   y2: 80,
   radius: null,
   label: null,
-  color: "#e2e8f0",
-  stroke_color: "#94a3b8",
+  color: "#f0ece8",
+  stroke_color: "#a39e99",
   stroke_width: 2,
   font_size: 16,
   opacity: 0.2,
@@ -44,7 +44,11 @@ async function flush() {
 describe("AnnotationDetails — rendering", () => {
   it("renders kind badge for rect annotation", async () => {
     const { getByText } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(getByText("Rectangle")).toBeTruthy();
@@ -52,7 +56,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders kind badge for text annotation", async () => {
     const { getByText } = render(AnnotationDetails, {
-      props: { annotation: textAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: textAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(getByText("Text Label")).toBeTruthy();
@@ -61,7 +69,11 @@ describe("AnnotationDetails — rendering", () => {
   it("renders kind badge for circle annotation", async () => {
     const circleAnnotation = { ...baseAnnotation, kind: "circle" as const };
     const { getByText } = render(AnnotationDetails, {
-      props: { annotation: circleAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: circleAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(getByText("Circle")).toBeTruthy();
@@ -69,7 +81,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders lock button when locked", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('button[title="Unlock to drag"]')).toBeTruthy();
@@ -77,7 +93,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders opacity section for shape annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="opacity"]')).toBeTruthy();
@@ -85,7 +105,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders stroke section for shape annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="stroke"]')).toBeTruthy();
@@ -93,7 +117,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders label section for text annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: textAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: textAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="label"]')).toBeTruthy();
@@ -101,7 +129,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders font-size section for text annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: textAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: textAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="font-size"]')).toBeTruthy();
@@ -109,7 +141,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("does not render label section for shape annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="label"]')).toBeNull();
@@ -117,7 +153,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("does not render opacity section for text annotations", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: textAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: textAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="opacity"]')).toBeNull();
@@ -125,7 +165,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders ColorSwatches for color section", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-slot="color-swatches"]')).toBeTruthy();
@@ -133,7 +177,11 @@ describe("AnnotationDetails — rendering", () => {
 
   it("renders delete button in actions section", async () => {
     const { container } = render(AnnotationDetails, {
-      props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete: vi.fn() },
+      props: {
+        annotation: baseAnnotation,
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
     });
     await flush();
     expect(container.querySelector('[data-section="actions"] button')).toBeTruthy();
@@ -182,14 +230,10 @@ describe("AnnotationDetails — label editing", () => {
       props: { annotation: textAnnotation, onUpdate, onDelete: vi.fn() },
     });
     await flush();
-    const input = container.querySelector(
-      'input[placeholder="Label text"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('input[placeholder="Label text"]') as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "New Label" } });
     await fireEvent.blur(input);
-    expect(onUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ label: "New Label" }),
-    );
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ label: "New Label" }));
   });
 
   it("does not call onUpdate when label is unchanged on blur", async () => {
@@ -198,9 +242,7 @@ describe("AnnotationDetails — label editing", () => {
       props: { annotation: textAnnotation, onUpdate, onDelete: vi.fn() },
     });
     await flush();
-    const input = container.querySelector(
-      'input[placeholder="Label text"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('input[placeholder="Label text"]') as HTMLInputElement;
     await fireEvent.blur(input);
     expect(onUpdate).not.toHaveBeenCalled();
   });
@@ -221,9 +263,7 @@ describe("AnnotationDetails — color updates", () => {
       '[data-slot="color-swatches"] button',
     ) as HTMLElement;
     await fireEvent.click(swatch);
-    expect(onUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ color: expect.any(String) }),
-    );
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ color: expect.any(String) }));
   });
 
   it("calls onUpdate with new stroke color when stroke swatch is clicked", async () => {
@@ -253,9 +293,7 @@ describe("AnnotationDetails — delete", () => {
       props: { annotation: baseAnnotation, onUpdate: vi.fn(), onDelete },
     });
     await flush();
-    const btn = container.querySelector(
-      '[data-section="actions"] button',
-    ) as HTMLElement;
+    const btn = container.querySelector('[data-section="actions"] button') as HTMLElement;
     await fireEvent.click(btn);
     expect(onDelete).toHaveBeenCalledWith(1);
   });

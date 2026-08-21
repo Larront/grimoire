@@ -41,14 +41,22 @@ import {
 } from "@lucide/svelte";
 
 /**
- * Typed loosely on purpose: every Lucide icon is a distinct component type, and the
- * callers hold a `string` off a model rather than a known key.
+ * Typed loosely on purpose: every Lucide icon is a distinct component type, and a
+ * caller holds one of them off a model rather than a statically known component.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type IconComponent = any;
 
-/** Every icon an editor surface names. A name with no entry resolves to nothing. */
-export const BLOCK_ICONS: Record<string, IconComponent> = {
+/**
+ * Every icon an editor surface names.
+ *
+ * Deliberately **not** annotated `Record<string, IconComponent>`: that annotation made
+ * the keys `string`, so a name with no entry type-checked and drew nothing — a mistyped
+ * icon was a silently missing glyph in a shipped menu (#220). Left inferred, the keys are
+ * literals and `BlockIconName` below is the set of them, so the same typo is a build
+ * error and every surface holding a name can stop guarding against undefined.
+ */
+export const BLOCK_ICONS = {
   CalendarDays,
   ChevronDown,
   CircleQuestionMark,
@@ -77,3 +85,6 @@ export const BLOCK_ICONS: Record<string, IconComponent> = {
   Trash2,
   TriangleAlert,
 };
+
+/** The name of an icon that exists. What every surface carrying an icon name holds. */
+export type BlockIconName = keyof typeof BLOCK_ICONS;

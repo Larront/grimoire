@@ -134,9 +134,6 @@ describe("External-move backlink prompt (issue #135)", () => {
 
     await act(async () => lastActionToast().opts.cancel?.onClick());
 
-    expect(invoke).not.toHaveBeenCalledWith(
-      "apply_backlink_rewrite",
-      expect.anything(),
-    );
+    expect(invoke).not.toHaveBeenCalledWith("apply_backlink_rewrite", expect.anything());
   });
 });

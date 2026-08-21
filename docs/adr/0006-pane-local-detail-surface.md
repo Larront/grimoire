@@ -8,12 +8,12 @@
 Grimoire grew three separate "detail" surfaces that drifted apart in look, edit
 contract, and token vocabulary:
 
-- `RightRail.svelte` — the **note** Details Pane. An *app-level* `<aside>` docked at the
+- `RightRail.svelte` — the **note** Details Pane. An _app-level_ `<aside>` docked at the
   far right of the window, a singleton that "follows focus" in split view (ADR-0003,
   and the `Right rail in split view → follows focus` decision in CONTEXT.md). Self-fetching
   edit model. Collapses to width 0 with its toggle hidden whenever the focused pane is not
   a note.
-- `map/PinDetailPanel.svelte` — the **pin** editor. A *pane-local* floating panel anchored
+- `map/PinDetailPanel.svelte` — the **pin** editor. A _pane-local_ floating panel anchored
   over the map. Controlled (`onUpdate(patch)`) edit model.
 - `map/AnnotationDetailPanel.svelte` — the **annotation** editor. Same floating, pane-local,
   controlled pattern.
@@ -22,7 +22,7 @@ A prototype (separate session) compared docked vs floating placement, including 
 detail panels in note panes. The app-level singleton was identified as the root cause of the
 model's awkwardness: it forces a follows-focus tiebreak, makes two notes' details
 unviewable at once, and detaches a left-pane note's rail to the far-right edge. The only real
-reason it was app-level is **width** — a 300px rail docked *inside* a half-width split pane
+reason it was app-level is **width** — a 300px rail docked _inside_ a half-width split pane
 leaves an unusably narrow editor (~220px on a 1280px laptop).
 
 The tab model (`tabs.svelte.ts`) has at most two panes (`left` + nullable `right`), each
@@ -43,7 +43,8 @@ The detail surface becomes **pane-local, user-controlled, with width-based prese
      not regress.
    - Split on a typical laptop → panes fall below the threshold → note surfaces float.
    - Split on a wide monitor → panes may exceed the threshold → note surfaces stay docked.
-   - The mode is re-evaluated as the paneforge divider is dragged.
+   - The mode is re-evaluated as the paneforge divider is dragged. (No divider was built —
+     see _Amendments_.)
 3. **Per-pane, user-controlled visibility.** Each pane toggles its own surface independently
    (note: rail toggle in that pane's editor toolbar; map: selecting a pin/annotation opens the
    panel). 0, 1, or 2 surfaces may be visible at once. The user decides their information load
@@ -76,7 +77,7 @@ The detail surface becomes **pane-local, user-controlled, with width-based prese
 ## Consequences
 
 - **Supersedes** the `Right rail in split view → follows focus` and `Rail visibility on
-  non-note panes` decisions in CONTEXT.md, and extends ADR-0003 (Details Pane is notes-only):
+non-note panes` decisions in CONTEXT.md, and extends ADR-0003 (Details Pane is notes-only):
   the rail/surface now engages on map panes too, via the shared `DetailPanel`. ADR-0003's
   "leave the door open to extend later" is the door now being opened.
 - **Selection must be keyed per pane, not per entity id.** With the same map openable in both
@@ -87,8 +88,79 @@ The detail surface becomes **pane-local, user-controlled, with width-based prese
   edit, so edits are neither lost nor leaked into a stale panel.
 - **A measured breakpoint enters layout.** The dock threshold (~820px, tunable) is evaluated
   per pane and re-evaluated on divider drag; the surface animates between docked and floating
-  modes. Reduced-motion snaps instead of animating.
+  modes. Reduced-motion snaps instead of animating. (The per-pane measurement shipped; the
+  divider did not — see _Amendments_.)
 - A floating note surface can overlap prose. It is user-opened, draggable/dismissible, and
   defaults to a pane corner — accepted, and validated by the prototype.
 - Spatial note: a docked surface still lives on its pane's right edge; for a left-pane note in
   a wide split that edge is mid-window. Inherent to docking; accepted.
+
+## Amendments
+
+### 2026-08-18 — There is no divider ([#223](https://github.com/Larront/grimoire/issues/223))
+
+The decision above is unchanged. One mechanism it names twice was never built, and the
+reasoning is left as written — it is the record of what was argued — so this section says
+what is no longer true rather than editing the argument.
+
+**Split is a fixed 50/50; there is no draggable divider.** §2's "the mode is re-evaluated as
+the paneforge divider is dragged", and the Consequences' "re-evaluated on divider drag", both
+describe a divider that does not exist: `AppShell.svelte` gives each pane `flex-1 min-w-0`
+and nothing else, and `paneforge` — the library named here — was a dependency imported
+nowhere. It has been removed from `package.json`. The design-system note that the divider "is
+draggable (paneforge)" is corrected to match.
+
+**What survives is the measurement, and it is the load-bearing half.** Pane width is still
+measured per pane, by a `ResizeObserver` on the pane's own container (owned by
+`pane-detail-surface.svelte.ts` since #208), and
+the dock/float threshold is still evaluated from it. That is what makes the rule _pane width,
+not window width_ — the clause that would otherwise have been got wrong (CONTEXT.md's Note
+block presentation row derives the same distinction independently). Drag was only ever one of
+the events that changes a pane's width; window resize, opening a split and closing one all
+still do, and the observer sees each of them. So no requirement is lost by the divider's
+absence — only a re-evaluation trigger that never fired.
+
+**A future divider needs no amendment to this ADR.** Should one be built, per-pane measurement
+already covers it: a `ResizeObserver` on the pane container fires on drag like any other width
+change. The paneforge dependency would come back with the feature, not before it.
+
+### 2026-08-19 — Where the surface's state lives, and where the toggle sits ([#208](https://github.com/Larront/grimoire/issues/208))
+
+The decision is unchanged; §1 is now implemented in state as well as in rendering.
+
+**The pane's surface is a module, not two hand-written copies.** `PaneDetailSurface`
+(`src/lib/details/pane-detail-surface.svelte.ts`) holds one pane's measured width, the
+dock/float/sheet mode that follows from it, the visibility latch, the mobile overlay token and
+the float transition; `DetailSurface.svelte` holds the three chrome variants. "Maps always
+float" (§2) is a policy argument that module takes, rather than a second implementation of the
+floating shell — which is what it had been, at a different z-index, a different width, and with
+a hardcoded `fly` that ignored `prefers-reduced-motion` despite the Consequences above
+requiring it. The absorbed `dock-threshold.ts` had extracted only the decision, leaving the
+mechanism behind in the panes.
+
+One consequence of the shared chrome is worth stating, because it is where two of this
+ADR's requirements pull against each other. The float's entry is global and its exit is
+local, so a host that opens the panel from its own block — the map panels, whose `{#if}`
+holds the selection their body reads — gets the animation, while its _close_ removes the
+panel at once. That immediacy is the Consequences' "dismiss its floating panel cleanly and
+commit-or-cancel any in-flight pin title/description edit"
+([#201](https://github.com/Larront/grimoire/issues/201)): the commit runs on the body's
+teardown, and an exit animation would defer it past the tab switch that caused it. A note
+pane's own toggle is the surface's own business, so that close does animate, with the note
+still rendered under it.
+
+There is one surface **per pane slot**, above the content mounted in it: that is what keeps a
+rail the GM opened open as they navigate from note to note, and open again on the way back
+from a map. The content claims it on mount (`claim({ toggleable, alwaysFloat })`) and releases
+it on unmount.
+
+**The note toggle lives in the pane's header row, not an editor toolbar.** §3 says the rail
+toggle sits "in that pane's editor toolbar". There is no editor toolbar: a note pane is a
+title and a TipTap surface inside one scroll container, and the only per-pane chrome is the row
+above it — nav buttons, that pane's tab strip, and the toggle at its right end. That row _is_
+pane-local (each pane has its own), so §3's intent — the toggle belongs to the pane, not to the
+window — holds where it is. Rendering it into the note column would put a floating control over
+the prose that can collide with the floating panel it opens. What did change is who decides
+whether to render it: the shell asks the pane's surface whether it has a toggleable surface,
+and no longer tests the active tab's type — the superseded "hide on non-note focus" rule was
+being re-derived there on every render.

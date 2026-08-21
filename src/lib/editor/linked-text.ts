@@ -4,9 +4,9 @@
 // A field renders by splitting its string into **text and link segments Svelte draws
 // normally**, never by building an HTML string. That is the whole reason this returns
 // records rather than markup: the escaping problem is *deleted* rather than
-// consolidated into two escapers that will eventually disagree. `renderTimelineText`
-// is the escaper this replaces, and Timeline moves onto this path when its own ticket
-// rewrites its rows.
+// consolidated into two escapers that will eventually disagree. `renderTimelineText` was
+// the escaper this replaced, and it is gone: Timeline's own ticket moved its rows onto
+// this path (#214), so every free-text value in every block now draws through here.
 //
 // Deliberately free of TipTap, ProseMirror and Svelte: the field draws these, the
 // Link Resolver answers whether each one resolves, and neither concern is here.
@@ -58,6 +58,24 @@ export function splitLinkedText(text: string): LinkedTextSegment[] {
  */
 export function wikiTargetsIn(text: string): string[] {
   return splitLinkedText(text)
-    .filter((segment): segment is Extract<LinkedTextSegment, { kind: "link" }> => segment.kind === "link")
+    .filter(
+      (segment): segment is Extract<LinkedTextSegment, { kind: "link" }> => segment.kind === "link",
+    )
     .map((segment) => segment.path);
+}
+
+/**
+ * A value as it reads on screen — every link replaced by its title, nothing else
+ * changed.
+ *
+ * The third member of this family, beside the segments a field draws and the
+ * targets it primes: what a *reader* of the value sees, for the places that need
+ * the line as prose rather than as a drawing. The Quick Notes Pane echoes it into
+ * an undo toast and matches a filter against it (#232) — a GM types what is on
+ * screen, and on screen a link is its title.
+ */
+export function linkedPlainText(text: string): string {
+  return splitLinkedText(text)
+    .map((segment) => (segment.kind === "text" ? segment.text : segment.title))
+    .join("");
 }

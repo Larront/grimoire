@@ -41,7 +41,11 @@
     </button>
   {/each}
   {#each annotations as ann (ann.id)}
-    <button type="button" data-testid={`stub-ann-${ann.id}`} onclick={() => onannotationclick?.(ann)}>
+    <button
+      type="button"
+      data-testid={`stub-ann-${ann.id}`}
+      onclick={() => onannotationclick?.(ann)}
+    >
       {ann.kind}
     </button>
   {/each}

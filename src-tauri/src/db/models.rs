@@ -27,7 +27,9 @@ pub struct NewNote<'a> {
     pub modified_at: &'a str,
 }
 
-use super::schema::{maps, pdf_scene_links, pin_categories, pins, scene_slots, scenes, spotify_auth};
+use super::schema::{
+    maps, pdf_scene_links, pin_categories, pins, quick_notes, scene_slots, scenes, spotify_auth,
+};
 
 // ── MapAnnotation ─────────────────────────────────────────────────────────────
 
@@ -253,6 +255,29 @@ pub struct NewPdfSceneLink {
     pub end_offset: i32,
     pub quote: String,
     pub scene_id: i32,
+}
+
+// ── QuickNote ─────────────────────────────────────────────────────────────────
+// One captured line, held as a row and nothing else (ADR-0018). No path, no
+// title, no file: a Quick Note is not a note, so this struct carries none of a
+// note's identity and no derived index ever sees one.
+//
+// `captured_at` is RFC-3339 — the pane groups by the day inside it, and that is
+// the only date information a Quick Note has.
+
+#[derive(Queryable, Selectable, Serialize, specta::Type, Deserialize, Debug, Clone, Identifiable)]
+#[diesel(table_name = quick_notes)]
+pub struct QuickNote {
+    pub id: i32,
+    pub body: String,
+    pub captured_at: String,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = quick_notes)]
+pub struct NewQuickNote {
+    pub body: String,
+    pub captured_at: String,
 }
 
 // ── SceneSlot ─────────────────────────────────────────────────────────────────

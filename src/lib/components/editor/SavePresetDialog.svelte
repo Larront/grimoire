@@ -78,8 +78,8 @@
     <Dialog.Header>
       <Dialog.Title>Save shape as preset</Dialog.Title>
       <Dialog.Description>
-        Presets are shared by every campaign on this machine. Stamping one copies its
-        text into the note — nothing here can reach a statblock you have already written.
+        Presets are shared by every campaign on this machine. Stamping one copies its text into the
+        note — nothing here can reach a statblock you have already written.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -120,10 +120,8 @@
 
     <Dialog.Footer>
       <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-      <Button
-        data-testid="preset-save-btn"
-        disabled={!trimmed || reserved || saving}
-        onclick={save}>Save preset</Button
+      <Button data-testid="preset-save-btn" disabled={!trimmed || reserved || saving} onclick={save}
+        >Save preset</Button
       >
     </Dialog.Footer>
   </Dialog.Content>

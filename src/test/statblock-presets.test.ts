@@ -28,9 +28,7 @@ describe("shipped presets", () => {
 
   it("round-trip through the format byte for byte", () => {
     for (const preset of SHIPPED_PRESETS) {
-      expect(
-        serializeStatblock(parseStatblockBody(fenceBody(preset.fence))),
-      ).toBe(preset.fence);
+      expect(serializeStatblock(parseStatblockBody(fenceBody(preset.fence)))).toBe(preset.fence);
     }
   });
 
@@ -38,9 +36,7 @@ describe("shipped presets", () => {
     const block = parseStatblockBody(fenceBody(SHIPPED_PRESETS[0].fence));
     expect(block.rows.length).toBeGreaterThan(0);
     expect(block.rows.every((row) => row.value === "")).toBe(true);
-    expect(
-      block.sections.every((section) => section.entries.length === 0),
-    ).toBe(true);
+    expect(block.sections.every((section) => section.entries.length === 0)).toBe(true);
   });
 
   // Four rows, four lessons: a pool, a mark track, an inert value, a named entry.
@@ -48,9 +44,7 @@ describe("shipped presets", () => {
     const block = parseStatblockBody(fenceBody(SHIPPED_PRESETS[1].fence));
     expect(block.name).toBe("Large Orc");
     expect(block.rows).toHaveLength(3);
-    expect(block.rows.some((row) => /^\d+\s*\/\s*\d+$/.test(row.value))).toBe(
-      true,
-    );
+    expect(block.rows.some((row) => /^\d+\s*\/\s*\d+$/.test(row.value))).toBe(true);
     expect(block.rows.some((row) => /\[[ x]\]/.test(row.value))).toBe(true);
     expect(block.rows.some((row) => /^\d+$/.test(row.value))).toBe(true);
     expect(block.sections[0].entries[0].name).toBeTruthy();
@@ -74,10 +68,7 @@ describe("shipped presets", () => {
 
 describe("availablePresets", () => {
   it("lists the shipped two when the store is empty", () => {
-    expect(availablePresets([]).map((p) => p.name)).toEqual([
-      "5E SRD",
-      "Large Orc",
-    ]);
+    expect(availablePresets([]).map((p) => p.name)).toEqual(["5E SRD", "Large Orc"]);
   });
 
   it("appends authored presets after the shipped ones", () => {
@@ -90,9 +81,7 @@ describe("availablePresets", () => {
   // constant still wins, which is what "cannot be edited" has to mean.
   it("keeps the shipped preset ahead of a same-named stored one", () => {
     const list = availablePresets([authored("large orc", "HP: 1/1")]);
-    expect(resolvePreset("Large Orc", list, null)?.fence).not.toContain(
-      "HP: 1/1",
-    );
+    expect(resolvePreset("Large Orc", list, null)?.fence).not.toContain("HP: 1/1");
   });
 });
 
@@ -113,13 +102,9 @@ describe("resolvePreset — with an argument", () => {
     ]);
     expect(resolvePreset("Orc Warl", shadowed, null)).toBeNull();
     expect(resolvePreset("Warlord", shadowed, null)).toBeNull();
-    expect(resolvePreset("Orc Warlord", shadowed, null)?.name).toBe(
-      "Orc Warlord",
-    );
+    expect(resolvePreset("Orc Warlord", shadowed, null)?.name).toBe("Orc Warlord");
     // Least forgivable of all, and the reason app-wide scope forces exactness.
-    expect(resolvePreset("Orc Warlord", shadowed, null)?.fence).toContain(
-      "40/40",
-    );
+    expect(resolvePreset("Orc Warlord", shadowed, null)?.fence).toContain("40/40");
   });
 
   // The asymmetry that justifies matching exactly: a miss lands on the shape the GM

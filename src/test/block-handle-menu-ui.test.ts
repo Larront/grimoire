@@ -1,14 +1,17 @@
-// Opening, walking and closing the grip's menu (#191).
+// The grip and the life-cycle it reports to, driven together (#191, #211).
 //
-// The engine's writes are pinned in block-handle-menu.test.ts and the grip's placement in
-// Chromium next door. What is left — and it is the half of this ticket a GM actually
-// performs — is the gesture: a click that opens a menu without cancelling the drag that
-// shares the same button, a menu that keeps focus while it is up, and two ways out of it
-// that both leave the GM somewhere they can carry on typing.
+// The engine's writes are pinned in block-handle-menu.test.ts, the clock in
+// block-handle-life.svelte.test.ts, and the grip's placement in Chromium next door. What
+// is left — and it is the half of this a GM actually performs — is the gesture: a click
+// that opens a menu without cancelling the drag that shares the same button, a menu that
+// keeps focus while it is up, and two ways out of it that both leave the GM somewhere they
+// can carry on typing.
 //
-// Driven through the real `BlockHandle` on a real note, because the claims are about what
-// a click does to a document. A mounted menu on its own would prove only that a callback
-// fired.
+// Driven through the real `BlockHandle` **and the real life-cycle behind it**, on a real
+// note. The two halves used to be well tested apart with nothing mounting them together,
+// so the contract between them — which latch a gesture sets, and what order its steps run
+// in — lived entirely in the gap, which is where the frozen grip lived too. The pair is
+// the subject here; a mounted menu on its own would prove only that a callback fired.
 import { fireEvent, render } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
@@ -17,7 +20,8 @@ vi.mock("$lib/toast", () => ({ toastError: vi.fn() }));
 
 import { toastError } from "$lib/toast";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
-import { deleteBlockAt } from "$lib/editor/block-handle";
+import { blockStillThere, deleteBlock, type BlockTarget } from "$lib/editor/block-handle";
+import { createBlockHandleLife, type BlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import { NodeSelection } from "@tiptap/pm/state";
 import { closeNote, note, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
@@ -44,24 +48,50 @@ afterEach(() => {
   vi.mocked(toastError).mockClear();
 });
 
-/** The grip, drawn on one block of a note, with the handle's own callbacks recorded. */
+/**
+ * The hide delay these run with, and `settle` is the wait for it.
+ *
+ * Short and real rather than faked: a fake clock over a mounted editor fakes the frames
+ * its node views draw in too. Nothing here asserts *how long* the grip lingers — that is
+ * the clock test's subject next door — only that it goes, or does not.
+ *
+ * Not a race under load, which is the usual objection to a sleep in a test: the hide and
+ * this wait are two timers armed in that order, and a timer due at 5ms is dispatched
+ * before one due at 20ms however far behind the loop is running.
+ */
+const HIDE_MS = 5;
+const settle = () => new Promise((resolve) => setTimeout(resolve, HIDE_MS * 4));
+
+/** The grip, drawn on one block of a note, reporting to its own life-cycle. */
 function grip(editor: Editor, type = "paragraph", index = 0) {
-  const pinned: boolean[] = [];
-  const held: boolean[] = [];
-  const released: true[] = [];
-  render(BlockHandle, {
-    props: {
-      editor,
-      target: targetOfNth(editor, type, index),
-      onHold: (h: boolean) => held.push(h),
-      onPin: (p: boolean) => pinned.push(p),
-      onRetarget: () => {},
-      onRelease: () => released.push(true),
-    },
+  return gripOn(editor, targetOfNth(editor, type, index));
+}
+
+/** The grip drawn on a target the caller chose — including one the document has lost. */
+function gripOn(editor: Editor, target: BlockTarget) {
+  const handle = createBlockHandleLife(() => editor, HIDE_MS);
+  // As a hover raises it: the life-cycle is told what the pointer is over, and the grip is
+  // what the editor draws for the target it then holds.
+  handle.point(target);
+  const { unmount } = render(BlockHandle, {
+    props: { editor, target, handle },
   });
   const el = document.querySelector<HTMLButtonElement>("[data-block-handle]")!;
   expect(el, "the grip is drawn").not.toBeNull();
-  return { el, pinned, held, released };
+  // `unmount` because the editor's own `{#if}` can take the grip away mid-gesture, and
+  // what that leaves behind is the thing this pair exists to get right.
+  return { el, handle, unmount };
+}
+
+/**
+ * The editor's own report of a change, wired as `Editor.svelte` wires it.
+ *
+ * Not inside `gripOn` because several tests below make a block vanish *on purpose*, to
+ * leave the grip holding one the document no longer has — the state a live-reload or
+ * another pane's undo produces, and precisely the one this signal normally prevents.
+ */
+function reportEdits(editor: Editor, handle: BlockHandleLife) {
+  editor.on("update", ({ transaction }) => handle.documentChanged(transaction));
 }
 
 const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]");
@@ -72,9 +102,7 @@ const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]
  * are plain items. A selector naming only the first would quietly stop seeing the other.
  */
 const items = () =>
-  Array.from(
-    document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'),
-  );
+  Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'));
 
 /** The menu item whose label starts with a word — how a GM picks one out. */
 function item(verb: string): HTMLElement {
@@ -98,22 +126,24 @@ describe("the pointer and the focus, which are two different holds", () => {
     // keyboard. Reported as "nothing is holding this", the handle drops and focus is
     // stranded on nothing, mid-gesture.
     const editor = note("A sentence.");
-    const { el, held } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.focus(el);
     await fireEvent.mouseLeave(el);
+    await settle();
 
-    expect(held.at(-1)).toBe(true);
+    expect(handle.target).not.toBeNull();
   });
 
   it("lets go once neither the pointer nor the focus is on it", async () => {
     const editor = note("A sentence.");
-    const { el, held } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.mouseEnter(el);
     await fireEvent.focus(el);
     await fireEvent.blur(el);
     await fireEvent.mouseLeave(el);
+    await settle();
 
-    expect(held.at(-1)).toBe(false);
+    expect(handle.target).toBeNull();
   });
 });
 
@@ -164,10 +194,12 @@ describe("clicking the grip", () => {
     // The pointer crosses a gap to reach the menu, and the grip's own mouseleave fires on
     // the way — so something other than the hover has to be keeping it on screen.
     const editor = note("A sentence.");
-    const { el, pinned } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.click(el);
+    await fireEvent.mouseLeave(el);
+    await settle();
 
-    expect(pinned).toEqual([true]);
+    expect(handle.target).not.toBeNull();
     expect(el.getAttribute("aria-expanded")).toBe("true");
   });
 
@@ -181,12 +213,12 @@ describe("clicking the grip", () => {
 
   it("closes again on a second click of the grip", async () => {
     const editor = note("A sentence.");
-    const { el, pinned } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.click(el);
     await fireEvent.click(el);
 
     expect(menu()).toBeNull();
-    expect(pinned).toEqual([true, false]);
+    expect(handle.menu).toBeNull();
   });
 });
 
@@ -195,13 +227,13 @@ describe("clicking the grip", () => {
 describe("dismissing the menu without choosing anything", () => {
   it("closes on Escape and hands focus back to the grip", async () => {
     const editor = note("A sentence.");
-    const { el, pinned } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.click(el);
     await fireEvent.keyDown(items()[0], { key: "Escape" });
 
     expect(menu()).toBeNull();
+    expect(handle.menu).toBeNull();
     expect(document.activeElement).toBe(el);
-    expect(pinned).toEqual([true, false]);
   });
 
   it("closes when the GM presses somewhere else entirely", async () => {
@@ -332,9 +364,7 @@ describe("choosing an item acts on the block the grip was on", () => {
 
   it("deletes a callout and everything in it, in one undo", async () => {
     const editor = note(
-      ["Before.", "", "> [!encounter] The Ambush", "> Two kobolds.", "", "After."].join(
-        "\n",
-      ),
+      ["Before.", "", "> [!encounter] The Ambush", "> Two kobolds.", "", "After."].join("\n"),
     );
     const { el } = grip(editor, "blockquote");
     await fireEvent.click(el);
@@ -364,16 +394,18 @@ describe("choosing an item acts on the block the grip was on", () => {
     // not happen is otherwise discovered at the paste, in another app.
     const editor = note("A sentence.");
     Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: vi.fn().mockRejectedValue(new Error("NotAllowedError")) },
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("NotAllowedError")),
+      },
       configurable: true,
     });
-    const { el, released } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.click(el);
     await fireEvent.click(item("Copy"));
 
     expect(toastError).toHaveBeenCalledOnce();
     expect(vi.mocked(toastError).mock.calls[0][0]).toContain("clipboard");
-    expect(released).toEqual([true]);
+    expect(handle.target).toBeNull();
     expect(menu()).toBeNull();
   });
 
@@ -428,32 +460,33 @@ describe("dragging from the grip", () => {
     // the next drop of anything into this note would insert the statblock instead and
     // delete the selection to make room for it.
     const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
-    const { el, released } = grip(editor, "statblockBlock");
+    const { el, handle } = grip(editor, "statblockBlock");
     await fireEvent.dragStart(el, { dataTransfer: transfer() });
     await fireEvent.dragEnd(el);
 
     expect(editor.view.dragging).toBeNull();
     // Still the other thing dragend is for: the positions the handle holds describe the
     // note as it was before the drop.
-    expect(released).toEqual([true]);
+    expect(handle.target).toBeNull();
   });
 
   it("closes the menu and takes the handle down with it", async () => {
     // Every position the handle holds describes the note as it was before the write.
     const editor = note("First.\n\nSecond.");
-    const { el, released } = grip(editor);
+    const { el, handle } = grip(editor);
     await fireEvent.click(el);
     await fireEvent.click(item("Duplicate"));
 
     expect(menu()).toBeNull();
-    expect(released).toEqual([true]);
+    expect(handle.menu).toBeNull();
+    expect(handle.target).toBeNull();
   });
 
   it("does nothing when the block went while the menu was open, mid-transformation", async () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const { el } = grip(editor, "paragraph", 1);
     await fireEvent.click(el);
-    deleteBlockAt(editor, targetOf(editor, "paragraph").pos);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     await fireEvent.click(item("Heading 1"));
 
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
@@ -465,7 +498,7 @@ describe("dragging from the grip", () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const { el } = grip(editor, "paragraph", 1);
     await fireEvent.click(el);
-    deleteBlockAt(editor, targetOf(editor, "paragraph").pos);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     await fireEvent.click(item("Delete"));
 
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
@@ -492,11 +525,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
   it.each([
     ["a statblock", "```statblock\n# Kobold A\nHP: 5/5\n```", "statblockBlock"],
     ["an infobox", "```infobox\n# The Ember Keep\nRuler: Mira\n```", "infoboxBlock"],
-    [
-      "a timeline",
-      "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```",
-      "timelineBlock",
-    ],
+    ["a timeline", "```timeline\n# The Shattering\nDate: 3rd of Frostfall\n```", "timelineBlock"],
     ["an image", "![The gate](images/gate.png)", "image"],
   ])("is absent entirely on %s — not drawn dim", async (_what, md, type) => {
     // A creature is not a sentence with extra steps: there is no deciding which of its
@@ -604,7 +633,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
 // ─── What the next keystroke lands on ─────────────────────────────────────────
 //
 // Three parts of this gesture set a whole-block `NodeSelection` on purpose — the grip's own
-// `mousedown` and `startBlockDrag`, so a drag has something to carry, and `moveBlockAt`, so
+// `mousedown` and `startBlockDrag`, so a drag has something to carry, and `moveBlock`, so
 // a second `↑` moves the same block. A node selection is *replaced* by the next character
 // typed, so every route that hands focus back to the prose has to collapse it first or the
 // GM's next letter stands in for the block they just acted on.
@@ -652,7 +681,7 @@ describe("handing focus back to the prose", () => {
   });
 
   it("leaves a caret when Escape follows a keyboard reorder", async () => {
-    // The route that survives fixing the mouse one: `moveBlockAt` leaves the block it
+    // The route that survives fixing the mouse one: `moveBlock` leaves the block it
     // moved selected by design, and Escape is the way out of a grip raised by `Mod-Shift-h`
     // — so the exit from a reorder handed the prose a node selection with no press involved.
     const editor = note("First.\n\nSecond.\n\nThird.");
@@ -665,5 +694,216 @@ describe("handing focus back to the prose", () => {
 
     typeNext(editor);
     expect(saved(editor)).toContain("Third.");
+  });
+});
+
+// ─── A grip still holding a block that has gone ───────────────────────────────
+//
+// The grip is drawn from a hover and then *stays* — through a live-reload, an undo, the
+// GM's own last keystroke in another pane. Its three direct gestures are the ones that
+// used to get the weakest check of the three in the codebase: "is *a* block there", which
+// a position that has gone stale answers yes to, because a bystander has slid into it.
+//
+// The note is three paragraphs of the same length on purpose. The grip is put on "Bravo.",
+// "Alpha." goes, and the position the grip holds now lands exactly on "Delta." — a
+// position that still resolves, to the wrong block. Nothing below may touch it.
+
+describe("a grip left holding a block the document no longer has", () => {
+  /** A note with the grip on the middle paragraph, and the one above it since deleted. */
+  function staleGrip() {
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    const bravo = targetOfNth(editor, "paragraph", 1);
+    deleteBlock(editor, targetOf(editor, "paragraph"));
+    // The failure this guards is only reachable because the position is still good.
+    expect(editor.state.doc.nodeAt(bravo.pos)?.textContent).toBe("Delta.");
+    return { editor, target: bravo, ...gripOn(editor, bravo) };
+  }
+
+  it("reorders nothing when the arrow keys reach a stale target", async () => {
+    const { editor, el, handle, target } = staleGrip();
+
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    await fireEvent.keyDown(el, { key: "ArrowDown" });
+
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+    // And the handle did not follow a write that never happened: it is still on the block
+    // it was given, stale as that is.
+    expect(handle.target).toBe(target);
+  });
+
+  it("selects nothing on mousedown, so Delete does not find a bystander selected", async () => {
+    const { editor, el } = staleGrip();
+
+    await fireEvent.mouseDown(el);
+
+    expect(editor.state.selection).not.toBeInstanceOf(NodeSelection);
+  });
+
+  it("starts no drag, so nothing can be dropped from a block that has gone", async () => {
+    const { editor, el } = staleGrip();
+
+    await fireEvent.dragStart(el);
+
+    expect(editor.view.dragging).toBeNull();
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+  });
+});
+
+// ─── What holds the handle up, and what takes it down ─────────────────────────
+//
+// The claims that used to have nowhere to live: one half of each was a latch in the
+// machine and the other a callback in the component, and no test mounted both. Every one
+// of these is the gesture a GM performs, end to end.
+
+describe("the grip while its menu is open", () => {
+  it("stays up when the pointer crosses the gap to the menu", async () => {
+    // The grip's own `mouseleave` fires on the way into the menu, and the hide it would
+    // otherwise schedule would take the menu's anchor away from under it.
+    const editor = note("A sentence.");
+    const { el, handle } = grip(editor);
+    await fireEvent.mouseEnter(el);
+    await fireEvent.click(el);
+    await fireEvent.mouseLeave(el);
+    await settle();
+
+    expect(handle.target).not.toBeNull();
+    expect(menu()).not.toBeNull();
+  });
+
+  it("keeps naming the block it was opened on, whatever the pointer does", async () => {
+    // Every item acts on one block, so a pointer wandering back over the prose underneath
+    // the menu — which the editor reports as ordinary movement — must not change which.
+    const editor = note("First.\n\nSecond.");
+    const { el, handle } = grip(editor);
+    const opened = handle.target;
+    await fireEvent.click(el);
+    handle.point(targetOfNth(editor, "paragraph", 1));
+
+    expect(handle.target).toBe(opened);
+    expect(handle.menu?.target).toBe(opened);
+  });
+
+  it("comes down once the menu closes and nothing else holds it", async () => {
+    const editor = note("A sentence.");
+    const { el, handle } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.keyDown(items()[0], { key: "Escape" });
+    // Escape hands focus back to the grip, so let go of that too.
+    await fireEvent.blur(el);
+    await settle();
+
+    expect(handle.target).toBeNull();
+  });
+
+  it("stays up after the menu closes if the pointer is back on the grip", async () => {
+    const editor = note("A sentence.");
+    const { el, handle } = grip(editor);
+    await fireEvent.mouseEnter(el);
+    await fireEvent.click(el);
+    await fireEvent.keyDown(items()[0], { key: "Escape" });
+    await settle();
+
+    expect(handle.target).not.toBeNull();
+    expect(menu()).toBeNull();
+  });
+
+  it("goes when the note scrolls out from under it, pointer resting on it or not", async () => {
+    // A held grip is exempt from an invalidation; a menu is emphatically not, and this is
+    // the one case where the two overlap. The menu is drawn `fixed` off a grip placed from
+    // a measurement the scroll has just made wrong, so one that survived would hang in the
+    // window naming a block that is no longer beside it.
+    const editor = note("A sentence.");
+    const { el, handle } = grip(editor);
+    await fireEvent.mouseEnter(el);
+    await fireEvent.click(el);
+    // What `Editor.svelte` calls from its capture-phase scroll listener.
+    handle.invalidate();
+
+    expect(handle.target).toBeNull();
+    expect(handle.menu).toBeNull();
+  });
+
+  it("goes down before the unmount that follows it, leaving no latch stranded", async () => {
+    // The frozen grip, performed the way the editor performs it. The grip is unmounted by
+    // an `{#if}` on the target, so the target going is what takes the component away — and
+    // the menu has to be closed *by the same step*, not by the component on its way out.
+    // It was the other way round before: a pin set here and released from `onDestroy`,
+    // which is a latch a component can be torn away from, and one left set ignored the
+    // pointer for the rest of the session with nothing on screen saying why.
+    const editor = note("First.\n\nSecond.");
+    const { el, handle, unmount } = grip(editor);
+    await fireEvent.mouseEnter(el);
+    await fireEvent.click(el);
+    expect(menu()).not.toBeNull();
+
+    // The scroll, and then what `Editor.svelte` does about it.
+    handle.invalidate();
+    expect(handle.menu).toBeNull();
+    expect(handle.target).toBeNull();
+    unmount();
+
+    const next = targetOfNth(editor, "paragraph", 1);
+    handle.point(next);
+
+    expect(handle.target).toBe(next);
+  });
+
+  it("comes down when the document changes under it", async () => {
+    // A menu open across an edit — another pane's undo, a live-reload — is ten items built
+    // on a note that has moved beneath them.
+    const editor = note("First.\n\nSecond.");
+    const { el, handle } = grip(editor, "paragraph", 1);
+    reportEdits(editor, handle);
+    await fireEvent.mouseEnter(el);
+    await fireEvent.click(el);
+    editor.commands.insertContentAt(1, "X");
+
+    expect(handle.menu).toBeNull();
+    expect(handle.target).toBeNull();
+  });
+});
+
+describe("a grip in the GM's hand while its block is rewritten", () => {
+  it("carries the target through the change rather than keeping the old node", async () => {
+    // Pressing the grip blurs whatever field the GM was in and that field commits, so the
+    // block under their pointer is a new object before the mouse comes back up. Every
+    // write addresses its block by node identity: without this the grip is still beside
+    // the block and still looks live, and every gesture behind it refuses.
+    const editor = note("First.\n\nSecond.");
+    const { el, handle } = grip(editor, "paragraph", 1);
+    reportEdits(editor, handle);
+    await fireEvent.mouseEnter(el);
+    const before = handle.target!;
+
+    editor.commands.insertContentAt(before.pos + 1, "X");
+
+    expect(handle.target).not.toBe(before);
+    expect(blockStillThere(editor.state.doc, handle.target!)).toBe(true);
+  });
+
+  it("takes down a grip nobody is holding, because the next mousemove answers again", async () => {
+    const editor = note("First.\n\nSecond.");
+    const { handle } = grip(editor, "paragraph", 1);
+    reportEdits(editor, handle);
+
+    editor.commands.insertContentAt(1, "X");
+
+    expect(handle.target).toBeNull();
+  });
+
+  it("keeps holding the block a keyboard reorder moved, so a second press moves the same one", async () => {
+    // The change the grip cannot be walked through: a reorder deletes the block and puts
+    // it back elsewhere, and where it landed is known only after the write.
+    const editor = note("First.\n\nSecond.\n\nThird.");
+    const { el, handle } = grip(editor, "paragraph", 2);
+    reportEdits(editor, handle);
+    await fireEvent.focus(el);
+
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(saved(editor)).toBe("First.\n\nThird.\n\nSecond.");
+    expect(blockStillThere(editor.state.doc, handle.target!)).toBe(true);
+
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(saved(editor)).toBe("Third.\n\nFirst.\n\nSecond.");
   });
 });

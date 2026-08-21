@@ -15,6 +15,7 @@ import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
 import { logError } from "$lib/log";
+import { linksTick } from "$lib/stores/links-tick.svelte";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -25,12 +26,11 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_EMPTY_NAME: "That needs a name.",
   ERR_BAD_NAME: "That name can't contain / or \\.",
   ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
-  ERR_UNSUPPORTED_IMAGE:
-    "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
+  ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
-  ERR_DB_LOCKED:
-    "Another program is using this ledger's database — close it and try again.",
+  ERR_EMPTY_QUICK_NOTE: "A Quick Note needs some text.",
+  ERR_DB_LOCKED: "Another program is using this ledger's database — close it and try again.",
   ERR_DB_CORRUPT: "This ledger's database is damaged.",
   // [[Ledger Format Version]] refusals (ADR-0017). Both directions of mismatch
   // refuse to open, so this copy is the whole GM-facing story for each.
@@ -40,8 +40,7 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   // toast whenever the dialog opens, because a dialog already forcing a decision
   // does not need a line of its own beside it. What survives here is the dead-end
   // case — the refusal stands and nothing else would say so.
-  ERR_FORMAT_MIGRATION_REQUIRED:
-    "This ledger's notes need updating before it can be opened.",
+  ERR_FORMAT_MIGRATION_REQUIRED: "This ledger's notes need updating before it can be opened.",
   // The backup is the one all-or-nothing step: it failed, so nothing was
   // rewritten, and the ledger is exactly as it was.
   ERR_FORMAT_BACKUP_FAILED:
@@ -72,19 +71,58 @@ export function friendlyMessage(error: unknown): string {
   return GENERIC_MESSAGE;
 }
 
+// ── Link-index freshness ─────────────────────────────────────────────────────
+// Commands that can change what links exist or what a wikilink resolves to.
+// Each one bumps [[linksTick]] on success, so the Backlinks and Outbound
+// sections of every open note reload without a caller remembering to say so
+// (#212). Two shapes qualify:
+//
+//   * a command that rewrites note *bytes* — the body is where links live, and
+//     `rename_note` / `apply_backlink_rewrite` / `update_scene` all reach
+//     `note_mutation::commit_backlink_rewrites` to rewrite other notes' bodies;
+//   * a command that adds or removes a note *row* — an unresolved wikilink
+//     resolves the moment its note is created, and breaks when it is deleted.
+//
+// Folder-level moves count because they re-key every note beneath them.
+// Deliberately absent: `write_note_tags` and the alias commands, which touch
+// frontmatter and the alias table, neither of which the link index reads.
+//
+// Typed against the generated bindings on purpose: `bindings.gen.ts` is
+// regenerated from Rust (ADR-0009), and a renamed command must fail the
+// type-check here rather than quietly stop refreshing anyone's backlinks.
+//
+// The wholesale paths (`rebuild_ledger_db`, format migration, and the [[Ledger
+// Watcher]]'s bulk fallback) are absent because they announce themselves: each
+// ends in a `ledger:rebuilt`, which every note [[Details Source]] subscribes to
+// for a full refetch — a stronger refresh than a tick.
+const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
+  "writeNoteContent",
+  "createNote",
+  "createNoteFromTemplate",
+  "deleteNote",
+  "deleteFolder",
+  "renameNote",
+  "renameFolder",
+  "moveFolder",
+  "applyBacklinkRewrite",
+  "updateScene",
+]);
+
 // ── Surface construction ─────────────────────────────────────────────────────
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
 
 /** Wrap every generated command with an on-failure behaviour, preserving types. */
-function wrap<C extends Record<string, AnyFn>>(
-  source: C,
-  onError: (error: unknown) => void,
-): C {
+function wrap<C extends Record<string, AnyFn>>(source: C, onError: (error: unknown) => void): C {
   const out = {} as Record<string, AnyFn>;
   for (const [name, fn] of Object.entries(source)) {
+    // `name` widens to string through Object.entries; the Set stays narrowly
+    // typed so the literals above are the thing being checked.
+    const bumpsLinks = LINK_WRITING_COMMANDS.has(name as keyof typeof commands);
     out[name] = async (...args: unknown[]) => {
       try {
-        return await fn(...args);
+        const result = await fn(...args);
+        if (bumpsLinks) linksTick.bump();
+        return result;
       } catch (error) {
         onError(error);
         throw error;

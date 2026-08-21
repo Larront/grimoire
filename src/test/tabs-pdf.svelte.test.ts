@@ -50,14 +50,29 @@ describe("tabs store — pdf tabs are path-keyed (ADR-0011)", () => {
   });
 
   it("does not duplicate a pdf tab when the same path is opened again", () => {
-    tabs.openTab({ type: "pdf", id: 0, title: "Rulebook", pdfPath: "rulebook.pdf" });
-    tabs.openTab({ type: "pdf", id: 0, title: "Rulebook", pdfPath: "rulebook.pdf" });
+    tabs.openTab({
+      type: "pdf",
+      id: 0,
+      title: "Rulebook",
+      pdfPath: "rulebook.pdf",
+    });
+    tabs.openTab({
+      type: "pdf",
+      id: 0,
+      title: "Rulebook",
+      pdfPath: "rulebook.pdf",
+    });
     const pdfTabs = tabs.left.tabs.filter((t) => t.type === "pdf");
     expect(pdfTabs.length).toBe(1);
   });
 
   it("persists a pdf tab's path to localStorage", () => {
-    tabs.openTab({ type: "pdf", id: 0, title: "Rulebook", pdfPath: "rulebook.pdf" });
+    tabs.openTab({
+      type: "pdf",
+      id: 0,
+      title: "Rulebook",
+      pdfPath: "rulebook.pdf",
+    });
     flushSync();
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
@@ -87,7 +102,10 @@ describe("tabs store — pdf tabs are path-keyed (ADR-0011)", () => {
       focusedPane: "left",
     });
     const loaded = persistence.load();
-    expect(loaded?.left.tabs[0]).toMatchObject({ type: "pdf", pdfPath: "r.pdf" });
+    expect(loaded?.left.tabs[0]).toMatchObject({
+      type: "pdf",
+      pdfPath: "r.pdf",
+    });
   });
 });
 
@@ -111,7 +129,12 @@ describe("tabs store — pdf files-tree operations (issue #101)", () => {
 
   it("closeTabsByPdfPath closes a pdf tab open in either pane, leaving others", () => {
     tabs.openTab({ type: "pdf", id: 0, title: "Keep", pdfPath: "keep.pdf" });
-    tabs.openTabForceNew({ type: "pdf", id: 0, title: "Doomed", pdfPath: "doomed.pdf" });
+    tabs.openTabForceNew({
+      type: "pdf",
+      id: 0,
+      title: "Doomed",
+      pdfPath: "doomed.pdf",
+    });
     // Force the same path into the right pane too (openTab would dedupe to the
     // existing left tab) so we exercise closing across both panes.
     tabs.openTabForceNew({ type: "pdf", id: 0, title: "Doomed", pdfPath: "doomed.pdf" }, "right");
@@ -134,7 +157,12 @@ describe("tabs store — pdf files-tree operations (issue #101)", () => {
   });
 
   it("updatePdfTab re-keys an open pdf tab's path and title on rename", () => {
-    tabs.openTab({ type: "pdf", id: 0, title: "old-name", pdfPath: "old-name.pdf" });
+    tabs.openTab({
+      type: "pdf",
+      id: 0,
+      title: "old-name",
+      pdfPath: "old-name.pdf",
+    });
 
     tabs.updatePdfTab("old-name.pdf", "new-name", "new-name.pdf");
 
@@ -144,7 +172,12 @@ describe("tabs store — pdf files-tree operations (issue #101)", () => {
       pdfPath: "new-name.pdf",
     });
     // Re-opening at the new path matches the existing tab rather than duplicating.
-    tabs.openTab({ type: "pdf", id: 0, title: "new-name", pdfPath: "new-name.pdf" });
+    tabs.openTab({
+      type: "pdf",
+      id: 0,
+      title: "new-name",
+      pdfPath: "new-name.pdf",
+    });
     expect(tabs.left.tabs.filter((t) => t.type === "pdf").length).toBe(1);
   });
 
@@ -154,6 +187,8 @@ describe("tabs store — pdf files-tree operations (issue #101)", () => {
 
     tabs.updatePdfTab("a.pdf", "renamed", "renamed.pdf");
 
-    expect(tabs.left.tabs.find((t) => t.pdfPath === "b.pdf")).toMatchObject({ title: "b" });
+    expect(tabs.left.tabs.find((t) => t.pdfPath === "b.pdf")).toMatchObject({
+      title: "b",
+    });
   });
 });

@@ -6,6 +6,7 @@ import AppSearch from "$lib/components/SearchPalette.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { notes } from "$lib/stores/notes.svelte";
 import { searchPalette } from "$lib/stores/search.svelte";
+import { dialogs } from "$lib/stores/overlay.svelte";
 
 const testNote = {
   id: 1,
@@ -67,35 +68,27 @@ describe("command palette – Add tag visibility", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeTruthy();
   });
 
   it("'Add tag' item is absent when active tab is a map", async () => {
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 
   it("'Add tag' item is absent when active tab is a scene", async () => {
     tabs.openTab({ type: "scene", id: 1, title: "Scene 1" });
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 
   it("'Add tag' item is absent when no tabs are open", async () => {
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-add-tag"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-add-tag"]')).toBeNull();
   });
 });
 
@@ -106,9 +99,7 @@ describe("command palette – Add tag flow", () => {
     await setupNote();
     render(AppSearch);
     await openTagPicker();
-    expect(
-      document.body.querySelector('[data-testid="add-tag-picker"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="add-tag-picker"]')).toBeTruthy();
   });
 
   it("tag picker loads the note's existing tags", async () => {
@@ -155,9 +146,7 @@ describe("command palette – Add tag flow", () => {
     await fireEvent.input(input);
     await fireEvent.keyDown(input, { key: "Enter" });
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="add-tag-picker"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="add-tag-picker"]')).toBeNull();
   });
 
   it("right rail open state is not changed when a tag is added via the palette", async () => {
@@ -189,6 +178,75 @@ async function typeQuery(query: string) {
   await fireEvent.input(input);
   await flush();
 }
+
+// ── The three result kinds, as one table ──────────────────────────────────────
+//
+// Notes, Maps and Scenes are one behaviour wearing three payload shapes. A group
+// draws when `search_all` returns rows for it and stays away when it does not; a row
+// opens its own kind of tab; the palette closes behind it; and the two modifiers
+// change *where* that tab lands. Written out per kind, those claims were a dozen
+// near-identical tests whose only real differences were a testid and which array of
+// the payload the row went into — so the differences are the table and the claims are
+// asserted once, over it.
+//
+// What is deliberately NOT here is anything true of only one kind: the debounce and
+// the already-open reuse are Notes' own, the pane cases below need a split that
+// already exists, and a Tag does not open a tab at all. Those stay written out.
+type ResultKind = "note" | "map" | "scene";
+
+interface KindSpec {
+  kind: ResultKind;
+  /** A row `search_all` returns, in the shape that kind's payload carries. */
+  hit: (id: number) => Record<string, unknown>;
+  /** Those rows, placed in the field of the payload their kind is read from. */
+  payload: (rows: unknown[]) => Record<string, unknown>;
+}
+
+const RESULT_KINDS: KindSpec[] = [
+  {
+    kind: "note",
+    hit: (id) => ({
+      id,
+      title: `Note ${id}`,
+      path: `note-${id}.md`,
+      excerpt: null,
+      match_count: 0,
+    }),
+    payload: (notes) => ({ notes, maps: [], scenes: [] }),
+  },
+  {
+    kind: "map",
+    hit: (id) => ({ id, title: `Map ${id}` }),
+    payload: (maps) => ({ notes: [], maps, scenes: [] }),
+  },
+  {
+    kind: "scene",
+    hit: (id) => ({ id, name: `Scene ${id}` }),
+    payload: (scenes) => ({ notes: [], maps: [], scenes }),
+  },
+];
+
+const NO_RESULTS = { notes: [], maps: [], scenes: [] };
+
+/** `search_all` answers with `results`; every other command answers null. */
+function searchReturns(results: unknown) {
+  vi.mocked(invoke).mockImplementation((cmd: string) =>
+    Promise.resolve(cmd === "search_all" ? results : null),
+  );
+}
+
+/** Open the palette, type, and let the 80ms debounce fire. Fake timers required. */
+async function searchFor(query: string) {
+  render(AppSearch);
+  await openPalette();
+  await typeQuery(query);
+  await vi.advanceTimersByTimeAsync(80);
+  await flush();
+}
+
+const rowsOf = (kind: ResultKind) =>
+  document.body.querySelectorAll(`[data-testid="cmd-${kind}-result"]`);
+const rowOf = (kind: ResultKind) => rowsOf(kind)[0] as HTMLElement;
 
 describe("command palette – Notes search", () => {
   beforeEach(() => {
@@ -224,67 +282,6 @@ describe("command palette – Notes search", () => {
     expect(invoke).toHaveBeenCalledWith("search_all", { query: "Dr" });
   });
 
-  it("shows Notes group with results after query fires", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [{ id: 2, title: "Dragon", path: "dragon.md" }],
-          maps: [],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Dr");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeTruthy();
-  });
-
-  it("no Notes group when query returns empty results", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all") return Promise.resolve({ notes: [], maps: [], scenes: [] });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("zzz");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeNull();
-  });
-
-  it("clicking a Note result calls tabs.openTab with the matching note", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [{ id: 3, title: "Aldric", path: "characters/aldric.md" }],
-          maps: [],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Al");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.activeTab?.type).toBe("note");
-    expect(tabs.activeTab?.id).toBe(3);
-  });
-
   it("if the note is already open, selecting it focuses the existing tab (no duplicate)", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
@@ -303,41 +300,12 @@ describe("command palette – Notes search", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
     await fireEvent.click(result);
     await flush();
 
-    const noteTabs = tabs.left.tabs.filter(
-      (t) => t.type === "note" && t.id === 1,
-    );
+    const noteTabs = tabs.left.tabs.filter((t) => t.type === "note" && t.id === 1);
     expect(noteTabs.length).toBe(1);
-  });
-
-  it("palette closes after selecting a note result", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [{ id: 3, title: "Aldric", path: "characters/aldric.md" }],
-          maps: [],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Al");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(searchPalette.open).toBe(false);
   });
 
   it("search results are cleared when palette closes", async () => {
@@ -356,9 +324,7 @@ describe("command palette – Notes search", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-note-result"]')).toBeTruthy();
 
     // Close and reopen — no stale results
     searchPalette.open = false;
@@ -366,9 +332,7 @@ describe("command palette – Notes search", () => {
     searchPalette.open = true;
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-note-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-note-result"]')).toBeNull();
   });
 });
 
@@ -389,13 +353,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful at dusk",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful at dusk",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -407,22 +373,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="note-excerpt"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="note-excerpt"]')).toBeTruthy();
   });
 
   it("does not show excerpt when excerpt is null (title-only match)", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: null,
-            match_count: 0,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -434,22 +400,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="note-excerpt"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="note-excerpt"]')).toBeNull();
   });
 
   it("shows N matches chip when match_count > 1", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "harbor here and harbor there",
-            match_count: 3,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "harbor here and harbor there",
+              match_count: 3,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -470,13 +436,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -488,22 +456,22 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="match-count-chip"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="match-count-chip"]')).toBeNull();
   });
 
   it("excerpt contains a highlighted span for the matched term", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -527,13 +495,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 4,
-            title: "The Harbor",
-            path: "harbor.md",
-            excerpt: "the harbor shines",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 4,
+              title: "The Harbor",
+              path: "harbor.md",
+              excerpt: "the harbor shines",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -545,9 +515,7 @@ describe("command palette – excerpt and match chip", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const result = document.body.querySelector(
-      '[data-testid="cmd-note-result"]',
-    ) as HTMLElement;
+    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
     await fireEvent.click(result);
     await flush();
 
@@ -558,13 +526,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [],
@@ -584,13 +554,15 @@ describe("command palette – excerpt and match chip", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{
-            id: 2,
-            title: "Harbor Tale",
-            path: "harbor.md",
-            excerpt: "the harbor is beautiful",
-            match_count: 1,
-          }],
+          notes: [
+            {
+              id: 2,
+              title: "Harbor Tale",
+              path: "harbor.md",
+              excerpt: "the harbor is beautiful",
+              match_count: 1,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [],
@@ -617,7 +589,7 @@ describe("command palette – excerpt and match chip", () => {
 
 // ── Maps and Scenes groups (issue #34) ────────────────────────────────────────
 
-describe("command palette – Maps group", () => {
+describe.each(RESULT_KINDS)("command palette – $kind results", ({ kind, hit, payload }) => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -627,97 +599,66 @@ describe("command palette – Maps group", () => {
     vi.useRealTimers();
   });
 
-  it("shows Maps group when maps are returned", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [{ id: 1, title: "World Map" }],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Wo");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    expect(
-      document.body.querySelector('[data-testid="cmd-map-result"]'),
-    ).toBeTruthy();
+  it("draws the group when search_all returns a row for it", async () => {
+    searchReturns(payload([hit(2)]));
+    await searchFor("xx");
+    expect(rowOf(kind)).toBeTruthy();
   });
 
-  it("no Maps group when maps array is empty", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({ notes: [], maps: [], scenes: [] });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("zzz");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    expect(
-      document.body.querySelector('[data-testid="cmd-map-result"]'),
-    ).toBeNull();
+  it("draws no group when its array comes back empty", async () => {
+    searchReturns(NO_RESULTS);
+    await searchFor("zzz");
+    expect(rowsOf(kind).length).toBe(0);
   });
 
-  it("clicking a Map result opens the map tab", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [{ id: 5, title: "Dungeon Map" }],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Du");
-    await vi.advanceTimersByTimeAsync(80);
+  it("opens a tab for the row that was clicked", async () => {
+    searchReturns(payload([hit(5)]));
+    await searchFor("xx");
+    await fireEvent.click(rowOf(kind));
     await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-map-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.activeTab?.type).toBe("map");
+    expect(tabs.activeTab?.type).toBe(kind);
     expect(tabs.activeTab?.id).toBe(5);
   });
 
-  it("palette closes after selecting a map result", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [{ id: 5, title: "Dungeon Map" }],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Du");
-    await vi.advanceTimersByTimeAsync(80);
+  it("closes the palette behind the tab it opened", async () => {
+    searchReturns(payload([hit(5)]));
+    await searchFor("xx");
+    await fireEvent.click(rowOf(kind));
     await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-map-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
     expect(searchPalette.open).toBe(false);
+  });
+
+  it("Ctrl+Enter opens a second tab rather than reusing the one already open", async () => {
+    tabs.openTab({ type: kind, id: 1, title: "Already open" });
+    searchReturns(payload([hit(1)]));
+    await searchFor("xx");
+
+    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await fireEvent.click(rowOf(kind));
+    await flush();
+
+    const opened = tabs.left.tabs.filter((t) => t.type === kind && t.id === 1);
+    expect(opened.length).toBe(2);
+  });
+
+  it("Shift+Enter creates the split and opens right, leaving the focus where it was", async () => {
+    tabs.openTab({ type: "note", id: 99, title: "Existing" });
+    expect(tabs.right).toBeNull();
+    searchReturns(payload([hit(7)]));
+    await searchFor("xx");
+
+    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
+    await fireEvent.click(rowOf(kind));
+    await flush();
+
+    expect(tabs.right?.tabs.some((t) => t.type === kind && t.id === 7)).toBe(true);
+    expect(tabs.focusedPane).toBe("left");
   });
 });
 
-describe("command palette – Scenes group", () => {
+// ── Group order ───────────────────────────────────────────────────────────────
+
+describe("command palette – Maps and Scenes order", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -727,118 +668,21 @@ describe("command palette – Scenes group", () => {
     vi.useRealTimers();
   });
 
-  it("shows Scenes group when scenes are returned", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [],
-          scenes: [{ id: 2, name: "Tavern Brawl" }],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Ta");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    expect(
-      document.body.querySelector('[data-testid="cmd-scene-result"]'),
-    ).toBeTruthy();
-  });
-
-  it("no Scenes group when scenes array is empty", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({ notes: [], maps: [], scenes: [] });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("zzz");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    expect(
-      document.body.querySelector('[data-testid="cmd-scene-result"]'),
-    ).toBeNull();
-  });
-
-  it("clicking a Scene result opens the scene tab", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [],
-          scenes: [{ id: 7, name: "Dragon Fight" }],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Dr");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-scene-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.activeTab?.type).toBe("scene");
-    expect(tabs.activeTab?.id).toBe(7);
-  });
-
-  it("palette closes after selecting a scene result", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [],
-          scenes: [{ id: 7, name: "Dragon Fight" }],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Dr");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-
-    const result = document.body.querySelector(
-      '[data-testid="cmd-scene-result"]',
-    ) as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(searchPalette.open).toBe(false);
-  });
-
   it("Maps group renders before Scenes group in the DOM", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [{ id: 1, title: "Dragon Map" }],
-          scenes: [{ id: 2, name: "Dragon Scene" }],
-        });
-      return Promise.resolve(null);
+    searchReturns({
+      notes: [],
+      maps: [{ id: 1, title: "Dragon Map" }],
+      scenes: [{ id: 2, name: "Dragon Scene" }],
     });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("Dr");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
+    await searchFor("Dr");
 
-    const mapResult = document.body.querySelector('[data-testid="cmd-map-result"]');
-    const sceneResult = document.body.querySelector('[data-testid="cmd-scene-result"]');
+    const mapResult = rowOf("map");
+    const sceneResult = rowOf("scene");
     expect(mapResult).toBeTruthy();
     expect(sceneResult).toBeTruthy();
     // Map result must appear before scene result in document order
     expect(
-      mapResult!.compareDocumentPosition(sceneResult!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      mapResult.compareDocumentPosition(sceneResult) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 });
@@ -872,9 +716,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeTruthy();
   });
 
   it("no Tags group when tags array is empty", async () => {
@@ -889,9 +731,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("shows count chip with note_count value", async () => {
@@ -933,9 +773,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const tagItem = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const tagItem = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     await fireEvent.click(tagItem);
     await flush();
 
@@ -966,16 +804,22 @@ describe("command palette – Tags group", () => {
     await flush();
 
     // "npc" should be hidden since tag:npc is already active
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("Tags group renders before Notes group in the DOM", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 1, title: "NPC Note", path: "npc.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 1,
+              title: "NPC Note",
+              path: "npc.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
           tags: [{ name: "npc", note_count: 3 }],
@@ -1000,8 +844,7 @@ describe("command palette – Tags group", () => {
 
   it("no Tags group when search_all returns no tags field (backward compat)", async () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({ notes: [], maps: [], scenes: [] });
+      if (cmd === "search_all") return Promise.resolve({ notes: [], maps: [], scenes: [] });
       return Promise.resolve(null);
     });
     render(AppSearch);
@@ -1010,9 +853,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-tag-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-tag-result"]')).toBeNull();
   });
 
   it("selecting tag when existing filter plus free text appends tag and preserves free text", async () => {
@@ -1036,9 +877,7 @@ describe("command palette – Tags group", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const villainTag = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const villainTag = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     expect(villainTag).toBeTruthy();
     await fireEvent.click(villainTag);
     await flush();
@@ -1054,9 +893,7 @@ describe("command palette – Tags group", () => {
         callCount++;
         // Second call (after tag:npc is in input) returns allied tag
         const tags =
-          callCount <= 1
-            ? [{ name: "npc", note_count: 2 }]
-            : [{ name: "allied", note_count: 1 }];
+          callCount <= 1 ? [{ name: "npc", note_count: 2 }] : [{ name: "allied", note_count: 1 }];
         return Promise.resolve({ notes: [], maps: [], scenes: [], tags });
       }
       return Promise.resolve(null);
@@ -1068,9 +905,7 @@ describe("command palette – Tags group", () => {
     await flush();
 
     // Select npc tag → input becomes "tag:npc"
-    const npcTag = document.body.querySelector(
-      '[data-testid="cmd-tag-result"]',
-    ) as HTMLElement;
+    const npcTag = document.body.querySelector('[data-testid="cmd-tag-result"]') as HTMLElement;
     await fireEvent.click(npcTag);
     await flush();
     await vi.advanceTimersByTimeAsync(80);
@@ -1089,7 +924,7 @@ describe("command palette – Commands group ordering", () => {
 
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
     vi.useRealTimers();
   });
 
@@ -1132,7 +967,15 @@ describe("command palette – Commands group ordering", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 1, title: "Crafter", path: "crafter.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 1,
+              title: "Crafter",
+              path: "crafter.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -1157,13 +1000,15 @@ describe("command palette – Commands group ordering", () => {
 describe("command palette – Commands group visibility", () => {
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
   });
 
   it("shows up to 3 commands when query is empty", async () => {
     render(AppSearch);
     await openPalette();
-    const allCmds = document.body.querySelectorAll('[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]');
+    const allCmds = document.body.querySelectorAll(
+      '[data-testid^="cmd-create"], [data-testid="cmd-open-settings"], [data-testid="cmd-toggle-theme"], [data-testid="cmd-switch-ledger"], [data-testid="cmd-rebuild-index"]',
+    );
     expect(allCmds.length).toBeLessThanOrEqual(3);
     expect(allCmds.length).toBeGreaterThanOrEqual(1);
   });
@@ -1206,7 +1051,7 @@ describe("command palette – Commands group visibility", () => {
 describe("command palette – Commands group wiring", () => {
   afterEach(() => {
     searchPalette.open = false;
-    searchPalette.settingsOpen = false;
+    dialogs.settingsOpen = false;
     resetMode();
   });
 
@@ -1228,9 +1073,12 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_note", expect.objectContaining({
-      noteTitle: "Untitled",
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_note",
+      expect.objectContaining({
+        noteTitle: "Untitled",
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1252,9 +1100,12 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_scene", expect.objectContaining({
-      name: expect.any(String),
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_scene",
+      expect.objectContaining({
+        name: expect.any(String),
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1276,13 +1127,39 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(invoke).toHaveBeenCalledWith("create_map_empty", expect.objectContaining({
-      title: expect.any(String),
-    }));
+    expect(invoke).toHaveBeenCalledWith(
+      "create_map_empty",
+      expect.objectContaining({
+        title: expect.any(String),
+      }),
+    );
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Open Settings sets searchPalette.settingsOpen and closes palette", async () => {
+  it("Capture a Quick Note opens the dialog and closes palette", async () => {
+    dialogs.quickNoteOpen = false;
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "capture";
+    await fireEvent.input(input);
+    await flush();
+
+    // The keystroke is not the only way in: a shortcut has to be reachable from
+    // here too (docs/design-system.md §Keyboard & Accessibility).
+    const item = document.body.querySelector(
+      '[data-testid="cmd-capture-quick-note"]',
+    ) as HTMLElement;
+    expect(item).toBeTruthy();
+    await fireEvent.click(item);
+    await flush();
+
+    expect(dialogs.quickNoteOpen).toBe(true);
+    expect(searchPalette.open).toBe(false);
+    dialogs.quickNoteOpen = false;
+  });
+
+  it("Open Settings sets dialogs.settingsOpen and closes palette", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -1295,7 +1172,7 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(searchPalette.settingsOpen).toBe(true);
+    expect(dialogs.settingsOpen).toBe(true);
     expect(searchPalette.open).toBe(false);
   });
 
@@ -1315,7 +1192,8 @@ describe("command palette – Commands group wiring", () => {
     await fireEvent.click(item);
     await flush();
 
-    const expectedMode = modeBefore === 'light' ? 'dark' : modeBefore === 'dark' ? 'system' : 'light';
+    const expectedMode =
+      modeBefore === "light" ? "dark" : modeBefore === "dark" ? "system" : "light";
     expect(userPrefersMode.current).toBe(expectedMode);
     expect(searchPalette.open).toBe(false);
   });
@@ -1481,9 +1359,7 @@ describe("command palette – Create note from template", () => {
     await fireEvent.click(item);
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-create-note-from-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-create-note-from-template"]')).toBeNull();
   });
 
   it("template picker mode resets when palette is closed", async () => {
@@ -1510,14 +1386,16 @@ describe("command palette – Create note from template", () => {
     searchPalette.open = true;
     await flush();
 
-    expect(
-      document.body.querySelector('[data-testid="cmd-template-result"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-template-result"]')).toBeNull();
   });
 });
 
 // ── Modifier-based open semantics (issue #37) ─────────────────────────────────
 
+// The cases below are the ones with a *pane* in them — a split that already exists,
+// an opposite pane holding the target, a focused pane that must not move. The plain
+// "this modifier opens a new tab" claim is asserted per kind in the RESULT_KINDS
+// table above, which is where a fourth result kind would pick it up for free.
 describe("command palette – modifier-based open semantics", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1545,40 +1423,6 @@ describe("command palette – modifier-based open semantics", () => {
     await flush();
   }
 
-  async function openMapResult(id: number, mapTitle: string) {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [{ id, title: mapTitle }],
-          scenes: [],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("ma");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-  }
-
-  async function openSceneResult(id: number, name: string) {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "search_all")
-        return Promise.resolve({
-          notes: [],
-          maps: [],
-          scenes: [{ id, name }],
-        });
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    await typeQuery("sc");
-    await vi.advanceTimersByTimeAsync(80);
-    await flush();
-  }
-
   // ── Ctrl+Enter (force new tab) ───────────────────────────────────────────────
 
   it("Ctrl+Enter on note (not yet open) opens a new tab in the active pane", async () => {
@@ -1592,19 +1436,6 @@ describe("command palette – modifier-based open semantics", () => {
 
     expect(tabs.left.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
     expect(tabs.left.tabs.length).toBe(2); // appended, not replaced
-  });
-
-  it("Ctrl+Enter on note already open in active pane creates a second tab (no reuse)", async () => {
-    tabs.openTab({ type: "note", id: 1, title: "My Note" }); // left pane, note:1
-    await openNoteResult(1, "My Note", "my-note.md");
-
-    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    const noteTabs = tabs.left.tabs.filter((t) => t.type === "note" && t.id === 1);
-    expect(noteTabs.length).toBe(2); // second tab created
   });
 
   it("Ctrl+Enter on note already open in opposite pane opens new tab in focused pane (no reuse)", async () => {
@@ -1626,60 +1457,7 @@ describe("command palette – modifier-based open semantics", () => {
     expect(tabs.focusedPane).toBe("left");
   });
 
-  it("Ctrl+Enter on map opens a new tab without reuse", async () => {
-    tabs.openTab({ type: "map", id: 1, title: "Existing Map" }); // left pane, map:1
-    await openMapResult(1, "Existing Map");
-
-    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-map-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    const mapTabs = tabs.left.tabs.filter((t) => t.type === "map" && t.id === 1);
-    expect(mapTabs.length).toBe(2);
-  });
-
-  it("Ctrl+Enter on scene opens a new tab without reuse", async () => {
-    tabs.openTab({ type: "scene", id: 1, title: "Existing Scene" });
-    await openSceneResult(1, "Existing Scene");
-
-    await fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-scene-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    const sceneTabs = tabs.left.tabs.filter((t) => t.type === "scene" && t.id === 1);
-    expect(sceneTabs.length).toBe(2);
-  });
-
   // ── Shift+Enter (open in opposite pane) ─────────────────────────────────────
-
-  it("Shift+Enter on note with no split creates split and opens in right pane", async () => {
-    tabs.openTab({ type: "note", id: 99, title: "Existing" }); // left only, focusedPane=left
-    expect(tabs.right).toBeNull();
-
-    await openNoteResult(5, "Target Note", "target.md");
-
-    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.right).not.toBeNull();
-    expect(tabs.right?.tabs.some((t) => t.type === "note" && t.id === 5)).toBe(true);
-  });
-
-  it("Shift+Enter does not change the focused pane", async () => {
-    tabs.openTab({ type: "note", id: 99, title: "Existing" }); // left, focusedPane=left
-    await openNoteResult(5, "Target Note", "target.md");
-
-    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-note-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.focusedPane).toBe("left");
-  });
 
   it("Shift+Enter on note with split opens in opposite pane (not focused)", async () => {
     // Setup: left has note:2, right has note:3, focused=left
@@ -1719,32 +1497,6 @@ describe("command palette – modifier-based open semantics", () => {
     expect(tabs.focusedPane).toBe("left");
   });
 
-  it("Shift+Enter on map creates split and opens in right pane", async () => {
-    tabs.openTab({ type: "note", id: 1, title: "Note" }); // left only
-    await openMapResult(7, "World Map");
-
-    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-map-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.right?.tabs.some((t) => t.type === "map" && t.id === 7)).toBe(true);
-    expect(tabs.focusedPane).toBe("left");
-  });
-
-  it("Shift+Enter on scene creates split and opens in right pane", async () => {
-    tabs.openTab({ type: "note", id: 1, title: "Note" }); // left only
-    await openSceneResult(4, "Battle Scene");
-
-    await fireEvent.keyDown(window, { key: "Enter", shiftKey: true });
-    const result = document.body.querySelector('[data-testid="cmd-scene-result"]') as HTMLElement;
-    await fireEvent.click(result);
-    await flush();
-
-    expect(tabs.right?.tabs.some((t) => t.type === "scene" && t.id === 4)).toBe(true);
-    expect(tabs.focusedPane).toBe("left");
-  });
-
   // ── Commands: modifiers have no effect ──────────────────────────────────────
 
   it("Ctrl+Enter on a Command row fires the action (same as plain Enter)", async () => {
@@ -1777,7 +1529,12 @@ describe("command palette – Recent section", () => {
   });
 
   function setupRecent(
-    entries: Array<{ entity_kind: string; entity_id: number; title: string; accessed_at: string }>,
+    entries: Array<{
+      entity_kind: string;
+      entity_id: number;
+      title: string;
+      accessed_at: string;
+    }>,
   ) {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "get_recent_entities") return Promise.resolve(entries);
@@ -1794,7 +1551,12 @@ describe("command palette – Recent section", () => {
 
   it("renders Recent group above Commands when input is empty", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1817,7 +1579,12 @@ describe("command palette – Recent section", () => {
 
   it("Recent group disappears the moment user types", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1833,12 +1600,42 @@ describe("command palette – Recent section", () => {
 
   it("shows at most 5 entries even when more are returned", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "N1", accessed_at: "2026-05-19T10:06:00.000Z" },
-      { entity_kind: "note", entity_id: 2, title: "N2", accessed_at: "2026-05-19T10:05:00.000Z" },
-      { entity_kind: "map", entity_id: 1, title: "M1", accessed_at: "2026-05-19T10:04:00.000Z" },
-      { entity_kind: "scene", entity_id: 1, title: "S1", accessed_at: "2026-05-19T10:03:00.000Z" },
-      { entity_kind: "note", entity_id: 3, title: "N3", accessed_at: "2026-05-19T10:02:00.000Z" },
-      { entity_kind: "note", entity_id: 4, title: "N4", accessed_at: "2026-05-19T10:01:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "N1",
+        accessed_at: "2026-05-19T10:06:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 2,
+        title: "N2",
+        accessed_at: "2026-05-19T10:05:00.000Z",
+      },
+      {
+        entity_kind: "map",
+        entity_id: 1,
+        title: "M1",
+        accessed_at: "2026-05-19T10:04:00.000Z",
+      },
+      {
+        entity_kind: "scene",
+        entity_id: 1,
+        title: "S1",
+        accessed_at: "2026-05-19T10:03:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 3,
+        title: "N3",
+        accessed_at: "2026-05-19T10:02:00.000Z",
+      },
+      {
+        entity_kind: "note",
+        entity_id: 4,
+        title: "N4",
+        accessed_at: "2026-05-19T10:01:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1848,7 +1645,12 @@ describe("command palette – Recent section", () => {
 
   it("each row shows a type chip with the entity kind", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1861,7 +1663,12 @@ describe("command palette – Recent section", () => {
   it("each row shows a relative-time hint", async () => {
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: twoMinutesAgo },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: twoMinutesAgo,
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1873,7 +1680,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent note row opens the note tab and closes palette", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 3, title: "Harbor", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 3,
+        title: "Harbor",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1889,7 +1701,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent map row opens the map tab", async () => {
     setupRecent([
-      { entity_kind: "map", entity_id: 5, title: "World Map", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "map",
+        entity_id: 5,
+        title: "World Map",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1904,7 +1721,12 @@ describe("command palette – Recent section", () => {
 
   it("clicking a Recent scene row opens the scene tab", async () => {
     setupRecent([
-      { entity_kind: "scene", entity_id: 7, title: "Battle", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "scene",
+        entity_id: 7,
+        title: "Battle",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1919,7 +1741,12 @@ describe("command palette – Recent section", () => {
 
   it("opening a Recent row calls record_recent to update the timestamp", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     render(AppSearch);
     await openPalette();
@@ -1940,7 +1767,15 @@ describe("command palette – Recent section", () => {
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
         return Promise.resolve({
-          notes: [{ id: 3, title: "Aldric", path: "aldric.md", excerpt: null, match_count: 0 }],
+          notes: [
+            {
+              id: 3,
+              title: "Aldric",
+              path: "aldric.md",
+              excerpt: null,
+              match_count: 0,
+            },
+          ],
           maps: [],
           scenes: [],
         });
@@ -1966,7 +1801,12 @@ describe("command palette – Recent section", () => {
 
   it("Ctrl+Enter on a Recent row opens a new tab without reuse", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 1, title: "My Note", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 1,
+        title: "My Note",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     render(AppSearch);
@@ -1983,7 +1823,12 @@ describe("command palette – Recent section", () => {
 
   it("Shift+Enter on a Recent row opens in opposite pane", async () => {
     setupRecent([
-      { entity_kind: "note", entity_id: 5, title: "Target", accessed_at: "2026-05-19T10:00:00.000Z" },
+      {
+        entity_kind: "note",
+        entity_id: 5,
+        title: "Target",
+        accessed_at: "2026-05-19T10:00:00.000Z",
+      },
     ]);
     tabs.openTab({ type: "note", id: 99, title: "Existing" });
     render(AppSearch);
@@ -2022,15 +1867,24 @@ describe("command palette – per-group caps", () => {
   }
 
   function makeTags(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ name: `tag${i + 1}`, note_count: 1 }));
+    return Array.from({ length: count }, (_, i) => ({
+      name: `tag${i + 1}`,
+      note_count: 1,
+    }));
   }
 
   function makeMaps(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ id: i + 1, title: `Map ${i + 1}` }));
+    return Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      title: `Map ${i + 1}`,
+    }));
   }
 
   function makeScenes(count: number) {
-    return Array.from({ length: count }, (_, i) => ({ id: i + 1, name: `Scene ${i + 1}` }));
+    return Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      name: `Scene ${i + 1}`,
+    }));
   }
 
   async function searchWithResults(results: Record<string, unknown>) {
@@ -2045,33 +1899,85 @@ describe("command palette – per-group caps", () => {
     await flush();
   }
 
-  // ── Default caps ─────────────────────────────────────────────────────────────
+  // ── The capped groups, as one table ─────────────────────────────────────────
+  //
+  // Four groups, one rule: draw up to N rows, offer a Show more row naming what is
+  // left, and reveal the remainder when it is clicked. Only the numbers differ, and
+  // only Notes has the relaxation clause below — so the numbers are the table and
+  // the relaxation stays written out.
+  interface GroupCap {
+    /** The payload field, and the word in the `cmd-show-more-*` testid. */
+    group: "notes" | "tags" | "maps" | "scenes";
+    /** The testid stem of one drawn row. */
+    row: string;
+    /** What the Show more row calls the group. */
+    label: string;
+    cap: number;
+    make: (count: number) => unknown[];
+    /**
+     * Notes relax their cap when they are the only group with results, so the cases
+     * that mean to test the *default* cap have to give Notes company.
+     */
+    company?: Record<string, unknown>;
+  }
 
-  it("Notes group renders at most 6 results by default", async () => {
-    // Include a map so activeGroupCount > 1, preventing single-group relaxation
-    await searchWithResults({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
-    const items = document.body.querySelectorAll('[data-testid="cmd-note-result"]');
-    expect(items.length).toBe(6);
+  const GROUP_CAPS: GroupCap[] = [
+    {
+      group: "notes",
+      row: "note",
+      label: "Notes",
+      cap: 6,
+      make: makeNotes,
+      company: { maps: [{ id: 1, title: "Map" }] },
+    },
+    { group: "tags", row: "tag", label: "Tags", cap: 5, make: makeTags },
+    { group: "maps", row: "map", label: "Maps", cap: 3, make: makeMaps },
+    {
+      group: "scenes",
+      row: "scene",
+      label: "Scenes",
+      cap: 3,
+      make: makeScenes,
+    },
+  ];
+
+  describe.each(GROUP_CAPS)("$label group", ({ group, row, label, cap, make, company }) => {
+    const results = (count: number) => ({
+      notes: [],
+      maps: [],
+      scenes: [],
+      [group]: make(count),
+      ...(company ?? {}),
+    });
+    const drawn = () => document.body.querySelectorAll(`[data-testid="cmd-${row}-result"]`);
+    const showMore = () => document.body.querySelector(`[data-testid="cmd-show-more-${group}"]`);
+
+    it(`draws at most ${cap} rows`, async () => {
+      await searchWithResults(results(cap + 4));
+      expect(drawn().length).toBe(cap);
+    });
+
+    it("draws no Show more row while the group is within its cap", async () => {
+      await searchWithResults(results(cap));
+      expect(showMore()).toBeNull();
+    });
+
+    it("draws a Show more row naming what is left over", async () => {
+      await searchWithResults(results(cap + 2));
+      expect(showMore()?.textContent).toContain("2");
+      expect(showMore()?.textContent).toContain(label);
+    });
+
+    it("reveals the rest when the Show more row is clicked, and takes the row away", async () => {
+      await searchWithResults(results(cap + 4));
+      await fireEvent.click(showMore() as HTMLElement);
+      await flush();
+      expect(drawn().length).toBe(cap + 4);
+      expect(showMore()).toBeNull();
+    });
   });
 
-  it("Tags group renders at most 5 results by default", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(8) });
-    const items = document.body.querySelectorAll('[data-testid="cmd-tag-result"]');
-    expect(items.length).toBe(5);
-  });
-
-  it("Maps group renders at most 3 results by default", async () => {
-    await searchWithResults({ notes: [], maps: makeMaps(6), scenes: [] });
-    const items = document.body.querySelectorAll('[data-testid="cmd-map-result"]');
-    expect(items.length).toBe(3);
-  });
-
-  it("Scenes group renders at most 3 results by default", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: makeScenes(6) });
-    const items = document.body.querySelectorAll('[data-testid="cmd-scene-result"]');
-    expect(items.length).toBe(3);
-  });
-
+  // Commands are not a search_all group, and have no Show more table entry.
   it("Commands group renders at most 3 commands when many match", async () => {
     // No note tab → 7 eligible commands; empty query matches all → cap at 3
     render(AppSearch);
@@ -2083,77 +1989,16 @@ describe("command palette – per-group caps", () => {
     expect(document.body.querySelector('[data-testid="cmd-show-more-commands"]')).toBeTruthy();
   });
 
-  // ── Show more rows ────────────────────────────────────────────────────────────
-
-  it("shows 'Show N more in Notes' row when notes exceed cap", async () => {
-    // Include a map so activeGroupCount > 1, preventing single-group relaxation
-    await searchWithResults({ notes: makeNotes(8), maps: [{ id: 1, title: "Map" }], scenes: [] });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]');
-    expect(showMore).toBeTruthy();
-    expect(showMore?.textContent).toContain("2");
-    expect(showMore?.textContent).toContain("Notes");
-  });
-
-  it("no Show more row when notes are within cap", async () => {
-    await searchWithResults({ notes: makeNotes(6), maps: [], scenes: [] });
-    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
-  });
-
-  it("shows Show more row for Tags when tags exceed cap", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(7) });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-tags"]');
-    expect(showMore).toBeTruthy();
-    expect(showMore?.textContent).toContain("2");
-    expect(showMore?.textContent).toContain("Tags");
-  });
-
-  it("shows Show more row for Maps when maps exceed cap", async () => {
-    await searchWithResults({ notes: [], maps: makeMaps(5), scenes: [] });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-maps"]');
-    expect(showMore).toBeTruthy();
-    expect(showMore?.textContent).toContain("Maps");
-  });
-
-  it("shows Show more row for Scenes when scenes exceed cap", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: makeScenes(5) });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-scenes"]');
-    expect(showMore).toBeTruthy();
-    expect(showMore?.textContent).toContain("Scenes");
-  });
-
-  // ── Expand in place ───────────────────────────────────────────────────────────
-
-  it("clicking Show more in Notes reveals all results and removes the row", async () => {
-    // Include a map so activeGroupCount > 1, preventing single-group relaxation (cap stays 6)
-    await searchWithResults({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
-    await fireEvent.click(showMore);
-    await flush();
-    expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
-    expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
-  });
-
-  it("clicking Show more in Maps reveals all map results", async () => {
-    await searchWithResults({ notes: [], maps: makeMaps(5), scenes: [] });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-maps"]') as HTMLElement;
-    await fireEvent.click(showMore);
-    await flush();
-    expect(document.body.querySelectorAll('[data-testid="cmd-map-result"]').length).toBe(5);
-    expect(document.body.querySelector('[data-testid="cmd-show-more-maps"]')).toBeNull();
-  });
-
-  it("clicking Show more in Tags reveals all tag results", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(7) });
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-tags"]') as HTMLElement;
-    await fireEvent.click(showMore);
-    await flush();
-    expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(7);
-    expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeNull();
-  });
-
   it("expanding one group does not expand other groups", async () => {
-    await searchWithResults({ notes: makeNotes(10), maps: [], scenes: [], tags: makeTags(8) });
-    const showMoreNotes = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    await searchWithResults({
+      notes: makeNotes(10),
+      maps: [],
+      scenes: [],
+      tags: makeTags(8),
+    });
+    const showMoreNotes = document.body.querySelector(
+      '[data-testid="cmd-show-more-notes"]',
+    ) as HTMLElement;
     await fireEvent.click(showMoreNotes);
     await flush();
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
@@ -2164,13 +2009,23 @@ describe("command palette – per-group caps", () => {
   // ── Single-group cap relaxation ───────────────────────────────────────────────
 
   it("Notes cap relaxes to 15 when notes is the only group with results", async () => {
-    await searchWithResults({ notes: makeNotes(15), maps: [], scenes: [], tags: [] });
+    await searchWithResults({
+      notes: makeNotes(15),
+      maps: [],
+      scenes: [],
+      tags: [],
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
     expect(document.body.querySelector('[data-testid="cmd-show-more-notes"]')).toBeNull();
   });
 
   it("Show more still appears for Notes when single-group count exceeds 15", async () => {
-    await searchWithResults({ notes: makeNotes(17), maps: [], scenes: [], tags: [] });
+    await searchWithResults({
+      notes: makeNotes(17),
+      maps: [],
+      scenes: [],
+      tags: [],
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(15);
     const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]');
     expect(showMore).toBeTruthy();
@@ -2188,7 +2043,12 @@ describe("command palette – per-group caps", () => {
   });
 
   it("Tags cap stays at 5 in single-group case (only Notes relaxes)", async () => {
-    await searchWithResults({ notes: [], maps: [], scenes: [], tags: makeTags(8) });
+    await searchWithResults({
+      notes: [],
+      maps: [],
+      scenes: [],
+      tags: makeTags(8),
+    });
     expect(document.body.querySelectorAll('[data-testid="cmd-tag-result"]').length).toBe(5);
     expect(document.body.querySelector('[data-testid="cmd-show-more-tags"]')).toBeTruthy();
   });
@@ -2199,7 +2059,11 @@ describe("command palette – per-group caps", () => {
     // Include a map so activeGroupCount > 1, preventing single-group relaxation (cap stays 6)
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "search_all")
-        return Promise.resolve({ notes: makeNotes(10), maps: [{ id: 1, title: "Map" }], scenes: [] });
+        return Promise.resolve({
+          notes: makeNotes(10),
+          maps: [{ id: 1, title: "Map" }],
+          scenes: [],
+        });
       return Promise.resolve(null);
     });
     render(AppSearch);
@@ -2208,7 +2072,9 @@ describe("command palette – per-group caps", () => {
     await vi.advanceTimersByTimeAsync(80);
     await flush();
 
-    const showMore = document.body.querySelector('[data-testid="cmd-show-more-notes"]') as HTMLElement;
+    const showMore = document.body.querySelector(
+      '[data-testid="cmd-show-more-notes"]',
+    ) as HTMLElement;
     await fireEvent.click(showMore);
     await flush();
     expect(document.body.querySelectorAll('[data-testid="cmd-note-result"]').length).toBe(10);
@@ -2236,7 +2102,10 @@ describe("command palette – Save note as template", () => {
     archived: false,
     modified_at: "2026-01-01T00:00:00Z",
   };
-  const fakeSavedEntry = { display_name: "My Note", path: ".grimoire/templates/My Note.md" };
+  const fakeSavedEntry = {
+    display_name: "My Note",
+    path: ".grimoire/templates/My Note.md",
+  };
 
   afterEach(() => {
     searchPalette.open = false;
@@ -2252,9 +2121,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeTruthy();
   });
 
   it("is hidden when active tab is not a note", async () => {
@@ -2265,9 +2132,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeNull();
   });
 
   it("is hidden when no tabs are open", async () => {
@@ -2277,9 +2142,7 @@ describe("command palette – Save note as template", () => {
     input.value = "save";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-save-note-as-template"]'),
-    ).toBeNull();
+    expect(document.body.querySelector('[data-testid="cmd-save-note-as-template"]')).toBeNull();
   });
 
   it("invoking it calls save_note_as_template with the active note path and closes palette", async () => {
@@ -2313,7 +2176,10 @@ describe("command palette – Save note as template", () => {
 // ── Create new template (issue #48) ──────────────────────────────────────────
 
 describe("command palette – Create new template", () => {
-  const fakeEntry = { display_name: "Untitled", path: ".grimoire/templates/Untitled.md" };
+  const fakeEntry = {
+    display_name: "Untitled",
+    path: ".grimoire/templates/Untitled.md",
+  };
 
   afterEach(() => {
     searchPalette.open = false;
@@ -2326,9 +2192,7 @@ describe("command palette – Create new template", () => {
     input.value = "template";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-create-template"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-create-template"]')).toBeTruthy();
   });
 
   it("selecting it invokes create_template and closes palette", async () => {
@@ -2386,9 +2250,7 @@ describe("command palette – Open graph view", () => {
   it("'Open graph view' command appears in the Commands group", async () => {
     render(AppSearch);
     await openPalette();
-    expect(
-      document.body.querySelector('[data-testid="cmd-open-graph"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-open-graph"]')).toBeTruthy();
   });
 
   it("appears when searching 'graph'", async () => {
@@ -2398,9 +2260,7 @@ describe("command palette – Open graph view", () => {
     input.value = "graph";
     await fireEvent.input(input);
     await flush();
-    expect(
-      document.body.querySelector('[data-testid="cmd-open-graph"]'),
-    ).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="cmd-open-graph"]')).toBeTruthy();
   });
 
   it("selecting 'Open graph view' opens a graph tab and closes palette", async () => {
@@ -2428,10 +2288,63 @@ describe("command palette – Open graph view", () => {
     await fireEvent.click(item2);
     await flush();
 
-    const allGraphTabs = [
-      ...tabs.left.tabs,
-      ...(tabs.right?.tabs ?? []),
-    ].filter((t) => t.type === "graph");
+    const allGraphTabs = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
+      (t) => t.type === "graph",
+    );
     expect(allGraphTabs.length).toBe(1);
+  });
+});
+
+// ── Open Quick Notes command (#230) ───────────────────────────────────────────
+
+describe("command palette – Open Quick Notes", () => {
+  afterEach(() => {
+    searchPalette.open = false;
+    tabs.closeAll("left");
+    if (tabs.right) tabs.closeAll("right");
+  });
+
+  // The Commands group draws three at a time, so this one is reached by typing —
+  // the same as most of the palette. Its no-typing home is the rail icon and the
+  // sidebar button (#233).
+  async function findCommand() {
+    const input = getSearchInput();
+    input.value = "quick";
+    await fireEvent.input(input);
+    await flush();
+    return document.body.querySelector('[data-testid="cmd-open-quick-notes"]') as HTMLElement;
+  }
+
+  it("appears when searching for it", async () => {
+    render(AppSearch);
+    await openPalette();
+    expect(await findCommand()).toBeTruthy();
+  });
+
+  it("selecting it opens the pane in a tab and closes the palette", async () => {
+    render(AppSearch);
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    expect(tabs.activeTab?.type).toBe("quickNotes");
+    expect(tabs.activeTab?.title).toBe("Quick Notes");
+    expect(searchPalette.open).toBe(false);
+  });
+
+  it("opens one tab, never two", async () => {
+    render(AppSearch);
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    await openPalette();
+    await fireEvent.click(await findCommand());
+    await flush();
+
+    const panes = [...tabs.left.tabs, ...(tabs.right?.tabs ?? [])].filter(
+      (t) => t.type === "quickNotes",
+    );
+    expect(panes.length).toBe(1);
   });
 });

@@ -16,6 +16,7 @@
     LayoutTemplate,
     FileDown,
     Network,
+    NotebookPen,
     BookOpen,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
@@ -29,6 +30,8 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
+  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -121,9 +124,7 @@
   );
 
   const visibleTagResults = $derived(
-    tagResults.filter(
-      (t) => !activeTagFilters.includes(t.name.toLowerCase()),
-    ),
+    tagResults.filter((t) => !activeTagFilters.includes(t.name.toLowerCase())),
   );
 
   const activeNote = $derived.by(() => {
@@ -137,12 +138,12 @@
     addTagOpen = true;
   }
 
+  // Shared with `Ctrl/Cmd+N` (#227) and the empty ledger's first-note button, so
+  // the three cannot drift apart.
   async function cmdCreateNote() {
     searchPalette.open = false;
     try {
-      const newNote = await api.createNote("Untitled", "Untitled.md", null);
-      await notes.load();
-      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
+      await createUntitledNoteAtRoot();
     } catch (e) {
       console.error("create_note failed:", e);
     }
@@ -175,14 +176,30 @@
     tabs.openTab({ type: "graph", id: 0, title: "Graph" });
   }
 
+  // One tab, never two: `openTab`'s dedup switches to the pane wherever it is
+  // already open, across both panes, exactly as the Graph does.
+  function cmdOpenQuickNotes() {
+    searchPalette.open = false;
+    tabs.openTab({ type: "quickNotes", id: 0, title: "Quick Notes" });
+  }
+
+  // The dialog's shortcut is `Ctrl/Cmd+Shift+N`, and a shortcut must also be
+  // reachable from here (docs/design-system.md §Keyboard & Accessibility) — the palette is
+  // where a GM looks for a thing whose key they have not learned yet. It sets the
+  // same flag the keystroke does: one surface, two ways in.
+  function cmdCaptureQuickNote() {
+    searchPalette.open = false;
+    dialogs.quickNoteOpen = true;
+  }
+
   function cmdOpenSettings() {
     searchPalette.open = false;
-    searchPalette.settingsOpen = true;
+    dialogs.settingsOpen = true;
   }
 
   function cmdOpenTagManager() {
     searchPalette.open = false;
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
   }
 
   function cmdToggleTheme() {
@@ -213,7 +230,13 @@
     try {
       const entry = await api.createTemplate();
       await templates.load();
-      tabs.openTab({ type: "template", id: 0, title: entry.display_name, badge: "Template", templatePath: entry.path });
+      tabs.openTab({
+        type: "template",
+        id: 0,
+        title: entry.display_name,
+        badge: "Template",
+        templatePath: entry.path,
+      });
     } catch (e) {
       console.error("create_template failed:", e);
     }
@@ -264,21 +287,119 @@
   }
 
   const ALL_COMMANDS = [
-    { label: "Create new note", testid: "cmd-create-note", noteOnly: false, icon: FilePlus, action: cmdCreateNote },
-    { label: "Create new scene", testid: "cmd-create-scene", noteOnly: false, icon: Clapperboard, action: cmdCreateScene },
+    {
+      label: "Create new note",
+      testid: "cmd-create-note",
+      noteOnly: false,
+      icon: FilePlus,
+      action: cmdCreateNote,
+    },
+    {
+      label: "Create new scene",
+      testid: "cmd-create-scene",
+      noteOnly: false,
+      icon: Clapperboard,
+      action: cmdCreateScene,
+    },
     // Add tag is note-context-sensitive; placed 3rd so it's in the visible cap when a note is active
-    { label: "Add tag to current note", testid: "cmd-add-tag", noteOnly: true, icon: Tag, action: openAddTag },
-    { label: "Open graph view", testid: "cmd-open-graph", noteOnly: false, icon: Network, action: cmdOpenGraphView },
-    { label: "Create note from template", testid: "cmd-create-note-from-template", noteOnly: false, icon: BookTemplate, action: cmdCreateNoteFromTemplate },
-    { label: "Create new template", testid: "cmd-create-template", noteOnly: false, icon: LayoutTemplate, action: cmdCreateTemplate },
-    { label: "Save note as template", testid: "cmd-save-note-as-template", noteOnly: true, icon: FileDown, action: cmdSaveNoteAsTemplate },
-    { label: "Create new map", testid: "cmd-create-map", noteOnly: false, icon: Map, action: cmdCreateMap },
-    { label: "Open Settings", testid: "cmd-open-settings", noteOnly: false, icon: Settings, action: cmdOpenSettings },
-    { label: "Manage tags", testid: "cmd-manage-tags", noteOnly: false, icon: Tag, action: cmdOpenTagManager },
-    { label: "Toggle theme", testid: "cmd-toggle-theme", noteOnly: false, icon: Sun, action: cmdToggleTheme },
-    { label: "Switch ledger…", testid: "cmd-switch-ledger", noteOnly: false, icon: FolderOpen, action: cmdSwitchLedger },
-    { label: "Rebuild search index", testid: "cmd-rebuild-index", noteOnly: false, icon: RefreshCw, action: cmdRebuildIndex },
-    { label: "Explore example world", testid: "cmd-explore-sample", noteOnly: false, icon: BookOpen, action: cmdExploreSample },
+    {
+      label: "Add tag to current note",
+      testid: "cmd-add-tag",
+      noteOnly: true,
+      icon: Tag,
+      action: openAddTag,
+    },
+    {
+      label: "Open graph view",
+      testid: "cmd-open-graph",
+      noteOnly: false,
+      icon: Network,
+      action: cmdOpenGraphView,
+    },
+    {
+      label: "Open Quick Notes",
+      testid: "cmd-open-quick-notes",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdOpenQuickNotes,
+    },
+    {
+      label: "Capture a Quick Note",
+      testid: "cmd-capture-quick-note",
+      noteOnly: false,
+      icon: NotebookPen,
+      action: cmdCaptureQuickNote,
+    },
+    {
+      label: "Create note from template",
+      testid: "cmd-create-note-from-template",
+      noteOnly: false,
+      icon: BookTemplate,
+      action: cmdCreateNoteFromTemplate,
+    },
+    {
+      label: "Create new template",
+      testid: "cmd-create-template",
+      noteOnly: false,
+      icon: LayoutTemplate,
+      action: cmdCreateTemplate,
+    },
+    {
+      label: "Save note as template",
+      testid: "cmd-save-note-as-template",
+      noteOnly: true,
+      icon: FileDown,
+      action: cmdSaveNoteAsTemplate,
+    },
+    {
+      label: "Create new map",
+      testid: "cmd-create-map",
+      noteOnly: false,
+      icon: Map,
+      action: cmdCreateMap,
+    },
+    {
+      label: "Open Settings",
+      testid: "cmd-open-settings",
+      noteOnly: false,
+      icon: Settings,
+      action: cmdOpenSettings,
+    },
+    {
+      label: "Manage tags",
+      testid: "cmd-manage-tags",
+      noteOnly: false,
+      icon: Tag,
+      action: cmdOpenTagManager,
+    },
+    {
+      label: "Toggle theme",
+      testid: "cmd-toggle-theme",
+      noteOnly: false,
+      icon: Sun,
+      action: cmdToggleTheme,
+    },
+    {
+      label: "Switch ledger…",
+      testid: "cmd-switch-ledger",
+      noteOnly: false,
+      icon: FolderOpen,
+      action: cmdSwitchLedger,
+    },
+    {
+      label: "Rebuild search index",
+      testid: "cmd-rebuild-index",
+      noteOnly: false,
+      icon: RefreshCw,
+      action: cmdRebuildIndex,
+    },
+    {
+      label: "Explore example world",
+      testid: "cmd-explore-sample",
+      noteOnly: false,
+      icon: BookOpen,
+      action: cmdExploreSample,
+    },
   ];
 
   const visibleRecent = $derived(searchQuery.length === 0 ? recentEntities.slice(0, 5) : []);
@@ -326,9 +447,9 @@
 
   const activeGroupCount = $derived(
     (visibleTagResults.length > 0 ? 1 : 0) +
-    (noteResults.length > 0 ? 1 : 0) +
-    (mapResults.length > 0 ? 1 : 0) +
-    (sceneResults.length > 0 ? 1 : 0),
+      (noteResults.length > 0 ? 1 : 0) +
+      (mapResults.length > 0 ? 1 : 0) +
+      (sceneResults.length > 0 ? 1 : 0),
   );
 
   const commandsCap = $derived(expandedGroups.has("commands") ? Infinity : DEFAULT_CAPS.commands);
@@ -405,7 +526,10 @@
   }
 
   function onSelectTag(tag: string) {
-    const tokens = searchQuery.trim().split(/\s+/).filter((t) => t.length > 0);
+    const tokens = searchQuery
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
     const tagTokens = tokens.filter((t) => t.startsWith("tag:") && t.length > 4);
     const freeTokens = tokens.filter((t) => !(t.startsWith("tag:") && t.length > 4));
     if (tagTokens.length > 0) {
@@ -415,10 +539,7 @@
     }
   }
 
-  function splitExcerpt(
-    text: string,
-    query: string,
-  ): Array<{ text: string; isMatch: boolean }> {
+  function splitExcerpt(text: string, query: string): Array<{ text: string; isMatch: boolean }> {
     const terms = query
       .trim()
       .toLowerCase()
@@ -499,9 +620,14 @@
 
   $effect(() => {
     if (searchPalette.open) {
-      api.getRecentEntities()
-        .then((res) => { recentEntities = res ?? []; })
-        .catch(() => { recentEntities = []; });
+      api
+        .getRecentEntities()
+        .then((res) => {
+          recentEntities = res ?? [];
+        })
+        .catch(() => {
+          recentEntities = [];
+        });
     }
   });
 
@@ -516,14 +642,16 @@
     const path = note.path;
     if (path === loadedForPath) return;
     loadedForPath = path;
-    api.readNoteTags(path)
+    api
+      .readNoteTags(path)
       .then((loaded) => {
         if (loadedForPath === path) tags = loaded;
       })
       .catch(() => {
         tags = [];
       });
-    api.listAllTags()
+    api
+      .listAllTags()
       .then((t) => {
         allTags = t ?? [];
       })
@@ -590,14 +718,14 @@
             >
               <Icon class="size-4 shrink-0 text-muted-foreground" />
               <span class="font-heading text-sm flex-1 truncate">{entity.title}</span>
-              <span
-                data-testid="recent-time-hint"
-                class="shrink-0 text-xs text-muted-foreground"
-              >{relativeTime(entity.accessed_at)}</span>
+              <span data-testid="recent-time-hint" class="shrink-0 text-xs text-muted-foreground"
+                >{relativeTime(entity.accessed_at)}</span
+              >
               <span
                 data-testid="recent-kind-chip"
                 class="shrink-0 rounded border border-border px-1 text-xs text-muted-foreground capitalize"
-              >{entity.entity_kind}</span>
+                >{entity.entity_kind}</span
+              >
             </Command.Item>
           {/each}
         </Command.Group>

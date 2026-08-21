@@ -72,8 +72,80 @@ type LedgerDebouncer = Debouncer<RecommendedWatcher, RecommendedCache>;
 
 /// Managed state holding the single active ledger watcher (or none). Dropping
 /// the debouncer stops it, so ledger switch/close is just a `None` assignment.
+///
+/// The canonical root is kept beside the debouncer so [`require_unwatched`] can
+/// answer *which* vault is being watched, not merely whether one is.
 #[derive(Default)]
-pub struct LedgerWatcher(pub Mutex<Option<LedgerDebouncer>>);
+pub struct LedgerWatcher(pub Mutex<Option<(PathBuf, LedgerDebouncer)>>);
+
+/// Proof that no watcher is live over a given vault, and therefore that bulk
+/// rewrites of that vault's `.md` files cannot come back as external edits.
+///
+/// This is the mirror of `format_version::FormatCleared`, and it exists for the
+/// same reason (issue #217). That token makes *"you may not open a ledger without
+/// passing the format gate"* something the compiler asks about; this one does the
+/// same for the obligation pointing the other way — **you may not rewrite a
+/// vault's notes underneath a running watcher**. Before it, that invariant lived
+/// in a comment at one call site in `commands/ledger.rs`, and the code it guarded
+/// was in a different file.
+///
+/// Unlike `FormatCleared` it is not only legibility: [`require_unwatched`]
+/// genuinely checks, and refuses rather than minting when a watcher is live.
+#[must_use]
+#[derive(Debug)]
+pub struct VaultUnwatched(());
+
+/// Ask whether `ledger_path` is free of a live watcher, and hand back the proof
+/// when it is.
+///
+/// Path-aware on purpose: a [[Format Migration]] is reached from a *refused* open,
+/// and the ledger the GM was looking at before that refusal may still be open with
+/// its own watcher running. That watcher has nothing to do with the vault being
+/// migrated, and refusing the migration over it would be a guard that fires on the
+/// ordinary case.
+///
+/// A vault whose path cannot be canonicalized, or a poisoned watcher slot, is
+/// refused: neither can be shown to be unwatched, and this is the direction the
+/// guard has to fail in.
+pub fn require_unwatched(app: &AppHandle, ledger_path: &Path) -> Result<VaultUnwatched, String> {
+    let canonical = std::fs::canonicalize(ledger_path).map_err(|e| {
+        format!(
+            "Cannot tell whether {} is being watched: {e}",
+            ledger_path.display()
+        )
+    })?;
+
+    let watched = app
+        .state::<LedgerWatcher>()
+        .0
+        .lock()
+        .map_err(|_| "Cannot tell whether the vault is being watched: watcher state poisoned")
+        .map(|slot| slot.as_ref().map(|(root, _)| root.clone()))?;
+
+    unwatched_verdict(watched.as_deref(), &canonical)
+}
+
+/// The comparison, as a pure function. Split from [`require_unwatched`] the same
+/// way `format_version::act` is split from its gate, and for the same reason: both
+/// branches are exercisable without arranging a Tauri app to hold a watcher.
+///
+/// `watched` is the canonical root of the live watcher, if there is one; `target`
+/// is the canonical root of the vault about to be rewritten.
+fn unwatched_verdict(watched: Option<&Path>, target: &Path) -> Result<VaultUnwatched, String> {
+    match watched {
+        Some(root) if root == target => Err(format!(
+            "Refusing to rewrite {} while its watcher is running",
+            target.display()
+        )),
+        _ => Ok(VaultUnwatched(())),
+    }
+}
+
+/// The proof, for a test that is not arranging a Tauri app to obtain it honestly.
+#[cfg(test)]
+pub(crate) fn unwatched_for_test() -> VaultUnwatched {
+    VaultUnwatched(())
+}
 
 /// Payload for the `note:content-changed` event: the ledger-relative path of the
 /// note whose `.md` file changed on disk.
@@ -232,8 +304,8 @@ pub fn start(app: &AppHandle, ledger_path: &Path) {
     // Replacing the slot drops the previous debouncer (stops the old watcher).
     match app.state::<LedgerWatcher>().0.lock() {
         Ok(mut slot) => {
-            *slot = Some(debouncer);
             log::info!("[ledger_watch] watching {}", canonical_root.display());
+            *slot = Some((canonical_root, debouncer));
         }
         Err(_) => log::error!("[ledger_watch] watcher state poisoned; watcher not stored"),
     }
@@ -408,14 +480,13 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
     }
 
     let notify = {
-        let state_ref = &mut *guard;
-        let Some(conn) = state_ref.connection.as_mut() else {
+        // A watcher event that lands mid-close has nothing to reconcile.
+        let Ok(crate::ledger::OpenLedger { conn, index, .. }) = guard.open() else {
             return;
         };
-        let index = state_ref.search_index.as_ref();
         match change {
             Change::Upsert { rel_path, content } => {
-                match upsert_external_note(conn, index, &ledger_path, &rel_path, &content) {
+                match upsert_external_note(conn, index, &rel_path, &content) {
                     Ok(Upserted::Modified) => Notify::ContentChanged(rel_path),
                     Ok(Upserted::Created) => Notify::TreeChanged,
                     Err(e) => {
@@ -425,7 +496,7 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
                 }
             }
             Change::Remove { rel_path } => {
-                match remove_external_note(conn, index, &ledger_path, &rel_path) {
+                match remove_external_note(conn, index, &rel_path) {
                     Ok(true) => Notify::Removed(rel_path),
                     Ok(false) => Notify::Nothing,
                     Err(e) => {
@@ -446,7 +517,7 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
                     },
                     // No row for the old path — nothing to follow; the new file is
                     // just a create. Insert it and let the tree pick it up.
-                    Ok(Moved::NoRow) => match upsert_external_note(conn, index, &ledger_path, &to_rel, &content) {
+                    Ok(Moved::NoRow) => match upsert_external_note(conn, index, &to_rel, &content) {
                         Ok(_) => Notify::TreeChanged,
                         Err(e) => {
                             log::warn!("[ledger_watch] move-create failed for {to_rel}: {e}");
@@ -525,17 +596,27 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
         return;
     }
 
-    let rebuilt = {
-        let state_ref = &mut *guard;
-        let Some(conn) = state_ref.connection.as_mut() else {
+    let (rebuilt, unlinked_pins) = {
+        let Ok(crate::ledger::OpenLedger { conn, .. }) = guard.open() else {
             return;
         };
         // Bring the notes table into agreement with disk before the rebuild pass
         // so it sees fully-populated rows — mirrors open_ledger's ordering.
-        if let Err(e) = crate::commands::import::reconcile_notes_with_disk(&ledger_path, conn) {
-            log::warn!("[ledger_watch] bulk notes reconcile failed: {e}");
-            return;
-        }
+        //
+        // The repair is delete-and-reinsert, so a folder reorganised outside
+        // Grimoire costs the re-created notes their identity and unlinks the pins
+        // that held it (#224). This is the *second* way into that repair — the
+        // same one the open path runs, reached mid-session — and it was the
+        // sibling silence: an open at least ends with a screen the GM is looking
+        // at, whereas here their map simply stops working under them.
+        let unlinked_pins =
+            match crate::commands::import::reconcile_notes_with_disk(&ledger_path, conn) {
+                Ok(report) => report.unlinked_pins,
+                Err(e) => {
+                    log::warn!("[ledger_watch] bulk notes reconcile failed: {e}");
+                    return;
+                }
+            };
         let maps = crate::db::schema::maps::table
             .load::<crate::db::models::Map>(conn)
             .unwrap_or_default();
@@ -543,12 +624,7 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
             .load::<crate::db::models::Scene>(conn)
             .unwrap_or_default();
         match crate::note_index::rebuild_all_from_ledger(&ledger_path, conn, &maps, &scenes) {
-            Ok(index) => {
-                // A successful rebuild clears any persisted stale marker; a failed
-                // Search rebuild (Ok(None)) leaves it so the next launch retries.
-                crate::note_index::clear_stale_marker_if_rebuilt(&ledger_path, index.is_some());
-                index
-            }
+            Ok(index) => (index, unlinked_pins),
             Err(e) => {
                 log::warn!("[ledger_watch] bulk rebuild failed: {e}");
                 return;
@@ -562,6 +638,15 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
 
     if let Err(e) = app.emit("ledger:rebuilt", ()) {
         log::warn!("[ledger_watch] failed to emit ledger:rebuilt: {e}");
+    }
+
+    // Separate from `ledger:rebuilt` rather than folded into its payload: that
+    // event is the frontend's cue to refetch, fires on every bulk batch, and
+    // carries nothing. This one fires only when the GM lost something.
+    if !unlinked_pins.is_empty()
+        && let Err(e) = app.emit("pins:unlinked", unlinked_pins)
+    {
+        log::warn!("[ledger_watch] failed to emit pins:unlinked: {e}");
     }
 }
 
@@ -620,7 +705,6 @@ pub(crate) enum Moved {
 pub(crate) fn upsert_external_note(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     rel_path: &str,
     content: &str,
 ) -> Result<Upserted, String> {
@@ -635,8 +719,7 @@ pub(crate) fn upsert_external_note(
     match maybe_note {
         Some(note) => {
             // prev_path == path: same-path reconcile, no re-key (matches write_note_content).
-            let outcome = crate::note_index::reconcile(conn, index, &note, content, Some(rel_path))?;
-            crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+            crate::note_index::reconcile(conn, index, &note, content, Some(rel_path))?;
             Ok(Upserted::Modified)
         }
         None => {
@@ -654,8 +737,7 @@ pub(crate) fn upsert_external_note(
                 .returning(Note::as_returning())
                 .get_result(conn)
                 .map_err(|e| e.to_string())?;
-            let outcome = crate::note_index::reconcile(conn, index, &created, content, None)?;
-            crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+            crate::note_index::reconcile(conn, index, &created, content, None)?;
             Ok(Upserted::Created)
         }
     }
@@ -668,7 +750,6 @@ pub(crate) fn upsert_external_note(
 pub(crate) fn remove_external_note(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-    ledger_path: &Path,
     rel_path: &str,
 ) -> Result<bool, String> {
     use crate::db::schema::notes::dsl as n;
@@ -683,8 +764,7 @@ pub(crate) fn remove_external_note(
         return Ok(false);
     };
 
-    let outcome = crate::note_index::remove(conn, index, note.id, &note.path)?;
-    crate::note_index::mark_stale_if_needed(&outcome, ledger_path);
+    crate::note_index::remove(conn, index, note.id, &note.path)?;
 
     diesel::delete(n::notes.find(note.id))
         .execute(conn)
@@ -898,13 +978,12 @@ mod tests {
 
     #[test]
     fn upsert_of_existing_note_reconciles_indexes_and_reports_modified() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Ash.md");
 
         // An external editor rewrote the file with a new tag and wikilink.
         let content = "---\ntags: [npc]\n---\nSee [[Dragon.md]].";
-        let result = upsert_external_note(&mut conn, None, dir.path(), "Ash.md", content).unwrap();
+        let result = upsert_external_note(&mut conn, None, "Ash.md", content).unwrap();
         assert!(
             matches!(result, Upserted::Modified),
             "an existing note must reconcile in place, not create a new row"
@@ -918,12 +997,11 @@ mod tests {
 
     #[test]
     fn upsert_of_new_path_inserts_a_note_row_and_reconciles_indexes() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         // No notes row for this path — a file created on disk outside the app.
         let content = "---\ntags: [creature]\naliases: [Drake]\n---\nSee [[Lair.md]].";
         let result =
-            upsert_external_note(&mut conn, None, dir.path(), "Bestiary/Dragon.md", content)
+            upsert_external_note(&mut conn, None, "Bestiary/Dragon.md", content)
                 .unwrap();
         assert!(
             matches!(result, Upserted::Created),
@@ -949,13 +1027,12 @@ mod tests {
 
     #[test]
     fn upsert_replaces_prior_derived_rows_on_repeat() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Ash.md");
 
-        upsert_external_note(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [old]\n---\n[[Old.md]].")
+        upsert_external_note(&mut conn, None, "Ash.md", "---\ntags: [old]\n---\n[[Old.md]].")
             .unwrap();
-        upsert_external_note(&mut conn, None, dir.path(), "Ash.md", "---\ntags: [new]\n---\n[[New.md]].")
+        upsert_external_note(&mut conn, None, "Ash.md", "---\ntags: [new]\n---\n[[New.md]].")
             .unwrap();
 
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
@@ -966,20 +1043,18 @@ mod tests {
 
     #[test]
     fn remove_of_existing_note_drops_row_and_indexes_and_reports_removed() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Ash.md");
         // Populate derived indexes so we can prove they're cleared.
         upsert_external_note(
             &mut conn,
             None,
-            dir.path(),
             "Ash.md",
             "---\ntags: [npc]\naliases: [The Ash]\n---\nSee [[Dragon.md]].",
         )
         .unwrap();
 
-        let removed = remove_external_note(&mut conn, None, dir.path(), "Ash.md").unwrap();
+        let removed = remove_external_note(&mut conn, None, "Ash.md").unwrap();
         assert!(removed, "an existing note must be removed and reported");
 
         let rows: Vec<String> = n::notes.select(n::path).load(&mut conn).unwrap();
@@ -994,11 +1069,10 @@ mod tests {
 
     #[test]
     fn remove_of_unknown_path_is_a_noop() {
-        let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Kept.md");
 
-        let removed = remove_external_note(&mut conn, None, dir.path(), "Ghost.md").unwrap();
+        let removed = remove_external_note(&mut conn, None, "Ghost.md").unwrap();
         assert!(!removed, "a path with no row reports nothing removed");
 
         // The unrelated row must survive.
@@ -1017,7 +1091,6 @@ mod tests {
         upsert_external_note(
             &mut conn,
             None,
-            dir.path(),
             "Characters/Aldric.md",
             "---\ntags: [npc]\n---\nSee [[Keep.md]].",
         )
@@ -1081,9 +1154,9 @@ mod tests {
         // Seed the moved note and a source that links to it by full path. Both
         // files must exist on disk so collect_backlink_rewrites_on_conn can read
         // the source to count it.
-        upsert_external_note(&mut conn, None, dir.path(), "Aldric.md", "Aldric of the Keep.").unwrap();
+        upsert_external_note(&mut conn, None, "Aldric.md", "Aldric of the Keep.").unwrap();
         std::fs::write(dir.path().join("Story.md"), "The tale of [[Aldric.md]] begins.").unwrap();
-        upsert_external_note(&mut conn, None, dir.path(), "Story.md", "The tale of [[Aldric.md]] begins.").unwrap();
+        upsert_external_note(&mut conn, None, "Story.md", "The tale of [[Aldric.md]] begins.").unwrap();
 
         let moved = move_external_note(
             &mut conn,
@@ -1113,7 +1186,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut conn = test_conn();
         insert_note(&mut conn, 1, "Aldric.md");
-        upsert_external_note(&mut conn, None, dir.path(), "Aldric.md", "No one links here.").unwrap();
+        upsert_external_note(&mut conn, None, "Aldric.md", "No one links here.").unwrap();
 
         let moved =
             move_external_note(&mut conn, None, dir.path(), "Aldric.md", "Renamed.md", "No one links here.")
@@ -1209,5 +1282,26 @@ mod tests {
         // the oracle would match — there is nothing for it to consider.
         let out = correlate_moves(changes, |_, _| true);
         assert_eq!(rels(&out), vec!["upsert:Edited.md"]);
+    }
+
+    // ── require_unwatched ─────────────────────────────────────────────────────
+
+    /// The obligation the token stands for: a bulk rewrite of a vault's notes may
+    /// not run underneath a watcher pointed at that same vault (#217).
+    #[test]
+    fn a_vault_its_own_watcher_is_running_over_cannot_be_rewritten() {
+        let vault = PathBuf::from("/vaults/Aldric");
+        let err = unwatched_verdict(Some(&vault), &vault)
+            .expect_err("a watched vault must refuse the rewrite");
+        assert!(err.contains("Refusing to rewrite"), "err={err}");
+    }
+
+    /// And the case the guard must *not* fire on. A [[Format Migration]] is reached
+    /// from a refused open, so the ledger the GM had open before that refusal may
+    /// still be watched — a different vault, and none of this one's business.
+    #[test]
+    fn a_watcher_over_a_different_vault_does_not_block_the_rewrite() {
+        assert!(unwatched_verdict(Some(Path::new("/vaults/Other")), Path::new("/vaults/Aldric")).is_ok());
+        assert!(unwatched_verdict(None, Path::new("/vaults/Aldric")).is_ok());
     }
 }

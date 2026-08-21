@@ -14,7 +14,9 @@ vi.mock("$lib/components/ui/sidebar", async (importOriginal) => {
 
 vi.mock("$lib/stores/tabs.svelte", () => ({
   tabs: {
-    get activeTab() { return null; },
+    get activeTab() {
+      return null;
+    },
     openTab: vi.fn(),
     navigateOpen: vi.fn(),
     closeTabByTypeAndId: vi.fn(),
@@ -82,7 +84,9 @@ afterEach(() => {
 
 describe("FileTree mobile — note row", () => {
   it("calls setOpenMobile(false) when clicking a note row", async () => {
-    const { container } = render(FileTree, { props: { node: noteNode, ...defaultProps } });
+    const { container } = render(FileTree, {
+      props: { node: noteNode, ...defaultProps },
+    });
     const button = container.querySelector("button");
     expect(button).not.toBeNull();
     await fireEvent.click(button!);
@@ -92,7 +96,9 @@ describe("FileTree mobile — note row", () => {
 
 describe("FileTree mobile — map row", () => {
   it("calls setOpenMobile(false) when clicking a map row", async () => {
-    const { container } = render(FileTree, { props: { node: mapNode, ...defaultProps } });
+    const { container } = render(FileTree, {
+      props: { node: mapNode, ...defaultProps },
+    });
     const button = container.querySelector("button");
     expect(button).not.toBeNull();
     await fireEvent.click(button!);
@@ -102,7 +108,9 @@ describe("FileTree mobile — map row", () => {
 
 describe("FileTree mobile — folder row", () => {
   it("does not call setOpenMobile when clicking a folder row", async () => {
-    const { container } = render(FileTree, { props: { node: folderNode, ...defaultProps } });
+    const { container } = render(FileTree, {
+      props: { node: folderNode, ...defaultProps },
+    });
     const button = container.querySelector("button");
     expect(button).not.toBeNull();
     await fireEvent.click(button!);

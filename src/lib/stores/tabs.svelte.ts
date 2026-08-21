@@ -53,12 +53,13 @@ function createTabsStore() {
         tabs: leftTabs,
         activeIndex: Math.min(left.activeIndex, Math.max(0, leftTabs.length - 1)),
       },
-      right: right && rightTabs
-        ? {
-            tabs: rightTabs,
-            activeIndex: Math.min(right.activeIndex, Math.max(0, rightTabs.length - 1)),
-          }
-        : null,
+      right:
+        right && rightTabs
+          ? {
+              tabs: rightTabs,
+              activeIndex: Math.min(right.activeIndex, Math.max(0, rightTabs.length - 1)),
+            }
+          : null,
       focusedPane,
     };
   }
@@ -75,7 +76,8 @@ function createTabsStore() {
   }
 
   function tabMatches(t: Tab, tab: Tab): boolean {
-    if (tab.type === "template") return t.type === "template" && t.templatePath === tab.templatePath;
+    if (tab.type === "template")
+      return t.type === "template" && t.templatePath === tab.templatePath;
     if (tab.type === "pdf") return t.type === "pdf" && t.pdfPath === tab.pdfPath;
     return t.type === tab.type && t.id === tab.id;
   }
@@ -130,7 +132,10 @@ function createTabsStore() {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };
       } else {
-        right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
+        right = {
+          tabs: [...right.tabs, newTab],
+          activeIndex: right.tabs.length,
+        };
       }
       focusedPane = "right";
     } else {
@@ -151,9 +156,7 @@ function createTabsStore() {
       return;
     }
     if (right) {
-      const rightIdx = right.tabs.findIndex(
-        (t) => t.type === type && t.id === id,
-      );
+      const rightIdx = right.tabs.findIndex((t) => t.type === type && t.id === id);
       if (rightIdx !== -1) {
         const tabs = [...right.tabs];
         tabs[rightIdx] = { ...tabs[rightIdx], rename: true };
@@ -186,8 +189,7 @@ function createTabsStore() {
       tabs.splice(index, 1);
       left = {
         tabs,
-        activeIndex:
-          tabs.length === 0 ? 0 : Math.min(left.activeIndex, tabs.length - 1),
+        activeIndex: tabs.length === 0 ? 0 : Math.min(left.activeIndex, tabs.length - 1),
       };
     }
     persist();
@@ -231,11 +233,7 @@ function createTabsStore() {
     persist();
   }
 
-  function reorderTab(
-    pane: "left" | "right",
-    fromIndex: number,
-    toIndex: number,
-  ) {
+  function reorderTab(pane: "left" | "right", fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
     if (pane === "right") {
       if (!right) return;
@@ -266,10 +264,7 @@ function createTabsStore() {
     const tab = source.tabs[tabIndex];
     const srcTabs = [...source.tabs];
     srcTabs.splice(tabIndex, 1);
-    const srcActive = Math.min(
-      source.activeIndex,
-      Math.max(0, srcTabs.length - 1),
-    );
+    const srcActive = Math.min(source.activeIndex, Math.max(0, srcTabs.length - 1));
 
     if (fromPane === "left") {
       left = { tabs: srcTabs, activeIndex: srcActive };
@@ -280,8 +275,7 @@ function createTabsStore() {
       }
       focusedPane = "right";
     } else {
-      right =
-        srcTabs.length === 0 ? null : { tabs: srcTabs, activeIndex: srcActive };
+      right = srcTabs.length === 0 ? null : { tabs: srcTabs, activeIndex: srcActive };
       if (right === null) focusedPane = "left";
       left = { tabs: [...left.tabs, tab], activeIndex: left.tabs.length };
       focusedPane = "left";
@@ -302,9 +296,7 @@ function createTabsStore() {
       return;
     }
     if (right) {
-      const rightIdx = right.tabs.findIndex(
-        (t) => t.type === type && t.id === id,
-      );
+      const rightIdx = right.tabs.findIndex((t) => t.type === type && t.id === id);
       if (rightIdx !== -1) closeTab("right", rightIdx);
     }
   }
@@ -334,9 +326,7 @@ function createTabsStore() {
     const update = (pane: TabPane) => ({
       ...pane,
       tabs: pane.tabs.map((t) =>
-        t.type === "pdf" && t.pdfPath === oldPath
-          ? { ...t, title: newTitle, pdfPath: newPath }
-          : t,
+        t.type === "pdf" && t.pdfPath === oldPath ? { ...t, title: newTitle, pdfPath: newPath } : t,
       ),
     });
     left = update(left);
@@ -347,9 +337,7 @@ function createTabsStore() {
   function updateTabTitle(type: TabType, id: number, title: string) {
     const update = (pane: TabPane) => ({
       ...pane,
-      tabs: pane.tabs.map((t) =>
-        t.type === type && t.id === id ? { ...t, title } : t,
-      ),
+      tabs: pane.tabs.map((t) => (t.type === type && t.id === id ? { ...t, title } : t)),
     });
     left = update(left);
     if (right) right = update(right);
@@ -437,7 +425,10 @@ function createTabsStore() {
         if (idx !== -1) {
           right = { ...right, activeIndex: idx };
         } else {
-          right = { tabs: [...right.tabs, newTab], activeIndex: right.tabs.length };
+          right = {
+            tabs: [...right.tabs, newTab],
+            activeIndex: right.tabs.length,
+          };
         }
       }
     } else {
@@ -468,12 +459,20 @@ function createTabsStore() {
     const pane = focusedPane;
     const current = pane === "right" && right ? right : left;
     const currentTab = current.tabs[current.activeIndex];
-    const newTab: Tab = { type: tab.type, id: tab.id, title: tab.title, badge: tab.badge, templatePath: tab.templatePath, pdfPath: tab.pdfPath };
+    const newTab: Tab = {
+      type: tab.type,
+      id: tab.id,
+      title: tab.title,
+      badge: tab.badge,
+      templatePath: tab.templatePath,
+      pdfPath: tab.pdfPath,
+    };
     const newTabs = [...current.tabs];
     newTabs[current.activeIndex] = newTab;
-    const backStack = currentTab && currentTab.type !== "empty"
-      ? [...(current.backStack ?? []), currentTab]
-      : (current.backStack ?? []);
+    const backStack =
+      currentTab && currentTab.type !== "empty"
+        ? [...(current.backStack ?? []), currentTab]
+        : (current.backStack ?? []);
     if (pane === "right" && right) {
       right = { ...right, tabs: newTabs, backStack, forwardStack: [] };
     } else {
@@ -487,7 +486,12 @@ function createTabsStore() {
     openTab(tab, targetPane);
   }
 
-  function applyHistoryEntry(pane: "left" | "right", entry: Tab, backStack: Tab[], forwardStack: Tab[]) {
+  function applyHistoryEntry(
+    pane: "left" | "right",
+    entry: Tab,
+    backStack: Tab[],
+    forwardStack: Tab[],
+  ) {
     const current = pane === "left" ? left : right;
     if (!current) return;
     const existingIdx = current.tabs.findIndex((t) => t.type === entry.type && t.id === entry.id);
@@ -495,9 +499,21 @@ function createTabsStore() {
     const newActiveIndex = existingIdx !== -1 ? existingIdx : current.activeIndex;
     if (existingIdx === -1) newTabs[current.activeIndex] = entry;
     if (pane === "right") {
-      right = { ...current, tabs: newTabs, activeIndex: newActiveIndex, backStack, forwardStack };
+      right = {
+        ...current,
+        tabs: newTabs,
+        activeIndex: newActiveIndex,
+        backStack,
+        forwardStack,
+      };
     } else {
-      left = { ...current, tabs: newTabs, activeIndex: newActiveIndex, backStack, forwardStack };
+      left = {
+        ...current,
+        tabs: newTabs,
+        activeIndex: newActiveIndex,
+        backStack,
+        forwardStack,
+      };
     }
     persist();
   }
@@ -526,9 +542,7 @@ function createTabsStore() {
     applyHistoryEntry(pane, next, backStack, forwardStack);
   }
 
-  function setDragging(
-    value: { pane: "left" | "right"; index: number } | null,
-  ) {
+  function setDragging(value: { pane: "left" | "right"; index: number } | null) {
     dragging = value;
   }
 

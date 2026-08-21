@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
   import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
@@ -7,7 +8,8 @@
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS, DEFAULT_PIN_COLOR } from "./pinAppearance";
+  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
+  import { DEFAULT_PIN_COLOR, ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
   import ColorSwatches from "$lib/components/ColorSwatches.svelte";
@@ -51,14 +53,57 @@
   let noteSearchQuery = $state("");
   let appearanceOpen = $state(false);
 
+  // The row the drafts were loaded from. The `pin` prop is read through the
+  // pane's `{#if selectedPin}`, so by teardown it can already be null —
+  // deselecting is one of the ways this panel closes — and a teardown commit
+  // still needs something to patch.
+  let editing: Pin | null = null;
+
   $effect(() => {
+    editing = pin;
     draftTitle = pin.title;
     draftDescription = pin.description ?? "";
   });
 
+  // Patches `editing`, not `pin`: the two are the same row for every edit made
+  // while the panel is up, and only `editing` survives the teardown commit below.
   async function save(patch: Partial<Pin>) {
-    await onUpdate({ ...pin, ...patch });
+    if (!editing) return;
+    await onUpdate({ ...editing, ...patch });
   }
+
+  // The two free-text fields commit on blur, and teardown fires no blur — so a
+  // title or description typed and left focused was silently discarded when the
+  // pane's tab changed and took MapPane with it (#201). ADR-0006's Consequences
+  // ask for commit-or-cancel here; this commits, matching what every other field
+  // on the panel does the moment it is touched.
+  //
+  // Each field yields a *patch fragment* rather than saving directly, because
+  // teardown has to send both fields in ONE write. `save` spreads `editing`, and
+  // `savePin` round-trips the whole row, so two writes off the same stale row
+  // would each carry the other field at its pre-edit value and the second would
+  // revert the first. On blur that cannot happen: the save applies back through
+  // the pane and `editing` is fresh before the next field is touched.
+  function titlePatch(): Partial<Pin> {
+    if (!editing) return {};
+    const next = draftTitle.trim();
+    if (next === editing.title) return {};
+    return { title: next || editing.title };
+  }
+
+  function descriptionPatch(): Partial<Pin> {
+    if (!editing) return {};
+    const next = draftDescription.trim() || null;
+    if (next === editing.description) return {};
+    return { description: next };
+  }
+
+  function commit(patch: Partial<Pin>) {
+    if (Object.keys(patch).length === 0) return;
+    save(patch);
+  }
+
+  onDestroy(() => commit({ ...titlePatch(), ...descriptionPatch() }));
 
   const filteredNotes = $derived(
     noteSearchQuery.trim()
@@ -68,9 +113,7 @@
       : notes.notes,
   );
 
-  const PIN_SHAPES: PinShape[] = [
-    "circle", "pin", "diamond", "headstone", "shield", "banner",
-  ];
+  const PIN_SHAPES: PinShape[] = ["circle", "pin", "diamond", "headstone", "shield", "banner"];
 
   const SHAPE_PREVIEWS: Record<PinShape, string> = {
     circle: `<circle cx="8" cy="8" r="6" fill="currentColor"/>`,
@@ -81,12 +124,6 @@
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
 
-  // The default leads the row, so the swatch a pin starts on is the swatch it returns to.
-  const PRESET_COLORS = [
-    DEFAULT_PIN_COLOR, "#6a9b87", "#4a90c4", "#8b3a3a",
-    "#6b4e8a", "#5a6b7a", "#c4b8a0", "#3d4a52",
-  ];
-
   const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
 </script>
 
@@ -96,10 +133,7 @@
   <input
     autofocus
     bind:value={draftTitle}
-    onblur={() => {
-      if (draftTitle.trim() !== pin.title)
-        save({ title: draftTitle.trim() || pin.title });
-    }}
+    onblur={() => commit(titlePatch())}
     onkeydown={(e) => {
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
@@ -113,7 +147,9 @@
     onclick={onToggleLock}
     title={unlocked ? "Lock pin" : "Unlock to drag"}
     class="mt-1 p-1.5 rounded-md transition-colors cursor-pointer shrink-0
-           {unlocked ? 'text-primary hover:text-primary/70' : 'text-foreground-faint hover:text-foreground-muted'}"
+           {unlocked
+      ? 'text-primary hover:text-primary/70'
+      : 'text-foreground-faint hover:text-foreground-muted'}"
   >
     {#if unlocked}
       <LockOpen class="w-4 h-4" />
@@ -126,9 +162,13 @@
 <!-- Linked note -->
 <DetailSection label="Linked Note" sectionKey="linked-note">
   {#if linkedNote}
-    <div class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2">
+    <div
+      class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2"
+    >
       <div class="flex items-center justify-between gap-2">
-        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground">{linkedNote.title}</span>
+        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground"
+          >{linkedNote.title}</span
+        >
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
           class="shrink-0 p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
@@ -155,10 +195,15 @@
         placeholder="Search notes…"
       />
       {#if noteSearchQuery.trim()}
-        <div class="bg-background-subtle border border-background-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+        <div
+          class="bg-background-subtle border border-background-border rounded-lg overflow-hidden max-h-36 overflow-y-auto"
+        >
           {#each filteredNotes.slice(0, 8) as n (n.id)}
             <button
-              onclick={() => { save({ note_id: n.id }); noteSearchQuery = ""; }}
+              onclick={() => {
+                save({ note_id: n.id });
+                noteSearchQuery = "";
+              }}
               class="w-full px-3 py-2 font-mono text-[10px] text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
             >
               {n.title}
@@ -174,11 +219,7 @@
 
 <!-- Tags -->
 <DetailSection label="Tags" sectionKey="tags">
-  <TagChipEditor
-    bind:tags={pinTags}
-    suggestions={allTags}
-    onchange={onTagsChange}
-  />
+  <TagChipEditor bind:tags={pinTags} suggestions={allTags} onchange={onTagsChange} />
 </DetailSection>
 
 <!-- Category -->
@@ -206,15 +247,11 @@
   <textarea
     id="pin-description"
     bind:value={draftDescription}
-    onblur={() => {
-      const val = draftDescription.trim() || null;
-      if (val !== pin.description) save({ description: val });
-    }}
+    onblur={() => commit(descriptionPatch())}
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
            font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
-    placeholder="Add notes about this location…"
-  ></textarea>
+    placeholder="Add notes about this location…"></textarea>
 </DetailSection>
 
 <!-- Appearance -->
@@ -223,7 +260,9 @@
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
       <span class="font-mono text-[10px] text-foreground-muted">Shape, icon, color</span>
       <ChevronDown
-        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen ? 'rotate-180' : ''}"
+        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen
+          ? 'rotate-180'
+          : ''}"
       />
     </CollapsibleTrigger>
 
@@ -231,7 +270,9 @@
       <div class="flex flex-col gap-3 pt-3">
         <!-- Shape -->
         <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Shape</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Shape</span
+          >
           <div class="flex gap-1">
             {#each PIN_SHAPES as shape (shape)}
               <button
@@ -242,7 +283,9 @@
                        {pin.shape === shape
                   ? 'border-primary bg-primary-subtle'
                   : 'border-background-border hover:border-primary/50 hover:bg-primary-subtle/50'}"
-                style="color:{pin.shape === shape ? resolvedColor : 'var(--color-foreground-muted)'}"
+                style="color:{pin.shape === shape
+                  ? resolvedColor
+                  : 'var(--color-foreground-muted)'}"
               >
                 <svg viewBox="0 0 16 16" width="16" height="16">
                   <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -255,7 +298,9 @@
 
         <!-- Icon -->
         <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Icon</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Icon</span
+          >
           <div class="grid grid-cols-4 gap-1">
             {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
               <button
@@ -275,10 +320,12 @@
 
         <!-- Color -->
         <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">Color</span>
+          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+            >Color</span
+          >
           <ColorSwatches
             value={pin.color}
-            presets={PRESET_COLORS}
+            presets={ENTITY_COLOR_PRESETS}
             onchange={(color) => save({ color })}
           />
         </div>

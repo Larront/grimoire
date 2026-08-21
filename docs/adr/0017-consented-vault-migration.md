@@ -9,7 +9,7 @@ Grimoire's database migrates itself. Twenty-three embedded migrations run on eve
 (`db/mod.rs:104`), one of them a pure data repair, and none of them ask. That is correct: the
 database is a private store, rebuildable from the notes, and a GM has no stake in its shape.
 
-Nothing equivalent exists for the notes, and the notes are the opposite kind of thing. They *are*
+Nothing equivalent exists for the notes, and the notes are the opposite kind of thing. They _are_
 the ledger, they are the artifact ledger portability exists to protect, and a GM hand-edits them in
 Obsidian and VS Code. Yet a block format change rewrites them — and the shipped-block migration
 ([#155](https://github.com/Larront/grimoire/issues/155)) has two: Scene's `<scene-block>` becomes a
@@ -34,7 +34,7 @@ ADR should not freeze.
 The database keeps migrating on every open with no prompt. A note format change prompts once, on
 open, with what will change, and migrates in one knowing pass over the whole vault — never
 note-by-note as each is opened, which would be a silent modification of a file because the GM
-*looked* at it.
+_looked_ at it.
 
 The stamp itself is exempt, and this needs saying because the principle can be misread as forbidding
 it: writing `.grimoire/format-version` is Grimoire's own bookkeeping, not a document. A vault with no
@@ -45,11 +45,11 @@ old content in it is stamped silently and its GM never learns this mechanism exi
 A vault stamps one integer — the format its **notes** are written in. Comparing it to the format the
 app knows yields three cases, not two:
 
-| Vault stamp | Outcome |
-|---|---|
-| Equal | Open normally |
-| **Behind** | Prompt; migrate on consent, **refuse to open on decline** |
-| **Ahead** | **Refuse to open.** No dialog with a way through it |
+| Vault stamp | Outcome                                                   |
+| ----------- | --------------------------------------------------------- |
+| Equal       | Open normally                                             |
+| **Behind**  | Prompt; migrate on consent, **refuse to open on decline** |
+| **Ahead**   | **Refuse to open.** No dialog with a way through it       |
 
 Both refusals are load-bearing and both are at risk of being "improved" later into a compatibility
 mode. There is no compatibility mode, and the reason is §1's consequence rather than a preference:
@@ -126,7 +126,7 @@ Generic copy — "some things are written differently" — is cheaper and rots i
 the GM nothing to weigh, so the yes becomes reflexive, and a reflexive yes to a mass rewrite of
 someone's campaign is what consent was for. It also cannot carry a warning, and warnings are
 specific: #155's Timeline pass space-prefixes a description line beginning with `#`, which is the one
-part of the whole migration that edits the GM's *prose* rather than Grimoire's own syntax, and
+part of the whole migration that edits the GM's _prose_ rather than Grimoire's own syntax, and
 therefore the part most deserving of being asked about.
 
 The count is a **union**, not a sum — a note two migrations touch is one note — and a migration that
@@ -137,7 +137,7 @@ at all.
 
 - **Downgrade paths.** The old app would have to contain an understanding of a format that did not
   exist when it shipped. The version needing the downgrade is always the one already installed.
-- **A GM-facing dry-run.** The prompt *is* the dry run's output. A button would be a second way to
+- **A GM-facing dry-run.** The prompt _is_ the dry run's output. A button would be a second way to
   ask a question already answered on screen.
 - **Read-only vault mode**, and **per-note write guards** for the notes a partial failure left behind.
   Both are modes, both must be honoured by every write path, and the second protects against a case
@@ -153,7 +153,7 @@ at all.
 - **This mechanism must exist before any note format change ships.** #155's sequencing already says
   so; the ADR makes the dependency structural rather than scheduled.
 - **A partial failure opens the vault; a decline does not.** The asymmetry is deliberate — consent was
-  given, and the affected notes are *named* — and the alternative is a permanent lockout from an
+  given, and the affected notes are _named_ — and the alternative is a permanent lockout from an
   entire campaign over one file with a permission nobody can change.
 - **Every future format change owes one plain-English sentence.** That is the whole registration cost,
   and it is the price of the prompt staying honest at any distance behind.

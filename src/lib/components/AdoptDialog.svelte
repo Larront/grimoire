@@ -67,7 +67,12 @@
   }
 </script>
 
-<Dialog.Root bind:open={dialogOpen} onOpenChange={(v) => { if (!v) reset(); }}>
+<Dialog.Root
+  bind:open={dialogOpen}
+  onOpenChange={(v) => {
+    if (!v) reset();
+  }}
+>
   <Dialog.Content showCloseButton={false}>
     <div data-testid="adopt-dialog" class="flex flex-col gap-5">
       <Dialog.Header>
@@ -80,12 +85,7 @@
       <div class="flex flex-col gap-3">
         <!-- Name field -->
         <div class="flex flex-col gap-1.5">
-          <label
-            for="adopt-name"
-            class="font-sans text-[11px] text-muted-foreground"
-          >
-            Name
-          </label>
+          <label for="adopt-name" class="font-sans text-[11px] text-muted-foreground"> Name </label>
           <!-- svelte-ignore a11y_autofocus -->
           <input
             id="adopt-name"

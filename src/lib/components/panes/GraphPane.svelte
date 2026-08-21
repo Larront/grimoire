@@ -12,15 +12,11 @@
   import type { Core, Layouts, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { notes } from "$lib/stores/notes.svelte";
-  import { searchPalette } from "$lib/stores/search.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import Filter from "@lucide/svelte/icons/filter";
   import Search from "@lucide/svelte/icons/search";
 
-  import {
-    assignTagSlots,
-    resolveTagColor,
-    mutedColor,
-  } from "$lib/graph-palette";
+  import { assignTagSlots, resolveTagColor, mutedColor } from "$lib/graph-palette";
 
   /*
     Tags are told apart by COLOUR ALONE, and that is a decision rather than an oversight.
@@ -135,8 +131,7 @@
     if (node.kind === "stub" || node.kind === "map") return MIN_RADIUS * 2;
     const count = node.backlink_count ?? 0;
     if (maxBacklinks === 0 || count === 0) return MIN_RADIUS * 2;
-    const radius =
-      MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * (count / maxBacklinks);
+    const radius = MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * (count / maxBacklinks);
     return Math.round(radius * 2);
   }
 
@@ -301,7 +296,7 @@
 
   /** Open the Tag Manager dialog (for per-tag graph color / visibility editing). */
   function openTagManager() {
-    searchPalette.tagManagerOpen = true;
+    dialogs.tagManagerOpen = true;
   }
 
   /**
@@ -380,8 +375,7 @@
       cy!.edges().forEach((e: unknown) => {
         const edge = e as Classable;
         const touches =
-          focusId != null &&
-          (edge.data("source") === focusId || edge.data("target") === focusId);
+          focusId != null && (edge.data("source") === focusId || edge.data("target") === focusId);
         edge.toggleClass("dimmed", focusId != null && !touches);
       });
     });
@@ -439,10 +433,7 @@
       // Generated node `kind` is `string`; the local GraphNodeData refines it to
       // a "map"|"note"|"stub" union. The backend only ever emits those values.
       const graphNodes = rawData.nodes as GraphNodeData[];
-      slotAssignments = assignTagSlots(
-        allTags,
-        (tag) => !!tagStylesMap.get(tag)?.color,
-      );
+      slotAssignments = assignTagSlots(allTags, (tag) => !!tagStylesMap.get(tag)?.color);
 
       // Compute max backlink count for proportional sizing
       const maxBacklinks = rawData.nodes.reduce(
@@ -542,9 +533,8 @@
         // Defer past the plugin's own `free` handler (which sets alphaTarget to
         // ~0.33), then lower the target so the sim cools to rest.
         requestAnimationFrame(() => {
-          const d3sim = (
-            sim as unknown as { simulation?: { alphaTarget(v: number): void } }
-          ).simulation;
+          const d3sim = (sim as unknown as { simulation?: { alphaTarget(v: number): void } })
+            .simulation;
           d3sim?.alphaTarget(0);
         });
       });
@@ -612,16 +602,12 @@
   });
 </script>
 
-<div
-  class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background"
->
+<div class="relative flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
   <!-- Toolbar overlay — search input + filter toggle, anchored top-right -->
   <div class="absolute top-2 right-2 z-20 flex items-center gap-1">
     <!-- Search input -->
     <div class="relative flex items-center">
-      <Search
-        class="pointer-events-none absolute left-2 size-3 text-foreground-muted"
-      />
+      <Search class="pointer-events-none absolute left-2 size-3 text-foreground-muted" />
       <input
         data-testid="graph-search"
         type="text"
@@ -653,9 +639,7 @@
       data-testid="filter-panel"
       class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
     >
-      <p
-        class="text-xs font-semibold text-foreground-muted uppercase tracking-wider"
-      >
+      <p class="text-xs font-semibold text-foreground-muted uppercase tracking-wider">
         Filter by tag
       </p>
 
@@ -708,9 +692,7 @@
       {/each}
 
       <!-- Untagged row (separator) -->
-      <div
-        class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1"
-      >
+      <div class="flex items-center gap-2 min-w-0 border-t border-border pt-2 mt-1">
         <!-- Untagged: the muted step and the plain circle, which is what the canvas
              draws for a note with no tag. -->
         <span
@@ -719,9 +701,7 @@
           style="background-color: {mutedColor()}"
         ></span>
 
-        <span class="flex-1 text-sm text-foreground-muted truncate"
-          >Untagged</span
-        >
+        <span class="flex-1 text-sm text-foreground-muted truncate">Untagged</span>
 
         <!-- Show/hide toggle for untagged notes -->
         <button
@@ -750,11 +730,7 @@
   {/if}
 
   <!-- Container is always in DOM so cytoscape can bind to it -->
-  <div
-    bind:this={container}
-    data-testid="graph-container"
-    class="flex-1 min-h-0 w-full"
-  ></div>
+  <div bind:this={container} data-testid="graph-container" class="flex-1 min-h-0 w-full"></div>
 
   {#if loading}
     <div
@@ -763,9 +739,7 @@
       <span class="text-sm">Loading graph…</span>
     </div>
   {:else if error}
-    <div
-      class="absolute inset-0 flex items-center justify-center text-destructive z-10"
-    >
+    <div class="absolute inset-0 flex items-center justify-center text-destructive z-10">
       <span class="text-sm">Failed to load graph: {error}</span>
     </div>
   {/if}

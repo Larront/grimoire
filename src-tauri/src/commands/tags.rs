@@ -14,7 +14,7 @@ use crate::db::models::Note;
 use crate::db::schema::note_tags::dsl as nt;
 use crate::db::schema::notes::dsl as nd;
 use crate::db::schema::pin_tags::dsl as pt;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 use crate::note_mutation::CommitItem;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
@@ -55,13 +55,9 @@ pub fn retag_tag(
     to_tag: Option<String>,
     ledger: State<AppLedger>,
 ) -> Result<RetagResult, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let ledger_path = state.path.clone().ok_or("No ledger open")?;
-    let state_ref = &mut *state;
-    let conn = state_ref.connection.as_mut().ok_or("No ledger open")?;
-    let index = state_ref.search_index.as_ref();
-    let result = retag_tag_on_conn(conn, index, &ledger_path, &from_tag, to_tag.as_deref())?;
-    Ok(result)
+    with_open_ledger(&ledger, |l| {
+        retag_tag_on_conn(l.conn, l.index, l.path, &from_tag, to_tag.as_deref())
+    })
 }
 
 /// Apply a retag to one entity's tag list: every case-insensitive match of
@@ -141,7 +137,7 @@ pub fn retag_tag_on_conn(
             items.push(CommitItem { full_path, note, content: new_content });
         }
 
-        crate::note_mutation::commit_many(conn, index, ledger_path, items)?;
+        crate::note_mutation::commit_many(conn, index, items)?;
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────
@@ -186,9 +182,7 @@ pub struct TagUsageEntry {
 #[tauri::command]
 #[specta::specta]
 pub fn get_tag_usage_counts(ledger: State<AppLedger>) -> Result<Vec<TagUsageEntry>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_tag_usage_counts_from_conn(conn)
+    with_open_ledger(&ledger, |l| get_tag_usage_counts_from_conn(l.conn))
 }
 
 pub fn get_tag_usage_counts_from_conn(
@@ -239,9 +233,7 @@ pub fn get_tag_usage_counts_from_conn(
 #[tauri::command]
 #[specta::specta]
 pub fn list_all_tags(ledger: State<AppLedger>) -> Result<Vec<String>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    list_all_tags_from_conn(conn)
+    with_open_ledger(&ledger, |l| list_all_tags_from_conn(l.conn))
 }
 
 pub fn list_all_tags_from_conn(conn: &mut SqliteConnection) -> Result<Vec<String>, String> {
@@ -283,13 +275,13 @@ pub fn upsert_pin_tags(
 #[tauri::command]
 #[specta::specta]
 pub fn get_pin_tags(pin_id: i32, ledger: State<AppLedger>) -> Result<Vec<String>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    pt::pin_tags
-        .filter(pt::pin_id.eq(pin_id))
-        .select(pt::tag)
-        .load::<String>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        pt::pin_tags
+            .filter(pt::pin_id.eq(pin_id))
+            .select(pt::tag)
+            .load::<String>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -299,9 +291,7 @@ pub fn set_pin_tags(
     tags: Vec<String>,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    upsert_pin_tags(conn, pin_id, &tags)
+    with_open_ledger(&ledger, |l| upsert_pin_tags(l.conn, pin_id, &tags))
 }
 
 #[cfg(test)]

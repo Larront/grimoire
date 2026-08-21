@@ -1,5 +1,5 @@
 use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene};
-use crate::db::schema::{maps, notes, pin_categories, pins, scene_slots, scenes};
+use crate::db::schema::{maps, notes, pin_categories, pins, quick_notes, scene_slots, scenes};
 use diesel::prelude::*;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
@@ -224,6 +224,36 @@ pub fn seed_sample_world_scenes(conn: &mut SqliteConnection) -> Result<(), Strin
     Ok(())
 }
 
+/// Seeds the one Quick Note the sample world ships with, into the already-open
+/// connection. A Quick Note is a row and not a note ([ADR-0018](../../../docs/adr/0018-quick-notes-are-rows-not-notes.md)),
+/// so the sample — which travels as a plain resource tree with no database — has to
+/// seed it in code, the way `seed_sample_world_maps` and `seed_sample_world_scenes`
+/// already do for its other non-file entities.
+///
+/// One line, not a tutorial and not a list of examples: a thought a GM might actually
+/// have parked mid-session, which happens to carry a working wikilink so the pen
+/// demonstrates that a `[[link]]` typed into it is drawn and clickable. The target is a
+/// note the sample really contains — a link that resolved to nothing would teach the
+/// wrong lesson about the one thing this Quick Note exists to show.
+///
+/// Idempotent: skips if any quick_notes rows already exist.
+pub fn seed_sample_world_quick_notes(conn: &mut SqliteConnection) -> Result<(), String> {
+    let existing: i64 = quick_notes::table
+        .count()
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+    if existing > 0 {
+        return Ok(());
+    }
+
+    crate::commands::quick_notes::insert_quick_note(
+        conn,
+        "[[Mira Ashvale]] should already know about the marsh fires — check what she'd have heard.",
+    )?;
+
+    Ok(())
+}
+
 /// Copies the bundled sample-world resource tree to a writable sandbox at
 /// `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 /// database with the sample map and pins, and returns the sandbox path.
@@ -261,6 +291,7 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     crate::commands::import::reconcile_notes_with_disk(&sample_dst, &mut conn)?;
     seed_sample_world_maps(&mut conn)?;
     seed_sample_world_scenes(&mut conn)?;
+    seed_sample_world_quick_notes(&mut conn)?;
 
     Ok(sample_dst.to_string_lossy().to_string())
 }
@@ -344,6 +375,40 @@ mod tests {
         );
     }
 
+    /// Adoption — _Make this world mine_ — is `copy_dir_tree` over the whole sandbox, so
+    /// everything the sample seeded into its database travels with it. That is worth a test
+    /// because a Quick Note has no file: it survives adoption only if `.grimoire/` is copied
+    /// along with the notes, and `copy_dir_tree` skipping a dotted directory would take the
+    /// pen with it while leaving every visible note in place — a loss the GM would not see
+    /// until they went looking for a thought they had parked.
+    #[test]
+    fn adoption_carries_the_seeded_quick_note() {
+        let sandbox = tempdir().unwrap();
+        let dest_parent = tempdir().unwrap();
+        let dest = dest_parent.path().join("My Ashfen");
+
+        {
+            let mut conn = establish_connection(sandbox.path()).unwrap();
+            seed_sample_world_quick_notes(&mut conn).unwrap();
+        }
+
+        copy_dir_tree(sandbox.path(), &dest).unwrap();
+
+        let mut adopted = establish_connection(&dest).unwrap();
+        let carried = crate::commands::quick_notes::load_quick_notes(&mut adopted).unwrap();
+        assert_eq!(
+            carried.len(),
+            1,
+            "the seeded Quick Note must survive adoption, got {} rows",
+            carried.len()
+        );
+        assert!(
+            carried[0].body.contains("[[Mira Ashvale]]"),
+            "the adopted Quick Note lost its text: {:?}",
+            carried[0].body
+        );
+    }
+
     // ── sample world integrity ────────────────────────────────────────────────
 
     /// Full pipeline test: copy the bundled sample-world fixture into a
@@ -377,6 +442,7 @@ mod tests {
 
         seed_sample_world_maps(&mut conn).unwrap();
         seed_sample_world_scenes(&mut conn).unwrap();
+        seed_sample_world_quick_notes(&mut conn).unwrap();
 
         // Rebuild derived indexes (tags, links, aliases, search).
         let all_maps: Vec<crate::db::models::Map> =
@@ -442,6 +508,50 @@ mod tests {
                 );
             }
         }
+
+        // ── Quick Notes: exactly one, and its wikilink resolves ──────────────
+        //
+        // The pen ships with one line, not a list — a GM meeting it should read a
+        // thought, not a tutorial. Its `[[wikilink]]` is the whole reason it carries one,
+        // so it is resolved here through `resolve_note_target_on_conn`: the same call the
+        // pane makes when the GM clicks the link. A rename of the note it points at, or a
+        // typo in the seeded line, leaves the sample demonstrating a dead link — which is
+        // worse than demonstrating nothing.
+        let quick: Vec<crate::db::models::QuickNote> =
+            crate::commands::quick_notes::load_quick_notes(&mut conn).unwrap();
+        assert_eq!(
+            quick.len(),
+            1,
+            "expected exactly 1 seeded Quick Note, got {}",
+            quick.len()
+        );
+
+        let body = &quick[0].body;
+        let target = body
+            .split_once("[[")
+            .and_then(|(_, rest)| rest.split_once("]]"))
+            .map(|(target, _)| target)
+            .unwrap_or_else(|| panic!("the seeded Quick Note must carry a wikilink: {body:?}"));
+        let resolved = crate::commands::links::resolve_note_target_on_conn(&mut conn, target)
+            .unwrap()
+            .unwrap_or_else(|| {
+                panic!("the seeded Quick Note's wikilink '[[{target}]]' resolves to nothing")
+            });
+        assert!(
+            tmp.path().join(&resolved.path).exists(),
+            "'[[{target}]]' resolved to '{}', which is not a file in the sample",
+            resolved.path
+        );
+
+        // Seeding is idempotent — explore_sample_ledger runs it on every open of a
+        // sandbox that may already hold rows, and a second line would be a second thought
+        // the GM never had.
+        seed_sample_world_quick_notes(&mut conn).unwrap();
+        let quick_count: i64 = crate::db::schema::quick_notes::table
+            .count()
+            .get_result(&mut conn)
+            .unwrap();
+        assert_eq!(quick_count, 1, "re-seeding must not add a second Quick Note");
 
         // ── Map count ────────────────────────────────────────────────────────
         let map_count: i64 = maps::table.count().get_result(&mut conn).unwrap();

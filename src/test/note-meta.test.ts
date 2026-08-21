@@ -11,9 +11,7 @@ describe("formatBreadcrumb", () => {
   });
 
   it("two folders deep (max untruncated)", () => {
-    expect(formatBreadcrumb("NPCs/Westmarch/Morrigan.md")).toBe(
-      "NPCs / Westmarch / Morrigan.md",
-    );
+    expect(formatBreadcrumb("NPCs/Westmarch/Morrigan.md")).toBe("NPCs / Westmarch / Morrigan.md");
   });
 
   it("three folders deep truncates the middle", () => {
@@ -21,9 +19,9 @@ describe("formatBreadcrumb", () => {
   });
 
   it("deeply nested path truncates to first / … / last", () => {
-    expect(
-      formatBreadcrumb("World/Locations/Cities/Westmarch/NPCs/Morrigan.md"),
-    ).toBe("World / … / Morrigan.md");
+    expect(formatBreadcrumb("World/Locations/Cities/Westmarch/NPCs/Morrigan.md")).toBe(
+      "World / … / Morrigan.md",
+    );
   });
 });
 
@@ -36,15 +34,11 @@ describe("formatRelativeTime", () => {
   });
 
   it("exactly 60 seconds → 1 minute ago", () => {
-    expect(formatRelativeTime("2026-01-15T11:59:00Z", now)).toBe(
-      "1 minute ago",
-    );
+    expect(formatRelativeTime("2026-01-15T11:59:00Z", now)).toBe("1 minute ago");
   });
 
   it("3 minutes ago", () => {
-    expect(formatRelativeTime("2026-01-15T11:57:00Z", now)).toBe(
-      "3 minutes ago",
-    );
+    expect(formatRelativeTime("2026-01-15T11:57:00Z", now)).toBe("3 minutes ago");
   });
 
   it("1 hour ago (singular)", () => {

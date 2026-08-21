@@ -28,20 +28,12 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 
 import {
   blockHandleMenuSections,
-  blockStillThere,
   runBlockHandleAction,
   type BlockHandleMenuSection,
   type ClipboardWriter,
 } from "$lib/editor/block-handle-menu";
-import { deleteBlockAt } from "$lib/editor/block-handle";
-import {
-  closeNote,
-  note,
-  posOf,
-  saved,
-  targetOf,
-  targetOfNth,
-} from "./fixtures/note-editor";
+import { blockStillThere, deleteBlock } from "$lib/editor/block-handle";
+import { closeNote, note, posOf, saved, targetOf, targetOfNth } from "./fixtures/note-editor";
 
 afterEach(closeNote);
 
@@ -121,13 +113,48 @@ describe("the section offering what a text block can become", () => {
     const editor = note("A sentence.");
 
     expect(section(menuFor(editor, "paragraph"), "Turn into").items).toEqual([
-      { command: { turnInto: "paragraph" }, label: "Paragraph", icon: "Pilcrow", current: true },
-      { command: { turnInto: "heading1" }, label: "Heading 1", icon: "Heading1", current: false },
-      { command: { turnInto: "heading2" }, label: "Heading 2", icon: "Heading2", current: false },
-      { command: { turnInto: "heading3" }, label: "Heading 3", icon: "Heading3", current: false },
-      { command: { turnInto: "bulletList" }, label: "Bullet List", icon: "List", current: false },
-      { command: { turnInto: "orderedList" }, label: "Numbered List", icon: "ListOrdered", current: false },
-      { command: { turnInto: "quote" }, label: "Quote", icon: "Quote", current: false },
+      {
+        command: { turnInto: "paragraph" },
+        label: "Paragraph",
+        icon: "Pilcrow",
+        current: true,
+      },
+      {
+        command: { turnInto: "heading1" },
+        label: "Heading 1",
+        icon: "Heading1",
+        current: false,
+      },
+      {
+        command: { turnInto: "heading2" },
+        label: "Heading 2",
+        icon: "Heading2",
+        current: false,
+      },
+      {
+        command: { turnInto: "heading3" },
+        label: "Heading 3",
+        icon: "Heading3",
+        current: false,
+      },
+      {
+        command: { turnInto: "bulletList" },
+        label: "Bullet List",
+        icon: "List",
+        current: false,
+      },
+      {
+        command: { turnInto: "orderedList" },
+        label: "Numbered List",
+        icon: "ListOrdered",
+        current: false,
+      },
+      {
+        command: { turnInto: "quote" },
+        label: "Quote",
+        icon: "Quote",
+        current: false,
+      },
     ]);
   });
 
@@ -191,7 +218,9 @@ describe("choosing what the block becomes", () => {
     ["quote", "> The Lower Halls"],
   ] as const)("writes %s as `%s`", async (into, expected) => {
     const editor = note("The Lower Halls");
-    await runBlockHandleAction(editor, targetOf(editor, "paragraph"), { turnInto: into });
+    await runBlockHandleAction(editor, targetOf(editor, "paragraph"), {
+      turnInto: into,
+    });
 
     expect(saved(editor)).toBe(expected);
   });
@@ -272,11 +301,9 @@ describe("choosing what the block becomes", () => {
   it("does nothing when the block went while the menu was open", async () => {
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
 
-    expect(
-      await runBlockHandleAction(editor, bravo, { turnInto: "heading1" }),
-    ).toBe(false);
+    expect(await runBlockHandleAction(editor, bravo, { turnInto: "heading1" })).toBe(false);
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
   });
 });
@@ -320,11 +347,7 @@ describe("duplicating the block the grip is on", () => {
         "```",
       ].join("\n"),
     );
-    await runBlockHandleAction(
-      editor,
-      targetOfNth(editor, "statblockBlock", 1),
-      "duplicate",
-    );
+    await runBlockHandleAction(editor, targetOfNth(editor, "statblockBlock", 1), "duplicate");
 
     expect(saved(editor).match(/# Kobold [AB]/g)).toEqual([
       "# Kobold A",
@@ -351,12 +374,7 @@ describe("copying the block as the markdown it is written as", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(`Before.\n\n${md}`);
     const { clipboard, written } = fakeClipboard();
-    await runBlockHandleAction(
-      editor,
-      targetOf(editor, "statblockBlock"),
-      "copy",
-      clipboard,
-    );
+    await runBlockHandleAction(editor, targetOf(editor, "statblockBlock"), "copy", clipboard);
 
     expect(written).toEqual([md]);
   });
@@ -448,13 +466,13 @@ describe("acting on a block that is no longer where the menu found it", () => {
     // describing the wrong block, which is the shape of the failure.
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
 
     expect(editor.state.doc.nodeAt(bravo.pos)?.textContent).toBe("Delta.");
     for (const action of ["duplicate", "copy", "delete"] as const) {
-      expect(
-        await runBlockHandleAction(editor, bravo, action, fakeClipboard().clipboard),
-      ).toBe(false);
+      expect(await runBlockHandleAction(editor, bravo, action, fakeClipboard().clipboard)).toBe(
+        false,
+      );
     }
     expect(saved(editor)).toBe("Bravo.\n\nDelta.");
   });
@@ -472,7 +490,7 @@ describe("acting on a block that is no longer where the menu found it", () => {
     const editor = note("A sentence.\n\nSecond.");
     const target = targetOf(editor, "paragraph");
     const { clipboard, written } = fakeClipboard();
-    deleteBlockAt(editor, target.pos);
+    deleteBlock(editor, target);
     await runBlockHandleAction(editor, target, "copy", clipboard);
 
     expect(written).toEqual([]);
@@ -483,10 +501,10 @@ describe("acting on a block that is no longer where the menu found it", () => {
     // resolves is not the same claim as the block the GM was looking at.
     const editor = note("Alpha.\n\nBravo.\n\nDelta.");
     const bravo = targetOfNth(editor, "paragraph", 1);
-    expect(blockStillThere(editor, bravo)).toBe(true);
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(true);
 
-    deleteBlockAt(editor, posOf(editor, "paragraph"));
+    deleteBlock(editor, targetOf(editor, "paragraph"));
     expect(editor.state.doc.nodeAt(bravo.pos)).not.toBeNull();
-    expect(blockStillThere(editor, bravo)).toBe(false);
+    expect(blockStillThere(editor.state.doc, bravo)).toBe(false);
   });
 });

@@ -5,15 +5,11 @@
 
   import { noteExtensions } from "$lib/editor/note-extensions";
   import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
-  import {
-    wikiBrokenLinkKey,
-    parseWikiTarget,
-    stripWikiFragment,
-  } from "$lib/editor/wiki-link";
+  import { wikiBrokenLinkKey, parseWikiTarget, stripWikiFragment } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
-  import { createBlockHandleHover } from "$lib/editor/block-handle-hover.svelte";
+  import { createBlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 
   import SlashCommandMenu from "./SlashCommandMenu.svelte";
   import BlockHandle from "./BlockHandle.svelte";
@@ -62,9 +58,14 @@
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ── The block handle ─────────────────────────────────────────────────────────
-  // Which block the grip belongs to, and whether it is on screen at all. The rules — in
-  // particular why the grip survives the pointer moving onto it — live in the module.
-  const blockHover = createBlockHandleHover();
+  // Which block the grip belongs to, whether it is on screen at all, and what its menu is
+  // doing — one owner for all of it (#211). The rules, and the orderings the gestures go
+  // in, live in the module; what is left here is the two things only this component knows:
+  // the editor's own report of the pointer, and the document changing under the grip.
+  //
+  // Built before the editor is, and given a way to read it late: the template below draws
+  // from it, so it cannot wait for `onMount`.
+  const blockHandle = createBlockHandleLife(() => editor);
 
   function scrollToFirstMatch(editorInstance: Editor, query: string) {
     const terms = query
@@ -113,17 +114,18 @@
         onWikiSuggestion: (state) => {
           wikiState = state;
         },
-        onBlockTarget: blockHover.point,
-        onBlockGrab: blockHover.grab,
+        onBlockTarget: blockHandle.point,
+        onBlockGrab: blockHandle.grab,
       }),
       content: initialContent,
       contentType: "markdown",
-      onUpdate: () => {
+      onUpdate: ({ transaction }) => {
         docVersion++;
         dirty = true;
-        // The positions in the grip's target are the old document's, and the pointer has
-        // not moved to re-answer them.
-        blockHover.invalidate();
+        // The positions in the grip's target are the old document's and the pointer has
+        // not moved to re-answer them — so the handle either walks its block through the
+        // change or comes down. Which of the two is the handle's own decision.
+        blockHandle.documentChanged(transaction);
         if (autosavePaused) return;
         clearTimeout(saveTimer);
         saveTimer = setTimeout(save, 500);
@@ -144,14 +146,14 @@
     // re-placed, because which block the (still) pointer is over now is a question only
     // the next mousemove answers. Capture phase: the note scrolls in an ancestor
     // container, not on the window, and a scroll event does not bubble out of one.
-    window.addEventListener("scroll", blockHover.invalidate, true);
-    return () => window.removeEventListener("scroll", blockHover.invalidate, true);
+    window.addEventListener("scroll", blockHandle.invalidate, true);
+    return () => window.removeEventListener("scroll", blockHandle.invalidate, true);
   });
 
   onDestroy(() => {
     unregisterFlush?.();
     clearTimeout(previewTimer);
-    blockHover.destroy();
+    blockHandle.destroy();
     // flush() captures the markdown synchronously (before its first await),
     // so the pending edit is safe to hand off before destroying the editor.
     void flush();
@@ -360,17 +362,8 @@
   <SlashCommandMenu state={slashState} />
 {/if}
 
-{#if editor && blockHover.target}
-  <BlockHandle
-    {editor}
-    target={blockHover.target}
-    grabbed={blockHover.grabbed}
-    onHold={blockHover.hold}
-    onPin={blockHover.pin}
-    onRetarget={blockHover.retarget}
-    onRelease={blockHover.release}
-    onGrabHandled={blockHover.grabHandled}
-  />
+{#if editor && blockHandle.target}
+  <BlockHandle {editor} target={blockHandle.target} handle={blockHandle} />
 {/if}
 
 {#if wikiState}

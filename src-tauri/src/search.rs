@@ -427,6 +427,41 @@ fn remove_doc(index: &Index, doc_key: &str) -> Result<(), String> {
     Ok(())
 }
 
+// ── Incremental writes ────────────────────────────────────────────────────────
+
+/// Apply one incremental Search Index write, and be the single place a failed
+/// one is recorded.
+///
+/// Every incremental write in the app is best-effort, and that is a decision
+/// rather than an oversight: the Search Index is derived, and `open_ledger`
+/// rebuilds the whole of it from a ledger walk on every open (ADR-0004). A write
+/// that fails costs the GM a stale palette result until they next reopen the
+/// vault and can never cost them content — so failing the save, the rename or the
+/// delete the GM actually asked for would be the worse trade.
+///
+/// What a caller may **not** do is throw the failure away. `let _ = index_map(..)`
+/// leaves a map that exists and cannot be found, with nothing anywhere saying so;
+/// this log line is all there is between that write failing and the next open
+/// healing it (issue #216).
+///
+/// `None` for the index is a miss on the same terms and is recorded the same way:
+/// a mutation ran with no index open — the launch rebuild failed, or the caller
+/// never had one — so the palette is behind until one is built.
+pub fn best_effort(
+    index: Option<&Index>,
+    what: &str,
+    write: impl FnOnce(&Index) -> Result<(), String>,
+) {
+    match index {
+        Some(idx) => {
+            if let Err(e) = write(idx) {
+                log::warn!("[search] {what} did not reach the Search Index: {e}");
+            }
+        }
+        None => log::warn!("[search] {what} did not reach the Search Index: none is open"),
+    }
+}
+
 pub fn index_note(index: &Index, note: &Note, body_text: &str, tags: &[String]) -> Result<(), String> {
     let schema = index.schema();
     upsert_doc(index, &format!("note:{}", note.id), note_doc(&schema, note, body_text, tags)?)
@@ -453,8 +488,95 @@ pub fn index_notes_batch(
     Ok(())
 }
 
+/// Batch-remove multiple docs: one IndexWriter opened once, one commit — the
+/// removal mirror of [`index_notes_batch`], and for the same reason. `remove_doc`
+/// acquires a writer and commits per call, so removing a folder's worth of notes
+/// one at a time is N writer allocations and N commits with the ledger mutex held.
+pub fn remove_docs_batch(index: &Index, doc_keys: &[String]) -> Result<(), String> {
+    if doc_keys.is_empty() {
+        return Ok(());
+    }
+    let schema = index.schema();
+    let doc_key_f = schema.get_field("doc_key").map_err(|e| e.to_string())?;
+    let mut writer: IndexWriter = index.writer(50_000_000).map_err(|e| e.to_string())?;
+    for key in doc_keys {
+        writer.delete_term(tantivy::Term::from_field_text(doc_key_f, key));
+    }
+    writer.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn remove_note(index: &Index, entity_id: i32) -> Result<(), String> {
     remove_doc(index, &format!("note:{}", entity_id))
+}
+
+pub fn remove_notes_batch(index: &Index, entity_ids: &[i32]) -> Result<(), String> {
+    let keys: Vec<String> = entity_ids.iter().map(|id| format!("note:{}", id)).collect();
+    remove_docs_batch(index, &keys)
+}
+
+pub fn remove_maps_batch(index: &Index, map_ids: &[i32]) -> Result<(), String> {
+    let keys: Vec<String> = map_ids.iter().map(|id| format!("map:{}", id)).collect();
+    remove_docs_batch(index, &keys)
+}
+
+// ── Maps and scenes ───────────────────────────────────────────────────────────
+//
+// Which map and scene mutations have to touch the Search Index, in one place, as
+// a rule rather than a list of commands somebody has to keep in their head.
+//
+// **A mutation re-indexes exactly when it changes a field the entity's document
+// holds.** Those fields are named by `map_doc` and `scene_doc` above and nowhere
+// else: a map's document is its `title` and its `modified_at`; a scene's is its
+// `name` and its `created_at`. Creating the row indexes it and deleting the row
+// removes it, which is the same rule read at the two ends of a life.
+//
+// Read off that rule, and it settles the cases a caller would otherwise have to
+// answer from memory:
+//
+// - `update_map` writes the title — indexes. `create_map` / `create_map_empty` /
+//   `delete_map` — the two ends.
+// - `assign_map_image` and `move_map` change neither title nor image-as-searchable
+//   text, but both stamp `modified_at`, which is the fast field the palette breaks
+//   ranking ties on. They index, and used not to (#216).
+// - Pins, pin categories and annotations are not searchable entities at all — they
+//   have no document — so nothing about them reaches here.
+// - `toggle_scene_favorite`, the slot commands and `update_scene_thumbnail` change
+//   nothing either document holds. They do not index, and that is now derivable
+//   rather than remembered.
+//
+// The four `*_indexed` / `*_unindexed` calls below are what a command actually
+// writes, and they take the whole entity rather than an index and a description
+// so the name a failure is logged under is decided here, beside the rule, rather
+// than composed afresh at each of the eight call sites.
+
+/// A map was created or changed: put its document in the Search Index, or record
+/// that it could not be. See [`best_effort`] for why a failure is not an error.
+pub fn map_indexed(index: Option<&Index>, map: &Map) {
+    best_effort(index, &format!("map '{}'", map.title), |idx| {
+        index_map(idx, map)
+    });
+}
+
+/// A map is gone: take its document out, or record that it could not be.
+pub fn map_unindexed(index: Option<&Index>, map: &Map) {
+    best_effort(index, &format!("removal of map '{}'", map.title), |idx| {
+        remove_map(idx, map.id)
+    });
+}
+
+/// A scene was created or renamed: put its document in the Search Index.
+pub fn scene_indexed(index: Option<&Index>, scene: &Scene) {
+    best_effort(index, &format!("scene '{}'", scene.name), |idx| {
+        index_scene(idx, scene)
+    });
+}
+
+/// A scene is gone: take its document out.
+pub fn scene_unindexed(index: Option<&Index>, scene: &Scene) {
+    best_effort(index, &format!("removal of scene '{}'", scene.name), |idx| {
+        remove_scene(idx, scene.id)
+    });
 }
 
 pub fn index_map(index: &Index, map: &Map) -> Result<(), String> {
@@ -1845,5 +1967,29 @@ mod tests {
 
         let results2 = search_notes_in_index(&index, dir.path(), "tag:npcs", 10).unwrap();
         assert_eq!(results2.len(), 1, "exact tag match must work");
+    }
+
+    // ── best_effort ───────────────────────────────────────────────────────────
+
+    /// The contract every incremental caller leans on: a Search Index write that
+    /// fails does not become the caller's problem (#205, #216). All three of these
+    /// used to be a `let _ =` or a bool nobody read.
+    #[test]
+    fn best_effort_swallows_a_failing_write_and_applies_a_working_one() {
+        let dir = TempDir::new().unwrap();
+        let index = rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+        let map = make_map(1, "Waterdeep");
+
+        // No index open at all — the commonest miss, and it must not panic.
+        best_effort(None, "map 'Waterdeep'", |idx| index_map(idx, &map));
+
+        // An index whose schema cannot hold the document — the write fails inside.
+        let bad = Index::create_in_ram(Schema::builder().build());
+        best_effort(Some(&bad), "map 'Waterdeep'", |idx| index_map(idx, &map));
+
+        // And the working case still writes, so the swallow is not a skip.
+        best_effort(Some(&index), "map 'Waterdeep'", |idx| index_map(idx, &map));
+        let hits = search_all_in_index(&index, dir.path(), "Waterdeep", 10).unwrap();
+        assert_eq!(hits.maps.len(), 1, "a successful write must still reach the index");
     }
 }

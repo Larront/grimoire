@@ -25,9 +25,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "npc");
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -42,9 +40,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     const evt = await fireEvent.keyDown(input, { key: " " });
     expect(evt).toBe(false); // preventDefault returned false-y
     const evt2 = await fireEvent.keyDown(input, { key: "!" });
@@ -53,9 +49,7 @@ describe("TagChipEditor", () => {
     await typeInto(input, "bad tag");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).not.toHaveBeenCalled();
-    expect(
-      container.querySelectorAll('[data-slot="tag-chip"]').length,
-    ).toBe(0);
+    expect(container.querySelectorAll('[data-slot="tag-chip"]').length).toBe(0);
   });
 
   it("preserves original case for display but treats duplicates case-insensitively", async () => {
@@ -63,9 +57,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: ["NPC"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "npc");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).not.toHaveBeenCalled();
@@ -79,9 +71,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: ["npc", "allied"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await fireEvent.keyDown(input, { key: "Backspace" });
     expect(onchange).toHaveBeenCalledWith(["npc"]);
     const chips = container.querySelectorAll('[data-slot="tag-chip"]');
@@ -94,9 +84,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: ["npc", "allied"], onchange },
     });
-    const removes = container.querySelectorAll(
-      '[data-slot="tag-chip-remove"]',
-    );
+    const removes = container.querySelectorAll('[data-slot="tag-chip-remove"]');
     expect(removes.length).toBe(2);
     await fireEvent.click(removes[0]);
     expect(onchange).toHaveBeenCalledWith(["allied"]);
@@ -110,15 +98,11 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: ["npc"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "ally");
     await fireEvent.keyDown(input, { key: "Backspace" });
     expect(onchange).not.toHaveBeenCalled();
-    expect(
-      container.querySelectorAll('[data-slot="tag-chip"]').length,
-    ).toBe(1);
+    expect(container.querySelectorAll('[data-slot="tag-chip"]').length).toBe(1);
   });
 
   it("accepts hyphen, underscore, slash, and digits in tag values", async () => {
@@ -126,9 +110,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "loc/town-01_inn");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).toHaveBeenCalledWith(["loc/town-01_inn"]);
@@ -140,9 +122,7 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: ["npc", "allied"] },
     });
-    expect(
-      container.querySelector('[data-slot="tag-chip-dropdown"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-slot="tag-chip-dropdown"]')).toBeNull();
   });
 
   it("shows matching suggestions ordered alphabetically while typing", async () => {
@@ -152,13 +132,9 @@ describe("TagChipEditor", () => {
         suggestions: ["arcane", "allied", "ancient", "npc"],
       },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "a");
-    const items = container.querySelectorAll(
-      '[data-slot="tag-chip-suggestion"]',
-    );
+    const items = container.querySelectorAll('[data-slot="tag-chip-suggestion"]');
     // allied, ancient, arcane — alphabetical
     expect(items.length).toBe(3);
     expect(items[0].textContent).toContain("allied");
@@ -170,13 +146,9 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: ["allied"], suggestions: ["allied", "ancient"] },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "a");
-    const items = container.querySelectorAll(
-      '[data-slot="tag-chip-suggestion"]',
-    );
+    const items = container.querySelectorAll('[data-slot="tag-chip-suggestion"]');
     expect(items.length).toBe(1);
     expect(items[0].textContent).toContain("ancient");
   });
@@ -186,13 +158,9 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: ["npc", "allied"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "n");
-    const items = container.querySelectorAll(
-      '[data-slot="tag-chip-suggestion"]',
-    );
+    const items = container.querySelectorAll('[data-slot="tag-chip-suggestion"]');
     await fireEvent.mouseDown(items[0]);
     expect(onchange).toHaveBeenCalledWith(["npc"]);
     const chips = container.querySelectorAll('[data-slot="tag-chip"]');
@@ -204,13 +172,9 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: ["npc", "allied"] },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "ancient");
-    const createRow = container.querySelector(
-      '[data-slot="tag-chip-create-new"]',
-    );
+    const createRow = container.querySelector('[data-slot="tag-chip-create-new"]');
     expect(createRow).toBeTruthy();
     expect(createRow!.textContent).toContain("ancient");
   });
@@ -219,13 +183,9 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: ["NPC", "Allied"] },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "npc");
-    const createRow = container.querySelector(
-      '[data-slot="tag-chip-create-new"]',
-    );
+    const createRow = container.querySelector('[data-slot="tag-chip-create-new"]');
     expect(createRow).toBeNull();
   });
 
@@ -234,13 +194,9 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: ["npc"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     await typeInto(input, "ancient");
-    const createRow = container.querySelector(
-      '[data-slot="tag-chip-create-new"]',
-    ) as HTMLElement;
+    const createRow = container.querySelector('[data-slot="tag-chip-create-new"]') as HTMLElement;
     await fireEvent.mouseDown(createRow);
     expect(onchange).toHaveBeenCalledWith(["ancient"]);
   });
@@ -249,14 +205,10 @@ describe("TagChipEditor", () => {
     const { container } = render(TagChipEditor, {
       props: { tags: [], suggestions: [] },
     });
-    const input = container.querySelector(
-      '[data-slot="tag-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="tag-chip-input"]') as HTMLInputElement;
     // Programmatically set an invalid draft (spaces).
     await typeInto(input, "bad value");
-    const createRow = container.querySelector(
-      '[data-slot="tag-chip-create-new"]',
-    );
+    const createRow = container.querySelector('[data-slot="tag-chip-create-new"]');
     expect(createRow).toBeNull();
   });
 });

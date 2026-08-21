@@ -1,7 +1,7 @@
 <script lang="ts">
   interface Props {
     value?: string | null;
-    presets: string[];
+    presets: readonly string[];
     onchange: (color: string) => void;
   }
 
@@ -17,23 +17,31 @@
       onclick={() => onchange(color)}
       title={color}
       class="w-6 h-6 rounded-full border-2 transition-[border-color,transform] cursor-pointer
-             {value === color ? 'border-primary scale-110' : 'border-transparent hover:border-background-border'}"
+             {value === color
+        ? 'border-primary scale-110'
+        : 'border-transparent hover:border-background-border'}"
       style="background-color:{color}"
     ></button>
   {/each}
   <label
     title="Custom color"
     class="w-6 h-6 rounded-full border-2 cursor-pointer flex items-center justify-center overflow-hidden
-           {isCustom ? 'border-primary scale-110' : 'border-background-border hover:border-primary/50 bg-background-subtle'}"
+           {isCustom
+      ? 'border-primary scale-110'
+      : 'border-background-border hover:border-primary/50 bg-background-subtle'}"
     style={isCustom ? `background-color:${value}` : ""}
   >
     {#if !isCustom}
       <span class="font-mono text-foreground-faint text-xs leading-none select-none">+</span>
     {/if}
+    <!-- The native picker has to open ON something, and with nothing chosen that was a
+         hardcoded cold blue belonging to no palette in the app (#222). The row's own
+         first swatch is the honest answer: it is where the entity started, so opening
+         the custom picker no longer proposes a colour the GM could not have reached. -->
     <input
       type="color"
       class="sr-only"
-      value={value ?? "#4a90c4"}
+      value={value ?? presets[0]}
       onchange={(e) => onchange((e.target as HTMLInputElement).value)}
     />
   </label>

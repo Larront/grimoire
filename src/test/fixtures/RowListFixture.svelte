@@ -11,14 +11,12 @@
   // svelte-ignore state_referenced_locally
   let _rows = $state<string[]>([...rows]);
   let _changes = $state<RowChange[]>([]);
-  let _focusOuts = $state<{ index: number; contained: HTMLElement }[]>([]);
   // Stands in for view state a block keys by row index, to prove the change
   // descriptor is enough to carry it along.
   let _marked = $state(new Set<number>());
 
   export const rowsNow = () => $state.snapshot(_rows);
   export const changes = () => $state.snapshot(_changes);
-  export const focusOuts = () => _focusOuts;
   export const marked = () => [..._marked].sort((a, b) => a - b);
 </script>
 
@@ -30,9 +28,6 @@
     _rows = next;
     _changes = [..._changes, change];
     _marked = remapRowIndices(_marked, change);
-  }}
-  onRowFocusOut={(index, rowEl) => {
-    _focusOuts = [..._focusOuts, { index, contained: rowEl }];
   }}
 >
   {#snippet row(item, i)}

@@ -1,62 +1,27 @@
 import { render, fireEvent, cleanup, act } from "@testing-library/svelte";
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { DOCK_THRESHOLD, getDockMode, floatTransition } from "../lib/utils/dock-threshold";
 import AppShell from "../lib/components/AppShell.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { overlay } from "../lib/stores/overlay.svelte";
+import { resetPaneSurfaces } from "../lib/details/pane-detail-surface.svelte";
+
+// The dock/float *decision* is `PaneDetailSurface`'s and is tested against that
+// interface in pane-detail-surface.svelte.test.ts. What is left here is the
+// wiring: that a pane rendered at a given width puts its Details Pane in the
+// chrome the surface chose.
+
+const defaultResizeObserver = globalThis.ResizeObserver;
 
 afterEach(async () => {
   cleanup();
   overlay.active = null;
+  resetPaneSurfaces();
+  globalThis.ResizeObserver = defaultResizeObserver;
   tabs.closeAll("right");
   tabs.closeAll("left");
   vi.mocked(invoke).mockResolvedValue(null);
 });
-
-// ── Pure threshold logic ──────────────────────────────────────────────────────
-
-describe("getDockMode threshold", () => {
-  it("returns docked at exactly the threshold", () => {
-    expect(getDockMode(DOCK_THRESHOLD)).toBe("docked");
-  });
-
-  it("returns docked above the threshold", () => {
-    expect(getDockMode(1200)).toBe("docked");
-    expect(getDockMode(DOCK_THRESHOLD + 1)).toBe("docked");
-  });
-
-  it("returns floating just below the threshold", () => {
-    expect(getDockMode(DOCK_THRESHOLD - 1)).toBe("floating");
-  });
-
-  it("returns floating at zero", () => {
-    expect(getDockMode(0)).toBe("floating");
-  });
-
-  it("DOCK_THRESHOLD is 820", () => {
-    expect(DOCK_THRESHOLD).toBe(820);
-  });
-});
-
-// ── Reduced-motion snap ───────────────────────────────────────────────────────
-
-describe("floatTransition reduced-motion", () => {
-  it("has positive duration when reduced-motion is off", () => {
-    expect(floatTransition(false).duration).toBeGreaterThan(0);
-  });
-
-  it("duration is 0 when reduced-motion is on (snaps)", () => {
-    expect(floatTransition(true).duration).toBe(0);
-  });
-
-  it("always uses x offset for fly direction", () => {
-    expect(floatTransition(false).x).toBeGreaterThan(0);
-    expect(floatTransition(true).x).toBeGreaterThan(0);
-  });
-});
-
-// ── Width-based dock/float in NotePane ───────────────────────────────────────
 
 function makeResizeObserver(width: number) {
   return class MockResizeObserver {
@@ -93,9 +58,7 @@ describe("NotePane dock/float presentation based on pane width", () => {
     // Toggle rail open
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
     expect(dockedRail!.getAttribute("data-state")).toBe("open");
 
@@ -114,15 +77,19 @@ describe("NotePane dock/float presentation based on pane width", () => {
     await fireEvent.click(getByTestId("left-rail-trigger"));
     await act(() => {});
 
-    // Docked aside should NOT be present (isDocked=false)
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    // Docked aside should NOT be present (the surface is floating)
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeNull();
 
     // Floating panel should be present
     const floatPanel = container.querySelector('[data-float="true"]');
     expect(floatPanel).toBeTruthy();
+
+    // …and below the app's dialogs and sheets, which are all `fixed z-50`
+    // portalled to <body>. Nothing between this float and <body> establishes a
+    // stacking context, so a higher layer here paints over a modal's scrim.
+    expect(floatPanel!.className).toContain("z-50");
+    expect(floatPanel!.className).not.toContain("z-1000");
   });
 
   it("docked aside is present but closed when rail is toggled off (width ≥ 820)", async () => {
@@ -131,9 +98,7 @@ describe("NotePane dock/float presentation based on pane width", () => {
     const { container } = render(AppShell);
     await act(() => {});
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
     expect(dockedRail!.getAttribute("data-state")).toBe("closed");
   });

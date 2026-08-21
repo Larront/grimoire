@@ -27,17 +27,45 @@ vi.mock("$lib/stores/scenes.svelte", () => ({
 
 import { NodeSelection } from "@tiptap/pm/state";
 import {
-  blockTargetAt,
   endBlockDrag,
   handlePlacement,
-  moveBlockAt,
+  moveBlock,
   startBlockDrag,
+  deleteBlock,
   type BlockTarget,
   type HandleGeometry,
 } from "$lib/editor/block-handle";
-import { caretAt, closeNote, note, posOf, posOfNth, press, saved } from "./fixtures/note-editor";
+import {
+  caretAt,
+  closeNote,
+  note,
+  posOfNth,
+  press,
+  saved,
+  targetOf,
+  targetOfNth,
+} from "./fixtures/note-editor";
 
 afterEach(closeNote);
+
+/**
+ * A target the document no longer holds, in the shape a gesture held across an edit, an
+ * undo or a live-reload actually ends up carrying: the position still **resolves**, and
+ * to a block of the same kind — it is the node that has gone.
+ *
+ * A position past the end would answer the same question through the bounds check alone,
+ * which is the branch that is easy to pass and the one that proves least: it would still
+ * be refused with the identity comparison deleted outright.
+ *
+ * Three blocks of the same length, so that removing the first leaves the second targets
+ * position holding the third rather than nothing at all.
+ */
+function gone(editor: ReturnType<typeof note>, type: string): BlockTarget {
+  const target = targetOfNth(editor, type, 1);
+  deleteBlock(editor, targetOf(editor, type));
+  expect(editor.state.doc.nodeAt(target.pos), "a block still starts there").toBeTruthy();
+  return target;
+}
 
 // jsdom has no `DataTransfer`, and the one thing under test about it is what was written
 // to it — so this records exactly that and nothing else.
@@ -66,14 +94,14 @@ function fakeDataTransfer() {
 describe("moving a block one place", () => {
   it("moves a paragraph down, and the note's markdown holds the new order", () => {
     const editor = note("First.\n\nSecond.");
-    moveBlockAt(editor, posOf(editor, "paragraph"), 1);
+    moveBlock(editor, targetOf(editor, "paragraph"), 1);
 
     expect(saved(editor)).toBe("Second.\n\nFirst.");
   });
 
   it("moves a paragraph up", () => {
     const editor = note("First.\n\nSecond.");
-    moveBlockAt(editor, posOfNth(editor, "paragraph", 1), -1);
+    moveBlock(editor, targetOfNth(editor, "paragraph", 1), -1);
 
     expect(saved(editor)).toBe("Second.\n\nFirst.");
   });
@@ -92,7 +120,7 @@ describe("moving a block one place", () => {
         "> ```",
       ].join("\n"),
     );
-    moveBlockAt(editor, posOfNth(editor, "statblockBlock", 1), -1);
+    moveBlock(editor, targetOfNth(editor, "statblockBlock", 1), -1);
 
     const out = saved(editor);
     expect(out.indexOf("Kobold B")).toBeLessThan(out.indexOf("Kobold A"));
@@ -111,49 +139,65 @@ describe("moving a block one place", () => {
 
     // The paragraph inside the quote is the first thing in it; there is nowhere above it
     // that is still inside the box, and leaving the box is not a move the GM asked for.
-    expect(moveBlockAt(editor, posOfNth(editor, "paragraph", 1), -1)).toBeNull();
+    expect(moveBlock(editor, targetOfNth(editor, "paragraph", 1), -1)).toBeNull();
     expect(saved(editor)).toBe(md);
   });
 
   it("declines at the ends of the note, changing nothing", () => {
     const editor = note("Only.");
-    expect(moveBlockAt(editor, posOf(editor, "paragraph"), -1)).toBeNull();
-    expect(moveBlockAt(editor, posOf(editor, "paragraph"), 1)).toBeNull();
+    expect(moveBlock(editor, targetOf(editor, "paragraph"), -1)).toBeNull();
+    expect(moveBlock(editor, targetOf(editor, "paragraph"), 1)).toBeNull();
     expect(saved(editor)).toBe("Only.");
   });
 
   it("answers with where the block landed, still holding it", () => {
     // What the handle draws itself against next: the old position now holds a neighbour.
     const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
-    const from = posOf(editor, "statblockBlock");
-    const landed = moveBlockAt(editor, from, -1);
+    const from = targetOf(editor, "statblockBlock");
+    const landed = moveBlock(editor, from, -1);
 
     expect(landed).not.toBeNull();
-    expect(landed).not.toBe(from);
-    expect(blockTargetAt(editor.state.doc, landed!)?.node.type.name).toBe("statblockBlock");
+    expect(landed!.pos).not.toBe(from.pos);
+    // The same node, at its new address — which is what makes the answer something the
+    // next gesture can be guarded against rather than a number to look up again.
+    expect(landed!.node).toBe(from.node);
+    expect(editor.state.doc.nodeAt(landed!.pos)).toBe(from.node);
   });
 
   it("leaves the moved block selected, so a second press moves the same one", () => {
     const editor = note("First.\n\nSecond.\n\nThird.");
-    const landed = moveBlockAt(editor, posOfNth(editor, "paragraph", 2), -1)!;
+    const landed = moveBlock(editor, targetOfNth(editor, "paragraph", 2), -1)!;
 
     expect(editor.state.selection).toBeInstanceOf(NodeSelection);
-    expect(editor.state.selection.from).toBe(landed);
+    expect(editor.state.selection.from).toBe(landed.pos);
     expect((editor.state.selection as NodeSelection).node.textContent).toBe("Third.");
   });
 
   it("is one undo step, like every other write in the pattern", () => {
     const md = "First.\n\nSecond.";
     const editor = note(md);
-    moveBlockAt(editor, posOf(editor, "paragraph"), 1);
+    moveBlock(editor, targetOf(editor, "paragraph"), 1);
     editor.commands.undo();
 
     expect(saved(editor)).toBe(md);
   });
 
-  it("declines a position that no longer holds a block", () => {
-    const editor = note("A sentence.");
-    expect(moveBlockAt(editor, 9999, 1)).toBeNull();
+  it("declines a target the document no longer holds", () => {
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    expect(moveBlock(editor, gone(editor, "paragraph"), 1)).toBeNull();
+    expect(saved(editor)).toBe("Bravo.\n\nDelta.");
+  });
+
+  it("changes nothing where the block will not fit beside its neighbour", () => {
+    // `tr.insert` is silent when the schema refuses the position, which used to leave a
+    // dispatched transaction holding the delete alone — the block gone from the note —
+    // and throw out of `NodeSelection.create` on the way past, into a `void move()`.
+    const editor = note(["- one", "", "  > quoted", "", "- two"].join("\n"));
+    const before = saved(editor);
+    const inner = targetOfNth(editor, "paragraph", 0);
+
+    expect(moveBlock(editor, inner, 1)).toBeNull();
+    expect(saved(editor)).toBe(before);
   });
 });
 
@@ -167,14 +211,14 @@ describe("starting a drag from the grip", () => {
     const editor = note("First.\n\n```statblock\n# Kobold A\nHP: 5/5\n```");
     const { transfer } = fakeDataTransfer();
 
-    expect(startBlockDrag(editor, posOf(editor, "statblockBlock"), transfer)).toBe(true);
+    expect(startBlockDrag(editor, targetOf(editor, "statblockBlock"), transfer)).toBe(true);
     expect(editor.view.dragging?.move).toBe(true);
     expect(editor.view.dragging?.slice.content.firstChild?.type.name).toBe("statblockBlock");
   });
 
   it("selects the block, which is what the slice is taken from", () => {
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
-    startBlockDrag(editor, posOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
+    startBlockDrag(editor, targetOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
 
     expect(editor.state.selection).toBeInstanceOf(NodeSelection);
     expect((editor.state.selection as NodeSelection).node.type.name).toBe("statblockBlock");
@@ -187,7 +231,7 @@ describe("starting a drag from the grip", () => {
     const md = ["```statblock", "# Kobold A", "HP: 5/5", "```"].join("\n");
     const editor = note(md);
     const { transfer, data } = fakeDataTransfer();
-    startBlockDrag(editor, posOf(editor, "statblockBlock"), transfer);
+    startBlockDrag(editor, targetOf(editor, "statblockBlock"), transfer);
 
     expect(data.get("text/plain")).toBe(md);
     expect(data.get("text/html")).toContain("statblock");
@@ -197,14 +241,16 @@ describe("starting a drag from the grip", () => {
     const editor = note("A sentence.");
     const fake = fakeDataTransfer();
     const block = document.createElement("p");
-    startBlockDrag(editor, posOf(editor, "paragraph"), fake.transfer, block);
+    startBlockDrag(editor, targetOf(editor, "paragraph"), fake.transfer, block);
 
     expect(fake.dragImage).toBe(block);
   });
 
-  it("declines a position that no longer holds a block, and starts nothing", () => {
-    const editor = note("A sentence.");
-    expect(startBlockDrag(editor, 9999, fakeDataTransfer().transfer)).toBe(false);
+  it("declines a target the document no longer holds, and starts nothing", () => {
+    const editor = note("Alpha.\n\nBravo.\n\nDelta.");
+    expect(startBlockDrag(editor, gone(editor, "paragraph"), fakeDataTransfer().transfer)).toBe(
+      false,
+    );
     expect(editor.view.dragging).toBeNull();
   });
 
@@ -215,7 +261,7 @@ describe("starting a drag from the grip", () => {
     // and the next drop into this note, of anything at all, would insert this block
     // instead of what was dropped and delete the selection to make room.
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
-    startBlockDrag(editor, posOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
+    startBlockDrag(editor, targetOf(editor, "statblockBlock"), fakeDataTransfer().transfer);
     expect(editor.view.dragging).not.toBeNull();
 
     endBlockDrag(editor);
@@ -249,7 +295,7 @@ describe("every block can be picked up by the handle", () => {
 
   it.each(BLOCKS)("%s becomes the selection the drag carries", (_name, type, md) => {
     const editor = note(md);
-    expect(startBlockDrag(editor, posOf(editor, type), fakeDataTransfer().transfer)).toBe(true);
+    expect(startBlockDrag(editor, targetOf(editor, type), fakeDataTransfer().transfer)).toBe(true);
 
     const { selection } = editor.state;
     expect(selection).toBeInstanceOf(NodeSelection);
@@ -260,18 +306,30 @@ describe("every block can be picked up by the handle", () => {
     // Two fences of the same shape in one note: a position that drifted by one node would
     // pass every case above and still carry the wrong creature.
     const editor = note(
-      ["```statblock", "# Kobold A", "HP: 5/5", "```", "", "```statblock", "# Kobold B", "HP: 5/5", "```"].join("\n"),
+      [
+        "```statblock",
+        "# Kobold A",
+        "HP: 5/5",
+        "```",
+        "",
+        "```statblock",
+        "# Kobold B",
+        "HP: 5/5",
+        "```",
+      ].join("\n"),
     );
-    startBlockDrag(editor, posOfNth(editor, "statblockBlock", 1), fakeDataTransfer().transfer);
+    startBlockDrag(editor, targetOfNth(editor, "statblockBlock", 1), fakeDataTransfer().transfer);
 
     expect((editor.state.selection as NodeSelection).node.attrs.name).toBe("Kobold B");
   });
 
   it("takes the callout's contents with it, because they are its children", () => {
     const editor = note(
-      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join("\n"),
+      ["> [!encounter] The Ambush", "> ```statblock", "> # Kobold A", "> HP: 5/5", "> ```"].join(
+        "\n",
+      ),
     );
-    startBlockDrag(editor, posOf(editor, "blockquote"), fakeDataTransfer().transfer);
+    startBlockDrag(editor, targetOf(editor, "blockquote"), fakeDataTransfer().transfer);
 
     const carried = editor.view.dragging?.slice.content.firstChild;
     expect(carried?.type.name).toBe("blockquote");

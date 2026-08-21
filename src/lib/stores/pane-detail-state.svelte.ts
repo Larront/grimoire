@@ -1,6 +1,7 @@
-import { untrack } from 'svelte';
+import { untrack } from "svelte";
+import { ledger } from "./ledger.svelte";
 
-type PaneId = 'left' | 'right';
+type PaneId = "left" | "right";
 
 export interface MapSelection {
   pinId: number | null;
@@ -28,6 +29,23 @@ function createPaneDetailState() {
   function reset(): void {
     selections = {};
   }
+
+  // Selections are keyed `pane:mapId`, and map ids restart per ledger database:
+  // a selection saved under `left:3` in one ledger would restore a pin from a
+  // different ledger's map 3 (#204). So the keys are only meaningful for the
+  // ledger that produced them, and a change of ledger — open, switch or close —
+  // drops them all. Owned here rather than in `closeLedger` for the same reason
+  // tabs owns its own reset (`tabs.svelte.ts`): the store that holds the
+  // per-ledger state is the store that knows when it expires.
+  $effect.root(() => {
+    let lastPath: string | null = null;
+    $effect(() => {
+      const path = ledger.isOpen ? ledger.path : null;
+      if (path === lastPath) return;
+      lastPath = path;
+      reset();
+    });
+  });
 
   return {
     getMapSelection,

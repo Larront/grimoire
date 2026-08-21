@@ -199,7 +199,7 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 }));
 
 vi.mock("../lib/stores/search.svelte", () => ({
-  searchPalette: { open: false, activeQuery: "", settingsOpen: false, tagManagerOpen: false },
+  searchPalette: { open: false, activeQuery: "", openToTemplatePicker: false },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({
@@ -361,9 +361,7 @@ afterEach(() => {
 describe("GraphPane – shell", () => {
   it("renders the graph container element", () => {
     const { container } = render(GraphPane);
-    expect(
-      container.querySelector("[data-testid='graph-container']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='graph-container']")).toBeTruthy();
   });
 
   it("calls get_graph_data on mount", async () => {
@@ -557,9 +555,7 @@ describe("GraphPane – backlink-proportional sizing", () => {
       };
       const hub = opts.elements.nodes.find((n) => n.data.id === "note-1")!;
       const orphan = opts.elements.nodes.find((n) => n.data.id === "note-2")!;
-      expect(hub.data.size as number).toBeGreaterThan(
-        orphan.data.size as number,
-      );
+      expect(hub.data.size as number).toBeGreaterThan(orphan.data.size as number);
     });
   });
 
@@ -609,9 +605,7 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find(
-        (s) => s.selector === "node[kind='stub']",
-      );
+      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
       expect(stubStyle?.style["opacity"]).toBe(0.6);
     });
   });
@@ -622,9 +616,7 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find(
-        (s) => s.selector === "node[kind='stub']",
-      );
+      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
       expect(stubStyle?.style["border-style"]).toBe("dashed");
     });
   });
@@ -635,9 +627,7 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         elements: { nodes: Array<{ data: Record<string, unknown> }> };
       };
-      const stub = opts.elements.nodes.find(
-        (n) => n.data.id === "stub-unknown.md",
-      )!;
+      const stub = opts.elements.nodes.find((n) => n.data.id === "stub-unknown.md")!;
       expect(stub.data.size as number).toBe(16); // min diameter
     });
   });
@@ -648,9 +638,7 @@ describe("GraphPane – stub node distinction", () => {
       const opts = cytoscapeOptions as {
         style: Array<{ selector: string; style: Record<string, unknown> }>;
       };
-      const stubStyle = opts.style.find(
-        (s) => s.selector === "node[kind='stub']",
-      );
+      const stubStyle = opts.style.find((s) => s.selector === "node[kind='stub']");
       expect(stubStyle?.style["border-width"]).toBeTruthy();
     });
   });
@@ -863,9 +851,7 @@ describe("GraphPane – stub node cursor affordance", () => {
 describe("GraphPane – filter panel", () => {
   it("renders a filter toggle button", () => {
     const { container } = render(GraphPane);
-    expect(
-      container.querySelector("[data-testid='filter-toggle']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='filter-toggle']")).toBeTruthy();
   });
 
   it("filter panel is hidden initially", () => {
@@ -875,81 +861,55 @@ describe("GraphPane – filter panel", () => {
 
   it("clicking the filter toggle shows the filter panel", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-panel']"),
-      ).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-panel']")).toBeTruthy();
     });
   });
 
   it("clicking the filter toggle twice hides the panel again", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-panel']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-panel']")).toBeTruthy(),
     );
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-panel']"),
-      ).toBeFalsy();
+      expect(container.querySelector("[data-testid='filter-panel']")).toBeFalsy();
     });
   });
 
   it("filter panel lists all ledger tags from list_all_tags", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("list_all_tags"));
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy();
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-quest']"),
-      ).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-tag-toggle-quest']")).toBeTruthy();
     });
   });
 
   it("each tag row has a colored swatch element", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-swatch-npc']"),
-      ).toBeTruthy();
-      expect(
-        container.querySelector("[data-testid='filter-swatch-quest']"),
-      ).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-swatch-npc']")).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-swatch-quest']")).toBeTruthy();
     });
   });
 
   it("npc swatch uses its explicit tag color from tag_graph_styles", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      const swatch = container.querySelector(
-        "[data-testid='filter-swatch-npc']",
-      ) as HTMLElement;
+      const swatch = container.querySelector("[data-testid='filter-swatch-npc']") as HTMLElement;
       expect(swatch).toBeTruthy();
       expect(swatch.style.backgroundColor).toBeTruthy();
     });
@@ -957,23 +917,17 @@ describe("GraphPane – filter panel", () => {
 
   it("filter panel shows an 'Untagged' row", async () => {
     const { container } = render(GraphPane);
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-untagged-toggle']"),
-      ).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy();
     });
   });
 
   it("tag toggle aria-checked is true when tag is visible (not hidden)", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
       const toggle = container.querySelector(
@@ -986,20 +940,14 @@ describe("GraphPane – filter panel", () => {
   it("toggling a visible tag calls set_tag_graph_style with hidden: true", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1016,20 +964,14 @@ describe("GraphPane – filter panel", () => {
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1044,20 +986,14 @@ describe("GraphPane – filter panel", () => {
   it("toggling untagged row calls set_tag_graph_style with tag '' and hidden: true", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-untagged-toggle']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy(),
     );
 
     vi.mocked(invoke).mockClear();
-    const toggle = container.querySelector(
-      "[data-testid='filter-untagged-toggle']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-untagged-toggle']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1072,19 +1008,13 @@ describe("GraphPane – filter panel", () => {
   it("untagged toggle aria-checked flips to false after clicking when initially visible", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-untagged-toggle']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy(),
     );
 
-    const toggle = container.querySelector(
-      "[data-testid='filter-untagged-toggle']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-untagged-toggle']") as HTMLElement;
     expect(toggle.getAttribute("aria-checked")).toBe("true");
 
     await fireEvent.click(toggle);
@@ -1097,42 +1027,30 @@ describe("GraphPane – filter panel", () => {
   it("each tag row has an 'Edit color' link", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
-      expect(
-        container.querySelector("[data-testid='filter-edit-npc']"),
-      ).toBeTruthy();
-      expect(
-        container.querySelector("[data-testid='filter-edit-quest']"),
-      ).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-edit-npc']")).toBeTruthy();
+      expect(container.querySelector("[data-testid='filter-edit-quest']")).toBeTruthy();
     });
   });
 
-  it("clicking 'Edit color' link sets searchPalette.tagManagerOpen to true", async () => {
-    const { searchPalette } = await import("../lib/stores/search.svelte");
-    searchPalette.tagManagerOpen = false;
+  it("clicking 'Edit color' link sets dialogs.tagManagerOpen to true", async () => {
+    const { dialogs } = await import("../lib/stores/overlay.svelte");
+    dialogs.tagManagerOpen = false;
 
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-edit-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-edit-npc']")).toBeTruthy(),
     );
 
-    const editLink = container.querySelector(
-      "[data-testid='filter-edit-npc']",
-    ) as HTMLElement;
+    const editLink = container.querySelector("[data-testid='filter-edit-npc']") as HTMLElement;
     await fireEvent.click(editLink);
 
-    expect(searchPalette.tagManagerOpen).toBe(true);
+    expect(dialogs.tagManagerOpen).toBe(true);
   });
 });
 
@@ -1144,19 +1062,13 @@ describe("GraphPane – node visibility filtering", () => {
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
     // Open filter panel and toggle npc off
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1169,19 +1081,13 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1199,19 +1105,13 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1225,19 +1125,13 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-untagged-toggle']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-untagged-toggle']")).toBeTruthy(),
     );
 
-    const toggle = container.querySelector(
-      "[data-testid='filter-untagged-toggle']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-untagged-toggle']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1252,20 +1146,14 @@ describe("GraphPane – node visibility filtering", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const btn = container.querySelector(
-      "[data-testid='filter-toggle']",
-    ) as HTMLElement;
+    const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() =>
-      expect(
-        container.querySelector("[data-testid='filter-tag-toggle-npc']"),
-      ).toBeTruthy(),
+      expect(container.querySelector("[data-testid='filter-tag-toggle-npc']")).toBeTruthy(),
     );
 
     // Initially hidden → toggle to show
-    const toggle = container.querySelector(
-      "[data-testid='filter-tag-toggle-npc']",
-    ) as HTMLElement;
+    const toggle = container.querySelector("[data-testid='filter-tag-toggle-npc']") as HTMLElement;
     await fireEvent.click(toggle);
 
     await waitFor(() => {
@@ -1280,16 +1168,12 @@ describe("GraphPane – node visibility filtering", () => {
 describe("GraphPane – search", () => {
   it("renders a search input in the toolbar", () => {
     const { container } = render(GraphPane);
-    expect(
-      container.querySelector("[data-testid='graph-search']"),
-    ).toBeTruthy();
+    expect(container.querySelector("[data-testid='graph-search']")).toBeTruthy();
   });
 
   it("search input has a placeholder", () => {
     const { container } = render(GraphPane);
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     expect(input).toBeTruthy();
     expect(input.placeholder).toBeTruthy();
   });
@@ -1298,9 +1182,7 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     // "My Note" matches note-1; note-2 "Other Note" also contains "note" so use "My Note" specifically
     await fireEvent.input(input, { target: { value: "My Note" } });
 
@@ -1315,9 +1197,7 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
 
     await waitFor(() => {
@@ -1331,14 +1211,10 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
     // Wait for highlight to apply so firstMatchId is set
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -1351,13 +1227,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(1));
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -1374,13 +1246,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
 
     await fireEvent.keyDown(input, { key: "Escape" });
 
@@ -1393,13 +1261,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
 
     await fireEvent.keyDown(input, { key: "Escape" });
 
@@ -1414,14 +1278,10 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     // Dim nodes with a search query
     await fireEvent.input(input, { target: { value: "My Note" } });
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
 
     // Clear the input
     await fireEvent.input(input, { target: { value: "" } });
@@ -1435,9 +1295,7 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     // "MY NOTE" uppercase should still match note-1 "My Note"
     await fireEvent.input(input, { target: { value: "MY NOTE" } });
 
@@ -1451,9 +1309,7 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     // "World Map" is the map-10 label
     await fireEvent.input(input, { target: { value: "World" } });
 
@@ -1467,9 +1323,7 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     // "unknown.md" is the stub label
     await fireEvent.input(input, { target: { value: "unknown" } });
 
@@ -1483,13 +1337,9 @@ describe("GraphPane – search", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "zzznomatchzzz" } });
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(0.2),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-1")?.["opacity"]).toBe(0.2));
 
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -1553,14 +1403,10 @@ describe("GraphPane – neighbor dimming on hover", () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(mouseoverHandlers.length).toBeGreaterThan(0));
 
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
     // note-2 is a non-match → dimmed to 0.2 by search
-    await waitFor(() =>
-      expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2),
-    );
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["opacity"]).toBe(0.2));
 
     // Hovering note-1 (note-2 is a neighbor) would normally dim non-neighbors;
     // the search guard must leave both the bypass and classes untouched.
@@ -1579,17 +1425,13 @@ describe("GraphPane – neighbor dimming on hover", () => {
     expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
 
     // Start a search — mouseout now hits the active-search guard and is swallowed.
-    const input = container.querySelector(
-      "[data-testid='graph-search']",
-    ) as HTMLInputElement;
+    const input = container.querySelector("[data-testid='graph-search']") as HTMLInputElement;
     await fireEvent.input(input, { target: { value: "My Note" } });
     mouseoutHandlers[0]();
     expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(true);
 
     // Clearing the search must remove the stale dim class.
     await fireEvent.input(input, { target: { value: "" } });
-    await waitFor(() =>
-      expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(false),
-    );
+    await waitFor(() => expect(nodeClassStores.get("note-3")?.has("dimmed")).toBe(false));
   });
 });

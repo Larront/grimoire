@@ -7,11 +7,7 @@
     onchange?: (aliases: string[]) => void;
   }
 
-  let {
-    aliases = $bindable([]),
-    placeholder = "Add an alias",
-    onchange,
-  }: Props = $props();
+  let { aliases = $bindable([]), placeholder = "Add an alias", onchange }: Props = $props();
 
   let draft = $state("");
   let inputEl: HTMLInputElement | undefined = $state();

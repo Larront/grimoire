@@ -9,10 +9,8 @@ const { revealItemInDir } = vi.hoisted(() => ({
 }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir }));
 
-const PATH =
-  "C:/Ledgers/Aurelia/.grimoire/format-backup-20260730T120000Z/migration-report.md";
-const PROSE =
-  "Copies of them from before the change, and a report of what changed, are here:";
+const PATH = "C:/Ledgers/Aurelia/.grimoire/format-backup-20260730T120000Z/migration-report.md";
+const PROSE = "Copies of them from before the change, and a report of what changed, are here:";
 
 function mount(onError = vi.fn()) {
   const r = render(MigrationReportBody, {
@@ -48,9 +46,7 @@ describe("the migration report is a place the GM can get to", () => {
 
   it("says where the link goes, for anyone not reading the prose", () => {
     const { link } = mount();
-    expect(link.getAttribute("aria-label")).toBe(
-      "Show migration-report.md in the file manager",
-    );
+    expect(link.getAttribute("aria-label")).toBe("Show migration-report.md in the file manager");
   });
 
   it("still renders the sentence the toast was written with", () => {

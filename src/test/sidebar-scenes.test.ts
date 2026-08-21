@@ -9,25 +9,40 @@ let mockSidebarLoadingSceneId: number | null = null;
 
 vi.mock("../lib/stores/ledger.svelte", () => ({
   ledger: {
-    get isOpen() { return false; },
-    get path() { return null; },
+    get isOpen() {
+      return false;
+    },
+    get path() {
+      return null;
+    },
     closeLedger: vi.fn(),
     checkExistingLedger: vi.fn(),
   },
   failedImportsModal: { open: false, failures: [] },
+  unlinkedPinsModal: { open: false, pins: [] },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({
-  notes: { get notes() { return []; } },
+  notes: {
+    get notes() {
+      return [];
+    },
+  },
 }));
 
 vi.mock("../lib/stores/maps.svelte", () => ({
-  maps: { get maps() { return []; } },
+  maps: {
+    get maps() {
+      return [];
+    },
+  },
 }));
 
 vi.mock("../lib/stores/scenes.svelte", () => ({
   scenes: {
-    get scenes() { return mockSidebarScenes; },
+    get scenes() {
+      return mockSidebarScenes;
+    },
     getSlots: vi.fn(() => Promise.resolve([])),
     load: vi.fn(),
   },
@@ -35,11 +50,21 @@ vi.mock("../lib/stores/scenes.svelte", () => ({
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: {
-    get left() { return { tabs: [], activeIndex: 0 }; },
-    get right() { return null; },
-    get focusedPane() { return "left"; },
-    get dragging() { return null; },
-    get activeTab() { return null; },
+    get left() {
+      return { tabs: [], activeIndex: 0 };
+    },
+    get right() {
+      return null;
+    },
+    get focusedPane() {
+      return "left";
+    },
+    get dragging() {
+      return null;
+    },
+    get activeTab() {
+      return null;
+    },
     openTab: vi.fn(),
     navigateOpen: vi.fn(),
     closeActiveTab: vi.fn(),
@@ -59,14 +84,30 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   audioEngine: {
-    get activeSceneId() { return mockSidebarActiveSceneId; },
-    get loadingSceneId() { return mockSidebarLoadingSceneId; },
-    get isPlaying() { return false; },
-    get isCrossfading() { return false; },
-    get masterVolume() { return 1; },
-    get isScenePaused() { return false; },
-    get isMasterMuted() { return false; },
-    get analyserNode() { return null; },
+    get activeSceneId() {
+      return mockSidebarActiveSceneId;
+    },
+    get loadingSceneId() {
+      return mockSidebarLoadingSceneId;
+    },
+    get isPlaying() {
+      return false;
+    },
+    get isCrossfading() {
+      return false;
+    },
+    get masterVolume() {
+      return 1;
+    },
+    get isScenePaused() {
+      return false;
+    },
+    get isMasterMuted() {
+      return false;
+    },
+    get analyserNode() {
+      return null;
+    },
     playScene: vi.fn(),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
@@ -81,16 +122,6 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     slotVolume: vi.fn(() => undefined),
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
-  },
-}));
-
-vi.mock("../lib/stores/right-rail.svelte", () => ({
-  RightRailState: class {
-    open = false;
-    isMobile = false;
-    openMobile = false;
-    toggle() {}
-    setOpenMobile(_v: boolean) {}
   },
 }));
 
@@ -126,10 +157,7 @@ describe("AppSidebar — scene playing indicator", () => {
   });
 
   it("favorite scene row gets data-scene-playing when activeSceneId matches", () => {
-    mockSidebarScenes = [
-      makeScene(1, "Forest Ambience", true),
-      makeScene(2, "Tavern Noise", true),
-    ];
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true), makeScene(2, "Tavern Noise", true)];
     mockSidebarActiveSceneId = 2;
     const { container } = render(AppShell);
     const playingRow = container.querySelector("[data-scene-playing]");
@@ -138,10 +166,7 @@ describe("AppSidebar — scene playing indicator", () => {
   });
 
   it("loadingSceneId takes precedence over activeSceneId in sidebar indicator", () => {
-    mockSidebarScenes = [
-      makeScene(1, "Forest Ambience", true),
-      makeScene(2, "Tavern Noise", true),
-    ];
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true), makeScene(2, "Tavern Noise", true)];
     mockSidebarActiveSceneId = 1;
     mockSidebarLoadingSceneId = 2;
     const { container } = render(AppShell);

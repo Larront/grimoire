@@ -49,6 +49,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import { BLOCK_WORDS } from "$lib/editor/block-vocabulary";
 
 /** A block the handle can act on, and where it starts. */
 export interface BlockTarget {
@@ -180,7 +181,11 @@ function blockChildren(
     // A non-leaf node's content starts one position after the node itself.
     const pos = parent.pos + 1 + offset;
     const dom = blockElementAt(view, pos);
-    if (dom) children.push({ target: { pos, node: child }, box: dom.getBoundingClientRect() });
+    if (dom)
+      children.push({
+        target: { pos, node: child },
+        box: dom.getBoundingClientRect(),
+      });
   });
   return children;
 }
@@ -215,11 +220,7 @@ function blockChildAtHeight(
 }
 
 /** The block child of `parent` nearest the height `top`, whether or not it covers it. */
-function nearestBlockChild(
-  view: EditorView,
-  parent: BlockTarget,
-  top: number,
-): BlockTarget | null {
+function nearestBlockChild(view: EditorView, parent: BlockTarget, top: number): BlockTarget | null {
   let best: { target: BlockTarget; distance: number } | null = null;
   for (const { target, box } of blockChildren(view, parent)) {
     const distance = Math.max(box.top - top, top - box.bottom, 0);
@@ -242,11 +243,7 @@ function nearestBlockChild(
  * is exactly what the gutter hover disregards. Inside the prose the x still decides, because
  * statblocks tile two to a row and two cards at the same height are not the same block.
  */
-export function innermostAtHeight(
-  view: EditorView,
-  target: BlockTarget,
-  top: number,
-): BlockTarget {
+export function innermostAtHeight(view: EditorView, target: BlockTarget, top: number): BlockTarget {
   // Terminates on its own: every step descends a level, and an atom has no block children.
   let current = target;
   for (let child = blockChildAtHeight(view, current, top); child; ) {
@@ -323,54 +320,97 @@ export function targetFromPointer(
 
 // ─── Acting on one ────────────────────────────────────────────────────────────
 //
-// Each of these re-reads the node at the position before writing, for the reason the
-// node-view connector states about its own writes: a position held across a render may no
-// longer hold the node it was taken from, and acting anyway would hit a bystander.
+// Every write below takes the **whole target** — the position and the node that stood
+// there — and refuses if the two no longer agree.
 //
-// Every one closes the history group first, so ADR-0016 §6 holds here too — a duplicate or
-// a delete is one Ctrl+Z, never folded into the sentence the GM typed a moment earlier.
+// A gesture is open across time. The GM hovers a block, reaches out to the grip, opens a
+// menu, reads it, and clicks; an undo, an external live-reload or their own last
+// keystroke can land anywhere in that. A position on its own goes stale *silently*,
+// because a position that no longer holds its block still resolves — to whatever has
+// since slid into it — so the write lands on a bystander and the GM's own note is the
+// only place that records it happened.
+//
+// One guard, at one strength, and it is `blockStillThere`. It is applied here, where a
+// gesture reaches the document, rather than at whichever caller happened to remember it:
+// that is what makes the grip's drag, its select and its arrow-move exactly as safe as
+// the menu's Delete.
+//
+// Every one closes the history group first, so ADR-0016 §6 holds here too — a duplicate
+// or a delete is one Ctrl+Z, never folded into the sentence the GM typed a moment
+// earlier.
 
-/** The node still at `pos`, or null if something else is there now. */
-function nodeAt(editor: Editor, pos: number): ProseMirrorNode | null {
-  if (pos < 0 || pos > editor.state.doc.content.size) return null;
-  const node = editor.state.doc.nodeAt(pos);
-  return node?.isBlock ? node : null;
+/**
+ * Whether the target is still the block it was taken from.
+ *
+ * **Identity**, not "is a block there", and the difference between the two is the whole
+ * of this function. ProseMirror's nodes are immutable and an edit rebuilds only the
+ * ancestors of what changed, so an untouched block is the *same object* across a
+ * transaction however far its position moved — and a different block at that position
+ * is, necessarily, a different object. "Is a block there" answers true for the bystander;
+ * identity is what tells the two apart.
+ *
+ * Not *proof* of the same block, and the limit is worth naming: ProseMirror shares nodes
+ * freely, and `duplicateBlock` in particular inserts the very object it copied — so two
+ * identical siblings can be one object, and a target for one of them survives the other
+ * sliding into its place. Identity narrows the bystander to a block indistinguishable from
+ * the one the GM was looking at, which is as far as an address of this kind reaches.
+ *
+ * `isBlock` because every write behind this takes a node's whole range: it was the
+ * deleted `nodeAt` helper's check, and a `BlockTarget` is a bare pair anyone can build.
+ */
+export function blockStillThere(doc: ProseMirrorNode, target: BlockTarget): boolean {
+  // Bounds first, and not merely for tidiness: `nodeAt` *throws* past the end of the
+  // document, and a note that live-reloaded to something shorter is exactly the case this
+  // guard exists for.
+  if (target.pos < 0 || target.pos > doc.content.size) return false;
+  return doc.nodeAt(target.pos) === target.node && target.node.isBlock;
 }
 
-/** Selects the block, which is what a drag carries and what Ctrl+C copies. */
-export function selectBlockAt(editor: Editor, pos: number): boolean {
-  if (!nodeAt(editor, pos)) return false;
+/**
+ * Selects the block, which is what a drag carries and what shows the GM which of forty
+ * blocks the grip is holding.
+ */
+export function selectBlock(editor: Editor, target: BlockTarget): boolean {
+  if (!blockStillThere(editor.state.doc, target)) return false;
   return editor
     .chain()
     .command(({ tr, dispatch }) => {
-      if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, pos));
+      if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, target.pos));
       return true;
     })
     .run();
 }
 
 /**
- * Hands focus back to the prose with a **caret**, never a whole-block selection.
+ * The end of a grip gesture, whichever gesture it was: what it left behind is cleared and
+ * the prose has the caret back.
  *
- * Three separate parts of the gesture leave a `NodeSelection` over the block on purpose,
- * and every one of them can be the last thing that happened before the GM types again:
+ * Parts of a gesture set a whole-block selection **on purpose** — a drag carries one, and
+ * an arrow-move leaves the block it moved selected so the GM can see the thing they are
+ * walking up an initiative order. A node selection is *replaced* by the next character
+ * typed, so prose focused with one still set means the GM's next keystroke destroys the
+ * block they were holding: a whole paragraph gone, one Ctrl+Z away but with nothing on
+ * screen saying why.
  *
- *   - `selectBlockAt`, on the grip's `mousedown`, because that is what a drag carries.
- *   - `startBlockDrag`, for the same reason.
- *   - `moveBlockAt`, which leaves the block it moved selected so the next `ArrowUp` acts
- *     on the same block rather than on whatever slid into the old position.
+ * So handing the prose back is one function rather than a rule each write's caller has
+ * to remember, and every route that returns focus to the document — a menu item, Escape —
+ * is this one.
  *
- * A node selection is *replaced* by the next character typed. So focusing the prose with
- * one still set means the GM's next keystroke destroys the block they just copied, moved
- * or duplicated — a whole paragraph gone, one Ctrl+Z away but with nothing on screen
- * saying why. Collapsing it here is what makes those three selections safe to set.
+ * A drag is **not** one of them, and that is not an omission. Once a drop has landed,
+ * ProseMirror owns the selection and has set its own over what arrived, and the drag may
+ * have ended in another pane or another application entirely — so a grip pulling focus
+ * back to its own editor on `dragend` takes the caret out of the note the GM just dropped
+ * into. `endBlockDrag` is the drag's own ending, and the latch it clears must be cleared
+ * from there and nowhere else: folded in here, a slow Copy's `finally` resolving mid-drag
+ * would unlatch a drag that had only just started.
  *
  * `TextSelection.between` and not `Selection.near`: `near` answers with another
- * `NodeSelection` for a selectable leaf, which is the case that has to be got rid of. This
- * searches for a *text* position, forwards first — so a divider's grip puts the caret at
- * the start of the paragraph after it, and a paragraph's puts it at that paragraph's start.
+ * `NodeSelection` for a selectable leaf, which is the case that has to be got rid of.
+ * This searches for a *text* position, forwards first — so a divider's grip puts the
+ * caret at the start of the paragraph after it, and a paragraph's puts it at that
+ * paragraph's start.
  */
-export function focusProse(editor: Editor): void {
+export function releaseBlock(editor: Editor): void {
   const { selection } = editor.state;
   if (selection instanceof NodeSelection) {
     const tr = editor.state.tr;
@@ -380,14 +420,13 @@ export function focusProse(editor: Editor): void {
   editor.commands.focus();
 }
 
-export function deleteBlockAt(editor: Editor, pos: number): boolean {
-  const node = nodeAt(editor, pos);
-  if (!node) return false;
+export function deleteBlock(editor: Editor, target: BlockTarget): boolean {
+  if (!blockStillThere(editor.state.doc, target)) return false;
   return editor
     .chain()
     .command(({ tr }) => {
       closeHistory(tr);
-      tr.delete(pos, pos + node.nodeSize);
+      tr.delete(target.pos, target.pos + target.node.nodeSize);
       return true;
     })
     .focus()
@@ -399,14 +438,13 @@ export function deleteBlockAt(editor: Editor, pos: number): boolean {
  * brings its children and a statblock brings its rows — a fight becomes six kobolds by
  * doing this five times, which is the case #182 described and had no gesture for.
  */
-export function duplicateBlockAt(editor: Editor, pos: number): boolean {
-  const node = nodeAt(editor, pos);
-  if (!node) return false;
+export function duplicateBlock(editor: Editor, target: BlockTarget): boolean {
+  if (!blockStillThere(editor.state.doc, target)) return false;
   return editor
     .chain()
     .command(({ tr }) => {
       closeHistory(tr);
-      tr.insert(pos + node.nodeSize, node);
+      tr.insert(target.pos + target.node.nodeSize, target.node);
       return true;
     })
     .run();
@@ -417,11 +455,10 @@ export function duplicateBlockAt(editor: Editor, pos: number): boolean {
  * ProseMirror slice. Pasting a creature into Obsidian should land the fence a GM could
  * have typed, because that is what the block *is* on disk (ADR-0016 §1).
  */
-export function blockMarkdownAt(editor: Editor, pos: number): string | null {
-  const node = nodeAt(editor, pos);
+export function blockMarkdown(editor: Editor, target: BlockTarget): string | null {
   const manager = editor.markdown;
-  if (!node || !manager) return null;
-  return manager.serialize({ type: "doc", content: [node.toJSON()] }).trimEnd();
+  if (!manager || !blockStillThere(editor.state.doc, target)) return null;
+  return manager.serialize({ type: "doc", content: [target.node.toJSON()] }).trimEnd();
 }
 
 /**
@@ -444,7 +481,7 @@ export function canTurnInto(node: ProseMirrorNode): boolean {
 }
 
 /**
- * The kind the block at `pos` **already is**, or null where nothing on offer names it.
+ * The kind the target **already is**, or null where nothing on offer names it.
  *
  * Two things need this and neither can get it from the node alone. The menu marks the
  * GM's current type, and the handle targets the *innermost* block — which for a list item
@@ -465,15 +502,13 @@ export function canTurnInto(node: ProseMirrorNode): boolean {
  * on offer, so its paragraph reads as the quote it is part of.
  *
  * Null is still the answer where nothing on offer names the block at all — a code block,
- * or a heading below level 3.
+ * or a heading below level 3 — and where the target has gone stale, which is the same
+ * "nothing to tick, and nothing to refuse" the menu wants from both.
  */
-export function turnIntoKindAt(
-  doc: ProseMirrorNode,
-  pos: number,
-): TurnIntoKind | null {
-  if (pos < 0 || pos > doc.content.size) return null;
-  const node = doc.nodeAt(pos);
-  if (!node || !canTurnInto(node)) return null;
+export function turnIntoKindOf(doc: ProseMirrorNode, target: BlockTarget): TurnIntoKind | null {
+  if (!blockStillThere(doc, target)) return null;
+  const { node } = target;
+  if (!canTurnInto(node)) return null;
 
   if (node.type.name === "heading") {
     const level = node.attrs.level as number;
@@ -484,7 +519,7 @@ export function turnIntoKindAt(
   if (node.type.name !== "paragraph") return null;
 
   // Deepest first, so a bullet list inside a callout reads as the list it is.
-  const $pos = doc.resolve(pos);
+  const $pos = doc.resolve(target.pos);
   for (let depth = $pos.depth; depth >= 1; depth--) {
     const ancestor = $pos.node(depth);
     switch (ancestor.type.name) {
@@ -511,7 +546,7 @@ function isInListItem($pos: ResolvedPos): boolean {
 }
 
 /**
- * Turns the block at `pos` into `kind`, and answers whether the **document changed**.
+ * Turns the target into `kind`, and answers whether the **document changed**.
  *
  * Not whether the chain reported success, which is a different question and the wrong
  * one: `editor.chain()` dispatches what it accumulated whichever way each command
@@ -520,9 +555,9 @@ function isInListItem($pos: ResolvedPos): boolean {
  * plainly did. ProseMirror rebuilds the doc node only when a transaction changes it, so
  * comparing identity across the call answers what the caller actually asked.
  */
-export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boolean {
-  const node = nodeAt(editor, pos);
-  if (!node || !canTurnInto(node)) return false;
+export function turnInto(editor: Editor, target: BlockTarget, kind: TurnIntoKind): boolean {
+  if (!blockStillThere(editor.state.doc, target)) return false;
+  if (!canTurnInto(target.node)) return false;
 
   const before = editor.state.doc;
   // Inside the block, not before it: these are all selection-driven commands, and a node
@@ -537,7 +572,7 @@ export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boo
       closeHistory(tr);
       return true;
     })
-    .setTextSelection(pos + 1);
+    .setTextSelection(target.pos + 1);
 
   switch (kind) {
     case "paragraph":
@@ -578,7 +613,8 @@ export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boo
 }
 
 /**
- * Moves the block one place among its siblings, and answers where it landed.
+ * Moves the block one place among its siblings, and answers where it landed — as a
+ * target, not as a number.
  *
  * This is the drag, for a GM who is not holding a mouse. A drag is a pointer gesture and
  * has no keyboard equivalent anywhere in a browser, so a grip that can be focused and not
@@ -591,12 +627,18 @@ export function turnIntoAt(editor: Editor, pos: number, kind: TurnIntoKind): boo
  * alternative — walking out of the parent at the ends — moves a block somewhere the GM
  * was not looking.
  *
- * The returned position is the block's new one, because the caller is drawing a handle
- * beside it and the old position now holds a neighbour.
+ * A target and not a position, because the old position now holds a neighbour: handing
+ * back a bare number hands back the one thing that has just stopped meaning what the
+ * caller takes it to mean. The node is the same object — it was reinserted as-is — so
+ * what comes back is an address the *next* gesture can be guarded against.
  */
-export function moveBlockAt(editor: Editor, pos: number, direction: -1 | 1): number | null {
-  const node = nodeAt(editor, pos);
-  if (!node) return null;
+export function moveBlock(
+  editor: Editor,
+  target: BlockTarget,
+  direction: -1 | 1,
+): BlockTarget | null {
+  if (!blockStillThere(editor.state.doc, target)) return null;
+  const { pos, node } = target;
 
   const { state } = editor;
   const neighbour =
@@ -617,9 +659,17 @@ export function moveBlockAt(editor: Editor, pos: number, direction: -1 | 1): num
   closeHistory(tr);
   tr.delete(pos, pos + node.nodeSize);
   tr.insert(landing, node);
+  // `insert` is *silent* when the schema will not take the node there — a paragraph past
+  // a blockquote inside a list item, where the parent's content expression stops matching
+  // — and what is left in the transaction is then a delete with nothing put back. Left
+  // alone that dispatches a note missing the block the GM was moving, and
+  // `NodeSelection.create` throws on the way past, out of a `void move()` where nothing
+  // catches it. Checking that the block actually landed turns both into the "nothing
+  // moved" this already answers for the ends of a list.
+  if (tr.doc.nodeAt(landing) !== node) return null;
   tr.setSelection(NodeSelection.create(tr.doc, landing));
   editor.view.dispatch(tr);
-  return landing;
+  return { pos: landing, node };
 }
 
 /**
@@ -636,14 +686,14 @@ export function moveBlockAt(editor: Editor, pos: number, direction: -1 | 1): num
  */
 export function startBlockDrag(
   editor: Editor,
-  pos: number,
+  target: BlockTarget,
   dataTransfer: DataTransfer | null,
   dragImage?: Element,
 ): boolean {
-  if (!nodeAt(editor, pos)) return false;
+  if (!blockStillThere(editor.state.doc, target)) return false;
   const { view } = editor;
 
-  const selection = NodeSelection.create(view.state.doc, pos);
+  const selection = NodeSelection.create(view.state.doc, target.pos);
   view.dispatch(view.state.tr.setSelection(selection));
 
   const slice = selection.content();
@@ -653,7 +703,7 @@ export function startBlockDrag(
     dataTransfer.setData("text/html", dom.innerHTML);
     // Markdown rather than ProseMirror's plain text, for the reason the copy action gives
     // (ADR-0016 §1): a creature dropped into Obsidian should be the fence it is on disk.
-    dataTransfer.setData("text/plain", blockMarkdownAt(editor, pos) ?? text);
+    dataTransfer.setData("text/plain", blockMarkdown(editor, target) ?? text);
     dataTransfer.effectAllowed = "copyMove";
     // The block itself, not the grip. Without this the GM drags a 16px icon and has no
     // ghost of the thing they are moving — which for a statblock is most of a screen.
@@ -687,22 +737,6 @@ export function endBlockDrag(editor: Editor): void {
 
 // ─── What to call it ──────────────────────────────────────────────────────────
 
-/** The GM's word for each node the handle can hold. A name with no entry is "block". */
-const BLOCK_WORDS: Record<string, string> = {
-  paragraph: "paragraph",
-  heading: "heading",
-  bulletList: "list",
-  orderedList: "numbered list",
-  listItem: "list item",
-  codeBlock: "code block",
-  horizontalRule: "divider",
-  statblockBlock: "statblock",
-  infoboxBlock: "infobox",
-  timelineBlock: "timeline",
-  sceneBlock: "scene",
-  image: "image",
-};
-
 /**
  * What the handle announces itself as holding — "Move statblock", "Move encounter
  * callout".
@@ -711,15 +745,17 @@ const BLOCK_WORDS: Record<string, string> = {
  * screen reader announcing "button" has told the GM nothing: which of the forty blocks in
  * this note it would move is the only fact about it. The words are the GM's own, taken
  * from the slash menu's vocabulary rather than from the schema — nobody typed
- * `statblockBlock`.
+ * `statblockBlock`. Literally the same words since #220: `BLOCK_WORDS` is derived from the
+ * one table both menus name their blocks from. A node with no entry there is a "block".
  *
  * A callout is named by its type, because "encounter" and "warning" are how the GM thinks
- * of the two boxes and both are `blockquote` underneath.
+ * of the two boxes and both are `blockquote` underneath. An untyped one falls through to
+ * the word the menus use for it, which is "quote".
  */
 export function blockLabel(node: ProseMirrorNode): string {
   if (node.type.name === "blockquote") {
     const type = node.attrs.calloutType as string | null;
-    return type ? `${type} callout` : "quote";
+    if (type) return `${type} callout`;
   }
   return BLOCK_WORDS[node.type.name] ?? "block";
 }
@@ -856,7 +892,10 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
   // the centring term in `handlePlacement` and hang the whole grip below the rule, reading
   // as the next paragraph's.
   const box = dom.getBoundingClientRect();
-  return { top: box.top, height: Math.min(box.height, lineHeightOf(dom) || handleHeight) };
+  return {
+    top: box.top,
+    height: Math.min(box.height, lineHeightOf(dom) || handleHeight),
+  };
 }
 
 /**
@@ -882,7 +921,11 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
 function leadingEdgeOf(view: EditorView, dom: HTMLElement, blockLeft: number): number {
   let edge = blockLeft;
   const prose = view.dom as HTMLElement;
-  for (let el = dom.parentElement; el && el !== prose && prose.contains(el); el = el.parentElement) {
+  for (
+    let el = dom.parentElement;
+    el && el !== prose && prose.contains(el);
+    el = el.parentElement
+  ) {
     edge = Math.min(edge, el.getBoundingClientRect().left);
   }
   return edge;
@@ -992,7 +1035,10 @@ export const BlockHandle = Extension.create<BlockHandleOptions>({
           const column = noteColumn(view);
           const move = (event: MouseEvent) => {
             onTarget(
-              targetFromPointer(view, { left: event.clientX, top: event.clientY }),
+              targetFromPointer(view, {
+                left: event.clientX,
+                top: event.clientY,
+              }),
               view,
             );
           };

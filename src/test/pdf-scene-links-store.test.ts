@@ -21,7 +21,11 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("../lib/stores/ledger.svelte", () => ({
-  ledger: { get isOpen() { return true; } },
+  ledger: {
+    get isOpen() {
+      return true;
+    },
+  },
 }));
 
 import { pdfSceneLinks } from "../lib/stores/pdf-scene-links.svelte";

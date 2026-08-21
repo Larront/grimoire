@@ -6,6 +6,7 @@ import { overlay } from "../lib/stores/overlay.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
 import { linksTick } from "../lib/stores/links-tick.svelte";
+import { resetPaneSurfaces } from "../lib/details/pane-detail-surface.svelte";
 import type { Note } from "../lib/types/ledger";
 
 const desktopMatchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -33,6 +34,7 @@ const mobileMatchMedia = vi.fn().mockImplementation((query: string) => ({
 afterEach(async () => {
   cleanup();
   overlay.active = null;
+  resetPaneSurfaces();
   tabs.closeAll("right");
   tabs.closeAll("left");
   Object.defineProperty(window, "matchMedia", {
@@ -54,9 +56,7 @@ describe("right rail responsive behaviour", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
-    const dockedRail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const dockedRail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(dockedRail).toBeTruthy();
   });
 
@@ -74,9 +74,7 @@ describe("right rail responsive behaviour", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container, getByTestId } = render(AppShell);
 
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(rail.getAttribute("data-state")).toBe("closed");
 
     await fireEvent.click(getByTestId("left-rail-trigger"));
@@ -96,9 +94,7 @@ describe("right rail responsive behaviour", () => {
 
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
-    const overlayRail = document.body.querySelector(
-      '[data-slot="right-rail"][data-mobile="true"]',
-    );
+    const overlayRail = document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]');
     expect(overlayRail).toBeTruthy();
   });
 });
@@ -117,24 +113,16 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     // Open sidebar overlay first (Ctrl+\)
     await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
     expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
+      document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]'),
     ).toBeTruthy();
 
     // Open right rail overlay
     await fireEvent.click(getByTestId("left-rail-trigger"));
 
     // Sidebar overlay should now be closed, right rail overlay open
+    expect(document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]')).toBeFalsy();
     expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
-    ).toBeFalsy();
-    expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
+      document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]'),
     ).toBeTruthy();
   });
 
@@ -149,24 +137,16 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     // Open right rail overlay first
     await fireEvent.click(getByTestId("left-rail-trigger"));
     expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
+      document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]'),
     ).toBeTruthy();
 
     // Open sidebar overlay (Ctrl+\)
     await fireEvent.keyDown(window, { key: "\\", ctrlKey: true });
 
     // Right rail should now be closed, sidebar overlay open
+    expect(document.body.querySelector('[data-slot="right-rail"][data-mobile="true"]')).toBeFalsy();
     expect(
-      document.body.querySelector(
-        '[data-slot="right-rail"][data-mobile="true"]',
-      ),
-    ).toBeFalsy();
-    expect(
-      document.body.querySelector(
-        '[data-mobile="true"][data-sidebar="sidebar"]',
-      ),
+      document.body.querySelector('[data-mobile="true"][data-sidebar="sidebar"]'),
     ).toBeTruthy();
   });
 
@@ -179,9 +159,7 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { container } = render(AppShell);
 
-    const sidebar = container.querySelector(
-      '[data-slot="sidebar"][data-state]',
-    );
+    const sidebar = container.querySelector('[data-slot="sidebar"][data-state]');
     const rail = container.querySelector('[data-slot="right-rail"]');
 
     expect(sidebar).toBeTruthy();
@@ -189,58 +167,61 @@ describe("overlay mutual exclusion on tablet (≤1023px)", () => {
   });
 });
 
-// ── Rail visibility rule on non-note panes ────────────────────────────────────
+// ── Which panes offer a details toggle ────────────────────────────────────────
+//
+// ADR-0006 §1 replaced the app-level rail — one singleton, hidden whenever the
+// *focused* pane was not a note — with a surface per pane. So the question these
+// tests ask is no longer "is the focused tab a note", it is "has this pane's own
+// content claimed a toggleable surface": a note pane claims one, a map pane
+// claims a surface with no toggle (selecting a pin opens it, §3), and a pane
+// with no entity to describe claims nothing.
 
-describe("rail visibility on non-note panes", () => {
-  it("toggle is hidden when active tab is a map pane", () => {
+describe("which panes offer a details toggle", () => {
+  it("a map pane offers none — its panels open by selection, not by toggle", () => {
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("toggle is hidden when active tab is a scene pane", () => {
+  it("a scene pane offers none — it has no entity surface at all", () => {
     tabs.openTab({ type: "scene", id: 1, title: "Chapter 1" });
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("toggle is hidden when active tab is a scenes dashboard", () => {
+  it("the scenes dashboard offers none", () => {
     tabs.openTab({ type: "scenes", id: 0, title: "Scenes" });
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("toggle is hidden when there are no tabs", () => {
+  it("an empty pane offers none", () => {
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("left-pane toggle is visible when active tab is a note", () => {
+  it("a note pane offers one", () => {
     tabs.openTab({ type: "note", id: 1, title: "My Note" });
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).not.toBeNull();
   });
 
-  it("desktop rail has data-state=closed on a map pane", () => {
+  it("a map pane's surface is never docked, however wide the pane", () => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: desktopMatchMedia,
     });
-    // With the new architecture, the rail lives inside NotePane, so when the
-    // active tab is a map pane (no NotePane rendered), the rail is not in the DOM.
     tabs.openTab({ type: "map", id: 1, title: "World Map" });
     const { container } = render(AppShell);
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]');
     expect(rail).toBeNull();
   });
 
-  it("desktop rail collapses when switching from note to map pane", async () => {
+  it("the docked rail leaves with the note pane that owned it", async () => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: desktopMatchMedia,
@@ -248,24 +229,18 @@ describe("rail visibility on non-note panes", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     const { container, getByTestId } = render(AppShell);
 
-    // Open the rail while on the note pane
     await fireEvent.click(getByTestId("left-rail-trigger"));
-    const railWhileNote = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    const railWhileNote = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(railWhileNote.getAttribute("data-state")).toBe("open");
 
-    // Switch to a map pane — NotePane is unmounted, so the rail element leaves the DOM
+    // Switch this pane to a map — the note pane unmounts and its rail with it.
     await act(() => {
       tabs.openTab({ type: "map", id: 2, title: "Map" });
     });
-    const railAfterSwitch = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    );
-    expect(railAfterSwitch).toBeNull();
+    expect(container.querySelector('[data-slot="right-rail"][data-mobile="false"]')).toBeNull();
   });
 
-  it("desktop rail re-opens when switching back to note pane", async () => {
+  it("the rail is open again on the way back, because the pane keeps its surface", async () => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: desktopMatchMedia,
@@ -273,44 +248,66 @@ describe("rail visibility on non-note panes", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     const { container, getByTestId } = render(AppShell);
 
-    // Open the rail on the note pane — the RightRailState in AppShell records open=true
     await fireEvent.click(getByTestId("left-rail-trigger"));
-
-    // Switch to map (NotePane unmounts, rail leaves DOM, but leftRail.open stays true)
     await act(() => {
       tabs.openTab({ type: "map", id: 2, title: "Map" });
     });
-
-    // Switch back to note — NotePane re-mounts and renders the rail using leftRail.open
     await act(() => {
       tabs.openTab({ type: "note", id: 1, title: "Note" });
     });
 
-    // leftRail.open is still true, so the re-mounted rail should be open
-    const rail = container.querySelector(
-      '[data-slot="right-rail"][data-mobile="false"]',
-    )!;
+    // The latch lives on the pane slot, not on the note pane's mount.
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
     expect(rail.getAttribute("data-state")).toBe("open");
   });
 
-  it("in split view with note left + map right, only left-rail-trigger is shown regardless of focus", () => {
+  it("a map in the other pane no longer collapses this pane's open rail", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: desktopMatchMedia,
+    });
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    const { container, getByTestId } = render(AppShell);
+    await fireEvent.click(getByTestId("left-rail-trigger"));
+
+    // Open a map beside it and focus that pane. Under the superseded
+    // follows-focus rule this collapsed the one rail there was.
+    await act(() => {
+      tabs.openTabOpposite({ type: "map", id: 1, title: "Map" });
+      tabs.setFocusedPane("right");
+    });
+
+    const rail = container.querySelector('[data-slot="right-rail"][data-mobile="false"]')!;
+    expect(rail.getAttribute("data-state")).toBe("open");
+  });
+
+  it("two note panes each show their own trigger, and both rails can be open at once", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: desktopMatchMedia,
+    });
+    tabs.openTab({ type: "note", id: 1, title: "Note" });
+    tabs.openTabOpposite({ type: "note", id: 2, title: "Other Note" });
+    const { container, getByTestId } = render(AppShell);
+
+    await fireEvent.click(getByTestId("left-rail-trigger"));
+    await fireEvent.click(getByTestId("right-rail-trigger"));
+
+    const rails = container.querySelectorAll('[data-slot="right-rail"][data-mobile="false"]');
+    expect(rails.length).toBe(2);
+    expect(Array.from(rails).every((r) => r.getAttribute("data-state") === "open")).toBe(true);
+  });
+
+  it("in a note|map split only the note pane's trigger appears, whichever pane has focus", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     tabs.openTab({ type: "map", id: 1, title: "Map" }, "right");
-    // Right pane (map) is now focused — left-pane trigger still appears independently
+    // The right (map) pane is focused — the left pane's trigger is unaffected.
     const { queryByTestId } = render(AppShell);
     expect(queryByTestId("left-rail-trigger")).not.toBeNull();
     expect(queryByTestId("right-rail-trigger")).toBeNull();
   });
 
-  it("in split view with note in both panes, both rail triggers are visible", () => {
-    tabs.openTab({ type: "note", id: 1, title: "Note" });
-    tabs.openTabOpposite({ type: "note", id: 2, title: "Other Note" });
-    const { queryByTestId } = render(AppShell);
-    expect(queryByTestId("left-rail-trigger")).not.toBeNull();
-    expect(queryByTestId("right-rail-trigger")).not.toBeNull();
-  });
-
-  it("in split view, left-rail-trigger shows even when right pane is focused", () => {
+  it("the left trigger shows even when the right pane is focused", () => {
     tabs.openTab({ type: "note", id: 1, title: "Note" });
     tabs.openTabOpposite({ type: "note", id: 2, title: "Other Note" });
     tabs.setFocusedPane("right");
@@ -318,7 +315,7 @@ describe("rail visibility on non-note panes", () => {
     expect(queryByTestId("left-rail-trigger")).not.toBeNull();
   });
 
-  it("mobile toggle is absent on a non-note pane (rail cannot be opened)", () => {
+  it("a map pane offers no toggle on mobile either", () => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: mobileMatchMedia,
@@ -343,9 +340,7 @@ const testNote: Note = {
   modified_at: "2026-01-01T00:00:00Z",
 };
 
-async function openRailWithNote(
-  invokeImpl: (cmd: string, args?: unknown) => unknown,
-) {
+async function openRailWithNote(invokeImpl: (cmd: string, args?: unknown) => unknown) {
   vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
     if (cmd === "read_note_content") return "";
     return invokeImpl(cmd, args);
@@ -393,7 +388,13 @@ describe("right rail — aliases section", () => {
       if (cmd === "read_note_tags") return [];
       if (cmd === "list_all_tags") return [];
       if (cmd === "get_alias_collisions")
-        return [{ alias: "Captain Ash", other_note_id: 2, other_note_title: "Ash Note" }];
+        return [
+          {
+            alias: "Captain Ash",
+            other_note_id: 2,
+            other_note_title: "Ash Note",
+          },
+        ];
       return null;
     });
     await act(() => {});
@@ -413,9 +414,7 @@ describe("right rail — aliases section", () => {
       return null;
     });
     await act(() => {});
-    expect(
-      container.querySelector('[data-slot="alias-collision-warning"]'),
-    ).toBeNull();
+    expect(container.querySelector('[data-slot="alias-collision-warning"]')).toBeNull();
   });
 
   it("aliases section is positioned between tags and folder sections", async () => {
@@ -431,9 +430,7 @@ describe("right rail — aliases section", () => {
     });
     await act(() => {});
     const sections = container.querySelectorAll("[data-section]");
-    const sectionNames = Array.from(sections).map((s) =>
-      s.getAttribute("data-section"),
-    );
+    const sectionNames = Array.from(sections).map((s) => s.getAttribute("data-section"));
     const tagsIdx = sectionNames.indexOf("tags");
     const aliasesIdx = sectionNames.indexOf("aliases");
     const folderIdx = sectionNames.indexOf("folder");
@@ -492,7 +489,9 @@ describe("right rail — backlinks section", () => {
       return defaultInvokeImpl(cmd);
     });
     await act(() => {});
-    const folderEl = container.querySelector('[data-slot="backlink-row"] [data-slot="link-folder"]');
+    const folderEl = container.querySelector(
+      '[data-slot="backlink-row"] [data-slot="link-folder"]',
+    );
     expect(folderEl).toBeTruthy();
     expect(folderEl!.textContent).toContain("Characters");
   });
@@ -692,15 +691,23 @@ describe("right rail — refresh after save", () => {
     let backlinkCallCount = 0;
     let outboundCallCount = 0;
     const { container } = await openRailWithNote(async (cmd: string) => {
-      if (cmd === "get_backlinks") { backlinkCallCount++; return []; }
-      if (cmd === "get_outbound_links") { outboundCallCount++; return []; }
+      if (cmd === "get_backlinks") {
+        backlinkCallCount++;
+        return [];
+      }
+      if (cmd === "get_outbound_links") {
+        outboundCallCount++;
+        return [];
+      }
       return defaultInvokeImpl(cmd);
     });
     await act(() => {});
     const beforeBacklink = backlinkCallCount;
     const beforeOutbound = outboundCallCount;
 
-    await act(() => { linksTick.bump(); });
+    await act(() => {
+      linksTick.bump();
+    });
 
     expect(backlinkCallCount).toBeGreaterThan(beforeBacklink);
     expect(outboundCallCount).toBeGreaterThan(beforeOutbound);

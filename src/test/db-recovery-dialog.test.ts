@@ -8,6 +8,7 @@ vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), {
     error: vi.fn(),
     success: vi.fn(),
+    dismiss: vi.fn(),
   }),
   Toaster: vi.fn(),
 }));
@@ -44,8 +45,12 @@ describe("DB recovery dialog (issue #116)", () => {
 
     expect(ledger.corruptLedgerPath).toBe(CORRUPT_PATH);
     await waitFor(() => {
-      expect(getByTestId("db-recovery-dialog").textContent).toContain(
-        "scenes, pins, and map details will be lost",
+      // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
+      // the formatter's business, not this assertion's.
+      // Quick Notes are database-only (ADR-0018), so a rebuild takes them too — a GM
+      // deciding whether to rebuild has to be told that before they choose.
+      expect(getByTestId("db-recovery-dialog").textContent?.replace(/\s+/g, " ")).toContain(
+        "scenes, pins, map details, and Quick Notes will be lost",
       );
     });
   });
@@ -62,6 +67,7 @@ describe("DB recovery dialog (issue #116)", () => {
           scene_count: 0,
           map_count: 0,
           failed_imports: [],
+          unlinked_pins: [],
           recovered_from_backup: null,
         };
       return null;

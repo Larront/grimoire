@@ -24,7 +24,10 @@ afterEach(async () => {
 describe("Ledger format refusals", () => {
   const refusals = [
     ["ERR_FORMAT_AHEAD: vault notes are on format 2, this Grimoire only reads 1", "ahead"],
-    ["ERR_FORMAT_MIGRATION_REQUIRED: vault notes are on format 0, this Grimoire writes 1", "behind"],
+    [
+      "ERR_FORMAT_MIGRATION_REQUIRED: vault notes are on format 0, this Grimoire writes 1",
+      "behind",
+    ],
     ["ERR_FORMAT_STAMP_UNREADABLE: does not hold a format version", "corrupt stamp"],
   ] as const;
 

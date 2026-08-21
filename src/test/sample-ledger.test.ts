@@ -16,6 +16,7 @@ function mockSampleInvoke() {
         scene_count: 0,
         map_count: 0,
         failed_imports: [],
+        unlinked_pins: [],
       };
     return null;
   });
@@ -51,9 +52,7 @@ describe("ledger store — exploreSample", () => {
 
     await ledger.exploreSample();
 
-    const openCall = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "open_ledger");
+    const openCall = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "open_ledger");
     expect(openCall).toBeDefined();
     expect(openCall![1]).toEqual({ path: SAMPLE_PATH });
   });

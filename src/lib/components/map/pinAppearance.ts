@@ -1,5 +1,9 @@
 import type { Pin, PinCategory, PinShape, PinIcon } from "$lib/types/ledger";
 import type { Component } from "svelte";
+// The pin's fallback colour is the first swatch in the picker's row, and lives with the
+// row rather than here (#222) — a default apart from the row it leads is a default a GM
+// can leave and never get back to.
+import { DEFAULT_PIN_COLOR } from "$lib/entity-colors";
 import {
   Star,
   Sword,
@@ -52,27 +56,7 @@ export const CURATED_ICON_COMPONENTS = new Map<PinIcon, Component<any>>([
   ["landmark", Landmark],
 ]);
 
-/*
-  The colour a pin wears when nobody has chosen one, and the FIRST swatch in the picker —
-  which is the constraint that decides it. A default outside the presets is a state a GM
-  can leave but never get back to.
-
-  It was `#4a90c4`, a cold blue, in a system whose §2 says its neutrals lean toward the
-  red-brown axis and "never cold grey". Amber is the warm mid-luminance step already in
-  the preset row: it holds up over a bright parchment map and a dark one alike, which the
-  darker presets do not, and it stays clear of the accent. That last part is deliberate —
-  DESIGN.md spends the accent on active states precisely because it is scarce, and every
-  pin on a map wearing it would be the least scarce thing on screen.
-
-  Exported because this value had FOUR copies: twice here, once as the picker's fallback,
-  and once as the first entry of its preset list. They are one name now.
-*/
-export const DEFAULT_PIN_COLOR = "#b89a5e";
-
-export function resolvedAppearance(
-  pin: Pin,
-  cat: PinCategory | undefined,
-): ResolvedAppearance {
+export function resolvedAppearance(pin: Pin, cat: PinCategory | undefined): ResolvedAppearance {
   return {
     shape: pin.shape ?? cat?.shape ?? "pin",
     color: pin.color ?? cat?.color ?? DEFAULT_PIN_COLOR,
@@ -111,8 +95,7 @@ const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
   },
   pin: {
     svgTag: "path",
-    svgAttrs:
-      'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"',
+    svgAttrs: 'd="M14 27 C8 22 4 18 4 12 A10 10 0 0 1 24 12 C24 18 20 22 14 27Z"',
     anchor: [20, 39],
     iconOffset: { top: 7, left: 10 },
   },
@@ -151,10 +134,7 @@ const SHAPE_DEFS: Record<PinShape, ShapeDef> = {
  * arrive as another. Change a default in `resolvedAppearance` and the ghost follows.
  */
 export function defaultAppearance(): ResolvedAppearance {
-  return resolvedAppearance(
-    { shape: null, color: null, icon: null } as unknown as Pin,
-    undefined,
-  );
+  return resolvedAppearance({ shape: null, color: null, icon: null } as unknown as Pin, undefined);
 }
 
 /** Where a pin's tooltip sits, measured from the shape's own anchor so the label clears

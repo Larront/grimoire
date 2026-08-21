@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
-  import { PanelRight, Check } from '@lucide/svelte';
+  import type { Snippet } from "svelte";
+  import { PanelRight, Check } from "@lucide/svelte";
 
   interface Props {
     title: string;
-    saveStatus?: 'idle' | 'saved' | 'error';
+    saveStatus?: "idle" | "saved" | "error";
     onRetrySave?: () => void;
     onclose?: () => void;
     isEmpty?: boolean;
@@ -14,7 +14,7 @@
 
   let {
     title,
-    saveStatus = 'idle',
+    saveStatus = "idle",
     onRetrySave,
     onclose,
     isEmpty = false,
@@ -24,17 +24,18 @@
 </script>
 
 <div data-slot="detail-panel" class="flex min-h-0 flex-1 flex-col">
-  <div class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-background-border px-(--pad-x)">
+  <div
+    class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-background-border px-(--pad-x)"
+  >
     <span class="font-heading text-(--font-body) font-medium text-foreground">{title}</span>
-    {#if saveStatus === 'saved'}
+    {#if saveStatus === "saved"}
       <span class="flex items-center gap-1 font-mono text-[10px] text-success">
         <Check class="size-3" />Saved
       </span>
-    {:else if saveStatus === 'error'}
-      <button
-        onclick={onRetrySave}
-        class="font-mono text-[10px] text-error hover:underline"
-      >Save failed · Retry</button>
+    {:else if saveStatus === "error"}
+      <button onclick={onRetrySave} class="font-mono text-[10px] text-error hover:underline"
+        >Save failed · Retry</button
+      >
     {/if}
     <button
       onclick={onclose}

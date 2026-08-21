@@ -20,8 +20,8 @@ PDFs are **path-addressed**. No `pdfs` SQLite entity table. The tab is `TabType 
 
 ### The future features are path-based, not id-based
 
-- **Linking** rides the existing Link Index, which is *already* path-keyed (`note_links(source_id, target_path)`, see [ADR-0005](./0005-link-index-path-keyed.md)). A `[[…]]` to a PDF is just a `target_path` that resolves to a `.pdf` instead of a `.md`. An id-keyed `pdfs` table would be the *wrong* shape — we'd resolve paths to ids and back.
-- **Search** is a regenerable derived index (Tantivy, [ADR-0004](./0004-tantivy-search-engine.md)) rebuilt from a ledger scan inside the idempotent setup framework. PDF full-text search is a new derive step (scan `.pdf`, extract text, add docs). If it ever wants a row to hang metadata off, that row is a *derived, regenerable* index keyed by path — not canonical state, not a migration.
+- **Linking** rides the existing Link Index, which is _already_ path-keyed (`note_links(source_id, target_path)`, see [ADR-0005](./0005-link-index-path-keyed.md)). A `[[…]]` to a PDF is just a `target_path` that resolves to a `.pdf` instead of a `.md`. An id-keyed `pdfs` table would be the _wrong_ shape — we'd resolve paths to ids and back.
+- **Search** is a regenerable derived index (Tantivy, [ADR-0004](./0004-tantivy-search-engine.md)) rebuilt from a ledger scan inside the idempotent setup framework. PDF full-text search is a new derive step (scan `.pdf`, extract text, add docs). If it ever wants a row to hang metadata off, that row is a _derived, regenerable_ index keyed by path — not canonical state, not a migration.
 
 ### The tab stays path-keyed regardless
 
@@ -34,4 +34,4 @@ A PDF dropped into the ledger folder appears; deleted, it's gone — with zero d
 ## Consequences
 
 - The Files tree now surfaces a file type the app did not author. The `tree.rs` walk stays a curated allowlist (`.md` + map images + `.pdf`); other arbitrary files remain hidden. Adding a file type is an explicit allowlist edit, not "show everything."
-- **Scene-link annotations are the one canonical exception** (in scope for this feature, built last). A Scene-link is *not* regenerable from PDF bytes, so it is canonical SQLite state keyed by the PDF path: `pdf_scene_links(id, pdf_path, page, start_offset, end_offset, quote, scene_id, created_at)`. This means **renaming/moving a PDF must rewrite the `pdf_path` rows**, reusing the existing wikilink-rename path-rewrite machinery. Path-keying survives this — the key is the path, not a new PDF entity id. (`scene_id` is a real FK with `ON DELETE CASCADE`; the canonical state hangs off the path, not off a `pdfs` row.)
+- **Scene-link annotations are the one canonical exception** (in scope for this feature, built last). A Scene-link is _not_ regenerable from PDF bytes, so it is canonical SQLite state keyed by the PDF path: `pdf_scene_links(id, pdf_path, page, start_offset, end_offset, quote, scene_id, created_at)`. This means **renaming/moving a PDF must rewrite the `pdf_path` rows**, reusing the existing wikilink-rename path-rewrite machinery. Path-keying survives this — the key is the path, not a new PDF entity id. (`scene_id` is a real FK with `ON DELETE CASCADE`; the canonical state hangs off the path, not off a `pdfs` row.)

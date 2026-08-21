@@ -24,9 +24,7 @@
   let isMuted = $derived(mutedVolume !== null);
   let isSpotify = $derived(slot.source === "spotify");
   let isPlaylist = $derived(
-    isSpotify &&
-      (slot.source_id.includes(":playlist:") ||
-        slot.source_id.includes(":album:"))
+    isSpotify && (slot.source_id.includes(":playlist:") || slot.source_id.includes(":album:")),
   );
 
   // Fix 1: Reset mute state when slot identity changes
@@ -121,11 +119,16 @@
   }
 </script>
 
-<div class="group flex flex-col gap-1.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent/50 transition-colors">
+<div
+  class="group flex flex-col gap-1.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent/50 transition-colors"
+>
   <!-- Row 1: source icon + label + play/pause -->
   <div class="flex items-center gap-2 min-w-0">
     {#if isSpotify}
-      <span class="shrink-0 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-green-400 leading-none">S</span>
+      <span
+        class="shrink-0 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-green-400 leading-none"
+        >S</span
+      >
     {:else}
       <Music2 class="size-3 shrink-0 text-muted-foreground/50" />
     {/if}

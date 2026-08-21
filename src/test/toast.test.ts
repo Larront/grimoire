@@ -50,10 +50,7 @@ describe("toastImportFailures", () => {
   });
 
   it("shows singular 'file' message for one failure, styled as an error", () => {
-    toastImportFailures(
-      [{ path: "notes/foo.md", reason: "Permission denied" }],
-      vi.fn(),
-    );
+    toastImportFailures([{ path: "notes/foo.md", reason: "Permission denied" }], vi.fn());
     expect(sonner.error).toHaveBeenCalledWith(
       "Couldn't import 1 file",
       expect.objectContaining({
@@ -80,10 +77,7 @@ describe("toastImportFailures", () => {
 
   it("action onClick calls onShowDetails", () => {
     const onShowDetails = vi.fn();
-    toastImportFailures(
-      [{ path: "foo.md", reason: "err" }],
-      onShowDetails,
-    );
+    toastImportFailures([{ path: "foo.md", reason: "err" }], onShowDetails);
     const opts = vi.mocked(sonner.error).mock.calls[0][1] as unknown as {
       action: { onClick: () => void };
     };

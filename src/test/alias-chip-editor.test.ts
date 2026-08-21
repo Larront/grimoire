@@ -25,9 +25,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "Captain Ash");
     await fireEvent.keyDown(input, { key: "Enter" });
 
@@ -42,9 +40,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "Captain Ash");
     await fireEvent.keyDown(input, { key: "," });
 
@@ -58,14 +54,10 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).not.toHaveBeenCalled();
-    expect(
-      container.querySelectorAll('[data-slot="alias-chip"]').length,
-    ).toBe(0);
+    expect(container.querySelectorAll('[data-slot="alias-chip"]').length).toBe(0);
   });
 
   it("does not add a whitespace-only alias", async () => {
@@ -73,9 +65,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "   ");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).not.toHaveBeenCalled();
@@ -86,9 +76,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "  Captain Ash  ");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).toHaveBeenCalledWith(["Captain Ash"]);
@@ -99,15 +87,11 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: ["Captain Ash"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "captain ash");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).not.toHaveBeenCalled();
-    expect(
-      container.querySelectorAll('[data-slot="alias-chip"]').length,
-    ).toBe(1);
+    expect(container.querySelectorAll('[data-slot="alias-chip"]').length).toBe(1);
   });
 
   it("removes the last chip on Backspace in empty input", async () => {
@@ -115,17 +99,13 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: ["Captain Ash", "The Hero"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await fireEvent.keyDown(input, { key: "Backspace" });
     expect(onchange).toHaveBeenCalledWith(["Captain Ash"]);
-    expect(
-      container.querySelectorAll('[data-slot="alias-chip"]').length,
-    ).toBe(1);
-    expect(
-      container.querySelector('[data-slot="alias-chip"]')!.textContent,
-    ).toContain("Captain Ash");
+    expect(container.querySelectorAll('[data-slot="alias-chip"]').length).toBe(1);
+    expect(container.querySelector('[data-slot="alias-chip"]')!.textContent).toContain(
+      "Captain Ash",
+    );
   });
 
   it("Backspace does nothing when input has content", async () => {
@@ -133,15 +113,11 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: ["Captain Ash"], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "something");
     await fireEvent.keyDown(input, { key: "Backspace" });
     expect(onchange).not.toHaveBeenCalled();
-    expect(
-      container.querySelectorAll('[data-slot="alias-chip"]').length,
-    ).toBe(1);
+    expect(container.querySelectorAll('[data-slot="alias-chip"]').length).toBe(1);
   });
 
   it("removes a chip when its X button is clicked", async () => {
@@ -153,12 +129,8 @@ describe("AliasChipEditor", () => {
     expect(removes.length).toBe(2);
     await fireEvent.click(removes[0]);
     expect(onchange).toHaveBeenCalledWith(["The Hero"]);
-    expect(
-      container.querySelectorAll('[data-slot="alias-chip"]').length,
-    ).toBe(1);
-    expect(
-      container.querySelector('[data-slot="alias-chip"]')!.textContent,
-    ).toContain("The Hero");
+    expect(container.querySelectorAll('[data-slot="alias-chip"]').length).toBe(1);
+    expect(container.querySelector('[data-slot="alias-chip"]')!.textContent).toContain("The Hero");
   });
 
   it("allows spaces and special characters in aliases", async () => {
@@ -166,9 +138,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [], onchange },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "The Dark Lord (Vol. III)");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(onchange).toHaveBeenCalledWith(["The Dark Lord (Vol. III)"]);
@@ -178,9 +148,7 @@ describe("AliasChipEditor", () => {
     const { container } = render(AliasChipEditor, {
       props: { aliases: [] },
     });
-    const input = container.querySelector(
-      '[data-slot="alias-chip-input"]',
-    ) as HTMLInputElement;
+    const input = container.querySelector('[data-slot="alias-chip-input"]') as HTMLInputElement;
     await typeInto(input, "Captain Ash");
     await fireEvent.keyDown(input, { key: "Enter" });
     expect(input.value).toBe("");

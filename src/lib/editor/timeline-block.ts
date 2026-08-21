@@ -1,11 +1,8 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
-import {
-  createBlockNodeView,
-  type BlockView,
-} from "$lib/editor/node-view-connector";
+import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
 import { fenceInfo } from "$lib/editor/fence-claim";
-import { jsonListAttr } from "$lib/editor/block-attrs";
+import { blockDom, listAttr } from "$lib/editor/block-attrs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,10 +12,28 @@ export interface TimelineEvent {
   description: string;
 }
 
-/** A freshly inserted timeline opens its one blank event, so its view must let it. */
-interface TimelineBlockViewExports extends BlockView {
-  openEdit: (index: number) => void;
+/**
+ * The block's record — one field, and named all the same (#209). A record is what the
+ * connector, the schema and the view are typed against, so a timeline that later carries
+ * anything beside its events adds a field here and nowhere else.
+ */
+export interface Timeline {
+  events: TimelineEvent[];
 }
+
+/** A freshly inserted timeline opens its one blank event, so its view must let it. */
+interface TimelineBlockViewExports extends BlockView<Timeline> {
+  focusRow: (index: number) => void;
+}
+
+/**
+ * How the timeline's record crosses the DOM, declared once: the schema's attributes, the
+ * `data-*` a copied timeline travels as, and the node view's stand-ins are all read off
+ * this table.
+ */
+const TIMELINE_DOM = blockDom<Timeline>({
+  events: listAttr<TimelineEvent>(),
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,55 +48,11 @@ function isBlankEvent(e: TimelineEvent): boolean {
 // Order — inserting, moving and deleting events — is the Row List's (#173), which
 // the view reaches directly. Nothing about ordering lives here any more.
 
-// ─── Display rendering ───────────────────────────────────────────────────────
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/**
- * Converts `[[...]]` wikilinks in a plain text string to `data-wiki-link` spans
- * suitable for rendering with {@html} in display mode. Plain-text segments are
- * HTML-escaped; the generated spans match the shape that Editor.svelte's delegated
- * handleClick / handleMouseover handlers expect.
- *
- * `isKnownPath` resolves whether a link points at an existing note. Links it
- * rejects get a `data-broken` marker so they can be styled as faded-accent stubs
- * (full-accent for resolved links). When omitted, no link is marked broken.
- */
-export function renderTimelineText(
-  text: string,
-  isKnownPath?: (path: string) => boolean,
-): string {
-  const re = /\[\[([^\]]+)\]\]/g;
-  const parts: string[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(text)) !== null) {
-    parts.push(escapeHtml(text.slice(lastIndex, match.index)));
-
-    const rawInner = match[1].trim();
-    const pipeIdx = rawInner.indexOf("|");
-    const path = pipeIdx >= 0 ? rawInner.slice(0, pipeIdx).trim() : rawInner;
-    const title =
-      pipeIdx >= 0
-        ? rawInner.slice(pipeIdx + 1).trim()
-        : (path.split("/").pop()?.replace(/\.md$/, "") ?? path);
-
-    const escapedPath = path.replace(/"/g, "&quot;");
-    const escapedTitle = title.replace(/"/g, "&quot;");
-    const brokenAttr = isKnownPath && !isKnownPath(path) ? " data-broken" : "";
-    parts.push(
-      `<span data-wiki-link${brokenAttr} data-path="${escapedPath}" data-title="${escapedTitle}">${escapeHtml(title)}</span>`,
-    );
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  parts.push(escapeHtml(text.slice(lastIndex)));
-  return parts.join("");
-}
+// Display rendering used to be here: an HTML-escaper and a function building
+// `data-wiki-link` spans as a string for `{@html}`. Both are gone (#214) — the view's
+// values are Linked Text Fields, which split a value into segments Svelte draws, so the
+// escaping problem is deleted rather than kept in a second escaper. Nothing about how a
+// timeline *looks* lives in this file any more.
 
 // ─── Grammar ──────────────────────────────────────────────────────────────────
 //
@@ -207,12 +178,7 @@ export const TimelineBlock = Node.create({
   draggable: true,
 
   addAttributes() {
-    return {
-      events: {
-        default: [],
-        parseHTML: (el) => jsonListAttr((el as HTMLElement).dataset.events),
-      },
-    };
+    return TIMELINE_DOM.attributes;
   },
 
   parseHTML() {
@@ -222,12 +188,7 @@ export const TimelineBlock = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     return [
       "timeline-block",
-      mergeAttributes(
-        {
-          "data-events": encodeURIComponent(JSON.stringify(node.attrs.events)),
-        },
-        HTMLAttributes,
-      ),
+      mergeAttributes(TIMELINE_DOM.dataset(node.attrs as Timeline), HTMLAttributes),
     ];
   },
 
@@ -245,22 +206,22 @@ export const TimelineBlock = Node.create({
       : [],
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
-  renderMarkdown(node: { attrs: { events: TimelineEvent[] } }) {
+  renderMarkdown(node: { attrs: Timeline }) {
     return serializeTimelineEvents(node.attrs.events);
   },
 
   addNodeView() {
-    return createBlockNodeView<TimelineBlockViewExports>({
+    return createBlockNodeView<Timeline, TimelineBlockViewExports>({
       component: TimelineBlockView,
       domAttrs: { "data-note-block": "timeline" },
-      defaults: { events: [] },
-      props: ({ updateAttributes }) => ({
-        onCommit: (events: TimelineEvent[]) => updateAttributes({ events }),
-      }),
-      mounted: (view, attrs) => {
-        // Fresh /timeline insert: one blank event → open it in edit mode immediately
-        const events = attrs.events as TimelineEvent[];
-        if (events.length === 1 && isBlankEvent(events[0])) view.openEdit(0);
+      defaults: TIMELINE_DOM.defaults,
+      // The record is the write-back's argument: the connector merges a `Partial<Timeline>`
+      // into the node, so nothing here re-lists what a timeline holds.
+      props: ({ updateAttributes }) => ({ onCommit: updateAttributes }),
+      mounted: (view, { events }) => {
+        // Fresh /timeline insert: one blank event → its title opens for typing, the way
+        // a fresh infobox's first row does.
+        if (events.length === 1 && isBlankEvent(events[0])) view.focusRow(0);
       },
     });
   },

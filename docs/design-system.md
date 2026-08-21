@@ -10,7 +10,7 @@ Grimoire serves two distinct mental states: slow and creative during worldbuildi
 
 **Restrained by default, expressive where it counts** — structural UI is clean and purposeful. Key arrival moments (splash, empty states, scene dashboard) get richer treatment without becoming theatrical.
 
-**Always session-ready, never session-gated** — there is no "start session" mode. The interface is equally usable for prep and live play without switching posture. The Scene Player, command palette, and icon rail are always available.
+**Always session-ready, never session-gated** — there is no "start session" mode. The interface is equally usable for prep and live play without switching posture. The Scene Player, the command palette, and the sidebar — panel or 48px strip — are always available.
 
 ---
 
@@ -129,7 +129,7 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 **Primary owns:**
 
-- Active rail icon
+- Active strip icon
 - Active tab (underline indicator)
 - Selected sidebar item (background tint)
 - Playing audio pulse
@@ -207,36 +207,43 @@ Layout from left to right:
 [ Sidebar ] [ Main Content Area ] [ Right Rail ]
 ```
 
-The sidebar collapses to a narrow icon rail — the grid responds accordingly.
+The sidebar collapses to a narrow icon strip — the grid responds accordingly.
 
-**Sidebar** — Collapses to icon rail on user toggle.
+**Sidebar** — Collapses to a 48px icon strip on user toggle.
 
 - On large screens: docked (pushes main content), default open
 - On small screens / tablet: overlay (slides over main content), default closed
-- Toggle: click the active rail icon or a chevron at the sidebar edge
+- Toggle: the `Sidebar.Trigger` in the left pane's tab bar, or `Cmd/Ctrl+\`. The brand mark is not a toggle — it is gone (#226).
 
 **Sidebar (expanded)** — Contains all primary navigation. Fixed structure from top to bottom:
 
-1. **Brand header** — Metamorphous wordmark "Grimoire", ledger name subtitle, collapse button
+1. **Brand header** — Metamorphous wordmark "Grimoire", ledger name subtitle. No collapse button: the wordmark crossfades out when collapsed and toggling lives in the tab bar (#226)
 2. **Inline search bar** — click to open the command palette
 3. **Pinned section** — star icon, flat list of starred/pinned notes (collapsible)
 4. **Recent section** — clock icon, up to 5 recently opened notes (collapsible)
 5. **Campaign tree** — folder icon, hierarchical file tree (collapsible, with "+" to create)
-6. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
-7. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
+6. **Quick Notes** — one button with a count badge, and deliberately no list: the Quick Notes pane and dialog are the only two surfaces a Quick Note has
+7. **Scene Player panel** — docked at bottom of scroll area, collapsible (see below)
+8. **Footer** — ledger select button (current ledger name + chevron; click opens ledger switcher popover)
 
-**Icon Rail (collapsed state)** — 48px wide, contains:
+**Collapsed strip** — 48px wide. Not a separate component beside the sidebar: it **is** the sidebar collapsed, and there is no strip at all below 1024px, where the sidebar is an overlay sheet.
 
 Main icons (top):
 
-- Brand mark — re-expands sidebar to last active section
 - Search icon — triggers Command Palette
-- Files icon — expands sidebar and activates the file tree section
-- Scenes icon — opens the scenes page
+- Files icon — expands the sidebar and scrolls to the file tree
+- Scenes icon — expands the sidebar and scrolls to the Scenes group
+- Graph icon — opens the graph pane
 
 Footer icon (bottom, smaller / subdued):
 
-- Settings — opens the settings dialog (not a full primary rail icon; visually lighter, pinned to bottom of rail)
+- Settings — opens the settings dialog (visually lighter, pinned to the bottom)
+
+No brand mark: the wordmark is the expanded header's identity and nothing replaces it collapsed — a 48px square with a letter in it, in a strip where every other square is a button, reads as one. Toggling is the tab bar's trigger and `Cmd/Ctrl+\`.
+
+Hidden when collapsed, because none of it can be 48px wide: the create toolbar, the file tree, the scene favourites, Quick Notes, Templates, the mini player and the ledger selector. Collapsed-or-expanded persists across restarts; expanding restores the remembered width.
+
+Quick Notes is the one entry on that list that _has_ an icon and a rail history, so it is worth saying why it is there. Its count is a right-aligned number beside a label, and shrinking that to a corner pill means clearing a 20px glyph inside a 32px button — about 14px, which two digits do not sit in comfortably. `Ctrl/Cmd+Shift+N` captures from anywhere, so the strip costs a GM the count and one click, not the feature.
 
 **Main Content Area** — hosts the active document or view. Supports tabs and split view.
 
@@ -257,7 +264,7 @@ Footer icon (bottom, smaller / subdued):
 
 Each content area has a tab bar. Tabs persist open documents
 
-**Split view:** Left/right only, maximum 2 panes. Each pane has its own independent tab bar. The divider is draggable (paneforge). No top/bottom splits. No more than 2 panes.
+**Split view:** Left/right only, maximum 2 panes. Each pane has its own independent tab bar. The split is a fixed 50/50 — there is no draggable divider (ADR-0006, _Amendments_). No top/bottom splits. No more than 2 panes.
 
 Primary use case: note open on left, map open on right during a live session.
 
@@ -330,7 +337,7 @@ Scene name in Metamorphous at the top. Each slot: source label (Nunito), volume 
 
 ### Command Palette
 
-Triggered by the search rail icon or `Cmd+K` (Mac) / `Ctrl+K` (Windows). Opens as a floating dialog centred on the main content area.
+Triggered by the sidebar's search control — the bar when expanded, the strip's icon when collapsed — or `Cmd+K` (Mac) / `Ctrl+K` (Windows). Opens as a floating dialog centred on the main content area.
 
 **Behaviour:**
 
@@ -382,14 +389,14 @@ Settings include:
 
 Three density levels, controlled by `data-density` attribute on the root element (or a `.density-*` class). The CSS variable `--row-h` drives all row heights.
 
-| Element                    | Cozy | Balanced (default) | Dense  |
-| -------------------------- | ---- | ------------------ | ------ |
-| `--row-h` (sidebar rows)   | 28px | 24px               | 21px   |
-| `--font-body`              | 15px | 14.5px             | 13.5px |
-| `--font-ui`                | 13px | 12.5px             | 11.5px |
-| `--pad-x` (editor padding) | 28px | 22px               | 16px   |
-| Tab bar height             | 40px | 36px               | 32px   |
-| Icon rail icon size        | 20px | 18px               | 16px   |
+| Element                          | Cozy | Balanced (default) | Dense  |
+| -------------------------------- | ---- | ------------------ | ------ |
+| `--row-h` (sidebar rows)         | 28px | 24px               | 21px   |
+| `--font-body`                    | 15px | 14.5px             | 13.5px |
+| `--font-ui`                      | 13px | 12.5px             | 11.5px |
+| `--pad-x` (editor padding)       | 28px | 22px               | 16px   |
+| Tab bar height                   | 40px | 36px               | 32px   |
+| `--strip-icon` (strip icon size) | 22px | 20px               | 18px   |
 
 The three density names replace the previous two-tier Comfortable/Compact model. "Balanced" is the default shipped state.
 
@@ -438,13 +445,14 @@ Never use a modal for a destructive confirmation — it is disproportionate and 
 
 ### Required Keyboard Shortcuts
 
-| Action               | Mac     | Windows  |
-| -------------------- | ------- | -------- |
-| Open Command Palette | `Cmd+K` | `Ctrl+K` |
-| Close tab            | `Cmd+W` | `Ctrl+W` |
-| Toggle sidebar       | `Cmd+\` | `Ctrl+\` |
-| New note             | `Cmd+N` | `Ctrl+N` |
-| Save (notes)         | `Cmd+S` | `Ctrl+S` |
+| Action               | Mac           | Windows        |
+| -------------------- | ------------- | -------------- |
+| Open Command Palette | `Cmd+K`       | `Ctrl+K`       |
+| Close tab            | `Cmd+W`       | `Ctrl+W`       |
+| Toggle sidebar       | `Cmd+\`       | `Ctrl+\`       |
+| New note             | `Cmd+N`       | `Ctrl+N`       |
+| Capture a Quick Note | `Cmd+Shift+N` | `Ctrl+Shift+N` |
+| Save (notes)         | `Cmd+S`       | `Ctrl+S`       |
 
 All keyboard shortcuts must be documented in a Settings help section and discoverable via the Command Palette (typing "/" surfaces command list).
 
@@ -454,7 +462,7 @@ All keyboard shortcuts must be documented in a Settings help section and discove
 - Use `:focus-visible` only — not `:focus` — to suppress ring on mouse click while preserving it for keyboard
 - Focus ring: `--primary`, 2px solid, 2px offset
 - After a modal or overlay closes, return focus to the element that triggered it
-- Icon rail icons require `aria-label` values (e.g., `aria-label="Files"`, `aria-label="Open command palette"`)
+- Collapsed-strip icons require `aria-label` values (e.g., `aria-label="Files"`, `aria-label="Open command palette"`)
 - Sidebar tree items use `role="treeitem"` with `aria-expanded` on folders
 
 ### Accessible Names

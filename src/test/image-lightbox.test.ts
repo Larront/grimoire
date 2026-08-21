@@ -15,6 +15,8 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     alt: "A portrait",
     align: "center",
     width: "100%",
+    // TipTap's own attribute, part of the record and read by nothing here.
+    title: null,
     selected: true,
     onUpdate: vi.fn(),
     onCaptionUpdate: vi.fn(),
@@ -35,12 +37,16 @@ describe("Image lightbox button", () => {
   });
 
   it("is not present when the image is not selected", () => {
-    const { container } = render(ImageBlockView, { props: makeProps({ selected: false }) });
+    const { container } = render(ImageBlockView, {
+      props: makeProps({ selected: false }),
+    });
     expect(container.querySelector("[data-lightbox-btn]")).toBeNull();
   });
 
   it("appears in the floating toolbar when the image is selected", async () => {
-    const { container } = render(ImageBlockView, { props: makeProps({ selected: true }) });
+    const { container } = render(ImageBlockView, {
+      props: makeProps({ selected: true }),
+    });
     await flushImageLoad();
     expect(container.querySelector("[data-lightbox-btn]")).toBeTruthy();
   });

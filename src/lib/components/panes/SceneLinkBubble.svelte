@@ -27,7 +27,9 @@
   const isPlaying = $derived(audioEngine.isScenePlaying(scene.id));
   const chipBg = $derived(scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]);
   const chipFg = $derived(ACCENT_FG[scene.id % ACCENT_FG.length]);
-  const ChipIcon = $derived(scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2);
+  const ChipIcon = $derived(
+    scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2,
+  );
 
   let changeOpen = $state(false);
 

@@ -69,16 +69,13 @@ afterEach(() => {
 
 async function openContextMenu(container: HTMLElement) {
   const trigger =
-    container.querySelector('[data-slot="context-menu-trigger"]') ??
-    container.firstElementChild!;
+    container.querySelector('[data-slot="context-menu-trigger"]') ?? container.firstElementChild!;
   await fireEvent.contextMenu(trigger);
 }
 
 async function clickMenuItem(label: RegExp | string) {
   return waitFor(() => {
-    const items = Array.from(
-      document.body.querySelectorAll('[data-slot="context-menu-item"]'),
-    );
+    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
     const item = items.find((el) => {
       const text = el.textContent ?? "";
       return label instanceof RegExp ? label.test(text) : text.includes(label);

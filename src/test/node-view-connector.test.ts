@@ -13,6 +13,21 @@ import { createBlockNodeView } from "$lib/editor/node-view-connector";
 import SealedBlockFixture from "./fixtures/SealedBlockFixture.svelte";
 import ContainerBlockFixture from "./fixtures/ContainerBlockFixture.svelte";
 
+/**
+ * What each fixture block holds. A record per fixture rather than none, because the
+ * connector is generic over it (#209): a spec cannot be built without naming what the
+ * block's attributes are, which is the whole of what that ticket bought — the fixtures
+ * stand in for real blocks here too.
+ */
+interface FixtureBlock {
+  label: string;
+  count: number;
+}
+
+interface ContainerFixtureBlock {
+  title: string;
+}
+
 // ─── Harness ──────────────────────────────────────────────────────────────────
 
 /** One `tr.setNodeMarkup` the node view asked for. */
@@ -137,11 +152,7 @@ function mountNodeView(
             metas.push({ value, beforeWrite: writes.length === 0 });
             return tr;
           },
-          setNodeMarkup(
-            pos: number,
-            _type: unknown,
-            newAttrs: Record<string, unknown>,
-          ) {
+          setNodeMarkup(pos: number, _type: unknown, newAttrs: Record<string, unknown>) {
             writes.push({ pos, attrs: newAttrs });
             return tr;
           },
@@ -197,7 +208,7 @@ function eventOn(target: globalThis.Node, type = "mousemove"): Event {
 describe("node-view connector — sealed mode", () => {
   it("mounts the block's view inside a wrapper the caret cannot enter", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         class: "fixture-wrapper",
         domAttrs: { "data-fixture-block": "" },
@@ -208,25 +219,21 @@ describe("node-view connector — sealed mode", () => {
     expect(view.dom.getAttribute("contenteditable")).toBe("false");
     expect(view.dom.className).toBe("fixture-wrapper");
     expect(view.dom.hasAttribute("data-fixture-block")).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Ambush/2",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Ambush/2");
     // Nothing for ProseMirror to own: a sealed block has no children.
     expect(view.contentDOM).toBeUndefined();
   });
 
   it("fills in a block's declared defaults for attributes the node has not set", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         defaults: { label: "Untitled", count: 0 },
       }),
       { label: null },
     );
 
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Untitled/0",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Untitled/0");
   });
 });
 
@@ -235,7 +242,7 @@ describe("node-view connector — sealed mode", () => {
 describe("node-view connector — attribute write-back", () => {
   it("writes the changed attribute back at the node's position", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -254,7 +261,7 @@ describe("node-view connector — attribute write-back", () => {
   // appended to whatever prose edit preceded it and one Ctrl+Z takes back both.
   it("closes the history group before writing, so the change is its own undo step", async () => {
     const { view, metas, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -272,7 +279,7 @@ describe("node-view connector — attribute write-back", () => {
   // attributes must not drop a third it has never heard of.
   it("merges the change into the node's other attributes rather than replacing them", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -290,7 +297,7 @@ describe("node-view connector — attribute write-back", () => {
 
   it("merges into the freshest attributes when the node has since changed", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -309,7 +316,7 @@ describe("node-view connector — attribute write-back", () => {
 
   it("prefers the document's attributes over its own when it can read them", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -328,7 +335,7 @@ describe("node-view connector — attribute write-back", () => {
 
   it("writes nothing when another node now sits at its position", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -344,7 +351,7 @@ describe("node-view connector — attribute write-back", () => {
 
   it("writes nothing when the node no longer has a position", async () => {
     const { view, writes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ updateAttributes }) => ({ onUpdate: updateAttributes }),
       }),
@@ -367,7 +374,7 @@ describe("node-view connector — attribute write-back", () => {
 describe("node-view connector — deleteNode", () => {
   it("deletes the node's whole range at its position", async () => {
     const { view, deletes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ deleteNode }) => ({ onRemove: deleteNode }),
       }),
@@ -386,7 +393,7 @@ describe("node-view connector — deleteNode", () => {
     // Same rule as a write (ADR-0016 §6), and the one where it matters most: a removal
     // folded into the sentence typed a moment earlier would take the sentence with it.
     const { view, deletes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ deleteNode }) => ({ onRemove: deleteNode }),
       }),
@@ -400,7 +407,7 @@ describe("node-view connector — deleteNode", () => {
 
   it("focuses the editor, so the GM's next Ctrl+Z reaches the removal", async () => {
     const { view, focuses } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ deleteNode }) => ({ onRemove: deleteNode }),
       }),
@@ -414,7 +421,7 @@ describe("node-view connector — deleteNode", () => {
 
   it("does nothing when the node's position is gone", async () => {
     const { view, deletes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ deleteNode }) => ({ onRemove: deleteNode }),
       }),
@@ -431,7 +438,7 @@ describe("node-view connector — deleteNode", () => {
     // The guard that matters more here than on a write: a stale position landing a
     // delete on whatever replaced this block would remove the wrong thing.
     const { view, deletes } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         props: ({ deleteNode }) => ({ onRemove: deleteNode }),
       }),
@@ -454,7 +461,7 @@ describe("node-view connector — deleteNode", () => {
 describe("node-view connector — update path", () => {
   it("pushes the node's attributes into the view as one object", () => {
     const { view, nodeType } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
       { label: "Ambush", count: 2 },
     );
 
@@ -467,14 +474,12 @@ describe("node-view connector — update path", () => {
     });
 
     expect(accepted).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Retreat/7",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Retreat/7");
   });
 
   it("refuses a node of another type", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
       { label: "Ambush", count: 2 },
     );
 
@@ -484,9 +489,7 @@ describe("node-view connector — update path", () => {
     });
 
     expect(accepted).toBe(false);
-    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe(
-      "Ambush/2",
-    );
+    expect(view.dom.querySelector("[data-fixture-label]")?.textContent).toBe("Ambush/2");
   });
 });
 
@@ -499,7 +502,7 @@ describe("node-view connector — update path", () => {
 describe("node-view connector — event handling", () => {
   it("keeps events raised inside the block and leaves the rest to ProseMirror", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
     );
 
     const inside = view.dom.querySelector("button") as HTMLElement;
@@ -509,10 +512,9 @@ describe("node-view connector — event handling", () => {
 
   it("lets a block's own decision win over that default, either way", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
-        stopEvent: () => (event) =>
-          event.type === "mousedown" ? false : undefined,
+        stopEvent: () => (event) => (event.type === "mousedown" ? false : undefined),
       }),
     );
 
@@ -524,7 +526,7 @@ describe("node-view connector — event handling", () => {
   });
 
   it("gives each mounted block its own handler, so one can hold a drag", () => {
-    const render = createBlockNodeView({
+    const render = createBlockNodeView<FixtureBlock>({
       component: SealedBlockFixture,
       // The Scene shape: per-instance state, set up from the block's own DOM.
       stopEvent: ({ dom }) => {
@@ -560,7 +562,7 @@ describe("node-view connector — event handling", () => {
 describe("node-view connector — selection", () => {
   it("tells a view that draws its own selection when it is selected", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         drawsOwnSelection: true,
       }),
@@ -575,7 +577,7 @@ describe("node-view connector — selection", () => {
 
   it("leaves selection to ProseMirror for a view that does not", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
     );
 
     expect(view.selectNode).toBeUndefined();
@@ -598,7 +600,7 @@ describe("node-view connector — selection", () => {
 
 describe("node-view connector — selectNode", () => {
   const selectSpec = () =>
-    createBlockNodeView({
+    createBlockNodeView<FixtureBlock>({
       component: SealedBlockFixture,
       props: ({ selectNode }) => ({ onSelect: selectNode }),
     });
@@ -661,7 +663,7 @@ describe("node-view connector — selectNode", () => {
 describe("node-view connector — container mode", () => {
   it("puts ProseMirror's content hole where the block asked for it", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<ContainerFixtureBlock>({
         component: ContainerBlockFixture,
         mode: "container",
       }),
@@ -670,17 +672,13 @@ describe("node-view connector — container mode", () => {
 
     expect(view.dom.hasAttribute("contenteditable")).toBe(false);
     expect(view.contentDOM).toBeTruthy();
-    expect(
-      view.contentDOM?.parentElement?.hasAttribute("data-node-view-content"),
-    ).toBe(true);
-    expect(view.dom.querySelector("[data-fixture-title]")?.textContent).toBe(
-      "Read aloud",
-    );
+    expect(view.contentDOM?.parentElement?.hasAttribute("data-node-view-content")).toBe(true);
+    expect(view.dom.querySelector("[data-fixture-title]")?.textContent).toBe("Read aloud");
   });
 
   it("hands events inside the content hole to ProseMirror, and keeps the chrome's", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<ContainerFixtureBlock>({
         component: ContainerBlockFixture,
         mode: "container",
       }),
@@ -690,24 +688,20 @@ describe("node-view connector — container mode", () => {
     const child = view.contentDOM!.appendChild(document.createElement("p"));
     expect(view.stopEvent?.(eventOn(child, "keydown"))).toBe(false);
 
-    const chrome = view.dom.querySelector(
-      "[data-fixture-title]",
-    ) as HTMLElement;
+    const chrome = view.dom.querySelector("[data-fixture-title]") as HTMLElement;
     expect(view.stopEvent?.(eventOn(chrome, "keydown"))).toBe(true);
   });
 
   it("ignores mutations to the block's own chrome and honours the content's", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({
+      createBlockNodeView<ContainerFixtureBlock>({
         component: ContainerBlockFixture,
         mode: "container",
       }),
       { title: "Read aloud" },
     );
 
-    const chrome = view.dom.querySelector(
-      "[data-fixture-title]",
-    ) as HTMLElement;
+    const chrome = view.dom.querySelector("[data-fixture-title]") as HTMLElement;
     expect(view.ignoreMutation?.({ target: chrome })).toBe(true);
     expect(view.ignoreMutation?.({ target: view.contentDOM })).toBe(false);
   });
@@ -717,7 +711,7 @@ describe("node-view connector — container mode", () => {
     // quietly hanging ProseMirror's content off the wrapper.
     expect(() =>
       mountNodeView(
-        createBlockNodeView({
+        createBlockNodeView<FixtureBlock>({
           component: SealedBlockFixture,
           mode: "container",
         }),
@@ -727,7 +721,7 @@ describe("node-view connector — container mode", () => {
 
   it("leaves mutation handling to ProseMirror in sealed mode", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
     );
 
     expect(view.ignoreMutation).toBeUndefined();
@@ -740,9 +734,7 @@ describe("node-view connector — lifecycle", () => {
   it("hands a freshly mounted block its view and attributes", () => {
     const seen: unknown[] = [];
     mountNodeView(
-      createBlockNodeView<{
-        setAttrs: (attrs: Record<string, unknown>) => void;
-      }>({
+      createBlockNodeView<FixtureBlock>({
         component: SealedBlockFixture,
         mounted: (view, attrs) => {
           seen.push([typeof view.setAttrs, attrs]);
@@ -756,7 +748,7 @@ describe("node-view connector — lifecycle", () => {
 
   it("unmounts the block's view when ProseMirror destroys the node view", () => {
     const { view } = mountNodeView(
-      createBlockNodeView({ component: SealedBlockFixture }),
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
     );
 
     expect(view.dom.querySelector("[data-fixture-label]")).toBeTruthy();

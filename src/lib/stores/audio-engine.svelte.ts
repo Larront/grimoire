@@ -111,7 +111,11 @@ class LocalSlotPlayer implements SlotPlayer {
 
   async stop(): Promise<void> {
     if (this.source) {
-      try { this.source.stop(); } catch { /* already stopped */ }
+      try {
+        this.source.stop();
+      } catch {
+        /* already stopped */
+      }
       this.source.disconnect();
     }
     this.gain?.disconnect();
@@ -212,9 +216,7 @@ class SpotifyContext {
     });
     this.sdkPlayer.addListener("authentication_error", ({ message }: { message: string }) => {
       logError("[SpotifyPlayer] auth error:", message);
-      this.toastAuthErrorOnce(
-        "Spotify session expired — reconnect in Settings → Integrations.",
-      );
+      this.toastAuthErrorOnce("Spotify session expired — reconnect in Settings → Integrations.");
     });
     this.sdkPlayer.addListener("account_error", ({ message }: { message: string }) => {
       logError("[SpotifyPlayer] account error:", message);
@@ -244,8 +246,7 @@ class SpotifyContext {
     // Normalise playlist_v2 URIs — the Web API only accepts "playlist"
     const sourceUri = slot.source_id.replace(/playlist_v2/g, "playlist");
     const usesContext =
-      sourceUri.startsWith("spotify:playlist:") ||
-      sourceUri.startsWith("spotify:album:");
+      sourceUri.startsWith("spotify:playlist:") || sourceUri.startsWith("spotify:album:");
     // All Spotify Web API calls are made from Rust — token never crosses IPC bridge
     await api.spotifyPlayTrack(
       sourceUri,
@@ -261,7 +262,11 @@ class SpotifyContext {
   }
 
   async pause(): Promise<void> {
-    try { await this.sdkPlayer?.pause(); } catch { /* ignore */ }
+    try {
+      await this.sdkPlayer?.pause();
+    } catch {
+      /* ignore */
+    }
   }
 
   async skipNext(): Promise<void> {
@@ -353,9 +358,12 @@ function createSlotPlayer(
   spotifyCtx: SpotifyContext,
 ): SlotPlayer {
   switch (slot.source) {
-    case "local": return new LocalSlotPlayer(localCtx);
-    case "spotify": return new SpotifySlotPlayer(spotifyCtx);
-    default: throw new Error(`Unknown slot source: ${slot.source}`);
+    case "local":
+      return new LocalSlotPlayer(localCtx);
+    case "spotify":
+      return new SpotifySlotPlayer(spotifyCtx);
+    default:
+      throw new Error(`Unknown slot source: ${slot.source}`);
   }
 }
 
@@ -404,7 +412,8 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   // Default factory: real adapters over lazily-created contexts. Contexts are
   // created on first slot construction rather than eagerly per crossfade.
   const slotPlayerFactory: MakeSlotPlayer =
-    makeSlotPlayer ?? ((slot) => createSlotPlayer(slot, getOrCreateLocalCtx(), getOrCreateSpotifyCtx()));
+    makeSlotPlayer ??
+    ((slot) => createSlotPlayer(slot, getOrCreateLocalCtx(), getOrCreateSpotifyCtx()));
 
   async function playScene(sceneId: number): Promise<void> {
     await crossfadeTo(sceneId);
@@ -632,17 +641,37 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   });
 
   return {
-    get activeSceneId() { return activeSceneId; },
-    get isPlaying() { return isPlaying; },
-    get isCrossfading() { return isCrossfading; },
-    get loadingSceneId() { return loadingSceneId; },
-    get slotStates() { return slotStates; },
-    get masterVolume() { return masterVolume; },
-    get isMasterMuted() { return preMuteVolume !== null; },
-    get isScenePaused() {
-      return activeSceneId !== null && slotStates.size > 0 && [...slotStates.values()].every(s => !s.playing);
+    get activeSceneId() {
+      return activeSceneId;
     },
-    get analyserNode(): AnalyserNode | null { return localCtx?.analyser ?? null; },
+    get isPlaying() {
+      return isPlaying;
+    },
+    get isCrossfading() {
+      return isCrossfading;
+    },
+    get loadingSceneId() {
+      return loadingSceneId;
+    },
+    get slotStates() {
+      return slotStates;
+    },
+    get masterVolume() {
+      return masterVolume;
+    },
+    get isMasterMuted() {
+      return preMuteVolume !== null;
+    },
+    get isScenePaused() {
+      return (
+        activeSceneId !== null &&
+        slotStates.size > 0 &&
+        [...slotStates.values()].every((s) => !s.playing)
+      );
+    },
+    get analyserNode(): AnalyserNode | null {
+      return localCtx?.analyser ?? null;
+    },
     playScene,
     stopAll,
     setSlotVolume,

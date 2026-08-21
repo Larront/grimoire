@@ -9,45 +9,86 @@ let mockTemplates: TemplateEntry[] = [];
 
 vi.mock("../lib/stores/ledger.svelte", () => ({
   ledger: {
-    get isOpen() { return true; },
-    get path() { return "/ledger"; },
+    get isOpen() {
+      return true;
+    },
+    get path() {
+      return "/ledger";
+    },
     closeLedger: vi.fn(),
     checkExistingLedger: vi.fn(),
   },
   failedImportsModal: { open: false, failures: [] },
+  unlinkedPinsModal: { open: false, pins: [] },
 }));
 
 vi.mock("../lib/stores/notes.svelte", () => ({
-  notes: { get notes() { return []; } },
+  notes: {
+    get notes() {
+      return [];
+    },
+  },
 }));
 
 vi.mock("../lib/stores/maps.svelte", () => ({
-  maps: { get maps() { return []; } },
+  maps: {
+    get maps() {
+      return [];
+    },
+  },
 }));
 
 vi.mock("../lib/stores/scenes.svelte", () => ({
   scenes: {
-    get scenes() { return []; },
+    get scenes() {
+      return [];
+    },
     getSlots: vi.fn(() => Promise.resolve([])),
+    load: vi.fn(),
+  },
+}));
+
+vi.mock("../lib/stores/quick-notes.svelte", () => ({
+  quickNotes: {
+    get notes() {
+      return [];
+    },
+    get count() {
+      return 0;
+    },
     load: vi.fn(),
   },
 }));
 
 vi.mock("../lib/stores/templates.svelte", () => ({
   templates: {
-    get templates() { return mockTemplates; },
-    get isLoading() { return false; },
+    get templates() {
+      return mockTemplates;
+    },
+    get isLoading() {
+      return false;
+    },
     load: vi.fn(),
   },
 }));
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: {
-    get left() { return { tabs: [], activeIndex: 0 }; },
-    get right() { return null; },
-    get focusedPane() { return "left"; },
-    get dragging() { return null; },
-    get activeTab() { return null; },
+    get left() {
+      return { tabs: [], activeIndex: 0 };
+    },
+    get right() {
+      return null;
+    },
+    get focusedPane() {
+      return "left";
+    },
+    get dragging() {
+      return null;
+    },
+    get activeTab() {
+      return null;
+    },
     openTab: vi.fn(),
     navigateOpen: vi.fn(),
     closeActiveTab: vi.fn(),
@@ -68,13 +109,27 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   audioEngine: {
-    get activeSceneId() { return null; },
-    get loadingSceneId() { return null; },
-    get isPlaying() { return false; },
-    get isCrossfading() { return false; },
-    get masterVolume() { return 1; },
-    get slotStates() { return new Map(); },
-    get analyserNode() { return null; },
+    get activeSceneId() {
+      return null;
+    },
+    get loadingSceneId() {
+      return null;
+    },
+    get isPlaying() {
+      return false;
+    },
+    get isCrossfading() {
+      return false;
+    },
+    get masterVolume() {
+      return 1;
+    },
+    get slotStates() {
+      return new Map();
+    },
+    get analyserNode() {
+      return null;
+    },
     playScene: vi.fn(),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
@@ -82,16 +137,6 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     resumeSlot: vi.fn().mockResolvedValue(undefined),
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
-  },
-}));
-
-vi.mock("../lib/stores/right-rail.svelte", () => ({
-  RightRailState: class {
-    open = false;
-    isMobile = false;
-    openMobile = false;
-    toggle() {}
-    setOpenMobile(_v: boolean) {}
   },
 }));
 
@@ -126,15 +171,21 @@ afterEach(() => {
 });
 
 async function flush() {
-  await act(async () => { await Promise.resolve(); });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 async function openTemplatesSection(container: Element) {
   const labels = Array.from(container.querySelectorAll("[data-slot='sidebar-group-label']"));
-  const label = labels.find(el => el.textContent?.includes("Templates")) as HTMLElement | undefined;
+  const label = labels.find((el) => el.textContent?.includes("Templates")) as
+    | HTMLElement
+    | undefined;
   if (!label) throw new Error("Templates group label not found");
   // The Collapsible.Trigger renders as a button inside the label element.
-  const trigger = (label.tagName === "BUTTON" ? label : label.querySelector("button")) as HTMLElement | null;
+  const trigger = (
+    label.tagName === "BUTTON" ? label : label.querySelector("button")
+  ) as HTMLElement | null;
   if (!trigger) throw new Error("Templates collapsible trigger button not found");
   await fireEvent.click(trigger);
   await flush();
@@ -149,7 +200,7 @@ describe("AppSidebar — Templates section", () => {
     const { container } = render(AppShell);
     await flush();
     const labels = Array.from(container.querySelectorAll("[data-slot='sidebar-group-label']"));
-    const templatesLabel = labels.find(el => el.textContent?.includes("Templates"));
+    const templatesLabel = labels.find((el) => el.textContent?.includes("Templates"));
     expect(templatesLabel).toBeTruthy();
   });
 
@@ -194,23 +245,23 @@ describe("AppSidebar — Templates section", () => {
     await fireEvent.contextMenu(trigger!);
 
     const deleteItem = await waitFor(() => {
-      const items = Array.from(
-        document.body.querySelectorAll('[data-slot="context-menu-item"]'),
-      );
-      const item = items.find(el => el.textContent?.includes("Delete Template")) as HTMLElement | undefined;
+      const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
+      const item = items.find((el) => el.textContent?.includes("Delete Template")) as
+        | HTMLElement
+        | undefined;
       if (!item) throw new Error("Delete Template menu item not found");
       return item;
     });
 
     await fireEvent.click(deleteItem);
-    expect(toastUndo).toHaveBeenCalledWith(
-      expect.stringContaining("NPC"),
-      expect.any(Function),
-    );
+    expect(toastUndo).toHaveBeenCalledWith(expect.stringContaining("NPC"), expect.any(Function));
   });
 
   it("clicking '+' button invokes create_template and opens template tab with badge", async () => {
-    const fakeEntry = { display_name: "Untitled", path: ".grimoire/templates/Untitled.md" };
+    const fakeEntry = {
+      display_name: "Untitled",
+      path: ".grimoire/templates/Untitled.md",
+    };
     vi.mocked(invoke).mockImplementation((cmd: string) => {
       if (cmd === "create_template") return Promise.resolve(fakeEntry);
       return Promise.resolve(null);
@@ -225,7 +276,11 @@ describe("AppSidebar — Templates section", () => {
 
     expect(invoke).toHaveBeenCalledWith("create_template");
     expect(tabs.openTab).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "template", badge: "Template", templatePath: fakeEntry.path }),
+      expect.objectContaining({
+        type: "template",
+        badge: "Template",
+        templatePath: fakeEntry.path,
+      }),
     );
   });
 

@@ -21,10 +21,7 @@
   import { Check } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import { placeMenu } from "$lib/utils/anchored-menu";
-  import type {
-    BlockHandleCommand,
-    BlockHandleMenuSection,
-  } from "$lib/editor/block-handle-menu";
+  import type { BlockHandleCommand, BlockHandleMenuSection } from "$lib/editor/block-handle-menu";
 
   interface Props {
     sections: BlockHandleMenuSection[];
@@ -152,9 +149,7 @@
   onkeydown={handleKeydown}
 >
   {#each sections as section, s (section.title ?? "actions")}
-    {@const offset = sections
-      .slice(0, s)
-      .reduce((n, earlier) => n + earlier.items.length, 0)}
+    {@const offset = sections.slice(0, s).reduce((n, earlier) => n + earlier.items.length, 0)}
     <!-- The heading is `aria-hidden` and names the group instead: read as a stray line of
          text between menu items it would be noise, and read as the group's name it is the
          verb the seven items below it are missing. -->
@@ -194,9 +189,9 @@
           onclick={() => onSelect(item.command)}
           onmouseenter={() => (active = index)}
         >
-          {#if Icon}
-            <Icon size={14} class="shrink-0 opacity-70" />
-          {/if}
+          <!-- Unguarded, like the slash menu's: an item's icon name is typed as one that
+               exists (#220), so a typo is a build error rather than a missing glyph. -->
+          <Icon size={14} class="shrink-0 opacity-70" />
           <span class="flex-1">{item.label}</span>
           <!-- What the block already is, said twice on purpose: `aria-checked` for a
                screen reader, and a tick for everyone reading the menu with their eyes. -->

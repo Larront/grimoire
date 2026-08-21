@@ -1,10 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger } from "$lib/stores/ledger.svelte";
-  import { notes } from "$lib/stores/notes.svelte";
-  import { tabs } from "$lib/stores/tabs.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-  import { api } from "$lib/api";
+  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note } from "$lib/types/ledger";
   import { LoaderCircle } from "@lucide/svelte";
 
@@ -17,14 +15,7 @@
     isCreatingNote = true;
     errorMsg = null;
     try {
-      const newNote = await api.createNote("Untitled", "Untitled.md", null);
-      await notes.load();
-      tabs.openTab({
-        type: "note",
-        id: newNote.id,
-        title: "Untitled",
-        rename: true,
-      });
+      await createUntitledNoteAtRoot();
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -35,12 +26,8 @@
 
 <!-- ── Ledger home (new, empty ledger) ─────────────────────────────── -->
 <div class="flex flex-col items-center justify-center h-full">
-  <div
-    class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade"
-  >
-    <h1
-      class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight"
-    >
+  <div class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade">
+    <h1 class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight">
       {ledgerName}
     </h1>
 
@@ -48,11 +35,7 @@
       <p class="font-sans text-sm italic text-foreground-muted text-center">
         Every world begins with its first note.
       </p>
-      <Button
-        onclick={handleCreateFirstNote}
-        disabled={isCreatingNote}
-        class="gap-2"
-      >
+      <Button onclick={handleCreateFirstNote} disabled={isCreatingNote} class="gap-2">
         {#if isCreatingNote}
           <LoaderCircle class="w-3.5 h-3.5 animate-spin" />
           Creating...

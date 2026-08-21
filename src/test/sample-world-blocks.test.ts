@@ -33,13 +33,7 @@
 // The rewording is what keeps the sample world uncorrupted; it is not a fix.
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { closeNote, dom, note, saved } from "./fixtures/note-editor";
-import {
-  NOTES,
-  fenceBody,
-  frontmatterBlock,
-  shipped,
-  shipsFile,
-} from "./fixtures/sample-world";
+import { NOTES, fenceBody, frontmatterBlock, shipped, shipsFile } from "./fixtures/sample-world";
 
 vi.mock("$lib/stores/link-resolver.svelte", () => ({
   linkResolver: { isKnown: () => true, prime: vi.fn(), resolve: vi.fn() },
@@ -204,9 +198,11 @@ describe("Mira Ashvale carries an Infobox with a thumbnail", () => {
     // "not saying the same thing twice" applies here exactly as it does to Thornhaven.
     // The whole fence, not `rowLines()` — that helper filters `# ` lines out, so asking
     // it whether one is there could only ever get one answer.
-    expect(fenceBody(raw, "infobox").split("\n").some((line) => line.startsWith("# "))).toBe(
-      false,
-    );
+    expect(
+      fenceBody(raw, "infobox")
+        .split("\n")
+        .some((line) => line.startsWith("# ")),
+    ).toBe(false);
   });
 
   it("duplicates no frontmatter key, and adds no frontmatter to feed a row", () => {
@@ -290,9 +286,7 @@ describe("Start Here points at the blocks it now has to point at", () => {
     const editor = note(body);
 
     expect(tour).toContain("> [!tip]");
-    expect(dom(editor).querySelector("blockquote")).toHaveTextContent(
-      "This aside is a Callout",
-    );
+    expect(dom(editor).querySelector("blockquote")).toHaveTextContent("This aside is a Callout");
   });
 
   it("still embeds the two scene fences the seeded scenes are checked against", () => {

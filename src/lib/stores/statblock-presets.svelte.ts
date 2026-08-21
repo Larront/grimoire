@@ -115,10 +115,7 @@ function createStatblockPresets() {
     },
     /** Whether the pointer names a preset that exists. Settings' `(not found)`. */
     get defaultResolves() {
-      return (
-        defaultName === null ||
-        findPreset(availablePresets(stored), defaultName) !== null
-      );
+      return defaultName === null || findPreset(availablePresets(stored), defaultName) !== null;
     },
 
     load,

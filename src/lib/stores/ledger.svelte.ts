@@ -1,7 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
 import { api, friendlyMessage } from "$lib/api";
-import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
+import {
+  toastError,
+  toastImportFailures,
+  toastMigrationReport,
+  toastUnlinkedPins,
+} from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import type { MigrationPlan } from "$lib/bindings.gen";
 
@@ -19,12 +24,23 @@ export interface FailedImport {
   reason: string;
 }
 
+/** A pin the open-time ledger repair left pointing at nothing (#224). */
+export interface UnlinkedPin {
+  pin_id: number;
+  pin_title: string;
+  map_id: number;
+  map_title: string;
+}
+
 interface OpenLedgerResult {
   path: string;
   note_count: number;
   scene_count: number;
   map_count: number;
   failed_imports: FailedImport[];
+  /** Pins the open-time notes repair unlinked (issue #224). Empty on every
+   *  ordinary open. */
+  unlinked_pins: UnlinkedPin[];
   /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
   recovered_from_backup: string | null;
 }
@@ -45,6 +61,14 @@ export const failedImportsModal = $state({
   failures: [] as FailedImport[],
 });
 
+/** The pins an open-time repair unlinked, and the dialog that lists them (#224).
+ *  `pins` outlives the toast on purpose: the toast is how the GM learns, this is
+ *  where they go on finding out, and closing one must not lose the other. */
+export const unlinkedPinsModal = $state({
+  open: false,
+  pins: [] as UnlinkedPin[],
+});
+
 function createLedgerStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
@@ -61,9 +85,7 @@ function createLedgerStore() {
   // format (ADR-0017) — FormatMigrationDialog (also in the root layout) composes
   // its copy from this plan and offers Update/Cancel. Declining leaves it null
   // and the ledger closed: the refusal that put it here simply stands.
-  let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(
-    null,
-  );
+  let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(null);
 
   /** Applies a successful open_ledger result to store state and surfaces
    *  failed imports and snapshot recovery. */
@@ -77,6 +99,14 @@ function createLedgerStore() {
         failedImportsModal.open = true;
       });
     }
+
+    // A repair that changed nothing says nothing — the common case, and the
+    // silence there is correct. When it did act, the pins it cost the GM are
+    // named rather than counted (issue #224).
+    unlinkedPinsModal.pins = result.unlinked_pins;
+    toastUnlinkedPins(result.unlinked_pins.length, () => {
+      unlinkedPinsModal.open = true;
+    });
 
     // Invisible background recovery → informational toast (issue #116).
     if (result.recovered_from_backup) {
@@ -118,10 +148,7 @@ function createLedgerStore() {
    *  beside it would say less than the dialog behind it. The rebuild prompt is
    *  left reporting, because a damaged database is a fault the GM should be told
    *  about whether or not they take the offer to repair it. */
-  async function routeOpenRefusal(
-    ledgerPath: string,
-    e: unknown,
-  ): Promise<boolean> {
+  async function routeOpenRefusal(ledgerPath: string, e: unknown): Promise<boolean> {
     const raw = String(e);
     if (raw.includes("ERR_DB_CORRUPT")) {
       corruptLedgerPath = ledgerPath;
@@ -131,9 +158,7 @@ function createLedgerStore() {
       // migrations that actually found work rather than written in advance.
       // A plan we cannot obtain means no prompt: the refusal stands, which is
       // the same place a decline leaves the GM.
-      const plan = await api.silent
-        .planFormatMigration(ledgerPath)
-        .catch(() => null);
+      const plan = await api.silent.planFormatMigration(ledgerPath).catch(() => null);
       if (plan) {
         formatMigration = { path: ledgerPath, plan };
         // The database side is settled by the time this refusal is reached, so

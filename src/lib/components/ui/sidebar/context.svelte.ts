@@ -36,9 +36,7 @@ class SidebarState {
   open = $derived.by(() => this.props.open());
   // openMobile is false when another overlay panel is active (mutual exclusion)
   #openMobileInternal = $state(false);
-  openMobile = $derived.by(
-    () => this.#openMobileInternal && overlay.active === "sidebar",
-  );
+  openMobile = $derived.by(() => this.#openMobileInternal && overlay.active === "sidebar");
   setOpen: SidebarStateProps["setOpen"];
   #isMobile: IsMobile;
   state = $derived.by(() => (this.open ? "expanded" : "collapsed"));

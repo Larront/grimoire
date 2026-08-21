@@ -28,16 +28,14 @@
     type CalloutAttrs,
   } from "$lib/editor/callout-block";
 
+  // The callout's record, taken as one prop bag rather than field by field: the connector
+  // mounts a block with its record spread over the props, so the rest element *is* the
+  // record and nothing here re-lists it (#209).
   let {
-    calloutType = null,
-    calloutTitle = null,
-    foldMarker = null,
     onTitleCommit,
     onCollapse,
-  }: {
-    calloutType?: string | null;
-    calloutTitle?: string | null;
-    foldMarker?: string | null;
+    ...attrs
+  }: CalloutAttrs & {
     /** The edited title, `null` when the GM cleared it back to nothing. */
     onTitleCommit: (title: string | null) => void;
     /**
@@ -47,18 +45,19 @@
     onCollapse?: () => void;
   } = $props();
 
+  // The editable copy — one record, so an undo hands over a whole callout and `setAttrs`
+  // has no field it can leave behind holding a stale value.
   // svelte-ignore state_referenced_locally
-  let _type = $state(calloutType);
-  // svelte-ignore state_referenced_locally
-  let _title = $state(calloutTitle);
+  let callout = $state<CalloutAttrs>({ ...attrs });
 
   // Seeded once from the file's fold marker and never written back: `-` is an authored
   // *starting* state (#180). A later attribute change must not re-fold a box the GM
-  // opened, so `setAttrs` leaves this alone.
+  // opened, so `setAttrs` leaves this alone — collapse is view state and lives outside
+  // the record for exactly that reason.
   // svelte-ignore state_referenced_locally
-  let collapsed = $state(isInitiallyCollapsed({ foldMarker }));
+  let collapsed = $state(isInitiallyCollapsed(attrs));
 
-  const known = $derived(recognisedCalloutType(_type));
+  const known = $derived(recognisedCalloutType(callout.calloutType));
 
   // Only a recognised type has an icon: an unrecognised one is drawn neutrally, and
   // that includes having none. The name comes off `CALLOUT_TYPES`, so the vocabulary
@@ -73,7 +72,7 @@
    * near it writes `Warning` into `> [!warning]`. It also reads as what it is: faded,
    * so a GM can see the box is unnamed and click to name it.
    */
-  const fallback = $derived(_type ? titleCaseCalloutType(_type) : "");
+  const fallback = $derived(callout.calloutType ? titleCaseCalloutType(callout.calloutType) : "");
 
   /**
    * Collapsing hides real document content, so the caret must not still be in it — a
@@ -88,13 +87,12 @@
   function setTitle(next: string) {
     // An emptied field is an *absent* title, not an empty one — the header line then
     // writes `> [!warning]` with nothing after the marker.
-    _title = next || null;
-    onTitleCommit(_title);
+    callout.calloutTitle = next || null;
+    onTitleCommit(callout.calloutTitle);
   }
 
-  export function setAttrs(attrs: CalloutAttrs) {
-    _type = attrs.calloutType;
-    _title = attrs.calloutTitle;
+  export function setAttrs(next: CalloutAttrs) {
+    callout = next;
   }
 </script>
 
@@ -103,10 +101,10 @@
      and a quote with no type is styled as the ordinary quote it is. -->
 <blockquote
   class="callout-block"
-  data-callout={_type ?? undefined}
+  data-callout={callout.calloutType ?? undefined}
   data-callout-known={known ? "" : undefined}
 >
-  {#if _type}
+  {#if callout.calloutType}
     <!-- Chrome, not content: `contenteditable="false"` keeps the caret out, and the
          connector's default event handling already gives every event in here to the
          block rather than to ProseMirror — which is the event swallowing the title
@@ -118,7 +116,7 @@
       {/if}
 
       <LinkedTextField
-        value={_title ?? ""}
+        value={callout.calloutTitle ?? ""}
         onCommit={setTitle}
         restrict={oneLine}
         ariaLabel="Callout title"

@@ -16,7 +16,7 @@ Within a record the header is the leading lines — an optional `Date:` line fol
 
 ## Why
 
-A Timeline Event's data *is* the note content (unlike a Scene, which a block references by SQLite id). The ledger-portability principle — defended for frontmatter tags and elsewhere — therefore applies directly: a fenced block keeps every event legible, greppable, and hand-editable in Obsidian or VS Code, matching the established `mermaid`/`dataview` fenced-block convention. An opaque `<timeline>` HTML blob (the Scene-block approach) would degrade to unreadable soup in any other tool.
+A Timeline Event's data _is_ the note content (unlike a Scene, which a block references by SQLite id). The ledger-portability principle — defended for frontmatter tags and elsewhere — therefore applies directly: a fenced block keeps every event legible, greppable, and hand-editable in Obsidian or VS Code, matching the established `mermaid`/`dataview` fenced-block convention. An opaque `<timeline>` HTML blob (the Scene-block approach) would degrade to unreadable soup in any other tool.
 
 The fence body avoids inline delimiters (`|`, `:`) because wikilink display syntax (`[[path|display]]`) and date labels (`Year 812: dawn`) legitimately contain them. Labeled lines are self-describing in the raw file and degrade gracefully when an optional field is absent, where a positional format would silently mislabel fields on a missing line.
 
@@ -31,4 +31,4 @@ The fence body avoids inline delimiters (`|`, `:`) because wikilink display synt
 - Wikilinks inside the fence are indexed for free: `extract_wikilinks` scans the whole note body including code fences, so timeline links feed the Link Index, Backlinks, and the Graph with no new indexing code, and rename-rewrite reaches into the fence too.
 - The block is an **atom** TipTap node whose event fields are plain `[[...]]`-bearing strings (see CONTEXT.md decision row); true nested-ProseMirror content is deferred.
 - A description cannot contain a blank-line paragraph break (the blank line is the event separator). Acceptable for short event blurbs; revisit if multi-paragraph descriptions become a real need.
-- Because the `Title:` line ends the header, a hand-authored `Date:` line placed *after* `Title:` is read as description rather than the date. The serializer always emits `Date:` first, so this only affects out-of-canonical-order hand edits — the trade-off that lets description content beginning with `Date:`/`Title:` survive a round-trip intact.
+- Because the `Title:` line ends the header, a hand-authored `Date:` line placed _after_ `Title:` is read as description rather than the date. The serializer always emits `Date:` first, so this only affects out-of-canonical-order hand edits — the trade-off that lets description content beginning with `Date:`/`Title:` survive a round-trip intact.

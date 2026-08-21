@@ -15,6 +15,7 @@ import { fireEvent, render } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
+import { createBlockHandleLife } from "$lib/editor/block-handle-life.svelte";
 import {
   bodyStart,
   caretAt,
@@ -39,17 +40,14 @@ vi.mock("$lib/stores/link-resolver.svelte", () => ({
 afterEach(closeNote);
 
 function titleField(editor: Editor, index = 0): HTMLElement {
-  const fields = dom(editor).querySelectorAll<HTMLElement>(
-    '[aria-label="Callout title"]',
-  );
+  const fields = dom(editor).querySelectorAll<HTMLElement>('[aria-label="Callout title"]');
   return fields[index];
 }
 
 // ─── The body is ProseMirror's ────────────────────────────────────────────────
 
 describe("a callout's body is ordinary document content", () => {
-  const MD =
-    "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.";
+  const MD = "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.";
 
   it("draws the body inside the node view's content hole", () => {
     const editor = note(MD);
@@ -90,9 +88,7 @@ describe("a callout's body is ordinary document content", () => {
     const editor = note("> Just a quotation.");
 
     expect(titleField(editor)).toBeUndefined();
-    expect(dom(editor).querySelector("blockquote")).toHaveTextContent(
-      "Just a quotation.",
-    );
+    expect(dom(editor).querySelector("blockquote")).toHaveTextContent("Just a quotation.");
     expect(saved(editor)).toBe("> Just a quotation.");
   });
 });
@@ -203,9 +199,7 @@ describe("typing in the title stays in the title", () => {
 
     expect(header).toHaveAttribute("contenteditable", "false");
     expect(
-      dom(editor)
-        .querySelector("[data-node-view-content]")
-        ?.closest("[contenteditable=false]"),
+      dom(editor).querySelector("[data-node-view-content]")?.closest("[contenteditable=false]"),
     ).toBeNull();
   });
 
@@ -299,8 +293,7 @@ describe("the callout's keyboard boundaries", () => {
   });
 
   it("exits the inner callout of a nest into the prose above it", () => {
-    const md =
-      "> [!note] The Ledger\n> Signed in ash.\n>\n> > [!warning] The bridge is out";
+    const md = "> [!note] The Ledger\n> Signed in ash.\n>\n> > [!warning] The bridge is out";
     const editor = note(md);
     caretAt(editor, bodyStart(editor, 1));
     press(editor, "Backspace");
@@ -326,8 +319,7 @@ describe("nested content is editable in place", () => {
   });
 
   it("edits the inner callout's title without touching the outer one", async () => {
-    const md =
-      "> [!note] The Ledger\n> > [!warning] The bridge is out\n> > Mind the gap.";
+    const md = "> [!note] The Ledger\n> > [!warning] The bridge is out\n> > Mind the gap.";
     const editor = note(md);
 
     await fireEvent.click(titleField(editor, 1));
@@ -336,17 +328,13 @@ describe("nested content is editable in place", () => {
     });
     await fireEvent.blur(titleField(editor, 1));
 
-    expect(saved(editor)).toBe(
-      "> [!note] The Ledger\n> > [!warning] Careful\n> > Mind the gap.",
-    );
+    expect(saved(editor)).toBe("> [!note] The Ledger\n> > [!warning] Careful\n> > Mind the gap.");
   });
 
   it("renders a fence inside a callout as its own block rather than a code box", () => {
     // #158's failure, asserted where a GM meets it: the fence a fight is grouped
     // around must be a real block at depth, node view and all.
-    const editor = note(
-      "> [!encounter] The Ambush\n> ```infobox\n> Population: 4,200\n> ```",
-    );
+    const editor = note("> [!encounter] The Ambush\n> ```infobox\n> Population: 4,200\n> ```");
 
     expect(dom(editor).querySelector(".infobox-block")).toBeTruthy();
     expect(dom(editor).querySelector("pre")).toBeNull();
@@ -389,9 +377,7 @@ describe("collapsing a callout", () => {
     const editor = note(MD);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute(
-      "hidden",
-    );
+    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
     expect(titleField(editor)).toHaveTextContent("The Ambush");
   });
 
@@ -402,9 +388,7 @@ describe("collapsing a callout", () => {
 
     await fireEvent.click(dom(editor).querySelector('[aria-label="Expand callout"]')!);
     expect(saved(editor)).toBe(MD);
-    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute(
-      "hidden",
-    );
+    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute("hidden");
   });
 
   it("takes the caret out of a body it hides", async () => {
@@ -433,18 +417,14 @@ describe("collapsing a callout", () => {
   it("starts collapsed when the file's fold marker asks for it", () => {
     const editor = note("> [!encounter]- The Ambush\n> Four goblins.");
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute(
-      "hidden",
-    );
+    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
     expect(dom(editor).querySelector('[aria-label="Expand callout"]')).toBeTruthy();
   });
 
   it("starts open when the marker asks for open, and writes the marker back either way", async () => {
     const editor = note("> [!encounter]+ The Ambush\n> Four goblins.");
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute(
-      "hidden",
-    );
+    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute("hidden");
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
     expect(saved(editor)).toBe("> [!encounter]+ The Ambush\n> Four goblins.");
   });
@@ -522,16 +502,10 @@ describe("a callout follows the document", () => {
  * action to hand back to the prose.
  */
 async function deleteViaGrip(editor: Editor) {
-  render(BlockHandle, {
-    props: {
-      editor,
-      target: targetOf(editor, "blockquote"),
-      onHold: () => {},
-      onPin: () => {},
-      onRetarget: () => {},
-      onRelease: () => {},
-    },
-  });
+  const handle = createBlockHandleLife(() => editor);
+  const target = targetOf(editor, "blockquote");
+  handle.point(target);
+  render(BlockHandle, { props: { editor, target, handle } });
   const grip = document.querySelector<HTMLButtonElement>("[data-block-handle]");
   expect(grip, "a grip on the callout").not.toBeNull();
 
@@ -608,9 +582,7 @@ describe("removing a callout", () => {
   });
 
   it("leaves the prose around it alone", async () => {
-    const editor = note(
-      "Before the box.\n\n> [!note] Aside\n> Inside the box.\n\nAfter the box.",
-    );
+    const editor = note("Before the box.\n\n> [!note] Aside\n> Inside the box.\n\nAfter the box.");
 
     await deleteViaGrip(editor);
 

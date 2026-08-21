@@ -91,7 +91,7 @@ Grimoire is cooled iron with an ember still glowing inside it. The surface is da
 still, and disciplined — near-black greys layered by tone, hairline borders of the
 faintest light — and against that stillness sits a single point of heat: crimson,
 used sparingly, the way a live coal reads against cold metal. Nothing here is
-decorative. The restraint *is* the brand: the product's own thesis is "the tool
+decorative. The restraint _is_ the brand: the product's own thesis is "the tool
 disappears," and the site practices what the app preaches. Warmth is latent, held in
 reserve, spent only where it counts.
 
@@ -101,7 +101,7 @@ honest tonal layering (deep → dark → raised) and thin white borders, never f
 drop-shadows or glassy blur. Typography carries the atmosphere: a medieval display
 face for the spellbook resonance, a clean humanist sans for the working text, a
 monospace for the technical, local-first credibility signals. The metaphor of a
-grimoire is held *lightly* — in language and type, never in costume.
+grimoire is held _lightly_ — in language and type, never in costume.
 
 This system explicitly rejects three things. It is **not a generic SaaS landing**:
 no gradient-mesh hero, no three-identical-feature-cards, no big-number hero metrics,
@@ -110,6 +110,7 @@ clip-art, no blackletter, no wizard clichés. And it is **not corporate or steri
 it has a committed point of view and would never be mistaken for an anonymous B2B tool.
 
 **Key Characteristics:**
+
 - Dark-first, near-black iron surfaces layered by tone, not by shadow
 - One committed accent (crimson) as the sole point of heat, used rarely
 - Medieval display serif + humanist sans + monospace, each with a distinct job
@@ -123,6 +124,7 @@ neutral irons and warm embers — with one saturated crimson accent that carries
 the heat.
 
 ### Primary
+
 - **Ember Crimson** (`#c2483d`): The sole accent and the only saturated color in the
   system. Reserved for the primary CTA ("Download Grimoire"), the wordmark, feature
   eyebrow labels, and hover-reveal arrows. It is the ember in the forge — its scarcity
@@ -130,11 +132,12 @@ the heat.
 - **Forge Crimson** (`#a83228`): The pressed/hover state of Ember Crimson. A deeper,
   cooler red that reads as the coal being pressed, not lit.
 - **Crimson Lit** (`#f9f1f0`): A near-white warmed toward crimson, used only as the
-  label color *on* a crimson button — the glow at the surface of the heat.
+  label color _on_ a crimson button — the glow at the surface of the heat.
 - **Crimson Tint** (`#c2483d1f`) & **Crimson Veil** (`#c2483d3d`): Low-opacity crimson
   washes for subtle fills and text selection highlight.
 
 ### Neutral (Iron)
+
 - **Iron Deep** (`#181818`): The base body background. The cold metal everything sits on.
 - **Iron Dark** (`#1f1f1f`): One tonal step up — alternating section backgrounds
   (e.g. the Features band) to segment the page without borders alone.
@@ -146,6 +149,7 @@ the heat.
   and list rows.
 
 ### Neutral (Ember Text)
+
 - **Ember Ash** (`#f0ece8`): Primary text — a warm off-white, the color of settled ash.
   Headings and high-emphasis copy.
 - **Ember Muted** (`#a39e99`): Secondary/body copy. Passes AA on Iron Deep (~6.6:1).
@@ -153,6 +157,7 @@ the heat.
   contrast on Iron Deep (~3.1:1): permitted for large/label text only, never body.
 
 ### Named Rules
+
 **The One Ember Rule.** Crimson is the only saturated color in the system and appears
 on ≤10% of any screen. If a second accent hue shows up, or crimson starts filling
 regions instead of marking them, the forge has caught fire — pull it back. Its rarity
@@ -170,13 +175,14 @@ and add a hairline border — do not reach for `box-shadow`.
 
 **Character:** A three-voice pairing on a deliberate contrast axis. Metamorphous is a
 medieval-inflected display serif — it carries the grimoire resonance without tipping
-into blackletter kitsch, and it appears *only* at large sizes where its character
+into blackletter kitsch, and it appears _only_ at large sizes where its character
 reads as craft, not costume. Nunito is a warm, rounded humanist sans that keeps the
 working text approachable and highly legible. JetBrains Mono handles the technical
 register — the local-first / open-source / platform signals — lending engineered
 credibility. Serif + sans + mono are maximally distinct; they never compete.
 
 ### Hierarchy
+
 - **Display** (Metamorphous 400, `clamp(2.25rem → 3rem)`, line-height 1.15): The hero
   H1 and section H2s. The spellbook voice. `text-wrap: balance` for even lines.
 - **Headline** (Metamorphous 400, `clamp(1.875rem → 2.25rem)`, line-height 1.25):
@@ -189,6 +195,7 @@ credibility. Serif + sans + mono are maximally distinct; they never compete.
   Eyebrows and meta rows ("LOCAL-FIRST · OPEN SOURCE", "01 · NOTES", file formats).
 
 ### Named Rules
+
 **The Serif-For-Voice Rule.** Metamorphous is for display sizes only (H1/H2 and the
 wordmark). Never set body, buttons, or UI labels in the display serif — at small sizes
 its character becomes noise and legibility drops. Working text is always Nunito.
@@ -208,12 +215,13 @@ blur is used in exactly one place (the sticky nav, `backdrop-blur-sm` over a 95%
 Iron Deep) as a functional legibility aid, never as decorative glassmorphism.
 
 ### Named Rules
-**The No-Shadow Rule.** `box-shadow` is prohibited as a *depth* device. If a 2014-app
+
+**The No-Shadow Rule.** `box-shadow` is prohibited as a _depth_ device. If a 2014-app
 lifted-card look appears, the shadow is the mistake — delete it and step the iron tone
 instead. Focus states may use a crimson ring; that is signal, not elevation.
 
 **The Ember-Glow Exception.** One `box-shadow` is sanctioned, and only one: a soft
-crimson glow on the **primary CTA** (`.ember-cta`). It reads as *energy* — the ember
+crimson glow on the **primary CTA** (`.ember-cta`). It reads as _energy_ — the ember
 earning its name — not as depth: it kindles in on load and intensifies on hover
 (`0 12px 34px -10px var(--color-crimson)`). It never appears at rest on cards or
 surfaces, and it is never a second color. This is the same "one functional exception"
@@ -228,7 +236,7 @@ catches the ember. State transitions run `150ms ease-out`.
 **Motion system.** Content is revealed, not decorated. On load the hero plays one
 orchestrated staggered entrance (rise + fade, `~90ms` apart, `ease-out-expo`); on
 scroll, the product screenshot (a slightly scaled reveal), the feature articles, and
-the download rows animate in as content *groups* — never a blanket fade on every
+the download rows animate in as content _groups_ — never a blanket fade on every
 section heading. All reveals are gated on a pre-paint `.js-motion` class, so the
 default page (no-JS, reduced-motion, or headless) renders fully visible; motion is
 pure enhancement and can never ship a section blank. Reveal timings sit in the
@@ -236,6 +244,7 @@ pure enhancement and can never ship a section blank. Reveal timings sit in the
 no elastic, no infinite loops.
 
 ### Buttons
+
 - **Shape:** Gently squared corners (`6px`, `rounded-structural`).
 - **Primary:** Ember Crimson (`#c2483d`) fill, Crimson Lit (`#f9f1f0`) label,
   semibold. Padding `0.75rem 1.5rem` (hero) or `0.375rem 1rem` (nav). The single
@@ -246,6 +255,7 @@ no elastic, no infinite loops.
   focus-visible ring in crimson for keyboard users.
 
 ### Cards / Containers
+
 - **Corner Style:** `8px` (`rounded-elevated`) for the screenshot frame; `6px` for
   smaller structural elements.
 - **Background:** Iron Raised (`#262626`) for the one true elevated surface.
@@ -254,6 +264,7 @@ no elastic, no infinite loops.
 - **Internal Padding:** Content-driven; the screenshot frame clips the image flush.
 
 ### Navigation
+
 - **Style:** Sticky top bar, `56px` tall, 95%-opaque Iron Deep with `backdrop-blur-sm`,
   hairline bottom border. Wordmark in Metamorphous crimson at left; links right.
 - **States:** Links are Ember Muted, hover to Ember Ash on a Hover Overlay wash. The
@@ -261,12 +272,14 @@ no elastic, no infinite loops.
   GitHub + Download persist.
 
 ### Feature Item (signature)
+
 No cards. Each feature is a bare `<article>`: a mono crimson eyebrow (`01 · NOTES`), a
 Nunito semibold title, and an Ember Muted body paragraph, laid out in a two-column grid
 with generous asymmetric gutters (`gap-x-16 gap-y-14`). The absence of card chrome is
 deliberate — the content stands on typography and space alone.
 
 ### Download List (signature)
+
 A bordered list with `divide-y` hairline rows. Each row: OS name (Nunito semibold) at
 left, mono file formats (Ember Faint) plus an arrow at right. On hover the whole row
 warms with Hover Overlay and the arrow shifts from Ember Muted to crimson — the ember
@@ -275,6 +288,7 @@ catching as you reach for it.
 ## 6. Do's and Don'ts
 
 ### Do:
+
 - **Do** keep crimson to ≤10% of any screen — one primary CTA, the wordmark, and small
   labels. Its scarcity is the design (The One Ember Rule).
 - **Do** build depth from the iron tonal ramp (`#181818` → `#1f1f1f` → `#262626`) plus
@@ -286,6 +300,7 @@ catching as you reach for it.
   (already scaffolded in `app.css`).
 
 ### Don't:
+
 - **Don't** build a **generic SaaS landing**: no gradient-mesh hero, no three-identical
   feature cards, no big-number hero metrics, no purple/indigo palette.
 - **Don't** slide into **fantasy kitsch**: no faux-parchment textures, no dragon

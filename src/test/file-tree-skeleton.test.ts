@@ -19,6 +19,7 @@ describe("File tree skeleton", () => {
       if (cmd === "get_notes") return [];
       if (cmd === "get_maps") return [];
       if (cmd === "get_scenes_with_slot_counts") return [];
+      if (cmd === "list_quick_notes") return [];
       // Never resolve file tree — keeps treeLoading true
       if (cmd === "get_file_tree") return new Promise(() => {});
       return null;
@@ -28,16 +29,11 @@ describe("File tree skeleton", () => {
     const { container } = render(AppShell);
 
     await waitFor(() => {
-      const skeletons = container.querySelectorAll(
-        '[data-sidebar="menu-skeleton"]',
-      );
-      if (skeletons.length === 0)
-        throw new Error("No file tree skeletons found");
+      const skeletons = container.querySelectorAll('[data-sidebar="menu-skeleton"]');
+      if (skeletons.length === 0) throw new Error("No file tree skeletons found");
       return skeletons;
     });
 
-    expect(
-      container.querySelectorAll('[data-sidebar="menu-skeleton"]').length,
-    ).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[data-sidebar="menu-skeleton"]').length).toBeGreaterThan(0);
   });
 });

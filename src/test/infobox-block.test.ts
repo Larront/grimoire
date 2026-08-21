@@ -79,9 +79,9 @@ describe("parseInfoboxBody", () => {
   it("reads a row genuinely labelled Image rather than eating it", () => {
     // The image line the next ticket brings is markdown-flavoured (`![alt](path)`),
     // which is exactly what keeps `Image:` an ordinary row and not a reserved label.
-    expect(parseInfoboxBody(body("# Harbor's End", "Image: a woodcut of the harbour")).rows).toEqual(
-      [{ label: "Image", value: "a woodcut of the harbour" }],
-    );
+    expect(
+      parseInfoboxBody(body("# Harbor's End", "Image: a woodcut of the harbour")).rows,
+    ).toEqual([{ label: "Image", value: "a woodcut of the harbour" }]);
   });
 
   it("keeps a title holding a colon whole", () => {
@@ -131,7 +131,9 @@ describe("parseInfoboxBody reads a thumbnail", () => {
   });
 
   it("reads an image line in a panel with no title", () => {
-    expect(parseInfoboxBody(body("![The harbour](images/harbor.png)", "Population: 4,200"))).toEqual(
+    expect(
+      parseInfoboxBody(body("![The harbour](images/harbor.png)", "Population: 4,200")),
+    ).toEqual(
       record({
         image: "images/harbor.png",
         imageAlt: "The harbour",
@@ -168,7 +170,10 @@ describe("parseInfoboxBody reads a thumbnail", () => {
 
   it("reads an alt holding a wikilink, brackets and all", () => {
     expect(parseInfoboxBody(body("![[[Captain Ash]] at the docks](images/ash.png)"))).toEqual(
-      record({ image: "images/ash.png", imageAlt: "[[Captain Ash]] at the docks" }),
+      record({
+        image: "images/ash.png",
+        imageAlt: "[[Captain Ash]] at the docks",
+      }),
     );
   });
 
@@ -250,9 +255,7 @@ describe("serializeInfobox", () => {
     // Reachable by typing a space into an empty unlabelled row. Its line would trim to
     // nothing, so the reader would drop it — the serializer drops it first, which keeps
     // the two halves agreeing about what the file says.
-    expect(serializeInfobox(record({ rows: [{ label: "", value: " " }] }))).toBe(
-      "```infobox\n```",
-    );
+    expect(serializeInfobox(record({ rows: [{ label: "", value: " " }] }))).toBe("```infobox\n```");
   });
 
   it("keeps a row whose line has something on it, however odd", () => {
@@ -352,13 +355,22 @@ describe("an infobox round-trips byte for byte", () => {
         rows: [{ label: "Image", value: "a woodcut of the harbour" }],
       }),
     ],
-    ["a value holding a colon", record({ rows: [{ label: "Ruler", value: "Ash, styled: the Grey" }] })],
+    [
+      "a value holding a colon",
+      record({ rows: [{ label: "Ruler", value: "Ash, styled: the Grey" }] }),
+    ],
     ["a title holding a colon", record({ title: "Harbor's End: the docks" })],
     ["a title holding a wikilink", record({ title: "Seat of [[Captain Ash]]" })],
     ["an empty value", record({ rows: [{ label: "Ruler", value: "" }] })],
     ["an unlabelled row", record({ rows: [{ label: "", value: "a woodcut" }] })],
-    ["an unlabelled row holding a colon", record({ rows: [{ label: "", value: "see: the ledger" }] })],
-    ["an unlabelled row that looks like a title", record({ rows: [{ label: "", value: "# The docks" }] })],
+    [
+      "an unlabelled row holding a colon",
+      record({ rows: [{ label: "", value: "see: the ledger" }] }),
+    ],
+    [
+      "an unlabelled row that looks like a title",
+      record({ rows: [{ label: "", value: "# The docks" }] }),
+    ],
     [
       "an unlabelled row that looks like the thumbnail",
       record({ rows: [{ label: "", value: "![a](b.png)" }] }),
@@ -367,7 +379,10 @@ describe("an infobox round-trips byte for byte", () => {
     ["a value that is only spaces", record({ rows: [{ label: "Note", value: "  " }] })],
     [
       "an unlabelled title-shaped row under a real title",
-      record({ title: "Harbor's End", rows: [{ label: "", value: "# The docks" }] }),
+      record({
+        title: "Harbor's End",
+        rows: [{ label: "", value: "# The docks" }],
+      }),
     ],
     [
       "a thumbnail and a title",
@@ -382,10 +397,16 @@ describe("an infobox round-trips byte for byte", () => {
     ["a thumbnail with no caption", record({ image: "images/harbor.png" })],
     [
       "a caption holding a wikilink",
-      record({ image: "images/ash.png", imageAlt: "[[Captain Ash]] at the docks" }),
+      record({
+        image: "images/ash.png",
+        imageAlt: "[[Captain Ash]] at the docks",
+      }),
     ],
     ["a path holding spaces", record({ image: ".grimoire/images/my map.png", imageAlt: "a" })],
-    ["a path holding parentheses", record({ image: ".grimoire/images/map (1).png", imageAlt: "a" })],
+    [
+      "a path holding parentheses",
+      record({ image: ".grimoire/images/map (1).png", imageAlt: "a" }),
+    ],
     [
       "a thumbnail above an image-shaped row",
       record({
@@ -480,7 +501,10 @@ describe("/infobox", () => {
     try {
       ed.commands.setContent([
         { type: "infoboxBlock", attrs: blankInfobox() },
-        { type: "paragraph", content: [{ type: "text", text: "Prose between." }] },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Prose between." }],
+        },
         { type: "infoboxBlock", attrs: blankInfobox() },
       ]);
 

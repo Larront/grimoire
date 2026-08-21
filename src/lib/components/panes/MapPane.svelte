@@ -17,21 +17,32 @@
     Circle,
   } from "@lucide/svelte";
   import MapCanvas from "$lib/components/map/MapCanvas.svelte";
+  import { DEFAULT_ANNOTATION_COLOR, DEFAULT_ANNOTATION_STROKE } from "$lib/entity-colors";
   import type { Note, Pin, PinCategory, MapAnnotation, AnnotationKind } from "$lib/types/ledger";
   import AnnotationDetails, { KIND_LABELS } from "$lib/components/map/AnnotationDetails.svelte";
   import PinDetails from "$lib/components/map/PinDetails.svelte";
   import DetailPanel from "$lib/components/DetailPanel.svelte";
+  import DetailSurface from "$lib/components/DetailSurface.svelte";
   import { toastUndo } from "$lib/toast";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
-  import { fly } from "svelte/transition";
+  import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
+  import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
+  import { isTypingIn } from "$lib/utils/keyboard";
 
   interface Props {
     mapId: number;
-    pane: 'left' | 'right';
+    pane: "left" | "right";
   }
   let { mapId, pane }: Props = $props();
+
+  // A map's surface always floats, whatever the pane measures: docking would
+  // shrink the canvas and a sheet would swallow it (ADR-0006 §2). And it carries
+  // no toggle — selecting a pin or an annotation is what opens it (§3) — so the
+  // pane's header row shows none.
+  const surface = $derived(paneSurface(pane));
+  $effect(() => surface.claim({ toggleable: false, alwaysFloat: true }));
 
   let leafletMap = $state<import("leaflet").Map | null>(null);
 
@@ -61,6 +72,26 @@
   const pinDetails = createPinDetailsSource(
     () => selectedPin,
     () => selectedLinkedNote,
+    (saved: Pin) => {
+      pins = pins.map((p) => (p.id === saved.id ? saved : p));
+      selectedPin = saved;
+    },
+  );
+
+  // The annotation Details Source is the annotation panel's save path and
+  // nothing else — an annotation has no auxiliary data to fetch. It is here so
+  // annotation edits report into the DetailPanel's status indicator instead of
+  // into console.error (see CONTEXT.md — "Details Source").
+  const annotationDetails = createAnnotationDetailsSource(
+    () => selectedAnnotation,
+    (saved: MapAnnotation) => {
+      annotations = annotations.map((a) => (a.id === saved.id ? saved : a));
+      selectedAnnotation = saved;
+    },
+    (id: number) => {
+      annotations = annotations.filter((a) => a.id !== id);
+      if (selectedAnnotation?.id === id) selectedAnnotation = null;
+    },
   );
 
   // Track whether initial map data has loaded; used to gate store writes so
@@ -122,9 +153,7 @@
       api.silent.getAnnotations(m.id) as Promise<MapAnnotation[]>,
     ]);
 
-    const imageFetch = m.image_path
-      ? api.silent.getMapImageDataUrl(m.id)
-      : Promise.resolve(null);
+    const imageFetch = m.image_path ? api.silent.getMapImageDataUrl(m.id) : Promise.resolve(null);
 
     Promise.all([ipcFetches, imageFetch])
       .then(([[p, c, a], url]) => {
@@ -152,7 +181,7 @@
   $effect(() => {
     if (mapData) {
       const title = mapData.title;
-      untrack(() => tabs.updateTabTitle('map', mapId, title));
+      untrack(() => tabs.updateTabTitle("map", mapId, title));
     }
   });
 
@@ -167,13 +196,21 @@
   }
 
   async function commitTitleRename() {
-    if (!mapData || !draftTitle.trim()) { renamingTitle = false; return; }
+    if (!mapData || !draftTitle.trim()) {
+      renamingTitle = false;
+      return;
+    }
     const trimmed = draftTitle.trim();
-    if (trimmed === mapData.title) { renamingTitle = false; return; }
+    if (trimmed === mapData.title) {
+      renamingTitle = false;
+      return;
+    }
     try {
       await api.updateMap({ ...mapData, title: trimmed });
       await maps.load();
-    } catch { /* ignore */ } finally {
+    } catch {
+      /* ignore */
+    } finally {
       renamingTitle = false;
     }
   }
@@ -205,7 +242,7 @@
   async function handlePinPlace(x: number, y: number) {
     if (!mapData) return;
     try {
-      const pin = await api.createPin(mapData.id, x, y, "New Pin", null, null, null) as Pin;
+      const pin = (await api.createPin(mapData.id, x, y, "New Pin", null, null, null)) as Pin;
       pins = [pin, ...pins];
       selectedPin = pin;
       placingMode = false;
@@ -260,7 +297,7 @@
 
   async function handlePinMove(pin: Pin, x: number, y: number) {
     try {
-      const result = await api.updatePin({ ...pin, x, y }) as Pin;
+      const result = (await api.updatePin({ ...pin, x, y })) as Pin;
       pins = pins.map((p) => (p.id === result.id ? result : p));
       if (selectedPin?.id === result.id) selectedPin = result;
     } catch (e) {
@@ -280,7 +317,7 @@
   }) {
     if (!mapData) return;
     try {
-      const ann = await api.createAnnotation({
+      const ann = (await api.createAnnotation({
         mapId: mapData.id,
         kind: data.kind,
         x: data.x,
@@ -289,57 +326,40 @@
         y2: data.y2 ?? null,
         radius: data.radius ?? null,
         label: data.label ?? null,
-        color: '#e2e8f0',
-        strokeColor: '#94a3b8',
+        color: DEFAULT_ANNOTATION_COLOR,
+        strokeColor: DEFAULT_ANNOTATION_STROKE,
         strokeWidth: 2,
         fontSize: 16,
         opacity: 0.2,
-      }) as MapAnnotation;
+      })) as MapAnnotation;
       annotations = [ann, ...annotations];
       selectedAnnotation = ann;
       selectedPin = null;
       // Stay in annotation mode for text (quick multi-placement); exit for shapes
-      if (data.kind !== 'text') annotationMode = null;
+      if (data.kind !== "text") annotationMode = null;
     } catch (e) {
       console.error("create annotation failed:", e);
     }
   }
 
-  async function handleAnnotationMove(id: number, updates: {
-    x: number;
-    y: number;
-    x2?: number;
-    y2?: number;
-    radius?: number;
-  }) {
+  async function handleAnnotationMove(
+    id: number,
+    updates: {
+      x: number;
+      y: number;
+      x2?: number;
+      y2?: number;
+      radius?: number;
+    },
+  ) {
     const existing = annotations.find((a) => a.id === id);
     if (!existing) return;
     try {
-      const result = await api.updateAnnotation({ ...existing, ...updates }) as MapAnnotation;
+      const result = (await api.updateAnnotation({ ...existing, ...updates })) as MapAnnotation;
       annotations = annotations.map((a) => (a.id === result.id ? result : a));
       if (selectedAnnotation?.id === result.id) selectedAnnotation = result;
     } catch (e) {
       console.error("move annotation failed:", e);
-    }
-  }
-
-  async function handleAnnotationUpdate(updated: MapAnnotation) {
-    try {
-      const result = await api.updateAnnotation(updated) as MapAnnotation;
-      annotations = annotations.map((a) => (a.id === result.id ? result : a));
-      selectedAnnotation = result;
-    } catch (e) {
-      console.error("update annotation failed:", e);
-    }
-  }
-
-  async function handleAnnotationDelete(id: number) {
-    try {
-      await api.deleteAnnotation(id);
-      annotations = annotations.filter((a) => a.id !== id);
-      if (selectedAnnotation?.id === id) selectedAnnotation = null;
-    } catch (e) {
-      console.error("delete annotation failed:", e);
     }
   }
 
@@ -355,18 +375,6 @@
     character, not a rectangle. Escape clears the selection, which is the other half of
     the same reflex.
   */
-  function isTypingIn(target: EventTarget | null): boolean {
-    const el = target as HTMLElement | null;
-    if (!el) return false;
-    const tag = el.tagName;
-    return (
-      tag === "INPUT" ||
-      tag === "TEXTAREA" ||
-      tag === "SELECT" ||
-      el.isContentEditable
-    );
-  }
-
   function onMapKeydown(e: KeyboardEvent) {
     if (isTypingIn(e.target)) return;
 
@@ -386,7 +394,7 @@
     // so the order here is a formality rather than a precedence rule.
     if (selectedAnnotation) {
       e.preventDefault();
-      void handleAnnotationDelete(selectedAnnotation.id);
+      void annotationDetails.deleteAnnotation(selectedAnnotation.id);
     } else if (selectedPin) {
       e.preventDefault();
       void handlePinDelete(selectedPin.id);
@@ -481,8 +489,7 @@
       <FileXCorner class="w-7 h-7 text-muted-foreground" />
       <p class="font-sans text-base font-semibold">Can't display this map</p>
       <p class="text-sm text-muted-foreground leading-relaxed">
-        Its image couldn't be read — the file may have been moved or deleted
-        outside Grimoire.
+        Its image couldn't be read — the file may have been moved or deleted outside Grimoire.
       </p>
     </div>
   </div>
@@ -490,7 +497,9 @@
   <!-- Empty state: no image assigned yet -->
   <div class="flex h-full items-center justify-center">
     <div class="flex flex-col items-center gap-6 text-center max-w-xs">
-      <div class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted">
+      <div
+        class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted"
+      >
         <ImagePlus class="size-7 text-primary" strokeWidth={1.5} />
       </div>
       <div class="space-y-1.5">
@@ -514,9 +523,7 @@
   </div>
 {:else}
   <!-- Ready state: full map canvas -->
-  <div
-    class="relative w-full h-full overflow-hidden isolate"
-  >
+  <div class="relative w-full h-full overflow-hidden isolate">
     <!-- Map canvas -->
     <MapCanvas
       map={mapData}
@@ -543,7 +550,9 @@
         selectedPin = null;
         selectedAnnotation = null;
       }}
-      onready={(m) => { leafletMap = m; }}
+      onready={(m) => {
+        leafletMap = m;
+      }}
       onannotationplace={handleAnnotationPlace}
       onannotationmove={handleAnnotationMove}
       onannotationclick={(ann) => {
@@ -563,7 +572,10 @@
           bind:value={draftTitle}
           onblur={commitTitleRename}
           onkeydown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); commitTitleRename(); }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitTitleRename();
+            }
             if (e.key === "Escape") renamingTitle = false;
           }}
           aria-label="Map name"
@@ -597,9 +609,15 @@
 
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
-      {@render tool(Type, "Place text label", annotationMode === 'text', () => setAnnotationMode('text'))}
-      {@render tool(RectangleHorizontal, "Draw rectangle", annotationMode === 'rect', () => setAnnotationMode('rect'))}
-      {@render tool(Circle, "Draw circle", annotationMode === 'circle', () => setAnnotationMode('circle'))}
+      {@render tool(Type, "Place text label", annotationMode === "text", () =>
+        setAnnotationMode("text"),
+      )}
+      {@render tool(RectangleHorizontal, "Draw rectangle", annotationMode === "rect", () =>
+        setAnnotationMode("rect"),
+      )}
+      {@render tool(Circle, "Draw circle", annotationMode === "circle", () =>
+        setAnnotationMode("circle"),
+      )}
 
       <div class="w-5 h-px bg-border/60 my-0.5"></div>
 
@@ -610,33 +628,42 @@
     <!-- Mode hint -->
     {#if placingMode || annotationMode}
       {@const hint = placingMode
-        ? 'Click anywhere to place a pin'
-        : annotationMode === 'text'
-          ? 'Click anywhere to place a text label'
-          : annotationMode === 'rect'
-            ? 'Click and drag to draw a rectangle'
-            : 'Click and drag to draw a circle'}
-      <div
-        class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none"
-      >
-        <div class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md">
+        ? "Click anywhere to place a pin"
+        : annotationMode === "text"
+          ? "Click anywhere to place a text label"
+          : annotationMode === "rect"
+            ? "Click and drag to draw a rectangle"
+            : "Click and drag to draw a circle"}
+      <div class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none">
+        <div
+          class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md"
+        >
           <p class="text-xs text-muted-foreground">{hint}</p>
         </div>
       </div>
     {/if}
 
-    <!-- Selected pin panel -->
+    <!-- Selected pin panel. The `{#if}` sits outside the surface rather than
+         inside its body, so the body never renders without a pin and closing
+         destroys it at once — which is what commits an unblurred edit to the
+         right pin (#201). `open` is then constant for as long as the block
+         lives, and the surface flies the panel in but not out (see
+         `DetailSurface.svelte`). -->
     {#if selectedPin && !placingMode && !annotationMode}
-      <div
-        transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-80 bg-background rounded-lg shadow-2xl
-               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
+      <DetailSurface
+        {surface}
+        open={true}
+        onclose={() => {
+          selectedPin = null;
+        }}
       >
         <DetailPanel
-          title={selectedPin.title || "Pin"}
+          title={selectedPin!.title || "Pin"}
           saveStatus={pinDetails.saveStatus}
           onRetrySave={pinDetails.retrySave}
-          onclose={() => { selectedPin = null; }}
+          onclose={() => {
+            selectedPin = null;
+          }}
         >
           <PinDetails
             pin={selectedPin!}
@@ -648,38 +675,40 @@
             notePreview={pinDetails.notePreview}
             onTagsChange={pinDetails.savePinTags}
             onToggleLock={togglePinLock}
-            onUpdate={async (updated: Pin) => {
-              const saved: Pin = await api.updatePin(updated) as Pin;
-              pins = pins.map((p) => (p.id === saved.id ? saved : p));
-              selectedPin = saved;
-            }}
+            onUpdate={pinDetails.savePin}
             onDelete={handlePinDelete}
-            onOpenNote={(id, title) => tabs.openTab({ type: 'note', id, title })}
+            onOpenNote={(id, title) => tabs.openTab({ type: "note", id, title })}
           />
         </DetailPanel>
-      </div>
+      </DetailSurface>
     {/if}
 
     <!-- Selected annotation panel -->
     {#if selectedAnnotation && !placingMode}
-      <div
-        transition:fly={{ x: 200, duration: 100 }}
-        class="absolute top-4 right-4 z-1000 w-72 bg-background rounded-lg shadow-2xl
-               border border-background-border flex flex-col overflow-hidden max-h-[calc(100%-2rem)]"
+      <DetailSurface
+        {surface}
+        open={true}
+        onclose={() => {
+          selectedAnnotation = null;
+        }}
       >
         <DetailPanel
-          title={KIND_LABELS[selectedAnnotation.kind]}
-          onclose={() => { selectedAnnotation = null; }}
+          title={KIND_LABELS[selectedAnnotation!.kind]}
+          saveStatus={annotationDetails.saveStatus}
+          onRetrySave={annotationDetails.retrySave}
+          onclose={() => {
+            selectedAnnotation = null;
+          }}
         >
           <AnnotationDetails
             annotation={selectedAnnotation!}
             unlocked={unlockedAnnotationId !== null}
             onToggleLock={toggleAnnotationLock}
-            onUpdate={handleAnnotationUpdate}
-            onDelete={handleAnnotationDelete}
+            onUpdate={annotationDetails.saveAnnotation}
+            onDelete={annotationDetails.deleteAnnotation}
           />
         </DetailPanel>
-      </div>
+      </DetailSurface>
     {/if}
   </div>
 {/if}

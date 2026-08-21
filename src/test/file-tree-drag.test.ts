@@ -16,9 +16,11 @@ const dropIntoFolder = vi.fn().mockResolvedValue(true);
 // The module's own behaviour is tested directly elsewhere; here the double is
 // what lets the test assert *which folder* the tree aimed a drop at.
 vi.mock("$lib/stores/tree-move.svelte", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../lib/stores/tree-move.svelte")>();
-  return { ...actual, dropIntoFolder: (...a: unknown[]) => dropIntoFolder(...a) };
+  const actual = await importOriginal<typeof import("../lib/stores/tree-move.svelte")>();
+  return {
+    ...actual,
+    dropIntoFolder: (...a: unknown[]) => dropIntoFolder(...a),
+  };
 });
 
 import { TREE_DRAG_MIME, treeDrag } from "$lib/stores/tree-move.svelte";
@@ -109,9 +111,7 @@ describe("dragging a row", () => {
     expect(row.draggable).toBe(true);
 
     await fireEvent.dragStart(row, { dataTransfer: fakeDataTransfer() });
-    expect(treeDrag.item).toEqual(
-      expect.objectContaining({ kind: "folder", path: "World" }),
-    );
+    expect(treeDrag.item).toEqual(expect.objectContaining({ kind: "folder", path: "World" }));
   });
 
   it("clears the drag once it ends, so no later dragover reads a stale item", async () => {
@@ -154,15 +154,19 @@ describe("dropping onto a folder", () => {
     await fireEvent.dragOver(region, { dataTransfer });
     await fireEvent.drop(region, { dataTransfer });
 
-    await waitFor(() =>
-      expect(dropIntoFolder).toHaveBeenCalledWith(item, "World", noteMap),
-    );
+    await waitFor(() => expect(dropIntoFolder).toHaveBeenCalledWith(item, "World", noteMap));
     await waitFor(() => expect(p.refresh).toHaveBeenCalled());
   });
 
   it("shows the row as a target while a legal drop is overhead", async () => {
     const { container } = render(FileTree, { props: props(folderNode) });
-    const item = { kind: "note", path: "Aldric.md", name: "A", noteId: 1, mapId: null };
+    const item = {
+      kind: "note",
+      path: "Aldric.md",
+      name: "A",
+      noteId: 1,
+      mapId: null,
+    };
     treeDrag.start(item as never);
     const region = dropRegionOf(container);
 
@@ -174,15 +178,19 @@ describe("dropping onto a folder", () => {
   it("does not offer itself as a target to a folder that contains it", async () => {
     const { container } = render(FileTree, { props: props(folderNode) });
     // The folder itself, dragged onto itself.
-    const item = { kind: "folder", path: "World", name: "World", noteId: null, mapId: null };
+    const item = {
+      kind: "folder",
+      path: "World",
+      name: "World",
+      noteId: null,
+      mapId: null,
+    };
     treeDrag.start(item as never);
     const region = dropRegionOf(container);
 
     await fireEvent.dragOver(region, { dataTransfer: fakeDataTransfer(item) });
 
-    expect(container.querySelector("button")?.className ?? "").not.toContain(
-      "ring-primary",
-    );
+    expect(container.querySelector("button")?.className ?? "").not.toContain("ring-primary");
   });
 
   it("leaves the tree alone when the move reports nothing changed", async () => {
@@ -190,7 +198,13 @@ describe("dropping onto a folder", () => {
     const p = props(folderNode);
     const { container } = render(FileTree, { props: p });
 
-    const item = { kind: "note", path: "Aldric.md", name: "A", noteId: 1, mapId: null };
+    const item = {
+      kind: "note",
+      path: "Aldric.md",
+      name: "A",
+      noteId: 1,
+      mapId: null,
+    };
     treeDrag.start(item as never);
     const dataTransfer = fakeDataTransfer(item);
     const region = dropRegionOf(container);
@@ -217,7 +231,13 @@ describe("dropping onto a folder", () => {
     try {
       const { container } = render(FileTree, { props: props(folderNode) });
       const row = container.querySelector("button")!;
-      const item = { kind: "note", path: "A.md", name: "A", noteId: 1, mapId: null };
+      const item = {
+        kind: "note",
+        path: "A.md",
+        name: "A",
+        noteId: 1,
+        mapId: null,
+      };
       treeDrag.start(item as never);
 
       await fireEvent.dragOver(dropRegionOf(container), {
@@ -238,11 +258,19 @@ describe("dropping onto a folder", () => {
     try {
       const { container } = render(FileTree, { props: props(folderNode) });
       const row = container.querySelector("button")!;
-      const item = { kind: "note", path: "A.md", name: "A", noteId: 1, mapId: null };
+      const item = {
+        kind: "note",
+        path: "A.md",
+        name: "A",
+        noteId: 1,
+        mapId: null,
+      };
       treeDrag.start(item as never);
       const region = dropRegionOf(container);
 
-      await fireEvent.dragOver(region, { dataTransfer: fakeDataTransfer(item) });
+      await fireEvent.dragOver(region, {
+        dataTransfer: fakeDataTransfer(item),
+      });
       await vi.advanceTimersByTimeAsync(200);
       await fireEvent.dragLeave(region, { relatedTarget: document.body });
       await vi.advanceTimersByTimeAsync(700);

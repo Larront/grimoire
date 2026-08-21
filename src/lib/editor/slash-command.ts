@@ -2,6 +2,8 @@ import { Extension } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import Suggestion from "@tiptap/suggestion";
 import { PluginKey } from "prosemirror-state";
+import type { BlockIconName } from "$lib/components/editor/block-icons";
+import { nameAndIcon } from "./block-vocabulary";
 import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
 import { blankInfobox } from "./infobox-block";
@@ -16,7 +18,11 @@ export interface SlashCommandItem {
   group: "Text" | "List" | "Insert" | "Callout";
   label: string;
   keywords: string[]; // extra search terms beyond label
-  icon: string; // lucide icon name — resolved to Component in SlashCommandMenu
+  /**
+   * Lucide icon name — resolved to a Component in SlashCommandMenu. A name that exists:
+   * a typo is a build error rather than an item drawn with no glyph (#220).
+   */
+  icon: BlockIconName;
   /**
    * Whether the command reads the words typed after its name. A space used to end
    * the suggestion session outright; it now survives, so this flag is what keeps
@@ -51,88 +57,79 @@ interface SlashCommandOptions {
 // ─── Command Registry ─────────────────────────────────────────────────────────
 // Add future custom node commands here — no other file needs to change.
 
+// Each entry's word and icon come from `nameAndIcon`, spread in rather than written out,
+// because the gutter handle's "Turn into" section names the same seven of these and the
+// handle's accessible label says the same words again — and a GM meeting one block under
+// two names has learned it twice (#220). What stays here is what is this menu's alone: the
+// group, the search keywords, and the command itself. A callout's entries are named by
+// `CALLOUT_TYPES`, which is that vocabulary's own single source.
+
 export const SLASH_COMMANDS: SlashCommandItem[] = [
   // ── Text ──────────────────────────────────────────────────────────────────
   {
     group: "Text",
-    label: "Paragraph",
+    ...nameAndIcon("paragraph"),
     keywords: ["p", "text", "plain"],
-    icon: "Pilcrow",
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setParagraph().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setParagraph().run(),
   },
   {
     group: "Text",
-    label: "Heading 1",
+    ...nameAndIcon("heading1"),
     keywords: ["h1", "title"],
-    icon: "Heading1",
     command: (editor, range) =>
       editor.chain().focus().deleteRange(range).setHeading({ level: 1 }).run(),
   },
   {
     group: "Text",
-    label: "Heading 2",
+    ...nameAndIcon("heading2"),
     keywords: ["h2", "subtitle"],
-    icon: "Heading2",
     command: (editor, range) =>
       editor.chain().focus().deleteRange(range).setHeading({ level: 2 }).run(),
   },
   {
     group: "Text",
-    label: "Heading 3",
+    ...nameAndIcon("heading3"),
     keywords: ["h3"],
-    icon: "Heading3",
     command: (editor, range) =>
       editor.chain().focus().deleteRange(range).setHeading({ level: 3 }).run(),
   },
   {
     group: "Text",
-    label: "Quote",
+    ...nameAndIcon("quote"),
     keywords: ["blockquote", "cite"],
-    icon: "Quote",
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setBlockquote().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setBlockquote().run(),
   },
   {
     group: "Text",
-    label: "Code Block",
+    ...nameAndIcon("codeBlock"),
     keywords: ["pre", "code", "codeblock"],
-    icon: "Code",
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setCodeBlock().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setCodeBlock().run(),
   },
   // ── List ──────────────────────────────────────────────────────────────────
   {
     group: "List",
-    label: "Bullet List",
+    ...nameAndIcon("bulletList"),
     keywords: ["ul", "unordered"],
-    icon: "List",
     // toggleBulletList is intentional: typing /bullet inside a bullet list removes it.
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).toggleBulletList().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).toggleBulletList().run(),
   },
   {
     group: "List",
-    label: "Numbered List",
+    ...nameAndIcon("orderedList"),
     keywords: ["ol", "ordered"],
-    icon: "ListOrdered",
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
   },
   // ── Insert ────────────────────────────────────────────────────────────────
   {
     group: "Insert",
-    label: "Divider",
+    ...nameAndIcon("divider"),
     keywords: ["hr", "rule", "separator"],
-    icon: "Minus",
-    command: (editor, range) =>
-      editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
+    command: (editor, range) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
   },
   {
     group: "Insert",
-    label: "Ambient Scene",
+    ...nameAndIcon("scene"),
     keywords: ["scene", "audio", "ambient", "music"],
-    icon: "Music2",
     command: (editor, range) =>
       editor
         .chain()
@@ -146,9 +143,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     group: "Insert",
-    label: "Infobox",
+    ...nameAndIcon("infobox"),
     keywords: ["infobox", "panel", "facts", "summary", "sidebar", "stats"],
-    icon: "PanelRight",
     command: (editor, range) =>
       editor
         .chain()
@@ -159,9 +155,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     group: "Insert",
-    label: "Statblock",
+    ...nameAndIcon("statblock"),
     keywords: ["statblock", "creature", "monster", "npc", "stats", "hp"],
-    icon: "Shield",
     // The one command that reads its argument (#179). `/statblock goblin` stamps the
     // `Goblin` preset if one exists and titles the block `# Goblin`; a name that
     // matches nothing still becomes the title, over the vault's default shape.
@@ -184,9 +179,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     group: "Insert",
-    label: "Timeline",
+    ...nameAndIcon("timeline"),
     keywords: ["timeline", "events", "chronology", "history"],
-    icon: "CalendarDays",
     command: (editor, range) =>
       editor
         .chain()
@@ -200,9 +194,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     group: "Insert",
-    label: "Image",
+    ...nameAndIcon("image"),
     keywords: ["img", "photo", "picture", "embed"],
-    icon: "Image",
     command: async (editor, range) => {
       const { open } = await import("@tauri-apps/plugin-dialog");
       editor.chain().focus().deleteRange(range).run();
@@ -253,9 +246,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
 
 /** Whether a command answers to a word exactly, by label or by keyword. */
 function isNamed(item: SlashCommandItem, word: string): boolean {
-  return (
-    item.label.toLowerCase() === word || item.keywords.some((kw) => kw === word)
-  );
+  return item.label.toLowerCase() === word || item.keywords.some((kw) => kw === word);
 }
 
 /**
@@ -280,17 +271,13 @@ export function filterCommands(query: string): SlashCommandItem[] {
     const q = query.toLowerCase().trim();
     if (!q) return SLASH_COMMANDS;
     return SLASH_COMMANDS.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.keywords.some((kw) => kw.includes(q)),
+      (item) => item.label.toLowerCase().includes(q) || item.keywords.some((kw) => kw.includes(q)),
     );
   }
 
   const head = query.slice(0, space).toLowerCase();
   if (!head) return [];
-  return SLASH_COMMANDS.filter(
-    (item) => item.acceptsArgument && isNamed(item, head),
-  );
+  return SLASH_COMMANDS.filter((item) => item.acceptsArgument && isNamed(item, head));
 }
 
 /**
@@ -345,11 +332,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           props: SlashCommandItem;
         }) => {
           const ed = editor as Editor;
-          props.command(
-            ed,
-            range,
-            slashArgument(ed.state.doc.textBetween(range.from, range.to)),
-          );
+          props.command(ed, range, slashArgument(ed.state.doc.textBetween(range.from, range.to)));
         },
 
         render: () => {
@@ -412,10 +395,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               const count = currentState.items.length;
 
               // Move down — Tab or ArrowDown
-              if (
-                event.key === "ArrowDown" ||
-                (event.key === "Tab" && !event.shiftKey)
-              ) {
+              if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
                 selectedIndex = (selectedIndex + 1) % count;
                 currentState = { ...currentState, selectedIndex };
                 onSlashCommand(currentState);
@@ -423,10 +403,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               }
 
               // Move up — Shift+Tab or ArrowUp
-              if (
-                event.key === "ArrowUp" ||
-                (event.key === "Tab" && event.shiftKey)
-              ) {
+              if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
                 selectedIndex = (selectedIndex - 1 + count) % count;
                 currentState = { ...currentState, selectedIndex };
                 onSlashCommand(currentState);

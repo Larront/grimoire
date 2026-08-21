@@ -30,9 +30,15 @@
   import { splitLinkedText, wikiTargetsIn } from "$lib/editor/linked-text";
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { notes } from "$lib/stores/notes.svelte";
-  import { api } from "$lib/api";
   import { portal } from "$lib/utils/portal";
-  import type { NoteSearchResult } from "$lib/editor/wiki-link";
+  import {
+    findWikiTrigger,
+    readWikiSuggestKey,
+    searchWikiTargets,
+    wikiMenuAnchor,
+    type NoteSearchResult,
+    type WikiMenuAnchor,
+  } from "$lib/editor/wiki-suggest";
   import WikiLinkSuggestion from "$lib/components/editor/WikiLinkSuggestion.svelte";
 
   let {
@@ -171,18 +177,16 @@
 
   // ── `[[` autocomplete ───────────────────────────────────────────────────────
   //
-  // The spec's autocomplete boundary: *spotting `[[` is per-surface, everything
-  // after it is one shared dropdown.* Spotting it is here, because only this field
-  // knows where its caret is; the dropdown is `WikiLinkSuggestion`, the same
+  // The boundary the spec draws: *spotting `[[` is per-surface, everything after it is
+  // shared.* Spotting it is here, because only this field knows where its caret is —
+  // and even that is `findWikiTrigger`'s rule rather than this file's. What a key means
+  // and what a query returns come from `wiki-suggest.ts`, so this field and prose cannot
+  // drift into two answers about Enter; the dropdown is `WikiLinkSuggestion`, the same
   // component the wikilink node's own suggestion plugin draws.
 
-  interface FieldSuggestion {
+  interface FieldSuggestion extends WikiMenuAnchor {
     items: NoteSearchResult[];
     selectedIndex: number;
-    x: number;
-    y: number;
-    /** The field's top, so a menu with no room below it flips clear of the field. */
-    anchorTop: number;
     /** Where the `[[` sits in the draft, so accepting replaces from there. */
     triggerStart: number;
   }
@@ -190,54 +194,41 @@
   let suggestion = $state<FieldSuggestion | null>(null);
 
   async function offerSuggestions(el: HTMLInputElement | HTMLTextAreaElement) {
-    const caret = el.selectionStart ?? el.value.length;
-    const before = el.value.slice(0, caret);
-    const open = before.lastIndexOf("[[");
     // No open `[[`, or the GM already closed it: there is nothing to complete.
-    if (open === -1 || before.slice(open + 2).includes("]]")) {
+    const trigger = findWikiTrigger(el.value, el.selectionStart ?? el.value.length);
+    if (!trigger) {
       suggestion = null;
       return;
     }
 
-    const items = await api.searchNotes(before.slice(open + 2)).catch(() => []);
-    const rect = el.getBoundingClientRect();
+    const items = await searchWikiTargets(trigger.query);
     suggestion = {
       items,
       selectedIndex: 0,
-      x: rect.left,
-      y: rect.bottom + 4,
-      anchorTop: rect.top,
-      triggerStart: open,
+      ...wikiMenuAnchor(el.getBoundingClientRect()),
+      triggerStart: trigger.start,
     };
   }
 
   /** Whether the key belonged to the dropdown. */
   function handleSuggestionKeydown(e: KeyboardEvent): boolean {
     if (!suggestion) return false;
-    const count = Math.max(suggestion.items.length, 1);
+    const verdict = readWikiSuggestKey(e.key, {
+      itemCount: suggestion.items.length,
+      selectedIndex: suggestion.selectedIndex,
+    });
+    if (!verdict) return false;
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      suggestion.selectedIndex = (suggestion.selectedIndex + 1) % count;
-      return true;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      suggestion.selectedIndex = (suggestion.selectedIndex - 1 + count) % count;
-      return true;
-    }
-    if (e.key === "Enter" && suggestion.items.length) {
-      e.preventDefault();
-      accept(suggestion.items[suggestion.selectedIndex]);
-      return true;
-    }
-    // Escape closes the dropdown and keeps the edit — one Escape, one dismissal.
-    if (e.key === "Escape") {
-      e.preventDefault();
+    e.preventDefault();
+    if (verdict.kind === "move") {
+      suggestion.selectedIndex = verdict.selectedIndex;
+    } else if (verdict.kind === "dismiss") {
+      // Escape closes the dropdown and keeps the edit — one Escape, one dismissal.
       suggestion = null;
-      return true;
+    } else {
+      accept(suggestion.items[verdict.selectedIndex]);
     }
-    return false;
+    return true;
   }
 
   function accept(item: NoteSearchResult) {
@@ -296,8 +287,7 @@
       void offerSuggestions(e.currentTarget);
     }}
     onblur={commit}
-    onkeydown={handleKeydown}
-  ></textarea>
+    onkeydown={handleKeydown}></textarea>
 {:else if editing}
   <input
     bind:this={input}

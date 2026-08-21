@@ -53,6 +53,9 @@ export const commands = {
 	 *  swaps. Returns the updated row.
 	 */
 	updatePdfSceneLink: (id: number, sceneId: number) => __TAURI_INVOKE<PdfSceneLink>("update_pdf_scene_link", { id, sceneId }),
+	createQuickNote: (body: string) => __TAURI_INVOKE<QuickNote>("create_quick_note", { body }),
+	updateQuickNote: (id: number, body: string) => __TAURI_INVOKE<QuickNote>("update_quick_note", { id, body }),
+	deleteQuickNote: (id: number) => __TAURI_INVOKE<number>("delete_quick_note", { id }),
 	createPin: (mapId: number, x: number | null, y: number | null, title: string, description: string | null, categoryId: number | null, noteId: number | null) => __TAURI_INVOKE<Pin>("create_pin", { mapId, x, y, title, description, categoryId, noteId }),
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
@@ -129,6 +132,7 @@ export const commands = {
 	getTagGraphStyles: () => __TAURI_INVOKE<{ [key in string]: TagGraphStyleResponse }>("get_tag_graph_styles"),
 	getTagUsageCounts: () => __TAURI_INVOKE<TagUsageEntry[]>("get_tag_usage_counts"),
 	listAllTags: () => __TAURI_INVOKE<string[]>("list_all_tags"),
+	listQuickNotes: () => __TAURI_INVOKE<QuickNote[]>("list_quick_notes"),
 	listStatblockPresets: () => __TAURI_INVOKE<StatblockPreset[]>("list_statblock_presets"),
 	listTemplates: () => __TAURI_INVOKE<TemplateEntry[]>("list_templates"),
 	/**
@@ -479,6 +483,12 @@ export type OpenLedgerResult = {
 	map_count: number,
 	failed_imports: FailedImport[],
 	/**
+	 *  Pins the open-time notes repair left pointing at nothing (#224). Empty on
+	 *  every ordinary open; non-empty is the GM being told that links they placed
+	 *  by hand need re-making.
+	 */
+	unlinked_pins: UnlinkedPin[],
+	/**
 	 *  Set when the database was auto-restored from the `.grimoire/backups`
 	 *  snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
 	 *  so the frontend can toast "scenes and pins reflect <date>".
@@ -526,6 +536,12 @@ export type PinCategory = {
 	icon: string,
 	color: string,
 	shape: string,
+};
+
+export type QuickNote = {
+	id: number,
+	body: string,
+	captured_at: string,
 };
 
 export type RecentEntityResult = {
@@ -641,5 +657,19 @@ export type TagUsageEntry = {
 export type TemplateEntry = {
 	display_name: string,
 	path: string,
+};
+
+/**
+ *  A pin whose note the repair deleted out from under it, named the way the GM
+ *  placed it: the pin's own title and the map it sits on.
+ * 
+ *  Carries no note path and no row id the GM ever sees — those went with the row,
+ *  and the pin is the thing they have to go and re-link.
+ */
+export type UnlinkedPin = {
+	pin_id: number,
+	pin_title: string,
+	map_id: number,
+	map_title: string,
 };
 

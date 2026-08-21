@@ -1,15 +1,24 @@
-// The Row List's order arithmetic (ADR-0016 §4, #173) — extracted from Timeline,
-// which is its first consumer and was the reference implementation.
+// What a change to a Row List *means* (ADR-0016 §4, #173).
 //
-// A Row List is an ordered list of rows inside a Note Block, and it knows nothing
-// about what a row contains: these functions are generic over the row type, and
-// RowList.svelte draws the controls that call them while each block draws its own
-// row. Timeline events are not `Label: value` at all, which is why this primitive
-// is separate from the labelled-row format (that arrives with Infobox, its first
-// consumer).
+// A Row List is an ordered list of rows inside a Note Block, and it knows nothing about
+// what a row contains. `RowList.svelte` draws the controls and does the splicing; each
+// block draws its own row. Timeline events are not `Label: value` at all, which is why
+// this primitive is separate from the labelled-row format.
 //
-// Everything here is pure and returns a new array — the caller writes the result
-// back, so a block keeps deciding when an order change becomes a document write.
+// What is left in this module is the two things a consumer has to get right and cannot
+// read off the new array: where its per-row view state went, and whether the change
+// reaches the document.
+//
+// It used to hold three array helpers as well — `insertRowAt`, `deleteRowAt`, `moveRow`.
+// Each had exactly one caller and no decision in it, and a `splice` behind a module seam
+// is a `splice` with a seam in front of it; `moveRow`'s "returns the same array when
+// nothing moved" had even become reference equality read for control flow *across* that
+// seam. They are inline in `RowList.svelte` now, and what stands here in their place is
+// the rule that was copied to five call sites across three blocks, under a comment each
+// (#218). Not untested — `statblock-block-view`, `infobox-block-view` and
+// `timeline-block-view` each pin it end to end through the control that performs it — but
+// stated five times and asserted nowhere on its own, which is what a rule that decides
+// whether a GM's row reaches their note should not be.
 
 /**
  * What one control did to the order, handed to a consumer alongside the new rows.
@@ -21,32 +30,38 @@ export type RowChange =
   | { kind: "delete"; index: number }
   | { kind: "move"; from: number; to: number };
 
-/** `rows` with `row` inserted at `index`. An index past the end appends. */
-export function insertRowAt<T>(rows: T[], index: number, row: T): T[] {
-  const result = [...rows];
-  result.splice(index, 0, row);
-  return result;
-}
-
-/** `rows` without the row at `index`. An index out of range changes nothing. */
-export function deleteRowAt<T>(rows: T[], index: number): T[] {
-  if (index < 0 || index >= rows.length) return rows;
-  return rows.filter((_, i) => i !== index);
+/** The two things a block does about a row change, in its own spelling. */
+export interface RowChangeOutcome {
+  /** Open the row at this index for typing — the insert case, and only that one. */
+  focus: (index: number) => void;
+  /** Write the rows into the document. */
+  commit: () => void;
 }
 
 /**
- * `rows` with the row at `from` moved to `to`. Either index out of range changes
- * nothing, which is what makes the move-up control at the top row and move-down
- * at the bottom row harmless rather than a special case at every call site.
+ * The rule that decides whether a GM's row reaches their note: **an insert focuses and
+ * does not commit; everything else commits.**
+ *
+ * A freshly inserted row is blank, and a blank row serializes to nothing at all — so
+ * committing it would write a fence identical to the one already on disk, spending an
+ * undo step that takes nothing back and marking the note dirty for a change the GM cannot
+ * see. It opens for typing instead, and becomes a document write on the first keystroke,
+ * through the field's own commit-on-blur.
+ *
+ * A move and a delete have nothing to wait for: what the GM asked for is already fully
+ * expressed by the rows in front of them, so it goes to the document at once.
+ *
+ * Callbacks rather than a returned verdict, because every block spells "focus" its own
+ * way — Timeline expands the event it opens, a Statblock names a level as well as an
+ * index — while the branch between the two is the same sentence in all five places it was
+ * copied to, and is the one part of this that can lose a row.
  */
-export function moveRow<T>(rows: T[], from: number, to: number): T[] {
-  if (from < 0 || from >= rows.length) return rows;
-  if (to < 0 || to >= rows.length) return rows;
-  if (from === to) return rows;
-  const result = [...rows];
-  const [moved] = result.splice(from, 1);
-  result.splice(to, 0, moved);
-  return result;
+export function settleRowChange(change: RowChange, block: RowChangeOutcome): void {
+  if (change.kind === "insert") {
+    block.focus(change.index);
+    return;
+  }
+  block.commit();
 }
 
 /**
@@ -57,10 +72,7 @@ export function moveRow<T>(rows: T[], from: number, to: number): T[] {
  * An insert does *not* add the new row's index — whether a freshly inserted row
  * starts out expanded, selected or editing is the consumer's business.
  */
-export function remapRowIndices(
-  indices: Iterable<number>,
-  change: RowChange,
-): Set<number> {
+export function remapRowIndices(indices: Iterable<number>, change: RowChange): Set<number> {
   const out = new Set<number>();
   for (const index of indices) {
     if (change.kind === "insert") {

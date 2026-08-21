@@ -26,7 +26,14 @@ function mockSampleInvoke(noteList = [START_HERE_NOTE]) {
   vi.mocked(invoke).mockImplementation(async (cmd: string) => {
     if (cmd === "explore_sample_ledger") return SAMPLE_PATH;
     if (cmd === "open_ledger")
-      return { path: SAMPLE_PATH, note_count: noteList.length, scene_count: 0, map_count: 0, failed_imports: [] };
+      return {
+        path: SAMPLE_PATH,
+        note_count: noteList.length,
+        scene_count: 0,
+        map_count: 0,
+        failed_imports: [],
+        unlinked_pins: [],
+      };
     if (cmd === "get_notes") return noteList;
     if (cmd === "close_ledger") return null;
     return null;
@@ -34,7 +41,9 @@ function mockSampleInvoke(noteList = [START_HERE_NOTE]) {
 }
 
 async function flush() {
-  await act(async () => { await Promise.resolve(); });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 // ── LedgerSelector sample treatment ─────────────────────────────────────────
@@ -139,13 +148,10 @@ describe("sample banner", () => {
     expect(appPrefs.sampleBannerDismissed).toBe(true);
 
     // Dismissal is persisted through the Rust-side app prefs, not webview storage
-    const saveCall = vi
-      .mocked(invoke)
-      .mock.calls.findLast(([cmd]) => cmd === "save_app_prefs");
+    const saveCall = vi.mocked(invoke).mock.calls.findLast(([cmd]) => cmd === "save_app_prefs");
     expect(saveCall).toBeDefined();
     expect(
-      (saveCall![1] as { prefs: { sampleBannerDismissed: boolean } }).prefs
-        .sampleBannerDismissed,
+      (saveCall![1] as { prefs: { sampleBannerDismissed: boolean } }).prefs.sampleBannerDismissed,
     ).toBe(true);
   });
 

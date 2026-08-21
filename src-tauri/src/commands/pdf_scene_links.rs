@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::db::models::{NewPdfSceneLink, PdfSceneLink};
 use crate::db::schema::pdf_scene_links;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 
 #[tauri::command]
 #[specta::specta]
@@ -25,20 +25,20 @@ pub fn create_pdf_scene_link(
     scene_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<PdfSceneLink, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::insert_into(pdf_scene_links::table)
-        .values(NewPdfSceneLink {
-            pdf_path,
-            page,
-            start_offset,
-            end_offset,
-            quote,
-            scene_id,
-        })
-        .returning(PdfSceneLink::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::insert_into(pdf_scene_links::table)
+            .values(NewPdfSceneLink {
+                pdf_path,
+                page,
+                start_offset,
+                end_offset,
+                quote,
+                scene_id,
+            })
+            .returning(PdfSceneLink::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -47,13 +47,13 @@ pub fn get_pdf_scene_links(
     pdf_path: String,
     ledger: State<AppLedger>,
 ) -> Result<Vec<PdfSceneLink>, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    pdf_scene_links::table
-        .filter(pdf_scene_links::pdf_path.eq(pdf_path))
-        .order((pdf_scene_links::page.asc(), pdf_scene_links::start_offset.asc()))
-        .load::<PdfSceneLink>(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        pdf_scene_links::table
+            .filter(pdf_scene_links::pdf_path.eq(pdf_path))
+            .order((pdf_scene_links::page.asc(), pdf_scene_links::start_offset.asc()))
+            .load::<PdfSceneLink>(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// Re-link a Scene-link to a different Scene (the toolbar change-Scene dropdown,
@@ -67,24 +67,24 @@ pub fn update_pdf_scene_link(
     scene_id: i32,
     ledger: State<AppLedger>,
 ) -> Result<PdfSceneLink, String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::update(pdf_scene_links::table.find(id))
-        .set(pdf_scene_links::scene_id.eq(scene_id))
-        .returning(PdfSceneLink::as_returning())
-        .get_result(conn)
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::update(pdf_scene_links::table.find(id))
+            .set(pdf_scene_links::scene_id.eq(scene_id))
+            .returning(PdfSceneLink::as_returning())
+            .get_result(l.conn)
+            .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn delete_pdf_scene_link(id: i32, ledger: State<AppLedger>) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|e| e.to_string())?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    diesel::delete(pdf_scene_links::table.find(id))
-        .execute(conn)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    with_open_ledger(&ledger, |l| {
+        diesel::delete(pdf_scene_links::table.find(id))
+            .execute(l.conn)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
 }
 
 /// Re-key every Scene-link from `old_path` to `new_path`. Called from `rename_pdf`
@@ -121,12 +121,20 @@ pub fn rewrite_pdf_path_prefix(
     // SQLite SUBSTR is 1-based; +1 starts just past the matched prefix. Binding
     // the prefix length as a literal i32 keeps it parameterised.
     let prefix_len = old_prefix.chars().count() as i32;
+    // `LIKE` alone is too generous to anchor a positional rewrite on: it matches
+    // case-insensitively over ASCII and reads `_` as a single-character wildcard, so
+    // a sibling folder `session-notes` is selected when `session_notes` was asked
+    // for — and cutting `prefix_len` characters off a path that never carried the
+    // prefix corrupts it. The `SUBSTR(..) = ?` guard is the exact test.
     diesel::sql_query(
-        "UPDATE pdf_scene_links SET pdf_path = ? || SUBSTR(pdf_path, ?) WHERE pdf_path LIKE ?",
+        "UPDATE pdf_scene_links SET pdf_path = ? || SUBSTR(pdf_path, ?) \
+         WHERE pdf_path LIKE ? AND SUBSTR(pdf_path, 1, ?) = ?",
     )
     .bind::<diesel::sql_types::Text, _>(new_prefix)
     .bind::<diesel::sql_types::Integer, _>(prefix_len + 1)
     .bind::<diesel::sql_types::Text, _>(&like_pattern)
+    .bind::<diesel::sql_types::Integer, _>(prefix_len)
+    .bind::<diesel::sql_types::Text, _>(old_prefix)
     .execute(conn)
 }
 
@@ -364,6 +372,37 @@ mod tests {
             .load(&mut conn)
             .unwrap();
         assert_eq!(sibling.len(), 1, "the name-prefix sibling folder is untouched");
+    }
+
+    /// `creatures-extra` above is refused by `LIKE` itself. These two are not:
+    /// `LIKE 'session_notes/%'` matches `session-notes/…` because `_` is a
+    /// single-character wildcard, and it matches `SESSION_NOTES/…` because SQLite
+    /// compares ASCII case-insensitively. A positional rewrite would cut the prefix
+    /// length off both and leave paths pointing at files that were never moved.
+    #[test]
+    fn test_rewrite_pdf_path_prefix_leaves_folders_only_like_matches() {
+        let mut conn = setup_db();
+        let scene = make_scene(&mut conn, "Scene");
+        make_link(&mut conn, "session_notes/one.pdf", 1, scene.id);
+        make_link(&mut conn, "session-notes/two.pdf", 1, scene.id);
+        make_link(&mut conn, "SESSION_NOTES/three.pdf", 1, scene.id);
+
+        let rewritten = rewrite_pdf_path_prefix(&mut conn, "session_notes/", "archive/").unwrap();
+        assert_eq!(rewritten, 1, "only the exact prefix is re-keyed");
+
+        let mut paths: Vec<String> = pdf_scene_links::table
+            .select(pdf_scene_links::pdf_path)
+            .load(&mut conn)
+            .unwrap();
+        paths.sort();
+        assert_eq!(
+            paths,
+            vec![
+                "SESSION_NOTES/three.pdf",
+                "archive/one.pdf",
+                "session-notes/two.pdf",
+            ],
+        );
     }
 
     #[test]

@@ -62,10 +62,10 @@ Tauri 2 · Svelte 5 (runes) · SvelteKit · SQLite (Diesel) · Tantivy · Tailwi
 Grimoire writes a log file you can attach to a
 [bug report](https://github.com/Larront/grimoire/issues):
 
-| OS      | Log location                                          |
-| :------ | :---------------------------------------------------- |
+| OS      | Log location                                            |
+| :------ | :------------------------------------------------------ |
 | Windows | `%LOCALAPPDATA%\com.lamonta.grimoire\logs\grimoire.log` |
-| macOS   | `~/Library/Logs/com.lamonta.grimoire/grimoire.log`     |
+| macOS   | `~/Library/Logs/com.lamonta.grimoire/grimoire.log`      |
 | Linux   | `~/.local/share/com.lamonta.grimoire/logs/grimoire.log` |
 
 ## Contributing

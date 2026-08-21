@@ -93,8 +93,8 @@
     <div class="flex flex-col gap-0.5">
       <span class="text-(--font-body) font-medium text-foreground">Default preset</span>
       <span class="text-(--font-ui) text-foreground-muted">
-        What <code>/statblock</code> stamps in this campaign. Presets are shared by every
-        campaign; this choice is not.
+        What <code>/statblock</code> stamps in this campaign. Presets are shared by every campaign; this
+        choice is not.
       </span>
     </div>
     <select
@@ -122,8 +122,8 @@
     <div class="flex flex-col gap-0.5">
       <span class="text-(--font-body) font-medium text-foreground">Saved presets</span>
       <span class="text-(--font-ui) text-foreground-muted">
-        Add one with “Save shape as preset” on any statblock. To change a shape, stamp it
-        into a note, edit it there, and save over the same name.
+        Add one with “Save shape as preset” on any statblock. To change a shape, stamp it into a
+        note, edit it there, and save over the same name.
       </span>
     </div>
 
@@ -197,8 +197,8 @@
     <div class="flex flex-col gap-0.5">
       <span class="text-(--font-body) font-medium text-foreground">Built in</span>
       <span class="text-(--font-ui) text-foreground-muted">
-        These ship with Grimoire and can't be renamed, edited or deleted — their names
-        aren't available for your own presets either.
+        These ship with Grimoire and can't be renamed, edited or deleted — their names aren't
+        available for your own presets either.
       </span>
     </div>
     <div class="flex flex-col" data-testid="statblock-builtin-list">
@@ -209,15 +209,20 @@
   </div>
 </div>
 
-<AlertDialog.Root open={deleting !== null} onOpenChange={(v) => { if (!v) deleting = null; }}>
+<AlertDialog.Root
+  open={deleting !== null}
+  onOpenChange={(v) => {
+    if (!v) deleting = null;
+  }}
+>
   <AlertDialog.Portal>
     <AlertDialog.Overlay />
     <AlertDialog.Content>
       <AlertDialog.Header>
         <AlertDialog.Title>Delete “{deleting?.name}”?</AlertDialog.Title>
         <AlertDialog.Description>
-          This removes the preset from every campaign on this machine. Statblocks you
-          have already written are copies and are left exactly as they are.
+          This removes the preset from every campaign on this machine. Statblocks you have already
+          written are copies and are left exactly as they are.
         </AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>

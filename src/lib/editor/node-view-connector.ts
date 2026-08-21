@@ -24,26 +24,44 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * A node's attributes as one object. The connector never takes or hands out
- * attributes positionally: `setAttrs(align, width, src, alt)` re-breaks every
- * consumer the moment a fifth attribute is added.
+ * A block's **record** — the attributes it holds, as one object with a type of its
+ * own: `Infobox`, `Statblock`, `SceneRef`.
+ *
+ * One object rather than a positional list, because `setAttrs(align, width, src, alt)`
+ * re-breaks every consumer the moment a fifth attribute is added (ADR-0016 §4). Typed
+ * rather than `Record<string, unknown>`, because the object alone only saved the
+ * *connector* from that break: every block was still re-enumerating its own field
+ * names on both sides of an untyped seam, and a field forgotten in one of them
+ * disappeared from the GM's file with nothing to say so (#209).
+ *
+ * The constraint is `object` rather than an index signature on purpose: a block's
+ * record is an `interface`, and an interface has no implicit index signature.
  */
-export type BlockAttrs = Record<string, unknown>;
+export type BlockRecord = object;
 
-/** What a block's Svelte view exposes for the connector to drive. */
-export interface BlockView {
-  /** Receives the node's attributes, notably after an undo. */
-  setAttrs: (attrs: BlockAttrs) => void;
+/**
+ * What a block's Svelte view exposes for the connector to drive, typed against the
+ * block's record so that the view and the node cannot disagree about what a block holds.
+ */
+export interface BlockView<R extends BlockRecord> {
+  /** Receives the node's whole record, notably after an undo. */
+  setAttrs: (attrs: R) => void;
   /** Only for a view that draws its own selected state — see `drawsOwnSelection`. */
   setSelected?: (selected: boolean) => void;
 }
 
 /** The handles a block's own code gets, one set per mounted node view. */
-export interface BlockNodeViewContext {
+export interface BlockNodeViewContext<R extends BlockRecord> {
   /** The wrapper element the block's view is mounted into. */
   dom: HTMLElement;
-  /** Merges `partial` into the node's current attributes and writes it back. */
-  updateAttributes: (partial: BlockAttrs) => void;
+  /**
+   * Merges `partial` into the node's current attributes and writes it back.
+   *
+   * `Partial<R>` is what lets a block's write-back be the record itself —
+   * `onCommit: updateAttributes` — rather than a hand-listed projection of it, and it
+   * is what makes a typo'd or stale field name a build error.
+   */
+  updateAttributes: (partial: Partial<R>) => void;
   /**
    * Removes the node from the document — the one gesture a sealed block cannot get
    * from ProseMirror.
@@ -92,14 +110,21 @@ export interface BlockNodeViewContext {
  */
 export type StopEventHole = (event: Event) => boolean | undefined;
 
-export interface BlockNodeViewSpec<V extends BlockView> {
+export interface BlockNodeViewSpec<R extends BlockRecord, V extends BlockView<R>> {
   /**
-   * The block's Svelte view. Typed loosely on purpose: the connector cannot know
-   * one block's props, and the props it passes are the node's own attribute
-   * names plus whatever `props` adds.
+   * The block's Svelte view.
+   *
+   * Its *props* stay loose, because the props it is mounted with are the node's record
+   * plus whatever `props` adds, and no type spells that pair: an intersection with an
+   * open index is not a substitute — Svelte's props are checked by name, so the
+   * callbacks read as missing rather than as covered.
+   *
+   * Its *exports* are not loose, and that is where this ticket's guarantee lives: `V`
+   * extends `BlockView<R>`, so the view's own `setAttrs(attrs: Infobox)` is finally
+   * checked against the record the node carries instead of merely declared beside it.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  component: Component<any, any>;
+  component: Component<any, V>;
 
   /**
    * `sealed` (the default) holds all its content in attributes and has no
@@ -113,11 +138,17 @@ export interface BlockNodeViewSpec<V extends BlockView> {
   class?: string;
   domAttrs?: Record<string, string>;
 
-  /** Stands in for any attribute the node leaves null or unset. */
-  defaults?: BlockAttrs;
+  /**
+   * Stands in for any attribute the node leaves null or unset — the whole record, so
+   * every field has one.
+   *
+   * A block deriving its attributes from a `blockDom` table hands over that table's
+   * `defaults` and declares nothing twice.
+   */
+  defaults?: R;
 
   /** Props beyond the node's attributes — a block's write-back callbacks. */
-  props?: (ctx: BlockNodeViewContext) => Record<string, unknown>;
+  props?: (ctx: BlockNodeViewContext<R>) => Record<string, unknown>;
 
   /**
    * The one named hole for event handling, and it is a deliberate hole: Image
@@ -125,7 +156,7 @@ export interface BlockNodeViewSpec<V extends BlockView> {
    * must hold a slider drag that leaves the node view. Closing it "for
    * consistency" re-breaks both (ADR-0016 §4).
    */
-  stopEvent?: (ctx: BlockNodeViewContext) => StopEventHole;
+  stopEvent?: (ctx: BlockNodeViewContext<R>) => StopEventHole;
 
   /**
    * Set when the view renders its own selected state, which suppresses
@@ -137,7 +168,7 @@ export interface BlockNodeViewSpec<V extends BlockView> {
    * Runs as soon as the block's view is mounted, before ProseMirror is handed
    * the node view — a fresh insert opening itself for editing.
    */
-  mounted?: (view: V, attrs: BlockAttrs) => void;
+  mounted?: (view: V, attrs: R) => void;
 }
 
 /** Only the parts of TipTap's node-view arguments the connector reads. */
@@ -154,12 +185,15 @@ interface NodeViewArgs {
  * anything null or unset. Applied on the way *out* to the view only — the
  * document keeps whatever it holds, so a default never becomes a write.
  */
-function withDefaults(attrs: BlockAttrs, defaults?: BlockAttrs): BlockAttrs {
-  const out: BlockAttrs = { ...attrs };
+function withDefaults<R extends BlockRecord>(attrs: Record<string, unknown>, defaults?: R): R {
+  const out: Record<string, unknown> = { ...attrs };
   for (const [key, value] of Object.entries(defaults ?? {})) {
     if (out[key] === undefined || out[key] === null) out[key] = value;
   }
-  return out;
+  // The node's attributes *are* the block's record — the schema was built from it, and
+  // the defaults above have stood in for whatever the document left out. ProseMirror
+  // types them as `any`, so this is the one place the claim is made rather than checked.
+  return out as R;
 }
 
 // ─── Stale positions ──────────────────────────────────────────────────────────
@@ -177,10 +211,7 @@ function withDefaults(attrs: BlockAttrs, defaults?: BlockAttrs): BlockAttrs {
  * `doc` is optional because a real transaction always carries one and a test stub need
  * not.
  */
-function nodeAtOrNull(
-  doc: ProseMirrorNode | undefined,
-  pos: number,
-): ProseMirrorNode | null {
+function nodeAtOrNull(doc: ProseMirrorNode | undefined, pos: number): ProseMirrorNode | null {
   if (!doc || pos < 0 || pos > doc.content.size) return null;
   return doc.nodeAt(pos);
 }
@@ -191,8 +222,8 @@ function nodeAtOrNull(
  * Builds a block's node view from its spec. The return value is what
  * `addNodeView()` hands TipTap.
  */
-export function createBlockNodeView<V extends BlockView = BlockView>(
-  spec: BlockNodeViewSpec<V>,
+export function createBlockNodeView<R extends BlockRecord, V extends BlockView<R> = BlockView<R>>(
+  spec: BlockNodeViewSpec<R, V>,
 ) {
   const sealed = (spec.mode ?? "sealed") === "sealed";
 
@@ -212,7 +243,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
     // through update(), which is what makes it safe to merge against.
     let current = node;
 
-    const ctx: BlockNodeViewContext = {
+    const ctx: BlockNodeViewContext<R> = {
       dom,
       getPos,
       updateAttributes(partial) {
@@ -334,8 +365,7 @@ export function createBlockNodeView<V extends BlockView = BlockView>(
       nodeView.contentDOM = contentDOM;
       // Everything outside the hole is the block's own rendering, which
       // ProseMirror must not try to read back as document content.
-      nodeView.ignoreMutation = (mutation) =>
-        !contentDOM.contains(mutation.target);
+      nodeView.ignoreMutation = (mutation) => !contentDOM.contains(mutation.target);
     }
 
     if (spec.drawsOwnSelection) {

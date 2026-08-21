@@ -25,6 +25,7 @@ desktop app (Windows / macOS / Linux) that unifies Markdown lore notes, interact
 maps, and ambient audio scenes into one portable folder ("the Ledger") the user owns.
 
 The site exists to convert visitors into users. Success, in priority order:
+
 1. **Downloads** — visitors grab the build for their OS. This is the primary goal.
 2. **GitHub engagement** — stars, contributors, and issues, as the secondary path for
    the technically inclined.
@@ -36,7 +37,7 @@ carefully made instrument by someone who understands the craft of running a game
 
 **Literary, restrained, crafted.** Quiet confidence over hype. The voice is that of a
 maker's tool, not a startup pitch — evocative but never purple, precise without being
-cold. It borrows the *idea* of a grimoire (a spellbook of record) as a metaphor for
+cold. It borrows the _idea_ of a grimoire (a spellbook of record) as a metaphor for
 substance and ownership, not as an excuse for fantasy costume.
 
 - Voice: assured, spare, a little literary. Lines like "The tool disappears. The world

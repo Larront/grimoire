@@ -15,6 +15,11 @@ Key stores:
 - `scenes.svelte.ts` — scenes + per-scene slot cache
 - `audio-engine.svelte.ts` — complex playback state machine bridging Web Audio API (local files) and Spotify Web Playback SDK
 
+Two seams sit beside the stores rather than in them:
+
+- `src/lib/details/` — one [[Details Source]] per entity kind (note, pin, annotation) feeding a Details Pane body, plus the save-status machine and staleness guard they share. Instantiated per pane, not a singleton. Beside them, `pane-detail-surface.svelte.ts` holds the other half of a pane's Details Pane: the pane's measured width, the dock/float/sheet decision it implies, the visibility latch and the mobile overlay token. One per pane slot (`paneSurface('left' | 'right')`), claimed by whatever content the pane is showing; `DetailSurface.svelte` is the chrome it chooses between.
+- `src/lib/ledger/events.ts` — the [[Ledger Watcher]]'s frontend event contract: every backend event name, its payload, and one `onLedgerEvents` subscription helper. Nothing else should spell these event names.
+
 ## Routing
 
 SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fallback: 'index.html'`). Routes:
@@ -44,7 +49,11 @@ SvelteKit file-based routing in SPA mode (no SSR — `adapter-static` with `fall
 - `media.rs` — copies audio/image files into the ledger's media directory
 - `spotify.rs` — OAuth flow, token storage, token refresh
 
-`LedgerState` (in `ledger.rs`) is a `Mutex<Option<AppLedger>>` managed by Tauri state. Commands guard against uninitialized ledger with early returns.
+`LedgerState` (in `ledger.rs`) is the Tauri-managed state behind `AppLedger = Mutex<LedgerState>`: a folder, a database connection and a search index, all `None` until a ledger opens.
+
+A command never reconstructs that from the three `Option`s. `with_open_ledger(&ledger, |l| …)` locks the state and hands the closure an `OpenLedger` — `path`, `conn`, `index` — or fails with `ERR_NO_LEDGER` / `ERR_LOCK_POISONED`, which are spelled once in `ledger.rs`. Commands whose work is all on disk take `ledger_path(&ledger)?` instead, which releases the lock before returning. The lock is held for the whole closure, so nothing inside it may call another command that locks `AppLedger`.
+
+Domain work then takes the resolved `OpenLedger` (or plain `conn` / `&Path` params) in a `*_inner` / `*_on_conn` function, which is what the tests call — no `State<AppLedger>` required.
 
 ## Database
 
@@ -57,7 +66,6 @@ SQLite at `<ledger_path>/.grimoire/grimoire.db`. Diesel ORM with migrations in `
 | `@tiptap/*`             | Rich text / Markdown editing                          |
 | `bits-ui`               | Headless UI primitives                                |
 | `shadcn-svelte`         | Pre-built UI components (in `src/lib/components/ui/`) |
-| `paneforge`             | Resizable panel layouts                               |
 | `mode-watcher`          | Dark/light mode                                       |
 | `@tauri-apps/plugin-fs` | File system access (with watch support)               |
 | `diesel` (Rust)         | SQLite ORM                                            |

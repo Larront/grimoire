@@ -56,7 +56,9 @@
       <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">No scenes match.</p>
     {:else}
       {#each filtered as scene (scene.id)}
-        {@const RowIcon = scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2}
+        {@const RowIcon = scene.thumbnail_icon
+          ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
+          : Music2}
         {@const rowBg = scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]}
         {@const rowFg = ACCENT_FG[scene.id % ACCENT_FG.length]}
         <button

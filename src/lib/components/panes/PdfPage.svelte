@@ -309,7 +309,7 @@
     {scenesList}
     {textDivs}
     {itemStrings}
-    wrapperEl={wrapperEl}
+    {wrapperEl}
     {scale}
     {textReady}
     onChangeScene={onChangeSceneLink}

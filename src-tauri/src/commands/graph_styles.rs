@@ -1,5 +1,5 @@
 use crate::db::schema::tag_graph_styles::dsl as gs;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
@@ -17,9 +17,7 @@ pub struct TagGraphStyleResponse {
 pub fn get_tag_graph_styles(
     ledger: State<AppLedger>,
 ) -> Result<HashMap<String, TagGraphStyleResponse>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    get_tag_graph_styles_from_conn(conn)
+    with_open_ledger(&ledger, |l| get_tag_graph_styles_from_conn(l.conn))
 }
 
 pub fn get_tag_graph_styles_from_conn(
@@ -43,9 +41,9 @@ pub fn set_tag_graph_style(
     hidden: bool,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    set_tag_graph_style_on_conn(conn, &tag, color.as_deref(), hidden)
+    with_open_ledger(&ledger, |l| {
+        set_tag_graph_style_on_conn(l.conn, &tag, color.as_deref(), hidden)
+    })
 }
 
 pub fn set_tag_graph_style_on_conn(

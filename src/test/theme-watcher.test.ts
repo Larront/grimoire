@@ -84,26 +84,16 @@ describe("ThemeWatcher — data-density attribute", () => {
 describe("ThemeWatcher — dark mode (default)", () => {
   it("applies the accent as a class, not an inline style", () => {
     render(ThemeWatcher);
-    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
-      true,
-    );
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "",
-    );
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(true);
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
   });
 
   it("swaps class immediately when preset switches", () => {
     render(ThemeWatcher);
     flushSync(() => ledger.setAccent("accent-verdant"));
-    expect(document.documentElement.classList.contains("accent-verdant")).toBe(
-      true,
-    );
-    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
-      false,
-    );
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "",
-    );
+    expect(document.documentElement.classList.contains("accent-verdant")).toBe(true);
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
   });
 });
 
@@ -113,34 +103,22 @@ describe("ThemeWatcher — light mode", () => {
 
   it("applies accent-crimson class on root with no inline --primary", () => {
     render(ThemeWatcher);
-    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
-      true,
-    );
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "",
-    );
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(true);
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
   });
 
   it("swaps class when preset switches", () => {
     render(ThemeWatcher);
     flushSync(() => ledger.setAccent("accent-arcane"));
-    expect(document.documentElement.classList.contains("accent-arcane")).toBe(
-      true,
-    );
-    expect(document.documentElement.classList.contains("accent-crimson")).toBe(
-      false,
-    );
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "",
-    );
+    expect(document.documentElement.classList.contains("accent-arcane")).toBe(true);
+    expect(document.documentElement.classList.contains("accent-crimson")).toBe(false);
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
   });
 
   it("leaves exactly one accent class on the root", () => {
     render(ThemeWatcher);
     flushSync(() => ledger.setAccent("accent-ice"));
-    const applied = [...document.documentElement.classList].filter((c) =>
-      c.startsWith("accent-"),
-    );
+    const applied = [...document.documentElement.classList].filter((c) => c.startsWith("accent-"));
     expect(applied).toEqual(["accent-ice"]);
   });
 });

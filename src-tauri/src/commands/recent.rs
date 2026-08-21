@@ -1,5 +1,5 @@
 use crate::db::schema::recent_entities::dsl as re;
-use crate::ledger::AppLedger;
+use crate::ledger::{with_open_ledger, AppLedger};
 use chrono::Utc;
 use diesel::prelude::*;
 use serde::Serialize;
@@ -66,19 +66,17 @@ pub fn record_recent(
     title: String,
     ledger: State<AppLedger>,
 ) -> Result<(), String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    upsert_recent(conn, &kind, id, &title)?;
-    trim_recent(conn, 20)?;
-    Ok(())
+    with_open_ledger(&ledger, |l| {
+        upsert_recent(l.conn, &kind, id, &title)?;
+        trim_recent(l.conn, 20)?;
+        Ok(())
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn get_recent_entities(ledger: State<AppLedger>) -> Result<Vec<RecentEntityResult>, String> {
-    let mut state = ledger.lock().map_err(|_| "Ledger lock poisoned")?;
-    let conn = state.connection.as_mut().ok_or("No ledger open")?;
-    load_recent(conn, 20)
+    with_open_ledger(&ledger, |l| load_recent(l.conn, 20))
 }
 
 #[cfg(test)]

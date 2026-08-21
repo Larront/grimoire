@@ -51,7 +51,6 @@ function statblock(
   } = {},
 ) {
   const onCommit = vi.fn();
-  const onRemove = vi.fn();
   const rendered = render(StatblockBlockView, {
     props: {
       name: "Goblin Scout",
@@ -59,13 +58,12 @@ function statblock(
       sections: ACTIONS,
       width: DEFAULT_STATBLOCK_WIDTH,
       onCommit,
-      onRemove,
       ...props,
     },
   });
   /** Opens the structure, the way the GM does: the pencil in the block's chrome. */
   const edit = () => fireEvent.click(rendered.getByLabelText("Edit statblock structure"));
-  return { ...rendered, onCommit, onRemove, edit };
+  return { ...rendered, onCommit, edit };
 }
 
 /** The statblock as the block last handed it to the document. */
@@ -108,7 +106,12 @@ describe("a Statblock draws its structure", () => {
 
   it("draws unnamed prose with an empty name rather than another shape", async () => {
     const { getByLabelText, edit } = statblock({
-      sections: [{ heading: "Description", entries: [{ name: "", body: "It remembers." }] }],
+      sections: [
+        {
+          heading: "Description",
+          entries: [{ name: "", body: "It remembers." }],
+        },
+      ],
     });
     await edit();
 
@@ -131,7 +134,10 @@ describe("a Statblock draws its structure", () => {
     const { container, edit } = statblock({
       rows: [],
       sections: [
-        { heading: "Lore", entries: [{ name: "Bound", body: "Sworn to [[Captain Ash]]." }] },
+        {
+          heading: "Lore",
+          entries: [{ name: "Bound", body: "Sworn to [[Captain Ash]]." }],
+        },
       ],
     });
 
@@ -198,7 +204,9 @@ describe("Statblock header rows", () => {
     const { getByLabelText, onCommit, edit } = statblock();
     await edit();
     await fireEvent.click(getByLabelText("Row 1 value"));
-    await fireEvent.input(getByLabelText("Row 1 value"), { target: { value: "9" } });
+    await fireEvent.input(getByLabelText("Row 1 value"), {
+      target: { value: "9" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 value"));
 
     expect(committed(onCommit).rows[0]).toEqual({ label: "HP", value: "9" });
@@ -208,7 +216,9 @@ describe("Statblock header rows", () => {
     const { getByLabelText, onCommit, edit } = statblock();
     await edit();
     await fireEvent.click(getByLabelText("Row 1 label"));
-    await fireEvent.input(getByLabelText("Row 1 label"), { target: { value: "HP: max" } });
+    await fireEvent.input(getByLabelText("Row 1 label"), {
+      target: { value: "HP: max" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 label"));
 
     expect(committed(onCommit).rows[0].label).toBe("HP max");
@@ -220,7 +230,9 @@ describe("Statblock header rows", () => {
     const { getByLabelText, onCommit, edit } = statblock();
     await edit();
     await fireEvent.click(getByLabelText("Row 1 label"));
-    await fireEvent.input(getByLabelText("Row 1 label"), { target: { value: "## Actions" } });
+    await fireEvent.input(getByLabelText("Row 1 label"), {
+      target: { value: "## Actions" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 label"));
 
     expect(committed(onCommit).rows[0].label).toBe("Actions");
@@ -314,9 +326,7 @@ describe("Statblock entries", () => {
     await edit();
     await fireEvent.click(getAllByLabelText("Delete entry")[0]);
 
-    expect(committed(onCommit).sections[0].entries.map((e) => e.name)).toEqual([
-      "Nimble Escape",
-    ]);
+    expect(committed(onCommit).sections[0].entries.map((e) => e.name)).toEqual(["Nimble Escape"]);
   });
 
   it("adding an entry opens its name for typing and waits before writing", async () => {
@@ -337,20 +347,28 @@ describe("Statblock entries", () => {
     await fireEvent.input(name, { target: { value: "Bite" } });
     await fireEvent.blur(name);
 
-    expect(committed(onCommit).sections[0].entries[2]).toEqual({ name: "Bite", body: "" });
+    expect(committed(onCommit).sections[0].entries[2]).toEqual({
+      name: "Bite",
+      body: "",
+    });
   });
 
   it("edits an entry in one section without touching another", async () => {
     const { getByLabelText, onCommit, edit } = statblock({
       sections: [
-        { heading: "Traits", entries: [{ name: "Amphibious", body: "It breathes water." }] },
+        {
+          heading: "Traits",
+          entries: [{ name: "Amphibious", body: "It breathes water." }],
+        },
         { heading: "Actions", entries: [{ name: "Bite", body: "1d6" }] },
       ],
     });
     await edit();
 
     await fireEvent.click(getByLabelText("Section 2 entry 1 body"));
-    await fireEvent.input(getByLabelText("Section 2 entry 1 body"), { target: { value: "1d8" } });
+    await fireEvent.input(getByLabelText("Section 2 entry 1 body"), {
+      target: { value: "1d8" },
+    });
     await fireEvent.blur(getByLabelText("Section 2 entry 1 body"));
 
     expect(committed(onCommit).sections[0].entries[0].body).toBe("It breathes water.");
@@ -428,9 +446,7 @@ describe("Statblock entries", () => {
     });
     await fireEvent.blur(getByLabelText("Section 1 entry 1 body"));
 
-    expect(committed(onCommit).sections[0].entries[0].body).toBe(
-      "First thought.\nSecond thought.",
-    );
+    expect(committed(onCommit).sections[0].entries[0].body).toBe("First thought.\nSecond thought.");
   });
 
   it("keeps a section marker out of a body's later line, which would end the entry", async () => {
@@ -454,9 +470,7 @@ describe("Statblock entries", () => {
     });
     await fireEvent.blur(getByLabelText("Section 1 entry 1 body"));
 
-    expect(committed(onCommit).sections[0].entries[0].body).toBe(
-      "Melee Weapon Attack: +9 to hit",
-    );
+    expect(committed(onCommit).sections[0].entries[0].body).toBe("Melee Weapon Attack: +9 to hit");
   });
 });
 
@@ -478,16 +492,25 @@ describe("a pool is played on", () => {
   it("takes a hit as a signed delta", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
     await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), { target: { value: "-7" } });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), { key: "Enter" });
+    await fireEvent.input(getByLabelText("Row 1 current value"), {
+      target: { value: "-7" },
+    });
+    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+      key: "Enter",
+    });
 
-    expect(committed(onCommit).rows[0]).toEqual({ label: "HP", value: "36/59" });
+    expect(committed(onCommit).rows[0]).toEqual({
+      label: "HP",
+      value: "36/59",
+    });
   });
 
   it("takes an unsigned number as an absolute", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
     await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), { target: { value: "20" } });
+    await fireEvent.input(getByLabelText("Row 1 current value"), {
+      target: { value: "20" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 current value"));
 
     expect(committed(onCommit).rows[0].value).toBe("20/59");
@@ -507,8 +530,12 @@ describe("a pool is played on", () => {
       sections: [],
     });
     await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), { target: { value: "-9" } });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), { key: "Enter" });
+    await fireEvent.input(getByLabelText("Row 1 current value"), {
+      target: { value: "-9" },
+    });
+    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+      key: "Enter",
+    });
 
     expect(committed(onCommit).rows[0].value).toBe("-6/12");
   });
@@ -516,8 +543,12 @@ describe("a pool is played on", () => {
   it("abandons the edit on Escape", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
     await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), { target: { value: "-7" } });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), { key: "Escape" });
+    await fireEvent.input(getByLabelText("Row 1 current value"), {
+      target: { value: "-7" },
+    });
+    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+      key: "Escape",
+    });
 
     expect(onCommit).not.toHaveBeenCalled();
     expect(getByLabelText("Row 1 current value").tagName).toBe("BUTTON");
@@ -647,7 +678,9 @@ describe("the mode is scoped to structure", () => {
 
     expect(queryByLabelText("Row 1 current value")).toBeNull();
     await fireEvent.click(getByLabelText("Row 1 value"));
-    await fireEvent.input(getByLabelText("Row 1 value"), { target: { value: "-20" } });
+    await fireEvent.input(getByLabelText("Row 1 value"), {
+      target: { value: "-20" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 value"));
 
     // And the text is taken literally: no delta was applied, because there is no pool.
@@ -677,18 +710,17 @@ describe("the mode is scoped to structure", () => {
     );
   });
 
-  it("keeps removal behind the pencil, out of reach of a mis-click mid-fight", async () => {
-    // The largest version of the slip the mode exists to prevent: in view mode there is
-    // no trash to hit at all, so deleting the creature takes the same deliberate gesture
-    // as editing its maximum (#175 review).
-    const { queryByLabelText, getByLabelText, onRemove, edit } = statblock(creature);
+  it("draws no delete control of its own, in either mode", async () => {
+    // Removal used to sit behind the pencil, which was the safest place for a trash can
+    // a block drew itself. The gutter handle's menu deletes anything now (#194), so the
+    // statblock draws none at all — the last block that still did (#219).
+    const { queryByLabelText, edit } = statblock(creature);
 
     expect(queryByLabelText("Remove statblock")).toBeNull();
 
     await edit();
-    await fireEvent.click(getByLabelText("Remove statblock"));
 
-    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(queryByLabelText("Remove statblock")).toBeNull();
   });
 
   it("opens labels, maximums, headings and entry prose behind the pencil", async () => {
@@ -741,7 +773,9 @@ describe("the mode is scoped to structure", () => {
     const { getByLabelText, onCommit, edit } = statblock(creature);
     await edit();
     await fireEvent.click(getByLabelText("Row 1 value"));
-    await fireEvent.input(getByLabelText("Row 1 value"), { target: { value: "40/59" } });
+    await fireEvent.input(getByLabelText("Row 1 value"), {
+      target: { value: "40/59" },
+    });
     await fireEvent.blur(getByLabelText("Row 1 value"));
 
     // `width` is the one drawing decision that does reach the document, on purpose: a GM
@@ -810,7 +844,12 @@ describe("a Statblock follows the document", () => {
     (component as unknown as { setAttrs: (a: unknown) => void }).setAttrs({
       name: "Aboleth",
       rows: [{ label: "HP", value: "120/135" }],
-      sections: [{ heading: "Traits", entries: [{ name: "Amphibious", body: "Water." }] }],
+      sections: [
+        {
+          heading: "Traits",
+          entries: [{ name: "Amphibious", body: "Water." }],
+        },
+      ],
     });
     await Promise.resolve();
 
@@ -848,9 +887,7 @@ describe("a Statblock follows the document", () => {
 
   it("redraws the width an undo restored", async () => {
     const { container, component } = statblock({ width: "narrow" });
-    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
-      "narrow",
-    );
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe("narrow");
 
     (component as unknown as { setAttrs: (a: unknown) => void }).setAttrs({
       name: "Goblin Scout",
@@ -878,13 +915,13 @@ describe("the card's width is the GM's, and it is kept", () => {
     await fireEvent.click(getByLabelText("Narrow statblock"));
 
     expect(lastCommitted(onCommit).width).toBe("narrow");
-    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe(
-      "narrow",
-    );
+    expect(container.querySelector(".statblock-block")!.getAttribute("data-width")).toBe("narrow");
   });
 
   it("widens back, and offers the gesture that undoes the one just made", async () => {
-    const { container, getByLabelText, onCommit } = statblock({ width: "narrow" });
+    const { container, getByLabelText, onCommit } = statblock({
+      width: "narrow",
+    });
 
     await fireEvent.click(getByLabelText("Widen statblock"));
 

@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { ModeWatcher } from 'mode-watcher';
-  import { ledger, type AccentPreset } from '$lib/stores/ledger.svelte';
-  import { appPrefs } from '$lib/stores/app-prefs.svelte';
+  import { ModeWatcher } from "mode-watcher";
+  import { ledger, type AccentPreset } from "$lib/stores/ledger.svelte";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
 
   const ALL_ACCENT_CLASSES: AccentPreset[] = [
-    'accent-crimson',
-    'accent-arcane',
-    'accent-verdant',
-    'accent-ice',
-    'accent-amber',
+    "accent-crimson",
+    "accent-arcane",
+    "accent-verdant",
+    "accent-ice",
+    "accent-amber",
   ];
 
   /*
@@ -42,7 +42,7 @@
 
   $effect(() => {
     if (appPrefs.reduceMotion) {
-      document.documentElement.dataset.reduceMotion = 'true';
+      document.documentElement.dataset.reduceMotion = "true";
     } else {
       delete document.documentElement.dataset.reduceMotion;
     }

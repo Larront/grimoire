@@ -20,52 +20,36 @@
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
-  import type { RowChange } from "$lib/editor/row-list";
-  import {
-    blankLabelledRow,
-    labelText,
-    oneLine,
-    type LabelledRow,
-  } from "$lib/editor/labelled-row";
+  import { settleRowChange, type RowChange } from "$lib/editor/row-list";
+  import { blankLabelledRow, labelText, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
   import type { Infobox } from "$lib/editor/infobox-block";
 
+  // The panel's own record, taken as one prop bag rather than as four named props: the
+  // connector mounts a block with its record spread over the props, so the rest element
+  // *is* the record and nothing here re-lists its fields (#209). A field added to
+  // `Infobox` arrives without a line changing in this file.
   let {
-    title,
-    image,
-    imageAlt,
-    rows,
     onCommit,
-  }: {
-    title: string;
-    image: string;
-    imageAlt: string;
-    rows: LabelledRow[];
+    ...attrs
+  }: Infobox & {
     onCommit: (infobox: Infobox) => void;
   } = $props();
 
+  // The editable copy. One record rather than one mirror per field, which is what makes
+  // `setAttrs` below total: an undo hands over a whole panel, so there is no field it can
+  // leave behind holding a stale value for the next commit to write back.
   // svelte-ignore state_referenced_locally
-  let _title = $state(title);
-  // svelte-ignore state_referenced_locally
-  let _image = $state(image);
-  // svelte-ignore state_referenced_locally
-  let _imageAlt = $state(imageAlt);
-  // svelte-ignore state_referenced_locally
-  let _rows = $state<LabelledRow[]>(rows);
+  let panel = $state<Infobox>({ ...attrs });
 
   /** The row whose label is opening for typing, after an insert or a fresh `/infobox`. */
   let focusedRow = $state<number | null>(null);
 
   function commit() {
-    onCommit({
-      title: _title,
-      image: _image,
-      imageAlt: _imageAlt,
-      rows: $state.snapshot(_rows) as LabelledRow[],
-    });
+    onCommit($state.snapshot(panel) as Infobox);
   }
 
   function setTitle(next: string) {
-    _title = next;
+    panel.title = next;
     commit();
   }
 
@@ -74,12 +58,12 @@
   // The path's resolution, loading and not-found states included. A file moved or
   // deleted outside Grimoire leaves the panel drawing everything else: a missing
   // portrait costs the portrait and nothing else.
-  const thumbnailImage = ledgerImage(() => _image);
+  const thumbnailImage = ledgerImage(() => panel.image);
 
   async function chooseImage() {
     const path = await pickLedgerImage();
     if (!path) return;
-    _image = path;
+    panel.image = path;
     commit();
   }
 
@@ -88,41 +72,38 @@
    * with no image is a record the fence has nowhere to write.
    */
   function removeImage() {
-    _image = "";
-    _imageAlt = "";
+    panel.image = "";
+    panel.imageAlt = "";
     commit();
   }
 
   function setImageAlt(next: string) {
-    _imageAlt = next;
+    panel.imageAlt = next;
     commit();
   }
 
   function setRow(index: number, patch: Partial<LabelledRow>) {
-    _rows[index] = { ..._rows[index], ...patch };
+    panel.rows[index] = { ...panel.rows[index], ...patch };
     focusedRow = null;
     commit();
   }
 
-  // Order changes come from the Row List, which owns the controls and the arithmetic.
-  // What is decided here is which of them reaches the document: a move and a delete at
-  // once, but a freshly inserted row is empty and serializes to nothing at all, so it
-  // waits — it becomes a document write when the GM types into it.
+  // Order changes come from the Row List, which owns the controls and the splicing.
+  // Whether one of them reaches the document is `settleRowChange`'s rule, stated once
+  // there; what is left here is what this block means by focusing a row.
   function handleRowChange(next: LabelledRow[], change: RowChange) {
-    _rows = next;
-    if (change.kind === "insert") {
-      focusedRow = change.index;
-      return;
-    }
-    focusedRow = null;
-    commit();
+    panel.rows = next;
+    settleRowChange(change, {
+      focus: (index) => (focusedRow = index),
+      commit: () => {
+        focusedRow = null;
+        commit();
+      },
+    });
   }
 
-  export function setAttrs(attrs: Infobox) {
-    _title = attrs.title;
-    _image = attrs.image;
-    _imageAlt = attrs.imageAlt;
-    _rows = attrs.rows;
+  export function setAttrs(next: Infobox) {
+    panel = next;
     focusedRow = null;
   }
 
@@ -142,9 +123,7 @@
      review). The label column is a minimum plus a percentage rather than a fixed
      width, so `Population` and `Ruler` still line up. -->
 {#snippet infoboxRow(row: LabelledRow, i: number)}
-  <div
-    class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2"
-  >
+  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2">
     <LinkedTextField
       value={row.label}
       onCommit={(label) => setRow(i, { label })}
@@ -175,7 +154,7 @@
       <img
         data-infobox-image
         src={thumbnailImage.url}
-        alt={_imageAlt}
+        alt={panel.imageAlt}
         class="block w-full rounded"
         draggable="false"
         onerror={thumbnailImage.markMissing}
@@ -186,7 +165,7 @@
         class="flex flex-col items-center justify-center gap-1.5 w-full min-h-16 rounded px-2 py-2
                border border-dashed border-border/60 bg-card font-sans text-xs text-muted-foreground/60"
       >
-        <span class="text-center break-all">Image not found: {_image}</span>
+        <span class="text-center break-all">Image not found: {panel.image}</span>
         <button
           type="button"
           data-infobox-image-replace
@@ -235,7 +214,7 @@
          in the Link Index whether this drew it or not. -->
     <figcaption class="mt-0.5">
       <LinkedTextField
-        value={_imageAlt}
+        value={panel.imageAlt}
         onCommit={setImageAlt}
         restrict={oneLine}
         ariaLabel="Image caption"
@@ -250,7 +229,7 @@
   class="infobox-block group/panel my-2 select-none rounded-lg border border-border bg-card/40 px-3 py-2"
   contenteditable="false"
 >
-  {#if _image}
+  {#if panel.image}
     {@render thumbnail()}
   {/if}
 
@@ -271,7 +250,7 @@
        handle's menu deletes anything now (#194), so the panel no longer draws its own. -->
   <div class="mb-1 flex items-start gap-1">
     <LinkedTextField
-      value={_title}
+      value={panel.title}
       onCommit={setTitle}
       restrict={oneLine}
       ariaLabel="Infobox title"
@@ -283,7 +262,7 @@
              motion-reduce:transition-none group-hover/panel:opacity-100
              group-focus-within/panel:opacity-100"
     >
-      {#if !_image}
+      {#if !panel.image}
         <button
           type="button"
           class="rounded p-0.5 cursor-pointer text-muted-foreground hover:text-foreground
@@ -298,12 +277,12 @@
     </div>
   </div>
 
-  {#if _rows.length === 0}
+  {#if panel.rows.length === 0}
     <div class="font-sans text-xs italic text-muted-foreground mb-1">No rows yet</div>
   {/if}
 
   <RowList
-    rows={_rows}
+    rows={panel.rows}
     row={infoboxRow}
     noun="row"
     createRow={blankLabelledRow}

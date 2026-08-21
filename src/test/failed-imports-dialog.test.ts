@@ -7,6 +7,7 @@ vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), {
     error: vi.fn(),
     success: vi.fn(),
+    dismiss: vi.fn(),
   }),
 }));
 
@@ -78,6 +79,7 @@ describe("failed imports — toast triggered by open_ledger", () => {
           scene_count: 0,
           map_count: 0,
           failed_imports: [],
+          unlinked_pins: [],
         };
       }
       return null;
@@ -96,6 +98,7 @@ describe("failed imports — toast triggered by open_ledger", () => {
           scene_count: 0,
           map_count: 0,
           failed_imports: sampleFailures,
+          unlinked_pins: [],
         };
       }
       return null;
@@ -119,6 +122,7 @@ describe("failed imports — toast triggered by open_ledger", () => {
           scene_count: 0,
           map_count: 0,
           failed_imports: [sampleFailures[0]],
+          unlinked_pins: [],
         };
       }
       return null;
@@ -143,6 +147,7 @@ describe("failed imports — toast triggered by open_ledger", () => {
           scene_count: 0,
           map_count: 0,
           failed_imports: sampleFailures,
+          unlinked_pins: [],
         };
       }
       return null;

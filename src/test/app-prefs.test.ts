@@ -14,9 +14,7 @@ describe("appPrefs — Rust persistence", () => {
   it("setters persist the full snapshot via save_app_prefs", () => {
     appPrefs.setSampleBannerDismissed(true);
 
-    const call = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "save_app_prefs");
+    const call = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "save_app_prefs");
     expect(call).toBeDefined();
     expect(call![1]).toEqual({
       prefs: {
@@ -31,10 +29,7 @@ describe("appPrefs — Rust persistence", () => {
 
   it("setters do not write to webview localStorage", () => {
     appPrefs.setReduceMotion(true);
-    expect(localStorage.setItem).not.toHaveBeenCalledWith(
-      "grimoire-reduce-motion",
-      "true",
-    );
+    expect(localStorage.setItem).not.toHaveBeenCalledWith("grimoire-reduce-motion", "true");
     appPrefs.setReduceMotion(false);
   });
 
@@ -58,9 +53,7 @@ describe("appPrefs — Rust persistence", () => {
     expect(localStorage.getItem("grimoire-sample-banner-dismissed")).toBeNull();
 
     // Migration re-persists the merged snapshot
-    const saved = vi
-      .mocked(invoke)
-      .mock.calls.filter(([cmd]) => cmd === "save_app_prefs");
+    const saved = vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "save_app_prefs");
     expect(saved.length).toBeGreaterThan(0);
 
     appPrefs.setReduceMotion(false);
@@ -69,9 +62,7 @@ describe("appPrefs — Rust persistence", () => {
 
   it("load() is a one-shot — repeat calls do not re-fetch", async () => {
     await appPrefs.load();
-    const fetches = vi
-      .mocked(invoke)
-      .mock.calls.filter(([cmd]) => cmd === "get_app_prefs");
+    const fetches = vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "get_app_prefs");
     expect(fetches.length).toBe(0);
   });
 });

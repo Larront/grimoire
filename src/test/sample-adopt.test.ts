@@ -19,6 +19,7 @@ function mockSampleInvoke() {
         scene_count: 0,
         map_count: 1,
         failed_imports: [],
+        unlinked_pins: [],
       };
     return null;
   });
@@ -36,6 +37,7 @@ function mockAdoptInvoke() {
         scene_count: 0,
         map_count: 1,
         failed_imports: [],
+        unlinked_pins: [],
       };
     if (cmd === "add_recent_ledger") return null;
     return null;
@@ -57,9 +59,7 @@ describe("ledger store — adopt", () => {
 
     await ledger.adopt(ADOPT_PARENT, ADOPT_NAME);
 
-    const adoptCall = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "adopt_sample_ledger");
+    const adoptCall = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "adopt_sample_ledger");
     expect(adoptCall).toBeDefined();
     expect(adoptCall![1]).toEqual({ parent: ADOPT_PARENT, name: ADOPT_NAME });
   });
@@ -86,9 +86,7 @@ describe("ledger store — adopt", () => {
 
     await ledger.adopt(ADOPT_PARENT, ADOPT_NAME);
 
-    const openCall = vi
-      .mocked(invoke)
-      .mock.calls.find(([cmd]) => cmd === "open_ledger");
+    const openCall = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "open_ledger");
     expect(openCall).toBeDefined();
     expect(openCall![1]).toEqual({ path: ADOPT_PATH });
   });

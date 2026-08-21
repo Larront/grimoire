@@ -4,7 +4,17 @@
 // note_links, note_aliases, and note_tags inside a single SQLite transaction,
 // then updates the Tantivy Search Index on a best-effort basis.
 //
-// Acting on `ReconcileOutcome::search_stale` is deferred to a later slice.
+// A failed Search Index write is *recorded here* rather than reported upwards
+// (issue #205). The seam used to hand every caller back a `ReconcileOutcome
+// { search_stale }` and leave them to remember `mark_stale_if_needed`, which nine
+// call sites did and one — the manual rebuild command — did not. That apparatus
+// maintained a `.grimoire/search.stale` file nothing ever read: the marker cannot
+// change what the app does, because `open_ledger` rebuilds the whole index from a
+// ledger walk on every open whether it is there or not. Making it matter would
+// have meant *skipping* that rebuild, which is the one thing standing between the
+// GM and a vault edited while Grimoire was closed. So the marker is gone and the
+// failure goes to the log, through `search::best_effort` — the same call maps and
+// scenes make, so a miss looks the same wherever it happened (#216).
 
 use crate::commands::frontmatter;
 use crate::commands::links::extract_wikilinks;
@@ -31,46 +41,6 @@ impl DerivedFacets {
             tags: frontmatter::read_tags(content),
             body_text: crate::search::extract_plain_text(content),
         }
-    }
-}
-
-pub struct ReconcileOutcome {
-    pub search_stale: bool,
-}
-
-pub fn stale_marker_path(ledger_path: &std::path::Path) -> std::path::PathBuf {
-    ledger_path.join(".grimoire").join("search.stale")
-}
-
-/// Write the persisted stale marker (best-effort; ignores I/O errors).
-pub fn write_search_stale_marker(ledger_path: &std::path::Path) {
-    let marker = stale_marker_path(ledger_path);
-    if let Some(parent) = marker.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(&marker, "");
-}
-
-/// Remove the persisted stale marker (best-effort; ignores I/O errors).
-pub fn clear_search_stale_marker(ledger_path: &std::path::Path) {
-    let _ = std::fs::remove_file(stale_marker_path(ledger_path));
-}
-
-/// Persist the stale marker when a reconcile/remove outcome reports that the
-/// best-effort Tantivy write failed. No-op otherwise. This is the command
-/// layer's hook onto the staleness the seam only *reports* (per ADR-0004).
-pub fn mark_stale_if_needed(outcome: &ReconcileOutcome, ledger_path: &std::path::Path) {
-    if outcome.search_stale {
-        write_search_stale_marker(ledger_path);
-    }
-}
-
-/// Reconcile the persisted stale marker against a launch-time rebuild result:
-/// a successful rebuild clears the marker; a failed rebuild leaves it in place
-/// so the next launch retries. Clearing an absent marker is a harmless no-op.
-pub fn clear_stale_marker_if_rebuilt(ledger_path: &std::path::Path, rebuild_succeeded: bool) {
-    if rebuild_succeeded {
-        clear_search_stale_marker(ledger_path);
     }
 }
 
@@ -131,7 +101,7 @@ pub fn reconcile(
     note: &Note,
     content: &str,
     prev_path: Option<&str>,
-) -> Result<ReconcileOutcome, String> {
+) -> Result<(), String> {
     let facets = DerivedFacets::extract(content);
     let old_path_to_clear = prev_path.filter(|&p| p != note.path.as_str());
 
@@ -141,14 +111,11 @@ pub fn reconcile(
     .map_err(|e| e.to_string())?;
 
     // Best-effort Tantivy write — failure must not abort the SQLite writes above
-    let search_stale = match index {
-        Some(idx) => {
-            crate::search::index_note(idx, note, &facets.body_text, &facets.tags).is_err()
-        }
-        None => true,
-    };
+    crate::search::best_effort(index, &format!("note '{}'", note.path), |idx| {
+        crate::search::index_note(idx, note, &facets.body_text, &facets.tags)
+    });
 
-    Ok(ReconcileOutcome { search_stale })
+    Ok(())
 }
 
 /// One item in a bulk reconcile batch.
@@ -161,16 +128,15 @@ pub struct ReconcileManyItem {
 /// Bulk reconcile: extract all facets, write every item's derived indexes in
 /// **one** SQLite transaction, then issue **one** batched Tantivy commit.
 ///
-/// On an empty slice, returns `ReconcileOutcome { search_stale: false }`.
-/// On a Tantivy failure, returns `search_stale: true`; the caller must write
-/// the stale marker exactly once.
+/// An empty slice does nothing at all — in particular it does not log a miss,
+/// because a batch with no items has nothing that failed to reach the index.
 pub fn reconcile_many(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
     items: &[ReconcileManyItem],
-) -> Result<ReconcileOutcome, String> {
+) -> Result<(), String> {
     if items.is_empty() {
-        return Ok(ReconcileOutcome { search_stale: false });
+        return Ok(());
     }
 
     let extracted: Vec<DerivedFacets> = items
@@ -190,21 +156,19 @@ pub fn reconcile_many(
     })
     .map_err(|e| e.to_string())?;
 
-    let search_stale = match index {
-        Some(idx) => {
-            let batch: Vec<(&Note, &str, &[String])> = items
-                .iter()
-                .zip(extracted.iter())
-                .map(|(item, facets)| {
-                    (&item.note, facets.body_text.as_str(), facets.tags.as_slice())
-                })
-                .collect();
-            crate::search::index_notes_batch(idx, &batch).is_err()
-        }
-        None => true,
-    };
+    let what = format!("{} note(s)", items.len());
+    crate::search::best_effort(index, &what, |idx| {
+        let batch: Vec<(&Note, &str, &[String])> = items
+            .iter()
+            .zip(extracted.iter())
+            .map(|(item, facets)| {
+                (&item.note, facets.body_text.as_str(), facets.tags.as_slice())
+            })
+            .collect();
+        crate::search::index_notes_batch(idx, &batch)
+    });
 
-    Ok(ReconcileOutcome { search_stale })
+    Ok(())
 }
 
 /// The per-file rows accumulated by a single ledger walk, ready for bulk insert.
@@ -346,7 +310,7 @@ pub fn remove(
     index: Option<&tantivy::Index>,
     note_id: i32,
     note_path: &str,
-) -> Result<ReconcileOutcome, String> {
+) -> Result<(), String> {
     conn.transaction::<_, diesel::result::Error, _>(|c| {
         diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path))).execute(c)?;
         diesel::delete(nl::note_links.filter(nl::source_id.eq(note_id))).execute(c)?;
@@ -355,12 +319,48 @@ pub fn remove(
     })
     .map_err(|e| e.to_string())?;
 
-    let search_stale = match index {
-        Some(idx) => crate::search::remove_note(idx, note_id).is_err(),
-        None => true,
-    };
+    crate::search::best_effort(index, &format!("removal of note '{note_path}'"), |idx| {
+        crate::search::remove_note(idx, note_id)
+    });
 
-    Ok(ReconcileOutcome { search_stale })
+    Ok(())
+}
+
+/// The bulk form of [`remove`]: clear the Derived Index for many notes at once —
+/// one SQLite transaction for all three tables, one Tantivy commit for all the
+/// documents. Same ordering obligation as [`remove`]: call it while the `notes`
+/// rows still exist.
+///
+/// A folder delete is the caller this exists for. Going through [`remove`] per note
+/// costs a writer acquisition and a commit each (`search::remove_doc`), which for a
+/// folder of a few hundred notes is a long stall with the ledger mutex held —
+/// the same cost `index_notes_batch` exists to avoid on the write side.
+pub fn remove_many(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    doomed: &[(i32, String)],
+) -> Result<(), String> {
+    if doomed.is_empty() {
+        return Ok(());
+    }
+
+    conn.transaction::<_, diesel::result::Error, _>(|c| {
+        for (note_id, note_path) in doomed {
+            diesel::delete(nt::note_tags.filter(nt::note_path.eq(note_path))).execute(c)?;
+            diesel::delete(nl::note_links.filter(nl::source_id.eq(note_id))).execute(c)?;
+            diesel::delete(na::note_aliases.filter(na::note_id.eq(note_id))).execute(c)?;
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    let ids: Vec<i32> = doomed.iter().map(|(id, _)| *id).collect();
+    let what = format!("removal of {} note(s)", ids.len());
+    crate::search::best_effort(index, &what, |idx| {
+        crate::search::remove_notes_batch(idx, &ids)
+    });
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -540,18 +540,23 @@ mod tests {
         assert_eq!(tags, vec!["Allied", "NPC"]);
     }
 
+    /// No index to write to is the commonest miss there is, and it must not take
+    /// the SQLite half of the reconcile down with it — the note's tags, links and
+    /// aliases are the canonical record and are owed to the caller either way.
     #[test]
-    fn reconcile_returns_search_stale_true_when_no_index() {
+    fn reconcile_without_an_index_still_writes_the_sqlite_side() {
         let mut conn = test_conn();
         let note = make_note(1, "ash.md");
         insert_note(&mut conn, &note);
 
-        let outcome = reconcile(&mut conn, None, &note, "body", None).unwrap();
-        assert!(outcome.search_stale);
+        reconcile(&mut conn, None, &note, "Ash met [[Bram]]", None).unwrap();
+
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert_eq!(links, vec!["Bram"]);
     }
 
     #[test]
-    fn reconcile_with_valid_index_returns_search_stale_false() {
+    fn reconcile_with_a_valid_index_makes_the_note_findable() {
         let mut conn = test_conn();
         let note = make_note(1, "ash.md");
         insert_note(&mut conn, &note);
@@ -559,8 +564,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
 
-        let outcome = reconcile(&mut conn, Some(&index), &note, "body", None).unwrap();
-        assert!(!outcome.search_stale, "valid Tantivy write must not be stale");
+        reconcile(&mut conn, Some(&index), &note, "the captain's ledger", None).unwrap();
+
+        let hits = crate::search::search_notes_in_index(&index, dir.path(), "captain", 10).unwrap();
+        assert_eq!(hits.len(), 1, "a reconciled note must be searchable");
     }
 
     // ── reconcile — transaction atomicity ────────────────────────────────────
@@ -600,10 +607,72 @@ mod tests {
         assert_eq!(tags, vec!["new"]);
     }
 
+    // ── remove_many ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn remove_many_clears_every_named_note_and_leaves_the_rest() {
+        let mut conn = test_conn();
+        let doomed = make_note(1, "creatures/dragon.md");
+        let doomed_two = make_note(2, "creatures/wyvern.md");
+        let bystander = make_note(3, "top-level.md");
+        for note in [&doomed, &doomed_two, &bystander] {
+            insert_note(&mut conn, note);
+            reconcile(
+                &mut conn,
+                None,
+                note,
+                "---\ntags: [beast]\naliases: [Scaly]\n---\n[[somewhere.md]]",
+                None,
+            )
+            .unwrap();
+        }
+
+        remove_many(
+            &mut conn,
+            None,
+            &[
+                (doomed.id, doomed.path.clone()),
+                (doomed_two.id, doomed_two.path.clone()),
+            ],
+        )
+        .unwrap();
+
+        let tag_paths: Vec<String> = nt::note_tags.select(nt::note_path).load(&mut conn).unwrap();
+        assert_eq!(tag_paths, vec!["top-level.md"]);
+        let link_sources: Vec<i32> = nl::note_links.select(nl::source_id).load(&mut conn).unwrap();
+        assert_eq!(link_sources, vec![3]);
+        let alias_ids: Vec<i32> = na::note_aliases.select(na::note_id).load(&mut conn).unwrap();
+        assert_eq!(alias_ids, vec![3]);
+    }
+
+    #[test]
+    fn remove_many_of_nothing_succeeds() {
+        let mut conn = test_conn();
+        remove_many(&mut conn, None, &[]).unwrap();
+    }
+
+    /// A removal with no index still has a SQLite half to carry out, and the note's
+    /// derived rows are what the palette and the backlinks pane read out of the
+    /// database — leaving them behind would keep a deleted note visible.
+    #[test]
+    fn remove_many_without_an_index_still_clears_the_sqlite_side() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
+        reconcile(&mut conn, None, &note, "---\ntags: [npc]\n---\n[[Bram]]", None).unwrap();
+
+        remove_many(&mut conn, None, &[(note.id, note.path.clone())]).unwrap();
+
+        let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
+        assert!(tags.is_empty(), "note_tags must be cleared without an index");
+        let links: Vec<String> = nl::note_links.select(nl::target_path).load(&mut conn).unwrap();
+        assert!(links.is_empty(), "note_links must be cleared without an index");
+    }
+
     // ── reconcile — Tantivy best-effort ──────────────────────────────────────
 
     #[test]
-    fn tantivy_failure_leaves_sqlite_intact_and_surfaces_search_stale() {
+    fn tantivy_failure_leaves_sqlite_intact() {
         let mut conn = test_conn();
         let note = make_note(1, "ash.md");
         insert_note(&mut conn, &note);
@@ -613,9 +682,9 @@ mod tests {
         let bad_index = tantivy::Index::create_in_ram(bad_schema);
 
         let content = "---\ntags: [npc]\naliases: [Captain]\n---\n[[target.md]].";
-        let outcome = reconcile(&mut conn, Some(&bad_index), &note, content, None).unwrap();
-
-        assert!(outcome.search_stale, "Tantivy failure must surface as search_stale");
+        // The failure is logged inside the seam (#205) and must not become the
+        // caller's problem: the reconcile the GM asked for still succeeded.
+        reconcile(&mut conn, Some(&bad_index), &note, content, None).unwrap();
 
         // All SQLite writes must have succeeded despite the Tantivy failure
         let tags: Vec<String> = nt::note_tags.select(nt::tag).load(&mut conn).unwrap();
@@ -784,53 +853,34 @@ mod tests {
     }
 
     #[test]
-    fn remove_returns_search_stale_true_when_no_index() {
-        let mut conn = test_conn();
-        let note = make_note(1, "ash.md");
-        insert_note(&mut conn, &note);
-
-        let outcome = remove(&mut conn, None, note.id, &note.path).unwrap();
-        assert!(outcome.search_stale);
-    }
-
-    #[test]
-    fn remove_with_valid_index_returns_search_stale_false() {
+    fn remove_with_a_valid_index_takes_the_note_out_of_search() {
         let mut conn = test_conn();
         let note = make_note(1, "ash.md");
         insert_note(&mut conn, &note);
 
         let dir = TempDir::new().unwrap();
         let index = crate::search::rebuild_index(dir.path(), &[], &[], &[]).unwrap();
+        reconcile(&mut conn, Some(&index), &note, "the captain's ledger", None).unwrap();
 
-        let outcome = remove(&mut conn, Some(&index), note.id, &note.path).unwrap();
-        assert!(!outcome.search_stale, "valid Tantivy delete must not be stale");
+        remove(&mut conn, Some(&index), note.id, &note.path).unwrap();
+
+        let hits = crate::search::search_notes_in_index(&index, dir.path(), "captain", 10).unwrap();
+        assert!(hits.is_empty(), "a removed note must stop being searchable");
     }
 
-    // ── stale marker utilities ────────────────────────────────────────────────
-
+    /// The Search Index write is best-effort, and a failed one must not turn a
+    /// delete the GM asked for into an error. It is recorded in the log instead
+    /// (#205) and healed by the rebuild at the next open.
     #[test]
-    fn write_search_stale_marker_creates_file() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
-        write_search_stale_marker(dir.path());
-        assert!(stale_marker_path(dir.path()).exists(), "marker file must be created");
-    }
+    fn a_failed_search_delete_does_not_fail_the_remove() {
+        let mut conn = test_conn();
+        let note = make_note(1, "ash.md");
+        insert_note(&mut conn, &note);
 
-    #[test]
-    fn clear_search_stale_marker_removes_file() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
-        write_search_stale_marker(dir.path());
-        clear_search_stale_marker(dir.path());
-        assert!(!stale_marker_path(dir.path()).exists(), "marker file must be removed");
-    }
+        let bad_schema = tantivy::schema::Schema::builder().build();
+        let bad_index = tantivy::Index::create_in_ram(bad_schema);
 
-    #[test]
-    fn clear_search_stale_marker_is_noop_when_absent() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join(".grimoire")).unwrap();
-        clear_search_stale_marker(dir.path()); // must not panic
-        assert!(!stale_marker_path(dir.path()).exists());
+        remove(&mut conn, Some(&bad_index), note.id, &note.path).unwrap();
     }
 
     // ── rebuild_all_from_ledger ───────────────────────────────────────────────
@@ -986,8 +1036,7 @@ mod tests {
             },
         ];
 
-        let outcome = reconcile_many(&mut conn, Some(&index), &items).unwrap();
-        assert!(!outcome.search_stale, "valid index write must not be stale");
+        reconcile_many(&mut conn, Some(&index), &items).unwrap();
 
         let tags1: Vec<String> = nt::note_tags
             .filter(nt::note_path.eq("alpha.md"))
@@ -1098,8 +1147,7 @@ mod tests {
     #[test]
     fn reconcile_many_empty_slice_is_noop() {
         let mut conn = test_conn();
-        let outcome = reconcile_many(&mut conn, None, &[]).unwrap();
-        assert!(!outcome.search_stale);
+        reconcile_many(&mut conn, None, &[]).unwrap();
     }
 
     #[test]
@@ -1113,8 +1161,7 @@ mod tests {
 
         let template_content =
             "---\ntags: [quest, main-story]\n---\n# Quest Template\nDescribe the quest.";
-        let outcome = reconcile(&mut conn, Some(&index), &note, template_content, None).unwrap();
-        assert!(!outcome.search_stale);
+        reconcile(&mut conn, Some(&index), &note, template_content, None).unwrap();
 
         let results =
             crate::search::search_notes_in_index(&index, dir.path(), "tag:quest", 10).unwrap();
