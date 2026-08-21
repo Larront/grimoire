@@ -93,8 +93,8 @@ describe("tag manager — usage count aggregate", () => {
 describe("tag manager — settings entry point", () => {
   async function openSettings() {
     const result = render(AppShell);
-    const rail = result.getByTestId("icon-rail");
-    await fireEvent.click(within(rail).getByRole("button", { name: /^settings$/i }));
+    // The rail is gone (#226) — Settings is a row in the sidebar footer, at every width.
+    await fireEvent.click(result.getByTestId("sidebar-settings"));
     const dialog = await result.findByRole("dialog");
     return { ...result, dialog };
   }
