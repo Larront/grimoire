@@ -128,7 +128,7 @@
       restrict={oneLine}
       ariaLabel={`Event ${i + 1} date`}
       placeholder="Date"
-      class="font-heading text-[11px] leading-tight text-muted-foreground mb-0.5"
+      class="text-xs font-medium leading-tight text-muted-foreground mb-0.5"
     />
 
     <div class="flex items-start gap-1">

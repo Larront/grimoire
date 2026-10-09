@@ -522,12 +522,12 @@
         <!-- The horizontal padding is in app.css under `[data-note-column]`, not here:
              its leading edge is the block gutter (#190) and is derived from the grip's
              own size, so it must not drift apart from a utility class. -->
-        <div data-note-column class="w-full mx-auto pt-10 pb-20 @5xl:max-w-[70%]">
+        <div data-note-column class="w-full mx-auto pt-10 pb-20 max-w-[46rem]">
           <input
             bind:this={titleInput}
             bind:value={draftTitle}
             class="w-full bg-transparent border-none outline-none p-0
-                   font-heading text-4xl leading-tight tracking-tight
+                   font-heading text-[2.75rem] leading-[1.15] tracking-tight
                    text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             placeholder="Untitled"
             onblur={commitTitle}

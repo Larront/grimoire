@@ -554,8 +554,14 @@
 
 /* ── TipTap Editor Prose ──────────────────────────────────────── */
 
+/* Prose sets one step above the chrome's body size: 16px at Balanced, where the shell
+   reads at 14. A note is read at arm's length mid-session, often in a dim room, and
+   the chrome's 14px is a list size, not a reading size. The column is capped at 46rem
+   (NotePane, TemplatePane) — about 72ch of Nunito at this size, the widest measure
+   that still lets an Infobox float beside the prose (it floats at a 640px column). */
 .tiptap {
-  line-height: 1.75;
+  font-size: calc(var(--font-body) + 2px);
+  line-height: 1.7;
   font-kerning: normal;
   /* The prose column is a query container, which is what lets a block respond to the
      width it actually has rather than to the window's (see the Infobox below). It is
@@ -665,28 +671,35 @@
   clear: both;
 }
 
+/* The note's type scale, each step ~1.25x the one below it and every step clearly
+   apart: title 44 (the pane's field) / H1 28 / H2 22 / H3 18 / H4 16 over 16px prose.
+   It was 36 / 30 / 24 / 20 / 18 over 14 — the title and H1 sat 6px apart, and with
+   almost every note opening on `# <title>` that was the same words twice at nearly
+   the same size. (The sample world and built-in templates no longer open on that echo.)
+   H4 matches the prose size and is told apart by the world's face and
+   the space above it. More space above a heading than below it, always. */
 .tiptap h1 {
-  font-size: 1.875rem;
+  font-size: 1.75rem;
   margin-top: 2.5rem;
-  margin-bottom: 1rem;
-}
-
-.tiptap h2 {
-  font-size: 1.5rem;
-  margin-top: 2rem;
   margin-bottom: 0.75rem;
 }
 
+.tiptap h2 {
+  font-size: 1.375rem;
+  margin-top: 2.25rem;
+  margin-bottom: 0.625rem;
+}
+
 .tiptap h3 {
-  font-size: 1.25rem;
-  margin-top: 1.5rem;
+  font-size: 1.125rem;
+  margin-top: 1.75rem;
   margin-bottom: 0.5rem;
 }
 
 .tiptap h4 {
-  font-size: 1.125rem;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .tiptap p {

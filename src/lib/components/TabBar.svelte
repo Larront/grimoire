@@ -219,7 +219,7 @@
             {#if tab.badge}
               <span
                 data-testid="tab-badge"
-                class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[10px] text-primary/80 leading-tight py-0.5"
+                class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[11px] text-primary/80 leading-tight py-0.5"
                 >{tab.badge}</span
               >
             {/if}

@@ -35,9 +35,14 @@ colors:
   viz-cat-7: "#9085e9"
   viz-cat-8: "#e66767"
 typography:
+  title:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "2.75rem"
+    fontWeight: 400
+    lineHeight: 1.15
   display:
     fontFamily: "Metamorphous, Georgia, serif"
-    fontSize: "1.875rem"
+    fontSize: "1.75rem"
     fontWeight: 400
     lineHeight: 1.25
   headline:
@@ -45,10 +50,15 @@ typography:
     fontSize: "1rem"
     fontWeight: 600
     lineHeight: 1.4
-  title:
+  prose:
     fontFamily: "Nunito, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 500
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.7
+  field-label:
+    fontFamily: "Nunito, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 600
     lineHeight: 1.4
   body:
     fontFamily: "Nunito, sans-serif"
@@ -62,10 +72,9 @@ typography:
     lineHeight: 1.4
   meta:
     fontFamily: "JetBrains Mono, monospace"
-    fontSize: "0.65625rem"
+    fontSize: "0.6875rem"
     fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: "0.05em"
 rounded:
   structural: "6px"
   elevated: "8px"
@@ -189,16 +198,20 @@ _The channel this exception does not have._ A per-tag node shape was built as th
 
 ### Hierarchy
 
-- **Display** (Metamorphous 400, 30px / 1.875rem, lh 1.25): Note titles, map names, scene names, sidebar wordmark — anything the GM authored. Never bold; 400 weight only.
-- **Headline** (Nunito 600, 16px / 1rem, lh 1.4): Major content headings, modal titles, right rail "Details" header. App-constructed headers only.
-- **Title** (Nunito 500, 14px / 0.875rem, lh 1.4): Tab labels, command palette section groupings. Also used at 10.5px uppercase with 0.1em letter-spacing for sidebar section headers.
-- **Body** (Nunito 400, 14px / 0.875rem, lh 1.75): Editor prose, sidebar note rows, settings descriptions. Cap at 65–75ch in long-form reading contexts.
-- **Label** (Nunito 500, 13px / 0.8125rem, lh 1.4): Buttons, input text, tooltip labels, command palette result items.
-- **Meta** (JetBrains Mono 400, 10–10.5px, lh 1.4, ls 0.05em): Tags, right rail metadata (type, folder, date), inline code, section header caps.
+- **Title** (Metamorphous 400, 44px / 2.75rem, lh 1.15): The note's and template's own title field. The largest type in the app, and the only thing at this size.
+- **Display** (Metamorphous 400, 28 / 22 / 18 / 16px for H1–H4, lh 1.25): Note headings, map names, scene names, card names, the sidebar wordmark. Steps ~1.25x apart; more space above a heading than below it. Never bold; 400 weight only.
+- **Prose** (Nunito 400, body size + 2px — 16px at Balanced, lh 1.7): Editor prose. The note column is capped at 46rem, about 72ch at this size and the widest measure that still lets an Infobox float beside the text.
+- **Headline** (Nunito 600, 16px / 1rem, lh 1.4): Dialog and sheet titles, the detail panel header ("Details", "Pin"). App-constructed headers only.
+- **Body** (Nunito 400, 14px / 0.875rem, lh 1.75): Sidebar rows, settings descriptions, the chrome's running text.
+- **Label** (Nunito 500, 13px / 0.8125rem, lh 1.4): Buttons, input text, tooltip labels, command palette results.
+- **Field label** (Nunito 600, 12px / 0.75rem, Ember Muted, sentence or title case as written): The name above a field or section — Tags, Backlinks, Linked Note, Shape, Recent ledgers. Not uppercase mono: at 10.5px in caps the old treatment was the hardest text in the app to read, on the labels a GM scans for.
+- **Meta** (JetBrains Mono 400, 11px, lh 1.4): Data that is genuinely code-like — file paths, inline code, key hints. Not labels.
+
+**The 11px floor.** Nothing in the app is set smaller than 11px.
 
 ### Named Rules
 
-**The Two Voices Rule.** If the app constructed it, Nunito. If the GM named it, Metamorphous. This boundary holds even for the same piece of text in different contexts: a note title in the tab bar is Nunito (tool chrome); the same title as an editor heading is Metamorphous (world content). No exceptions.
+**The Two Voices Rule.** If the app constructed it, Nunito. If the GM named it, Metamorphous — *where the name is the subject*: a note's title, its headings, a map or scene name on its own surface, a card's name, the name at the top of a panel. Where a name is one item in a list — backlinks, palette results, pickers, the tab bar, the file tree — it is chrome listing things, and takes Nunito: Metamorphous's display letterforms slow a scan at 13–14px, and spent on every row it stops marking the threshold it exists to mark. Dialog titles are app-constructed and always Nunito.
 
 **The Fixed Scale Rule.** Type sizes do not change across density settings. Only spacing and component height change. Dense mode is not smaller text — it is less vertical space.
 
@@ -268,11 +281,11 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 ### Navigation — Sidebar
 
-Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: uppercase JetBrains Mono 10.5px, Ember Muted, 0.1em letter-spacing.
+Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
 ### Command Palette (Signature Component)
 
-560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Scene name results render in Metamorphous; all other results and UI chrome in Nunito. Results group by type (Notes, Maps, Scenes) with an uppercase JetBrains Mono category label.
+560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
 
 ### Scene Player (Signature Component)
 
@@ -282,7 +295,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 
 ### Do:
 
-- **Do** use Metamorphous exclusively for GM-authored content: note titles, map names, scene names, splash wordmark. Never on structural app chrome.
+- **Do** use Metamorphous for GM-authored names where the name is the subject: note titles and headings, map and scene names on their own surfaces, card names, the splash wordmark. In lists, menus, tabs and dialog titles, Nunito.
 - **Do** place every surface at one of the three levels (§4) and give it that level's treatment — border in the page, `shadow-float` floating, scrim for modal.
 - **Do** pair every error and success state with a status icon (circle-x / circle-check). Red and green are invisible to ~8% of male users; color alone is not accessible.
 - **Do** use Crimson only as a signal — selection, focus, the primary button, playing, and link underlines. Its scarcity is what makes it read as signal.

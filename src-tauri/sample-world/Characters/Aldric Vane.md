@@ -1,8 +1,6 @@
 ---
 tags: [npc]
 ---
-# Aldric Vane
-
 A former soldier living at the edge of [[Locations/Thornhaven Village.md]]. He was part of the expedition that tried to open the sealed library four years ago. He does not talk about what they found.
 
 ## Description

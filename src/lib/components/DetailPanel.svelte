@@ -29,11 +29,11 @@
   >
     <span class="text-(--font-body) font-semibold text-foreground">{title}</span>
     {#if saveStatus === "saved"}
-      <span class="flex items-center gap-1 font-mono text-[10px] text-success">
+      <span class="flex items-center gap-1 font-mono text-[11px] text-success">
         <Check class="size-3" />Saved
       </span>
     {:else if saveStatus === "error"}
-      <button onclick={onRetrySave} class="font-mono text-[10px] text-error hover:underline"
+      <button onclick={onRetrySave} class="font-mono text-[11px] text-error hover:underline"
         >Save failed · Retry</button
       >
     {/if}

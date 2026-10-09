@@ -717,7 +717,7 @@
               class="flex items-center gap-2"
             >
               <Icon class="size-4 shrink-0 text-muted-foreground" />
-              <span class="font-heading text-sm flex-1 truncate">{entity.title}</span>
+              <span class="text-sm font-medium flex-1 truncate">{entity.title}</span>
               <span data-testid="recent-time-hint" class="shrink-0 text-xs text-muted-foreground"
                 >{relativeTime(entity.accessed_at)}</span
               >
@@ -780,7 +780,7 @@
             >
               <FileText class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <div class="min-w-0 flex-1">
-                <div class="font-heading text-sm">{result.title}</div>
+                <div class="text-sm font-medium">{result.title}</div>
                 {#if result.excerpt}
                   <div
                     data-testid="note-excerpt"
@@ -819,7 +819,7 @@
               class="flex items-center gap-2"
             >
               <Map class="size-4 shrink-0 text-muted-foreground" />
-              <span class="font-heading text-sm">{result.title}</span>
+              <span class="text-sm font-medium">{result.title}</span>
             </Command.Item>
           {/each}
           {@render showMoreRow("maps", mapsShowMore)}
@@ -835,7 +835,7 @@
               class="flex items-center gap-2"
             >
               <Clapperboard class="size-4 shrink-0 text-muted-foreground" />
-              <span class="font-heading text-sm">{result.name}</span>
+              <span class="text-sm font-medium">{result.name}</span>
             </Command.Item>
           {/each}
           {@render showMoreRow("scenes", scenesShowMore)}

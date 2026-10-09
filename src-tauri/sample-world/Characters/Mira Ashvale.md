@@ -2,8 +2,6 @@
 tags: [npc]
 aliases: [Mira, the Herbalist]
 ---
-# Mira Ashvale
-
 ```infobox
 ![Mira, drawn from the one time she sat still for it](.grimoire/images/mira-ashvale.png)
 Trade: Remedies, and the rumours that come with them

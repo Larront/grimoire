@@ -1,8 +1,6 @@
 ---
 tags: [encounter]
 ---
-# The Shadow in the Hall
-
 A hunting encounter in the lower halls of [[Locations/The Ember Keep.md]]. Something that survived [[Lore/The War of Embers.md]] has been here for three centuries and does not welcome visitors.
 
 ## Description

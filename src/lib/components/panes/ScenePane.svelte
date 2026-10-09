@@ -761,7 +761,7 @@
 
                   <!-- Source indicator -->
                   <span
-                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
+                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[11px] tracking-wide text-muted-foreground"
                     >{slot.source === "spotify" ? "Spotify" : "Local"}</span
                   >
 
@@ -1037,7 +1037,7 @@
                 Connect Spotify
               {/if}
             </Button>
-            <span class="text-[10px] text-muted-foreground">
+            <span class="text-[11px] text-muted-foreground">
               Open Settings from the icon rail to manage integrations.
             </span>
           </div>

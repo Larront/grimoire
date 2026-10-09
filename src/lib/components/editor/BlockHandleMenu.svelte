@@ -155,7 +155,7 @@
          verb the seven items below it are missing. -->
     {#if section.title}
       <div
-        class="px-3 pt-2.5 pb-0.5 font-heading text-[0.6rem] uppercase tracking-widest
+        class="px-3 pt-2.5 pb-0.5 text-[11px] font-medium uppercase tracking-wider
                text-muted-foreground/60 select-none pointer-events-none"
         aria-hidden="true"
       >

@@ -58,7 +58,7 @@
 
 <!-- Kind row -->
 <div class="flex items-center justify-between pb-3">
-  <span class="font-mono text-[10px] text-foreground-muted uppercase tracking-[0.1em]">
+  <span class="text-xs font-semibold text-foreground-muted">
     {KIND_LABELS[annotation.kind]}
   </span>
   <button
@@ -91,7 +91,7 @@
         if (e.key === "Enter") (e.target as HTMLElement).blur();
       }}
       class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-             font-mono text-[10px] text-foreground outline-none focus:border-primary"
+             font-mono text-[11px] text-foreground outline-none focus:border-primary"
       placeholder="Label text"
     />
   </DetailSection>

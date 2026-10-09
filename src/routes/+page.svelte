@@ -175,7 +175,7 @@
     {:else if mode === "creating"}
       <!-- ── Create new ledger form ───────────────────────────────── -->
       <div class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1">
-        <span class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint">
+        <span class="text-xs font-semibold text-foreground-muted">
           New Ledger
         </span>
 
@@ -329,7 +329,7 @@
       <!-- ── Returning user ───────────────────────────────────── -->
       <div class="w-70 mt-8 relative z-10 splash-fade-delay-1">
         <span
-          class="font-mono text-[10.5px] uppercase tracking-widest text-foreground-faint mb-2.5 block"
+          class="text-xs font-semibold text-foreground-muted mb-2.5 block"
         >
           Recent Ledgers
         </span>
@@ -349,7 +349,7 @@
                     {v.name}
                   </div>
                   <div
-                    class="font-mono text-[10px] text-foreground-muted mt-0.5 truncate"
+                    class="font-mono text-[11px] text-foreground-muted mt-0.5 truncate"
                     title={v.path}
                   >
                     Folder not found — {v.path}
@@ -390,11 +390,11 @@
                       {v.name}
                     </div>
                   {/if}
-                  <div class="font-mono text-[10px] text-foreground-muted mt-0.5">
+                  <div class="font-mono text-[11px] text-foreground-muted mt-0.5">
                     {formatLedgerStats(v)}
                   </div>
                 </div>
-                <div class="font-mono text-[10px] text-foreground-faint ml-3 shrink-0">
+                <div class="font-mono text-[11px] text-foreground-faint ml-3 shrink-0">
                   {formatRelativeTime(v.last_opened)}
                 </div>
               </button>

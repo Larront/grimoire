@@ -1,8 +1,6 @@
 ---
 tags: [location]
 ---
-# Thornhaven Village
-
 ```infobox
 Region: [[Lore/The Ashfen Marshes.md]]
 Trades in: Marsh herbs, dried provisions, information

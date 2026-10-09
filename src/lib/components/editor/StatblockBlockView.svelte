@@ -333,7 +333,7 @@
     readonly={!edit}
     ariaLabel={`Section ${s + 1} heading`}
     placeholder="Section"
-    class="{edit ? 'statblock-field ' : ''}font-heading text-xs uppercase tracking-wide
+    class="{edit ? 'statblock-field ' : ''}font-heading text-sm
            leading-snug text-muted-foreground border-b border-border/60 pb-0.5 mb-1"
   />
 {/snippet}

@@ -77,7 +77,7 @@
           >
             <RowIcon class="size-3.5" style="color: {rowFg}" strokeWidth={1.75} />
           </span>
-          <span class="truncate font-heading text-sm">{scene.name}</span>
+          <span class="truncate text-sm font-medium">{scene.name}</span>
         </button>
       {/each}
     {/if}
@@ -99,7 +99,7 @@
       >
         <Plus class="size-3.5" />
       </span>
-      <span class="font-heading text-sm">New scene</span>
+      <span class="text-sm font-medium">New scene</span>
     </button>
   </div>
 </div>

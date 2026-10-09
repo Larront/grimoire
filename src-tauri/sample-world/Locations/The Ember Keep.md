@@ -1,8 +1,6 @@
 ---
 tags: [location]
 ---
-# The Ember Keep
-
 A crumbling fortress on the eastern edge of the [[Lore/The Ashfen Marshes.md]], built and held by [[The Order of Embers]] before the [[Lore/The War of Embers.md]].
 
 ## Description

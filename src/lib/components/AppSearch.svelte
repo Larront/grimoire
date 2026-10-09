@@ -23,7 +23,7 @@
   </span>
   <kbd
     class="pointer-events-none inline-flex h-4 shrink-0 select-none items-center gap-0.5
-           rounded border border-border bg-sidebar px-1 font-mono text-[10px] opacity-60"
+           rounded border border-border bg-sidebar px-1 font-mono text-[11px] opacity-60"
   >
     <span>{isMac ? "⌘" : "Ctrl"} + K</span>
   </kbd>

@@ -126,7 +126,7 @@
   <div class="flex items-center gap-2 min-w-0">
     {#if isSpotify}
       <span
-        class="shrink-0 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-green-400 leading-none"
+        class="shrink-0 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-green-400 leading-none"
         >S</span
       >
     {:else}
