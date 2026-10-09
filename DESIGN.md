@@ -3,18 +3,18 @@ name: Grimoire
 description: A desktop worldbuilding tool for Game Masters — where the tool disappears and the world remains.
 colors:
   # Surfaces — Iron palette (dark mode canonical)
-  iron-dark: "#1f1f1f"
-  iron-deep: "#181818"
-  iron-raised: "#262626"
-  iron-border: "#ffffff14"
-  hover-overlay: "#ffffff0a"
+  iron-dark: "#1c1917"
+  iron-deep: "#131110"
+  iron-raised: "#2a2522"
+  iron-border: "#ffeee217"
+  hover-overlay: "#fff0e60b"
   # Text — Ember palette
   ember-ash: "#f0ece8"
   ember-ash-muted: "#a39e99"
   ember-ash-faint: "#6b6460"
   # Primary accent — Crimson preset (default; five presets are user-switchable)
   crimson: "#c2483d"
-  crimson-lit: "#f9f1f0"
+  crimson-lit: "#ffffff"
   crimson-tint: "#c2483d1f"
   crimson-veil: "#c2483d3d"
   # Light mode surfaces (alt-theme reference)
@@ -136,23 +136,25 @@ Iron surfaces — warm dark neutrals tinted slightly toward the red-brown axis, 
 
 ### Primary
 
-- **Crimson** (`#c2483d` dark / `#a83228` light): The default accent. Active states, CTA buttons, links, focus rings, playing pulse, blockquote borders. Present on every screen; dominant on none.
-- **Crimson Tint** (`#c2483d1f` / rgba 12%): Selection backgrounds, hover row tints, active sidebar item background.
+- **Crimson** (`#c2483d` dark / `#a83228` light): The default accent, and a **signal**: selection (active row, active tab), focus rings, the primary action, what is playing, and the underline that marks a link. Not a text colour for small type, and not decoration.
+- **Crimson Tint** (`#c2483d1f` / rgba 12%): Selection backgrounds, active sidebar item background.
 - **Crimson Veil** (`#c2483d3d` / rgba 24%): Accent borders, secondary tints.
-- **Crimson Text** (`#f9f1f0`): Text on a Crimson-filled surface (primary button label).
+- **Crimson Text** (`#ffffff`): Text on a Crimson-filled surface (primary button label), 4.9:1.
 
-_Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same three-token structure. All five meet AA contrast on Iron Dark._
+_Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same structure. Each preset's label-on-fill pair clears 4.5:1: Crimson takes white; Arcane, Verdant, Ice and Amber take near-black, because pale text on a mid-tone fill cannot. **As text on Iron, no preset clears 4.5:1 at small sizes** (Crimson is 3.5:1) — which is the practical reason the accent marks links with an underline rather than colouring their words._
 
 ### Neutral
 
-- **Iron Dark** (`#1f1f1f`): Main canvas. The default surface for all content areas.
-- **Iron Deep** (`#181818`): Sidebar surface. Slightly recessed — establishes the content/chrome boundary.
-- **Iron Raised** (`#262626`): Cards, popovers, command palette, toasts. Sits above the main canvas.
-- **Iron Border** (`#ffffff14` / rgba 8%): Dividers, subtle borders, input strokes.
-- **Hover Overlay** (`#ffffff0a` / rgba 4%): Applied over any surface on hover. Light in dark mode; its inverse (`rgba(31,26,29,0.05)`) in light mode.
+- **Iron Dark** (`#1c1917`): Main canvas. The default surface for all content areas.
+- **Iron Deep** (`#131110`): Sidebar surface. Recessed — establishes the content/chrome boundary.
+- **Iron Raised** (`#2a2522`): Cards, popovers, command palette, toasts. Sits above the main canvas, 1.15:1 lighter.
+- **Iron Border** (`rgba(255,238,226,0.09)`): Dividers, subtle borders, input strokes. Warm-white, not pure white, so it does not read cold on the tinted ramp.
+- **Hover Overlay** (`rgba(255,240,230,0.045)`): Applied over any surface on hover. Light in dark mode; its inverse (`rgba(31,26,29,0.05)`) in light mode.
+
+_The ramp was pure grey (`#181818` / `#1f1f1f` / `#262626`, R=G=B) until October 2026, so the warmth this section promised came only from the text and the accent, and its steps sat 1.08:1 apart. It was re-tuned after a side-by-side trial in the running app._
 - **Ember Ash** (`#f0ece8`): Primary text. Warm cream, not white. Slight amber cast keeps the palette coherent.
 - **Ember Muted** (`#a39e99`): Secondary text, inactive labels, metadata, sidebar items at rest. AA contrast on Iron Dark.
-- **Ember Faint** (`#6b6460`): Decorative labels, placeholders, section headers. Intentionally sub-AA — non-essential and non-interactive only.
+- **Ember Faint** (`#6b6460`): Decorative marks and placeholders. Intentionally sub-AA — non-essential and non-interactive only. Not section headers: a label that names a field (Tags, Category, Backlinks) conveys meaning and takes Ember Muted.
 - **Parchment** (`#faf8f5`): Light mode canvas. The warm analogue to Iron Dark.
 - **Parchment Subtle** (`#f2ede8`): Light mode sidebar surface.
 
@@ -163,7 +165,9 @@ _Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), I
 
 ### Named Rules
 
-**The One Accent Rule.** One accent family, one user-controlled preset. No secondary palette. The primary is present on every screen but dominant on none. If reaching for a second color for decorative reasons, reach for a foreground opacity step instead.
+**The One Accent Rule.** One accent family, one user-controlled preset. No secondary palette. If reaching for a second color for decorative reasons, reach for a foreground opacity step instead.
+
+**The Signal Rule.** The accent means one of five things: *selected*, *focused*, *the primary action*, *playing*, or *this is a link* (as an underline, never as the words' colour). Anything else stays neutral — create buttons, "you are in the sample", tag and alias pills, callouts, quotes, title rules, toggles in Settings. In a worldbuilding tool nearly every proper noun is a link; when links were painted crimson, the accent was a tenth of the prose and stopped meaning anything at all.
 
 **The No Decorative Color Rule.** Color never categorizes file types, tag categories, or organizes information visually. Only the five semantic families exist. Differentiate with shape, icon, or text.
 
@@ -231,7 +235,7 @@ Components respond with precision and without hurry. State transitions are 150ms
 
 ### Tags / Chips
 
-- **Style:** Iron Raised background, Iron Border stroke, JetBrains Mono 10.5px, Ember Muted text, pill radius (100px), 2px 10px padding.
+- **Style:** Iron Raised background, Iron Border stroke, Ember Ash text, pill radius (100px). Neutral — a tag is not a signal.
 - **Add Tag variant:** Dashed Iron Border, Ember Faint text. Hover: Crimson text, dashed Crimson border.
 - **No color-coded tags.** Type differentiation via text and icon only. The One Accent Rule applies here too.
 
@@ -258,7 +262,7 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 ### Navigation — Sidebar
 
-Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: uppercase JetBrains Mono 10.5px, Ember Faint, 0.1em letter-spacing.
+Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: uppercase JetBrains Mono 10.5px, Ember Muted, 0.1em letter-spacing.
 
 ### Command Palette (Signature Component)
 
@@ -275,7 +279,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 - **Do** use Metamorphous exclusively for GM-authored content: note titles, map names, scene names, splash wordmark. Never on structural app chrome.
 - **Do** use tonal surface steps (Iron Deep / Iron Dark / Iron Raised) to convey depth. Three steps are enough; the Shadowless Rule completes the rest.
 - **Do** pair every error and success state with a status icon (circle-x / circle-check). Red and green are invisible to ~8% of male users; color alone is not accessible.
-- **Do** use Crimson sparingly — active states, primary buttons, links, focus rings. Its scarcity is what makes it read as signal.
+- **Do** use Crimson only as a signal — selection, focus, the primary button, playing, and link underlines. Its scarcity is what makes it read as signal.
 - **Do** keep component height tied to `--row-h`. All three density settings are handled automatically.
 - **Do** give every icon-only button an `aria-label` — icon rail, toolbar buttons, close buttons, mute toggles.
 - **Do** return focus to the triggering element when overlays, dialogs, and command palette close.

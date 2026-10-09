@@ -65,14 +65,14 @@
     {#each aliases as alias, i (alias + i)}
       <span
         data-slot="alias-chip"
-        class="group inline-flex items-center gap-1 rounded-[100px] bg-primary/15 px-2 py-0.5 text-xs font-medium text-foreground"
+        class="group inline-flex items-center gap-1 rounded-[100px] border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
       >
         <span>{alias}</span>
         <button
           type="button"
           data-slot="alias-chip-remove"
           aria-label={`Remove alias ${alias}`}
-          class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:text-primary"
+          class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
           onclick={(e) => {
             e.stopPropagation();
             removeAt(i);

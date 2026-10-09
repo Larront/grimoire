@@ -58,7 +58,7 @@
 
 <!-- Kind row -->
 <div class="flex items-center justify-between pb-3">
-  <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">
+  <span class="font-mono text-[10px] text-foreground-muted uppercase tracking-[0.1em]">
     {KIND_LABELS[annotation.kind]}
   </span>
   <button

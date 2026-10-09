@@ -120,7 +120,7 @@
       class="w-64 rounded-lg border border-dashed border-background-border bg-background-elevated p-3"
     >
       <div class="mb-2 flex items-center justify-between">
-        <span class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">
+        <span class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-muted">
           Toast lab · dev
         </span>
         <button

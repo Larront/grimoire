@@ -270,7 +270,7 @@
       <div class="flex flex-col gap-3 pt-3">
         <!-- Shape -->
         <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+          <span class="font-mono text-[10px] text-foreground-muted uppercase tracking-[0.1em]"
             >Shape</span
           >
           <div class="flex gap-1">
@@ -298,7 +298,7 @@
 
         <!-- Icon -->
         <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+          <span class="font-mono text-[10px] text-foreground-muted uppercase tracking-[0.1em]"
             >Icon</span
           >
           <div class="grid grid-cols-4 gap-1">
@@ -320,7 +320,7 @@
 
         <!-- Color -->
         <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
+          <span class="font-mono text-[10px] text-foreground-muted uppercase tracking-[0.1em]"
             >Color</span
           >
           <ColorSwatches

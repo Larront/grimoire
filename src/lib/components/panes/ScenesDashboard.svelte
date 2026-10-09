@@ -158,7 +158,7 @@
         New Scene
       </Button>
     </div>
-    <div class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"></div>
+    <div class="mt-3 h-px bg-border"></div>
 
     {#if scenes.scenes.length === 0}
       <div

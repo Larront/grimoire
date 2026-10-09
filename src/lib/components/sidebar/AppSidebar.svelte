@@ -314,7 +314,7 @@
                 class="{buttonVariants({
                   variant: 'ghost',
                   size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
+                })} text-foreground-muted hover:text-foreground"
                 aria-label="New Note"
                 onclick={() => handleNewNote(null)}
               >
@@ -328,7 +328,7 @@
                 class="{buttonVariants({
                   variant: 'ghost',
                   size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
+                })} text-foreground-muted hover:text-foreground"
                 aria-label="New Folder"
                 onclick={() => handleNewFolder(null)}
               >
@@ -342,7 +342,7 @@
                 class="{buttonVariants({
                   variant: 'ghost',
                   size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
+                })} text-foreground-muted hover:text-foreground"
                 aria-label="New Map"
                 onclick={() => handleNewMap(null)}
               >
@@ -356,7 +356,7 @@
                 class="{buttonVariants({
                   variant: 'ghost',
                   size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
+                })} text-foreground-muted hover:text-foreground"
                 aria-label="New Scene"
               >
                 <Music2 strokeWidth={1.5} />

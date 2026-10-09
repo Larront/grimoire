@@ -533,7 +533,7 @@
             onblur={commitTitle}
             onkeydown={handleTitleKeydown}
           />
-          <div class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"></div>
+          <div class="mt-3 mb-8 h-px bg-border"></div>
           {#if loadError}
             <!-- No Editor mounts in this state, so no autosave can recreate
                  the missing file. -->
