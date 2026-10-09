@@ -137,7 +137,7 @@
     onkeydown={(e) => {
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
-    class="flex-1 min-w-0 bg-transparent font-heading text-xl font-semibold text-foreground
+    class="flex-1 min-w-0 bg-transparent font-heading text-xl text-foreground
            border-none outline-none border-b border-transparent focus:border-primary
            pb-1 transition-colors"
     placeholder="Name this pin"
@@ -149,7 +149,7 @@
     class="mt-1 p-1.5 rounded-md transition-colors cursor-pointer shrink-0
            {unlocked
       ? 'text-primary hover:text-primary/70'
-      : 'text-foreground-faint hover:text-foreground-muted'}"
+      : 'text-foreground-muted hover:text-foreground'}"
   >
     {#if unlocked}
       <LockOpen class="w-4 h-4" />
@@ -162,36 +162,41 @@
 <!-- Linked note -->
 <DetailSection label="Linked Note" sectionKey="linked-note">
   {#if linkedNote}
-    <div
-      class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2"
-    >
-      <div class="flex items-center justify-between gap-2">
-        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground"
-          >{linkedNote.title}</span
-        >
+    <!-- The note a pin points at is the reason a GM clicked it, so opening it is this
+         panel's primary action: a labelled button, not a 14px icon in the corner.
+         Unlinking is the rare, quiet one beside it. The preview is prose, not file
+         internals — see `pinNotePreview`. -->
+    <div class="flex flex-col gap-2">
+      <span class="min-w-0 truncate font-heading text-(--font-body) text-foreground"
+        >{linkedNote.title}</span
+      >
+      {#if notePreview}
+        <p class="text-xs leading-relaxed text-foreground-muted line-clamp-4">{notePreview}</p>
+      {/if}
+      <div class="flex items-center gap-1 pt-0.5">
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
-          class="shrink-0 p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium
+                 text-primary-foreground hover:bg-primary/85 transition-colors cursor-pointer"
           title="Open note"
         >
-          <ExternalLink class="w-3.5 h-3.5" />
+          <ExternalLink class="size-3.5" />
+          Open note
+        </button>
+        <button
+          onclick={() => save({ note_id: null })}
+          class="rounded-md px-2 py-1 text-xs text-foreground-muted hover:bg-hover-overlay
+                 hover:text-foreground transition-colors cursor-pointer"
+        >
+          Unlink
         </button>
       </div>
-      {#if notePreview}
-        <p class="font-mono text-[10px] text-foreground-muted leading-relaxed">{notePreview}</p>
-      {/if}
-      <button
-        onclick={() => save({ note_id: null })}
-        class="font-mono text-[10px] text-error hover:text-error/70 transition-colors cursor-pointer self-start"
-      >
-        Unlink
-      </button>
     </div>
   {:else}
     <div class="flex flex-col gap-1">
       <input
         bind:value={noteSearchQuery}
-        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 font-mono text-[10px] text-foreground outline-none focus:border-primary"
+        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
         placeholder="Search notes…"
       />
       {#if noteSearchQuery.trim()}
@@ -204,12 +209,12 @@
                 save({ note_id: n.id });
                 noteSearchQuery = "";
               }}
-              class="w-full px-3 py-2 font-mono text-[10px] text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
+              class="w-full px-3 py-2 text-xs text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
             >
               {n.title}
             </button>
           {:else}
-            <p class="px-3 py-2 font-mono text-[10px] text-foreground-faint">No notes found</p>
+            <p class="px-3 py-2 text-xs text-foreground-muted">No notes found</p>
           {/each}
         </div>
       {/if}
@@ -233,7 +238,7 @@
       save({ category_id: id });
     }}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-           font-mono text-[10px] text-foreground outline-none focus:border-primary cursor-pointer"
+           text-xs text-foreground outline-none focus:border-primary cursor-pointer"
   >
     <option value="">Uncategorized</option>
     {#each categories as cat (cat.id)}
@@ -250,7 +255,7 @@
     onblur={() => commit(descriptionPatch())}
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
-           font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
+           text-xs text-foreground outline-none focus:border-primary resize-none leading-relaxed"
     placeholder="Add notes about this location…"></textarea>
 </DetailSection>
 
@@ -258,9 +263,9 @@
 <DetailSection label="Appearance" sectionKey="appearance">
   <Collapsible bind:open={appearanceOpen}>
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
-      <span class="font-mono text-[10px] text-foreground-muted">Shape, icon, color</span>
+      <span class="text-xs text-foreground-muted">Shape, icon, color</span>
       <ChevronDown
-        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen
+        class="w-3.5 h-3.5 text-foreground-muted transition-transform duration-200 {appearanceOpen
           ? 'rotate-180'
           : ''}"
       />
@@ -335,7 +340,7 @@
         <button
           type="button"
           onclick={() => save({ shape: null, icon: null, color: null })}
-          class="font-mono text-[10px] text-foreground-faint hover:text-error transition-colors cursor-pointer self-start"
+          class="text-xs text-foreground-muted hover:text-error transition-colors cursor-pointer self-start"
         >
           Reset to default
         </button>

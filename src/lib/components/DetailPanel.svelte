@@ -27,7 +27,7 @@
   <div
     class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-background-border px-(--pad-x)"
   >
-    <span class="font-heading text-(--font-body) font-medium text-foreground">{title}</span>
+    <span class="text-(--font-body) font-semibold text-foreground">{title}</span>
     {#if saveStatus === "saved"}
       <span class="flex items-center gap-1 font-mono text-[10px] text-success">
         <Check class="size-3" />Saved

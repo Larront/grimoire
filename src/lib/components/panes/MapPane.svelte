@@ -30,6 +30,7 @@
   import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
 
   interface Props {
     mapId: number;
@@ -60,6 +61,37 @@
   let loadError = $state(false);
   let selectedPin = $state<Pin | null>(null);
   let selectedAnnotation = $state<MapAnnotation | null>(null);
+
+  // KEEP THE SELECTION IN SIGHT. A map's detail panel always floats (ADR-0006) and
+  // floats top-right, so a pin in the east third of the map used to vanish under the
+  // panel describing it — the GM clicked to see *where* and the answer hid it. On
+  // each new selection the map pans just far enough to put the pin (or annotation
+  // anchor) in the uncovered region. `panInside` is a no-op when it is already clear,
+  // so a selection that was visible never moves the map.
+  //
+  // Keyed on the selection's identity alone: dragging a selected pin rewrites
+  // `selectedPin` on every save, and the map must not chase a pin the GM is moving.
+  const PANEL_CLEARANCE = 320 + 16 + 24; // DetailSurface w-80, its right-4 inset, breathing room
+  const focusKey = $derived(
+    selectedPin ? `pin:${selectedPin.id}` : selectedAnnotation ? `ann:${selectedAnnotation.id}` : null,
+  );
+  $effect(() => {
+    if (!focusKey) return;
+    untrack(() => {
+      const target = selectedPin ?? selectedAnnotation;
+      const m = leafletMap;
+      if (!target || !m || !mapData?.image_width || !mapData.image_height) return;
+      // A pane too narrow to leave a clear region past the panel gets what it can
+      // rather than a padding Leaflet cannot satisfy.
+      const right = Math.min(PANEL_CLEARANCE, Math.max(24, m.getSize().x - 120));
+      m.panInside([target.y * mapData.image_height, target.x * mapData.image_width], {
+        paddingTopLeft: [24, 24],
+        paddingBottomRight: [right, 24],
+        animate: !appPrefs.reduceMotion,
+      });
+    });
+  });
+
   let placingMode = $state(false);
   let annotationMode = $state<AnnotationKind | null>(null);
 
@@ -658,7 +690,7 @@
         }}
       >
         <DetailPanel
-          title={selectedPin!.title || "Pin"}
+          title="Pin"
           saveStatus={pinDetails.saveStatus}
           onRetrySave={pinDetails.retrySave}
           onclose={() => {

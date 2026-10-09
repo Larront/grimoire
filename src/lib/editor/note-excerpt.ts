@@ -24,6 +24,7 @@
 // switch to it and this module should be deleted rather than extended.
 
 import { titleCaseCalloutType } from "$lib/editor/callout-block";
+import { parseWikiTarget } from "$lib/editor/wiki-target";
 
 // ─── Line grammar ─────────────────────────────────────────────────────────────
 
@@ -95,12 +96,16 @@ function fenceDescriptor(info: string, body: string[]): string {
  *
  * `_underscore_` emphasis is left alone on purpose: file_names and stat_keys are
  * common in a GM's prose and stripping them mangles more text than it tidies.
- * `[[wikilinks]]` are left alone for the reason in this module's header — the
- * markdown-link rule below refuses a `[` that follows another `[` so it cannot
- * reach inside one.
+ * `[[wikilinks]]` keep their brackets for the reason in this module's header, but
+ * say what the editor would: the display name, not the file path. A sample note's
+ * `[[Lore/The Ashfen Marshes.md]]` reads as `[[The Ashfen Marshes]]` and an aliased
+ * `[[People/Aldric|the Regent]]` as `[[the Regent]]` — the notation stays honest
+ * ("a link is here") without printing the ledger's folder layout. The markdown-link
+ * rule below refuses a `[` that follows another `[` so it cannot reach inside one.
  */
 function stripInline(line: string): string {
   return line
+    .replace(/\[\[([^[\]]+)\]\]/g, (_, inner: string) => `[[${parseWikiTarget(inner).title}]]`)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/(?<!\[)\[([^[\]]+)\]\([^)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
