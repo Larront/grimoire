@@ -514,7 +514,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="statblock-block group/block relative my-2 select-none rounded-lg border border-l-[3px]
+  class="statblock-block group/block relative my-2 select-none rounded-lg border
          border-border bg-card/40 px-3 py-2"
   class:statblock-editing={editing}
   data-width={block.width}
@@ -666,13 +666,15 @@
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state
      itself rather than a label describing it: input chrome appears under every value,
-     and the block's left rail turns dashed accent.
+     and the block's frame turns dashed accent.
 
-     The rail is 3px wide in both modes and only changes colour and style, so entering
-     the mode does not nudge the whole block sideways. */
+     The frame is 1px in both modes and only changes colour and style, so entering the
+     mode does not nudge the block. It used to be a 3px left rail, which made the
+     statblock the one Note Block wearing a side stripe; every block now shares one
+     frame (DESIGN.md §4, "in the page"). */
   .statblock-block.statblock-editing {
-    border-left-style: dashed;
-    border-left-color: var(--primary);
+    border-style: dashed;
+    border-color: var(--primary);
   }
 
   /* Input chrome: an underline under every value the mode has opened. The class is

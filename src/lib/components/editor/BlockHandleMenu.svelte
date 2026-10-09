@@ -142,7 +142,7 @@
   id="block-handle-menu"
   data-block-handle-menu
   class="fixed z-50 min-w-[190px] rounded-lg border border-border bg-popover py-1
-         shadow-xl shadow-black/30"
+         shadow-float"
   role="menu"
   aria-label="Actions for {label}"
   tabindex={-1}

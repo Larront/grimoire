@@ -282,7 +282,7 @@
 
 {#if ref.sceneId === null}
   <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
-  <div class="my-1 rounded-md border border-border/60 bg-card px-3 py-2.5 select-none">
+  <div class="my-1 rounded-lg border border-border bg-card/40 px-3 py-2.5 select-none">
     <!-- Search. Every control here binds a scene, so a `/scene` inserted by accident
          used to strand the picker in the note — hence the trash can that sat beside the
          search field. Delete on the gutter handle's menu reaches a sealed block now
@@ -371,12 +371,12 @@
 {:else}
   <!-- ── Active: compact strip + expandable mixer ───────────────────────────── -->
   <div
-    class="my-1 rounded-md border bg-card select-none overflow-hidden transition-colors duration-200
+    class="my-1 rounded-lg border bg-card/40 select-none overflow-hidden transition-colors duration-200
            {isThisScenePlaying
-      ? 'border-primary/25'
+      ? 'border-primary/60'
       : isThisSceneLoading
-        ? 'border-primary/12'
-        : 'border-border/60'}"
+        ? 'border-primary/30'
+        : 'border-border'}"
   >
     <!-- Compact strip -->
     <div class="flex items-center gap-2 px-2.5 py-2">

@@ -126,7 +126,7 @@ This system refuses theatricality. No leather textures, chrome bevels, glowing r
 - Dark-first. Iron surfaces are the default posture; light mode (Parchment) is a deliberate alt.
 - Two-voice typography. Nunito for the tool; Metamorphous for the world. Boundary is content ownership.
 - Single user-switchable accent. Five named presets (Crimson, Arcane, Verdant, Ice, Amber). No secondary palette.
-- Flat tonal layering. Depth via surface values only; no shadows on structural chrome.
+- Three levels of depth. In the page: border only. Floating: raised tone, border, one shared shadow. Modal: a dim scrim, no blur.
 - Restrained component geometry. 6px structural / 8px elevated / 100px pill. Consumer-app softness is refused.
 - Motion is purposeful. 150ms ease-out for state changes; nothing bounces.
 
@@ -204,21 +204,27 @@ _The channel this exception does not have._ A per-tag node shape was built as th
 
 ## 4. Elevation
 
-This system is entirely flat. No `box-shadow`. No `drop-shadow` on structural chrome. Depth is achieved through tonal layering: Iron Deep sits below Iron Dark, which sits below Iron Raised. Three surface steps are the complete elevation vocabulary.
+Depth has exactly three levels, named by what a surface *does*, not what kind of component it is. Each level has one treatment, and nothing invents a fourth.
 
-This is a direct expression of "the tool disappears." Shadows would make the chrome visible and present. Tonal steps make surfaces legible without drawing attention to the interface itself.
+| Level | What lives here | Treatment |
+| --- | --- | --- |
+| **In the page** | Note blocks (infobox, statblock, callout, scene embed), cards, the docked detail rail, the sidebar, sticky bars that belong to their pane | Iron Border, no shadow. Note blocks share one frame: 1px Iron Border, 8px radius, Iron Raised at 40%. |
+| **Floating** | Menus, popovers, tooltips, suggestion lists, link previews, the floating detail panel, toasts, controls over the GM's imagery | Iron Raised (`bg-popover`), Iron Border, `shadow-float` |
+| **Modal** | Dialogs, the command palette, sheets | A floating surface over `bg-scrim` — a dim, warm-black wash. No blur. |
+
+`shadow-float` and `bg-scrim` are the only two depth utilities (`--elevation-float` and `--scrim` in `src/app.css`, stepped per mode). The shadow carries a real offset and a soft blur: it reads as height, not as a glow.
 
 ### Surface Hierarchy
 
-- **Iron Deep** (`#181818`) — lowest tier: sidebar, recessed panels, secondary surfaces
-- **Iron Dark** (`#1f1f1f`) — base tier: main content canvas, default surface
-- **Iron Raised** (`#262626`) — elevated tier: cards, command palette, popovers, dialogs, toasts
+- **Iron Deep** (`#131110`) — lowest tier: sidebar, docked detail rail, recessed panels
+- **Iron Dark** (`#1c1917`) — base tier: main content canvas, default surface
+- **Iron Raised** (`#2a2522`) — elevated tier: every floating surface, and the 40% wash on note blocks
 
 ### Named Rules
 
-**The Shadowless Rule.** No `box-shadow` or `drop-shadow` on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border. Shadows exist in the GM's world — in scene art, map overlays, atmospheric imagery — not in the tool surrounding them.
+**The Three Levels Rule.** A surface is in the page, floating, or modal, and takes that level's treatment exactly. If you are adding a shadow, it is `shadow-float` on a floating surface; if you are blurring a backdrop, don't.
 
-_Where the line falls._ "Chrome" was doing unstated work in that sentence, and the ambiguity cost: a dozen popovers and dropdowns grew shadows while the toast stylesheet was busy stripping sonner's, both citing this rule. **The test is what the surface floats over, not what kind of component it is.** A panel over the app's own surfaces knows what is behind it — Iron Deep, Iron Dark, or Iron Raised — and separates on a tonal step plus Iron Border, so it takes no shadow: dropdowns, popovers, tooltips, pickers, toggle knobs, editor toolbars. A panel over the GM's own imagery does not: a map is whatever picture they dropped in, a PDF page is white, scene art is arbitrary, and against an unknown background a border alone can vanish. Those keep a shadow, and it is the one place in the app that has one. If you are adding a shadow, name the image it sits on; if you cannot, it does not get one.
+_Why this replaced the Shadowless Rule._ Grimoire used to be "entirely flat": no shadows, depth from tonal steps alone. That was right about decoration and wrong about floating surfaces. The dark ramp's steps are close together by design, so a menu over the editor could not read as *above* it on tone alone, and the rule had been quietly bypassed in about ten places by components that needed exactly that, each with its own ad-hoc shadow. One shared shadow wherever something genuinely floats keeps the intent (the tool does not decorate itself) and loses the inconsistency. The backdrop blur behind dialogs went for the opposite reason: it hid the note a GM was reading behind the palette, and bought nothing.
 
 ## 5. Components
 
@@ -243,7 +249,7 @@ Components respond with precision and without hurry. State transitions are 150ms
 
 - **Corner Style:** Elevated corners (8px)
 - **Background:** Iron Raised
-- **Shadow:** None — Shadowless Rule is absolute
+- **Shadow:** None — a card is in the page (§4)
 - **Border:** Iron Border
 - **Internal Padding:** 16px
 - **States:** Default, Hover (Hover Overlay layered over Iron Raised), Playing (Crimson Tint background), Loading (generated thumbnail fallback — warm background + music icon, never a broken image or blank)
@@ -266,7 +272,7 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 
 ### Command Palette (Signature Component)
 
-560px wide, horizontally centred over the content area. Iron Raised background, 8px radius. Not a full-screen overlay — the app remains visible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Scene name results render in Metamorphous; all other results and UI chrome in Nunito. Results group by type (Notes, Maps, Scenes) with an uppercase JetBrains Mono category label.
+560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Scene name results render in Metamorphous; all other results and UI chrome in Nunito. Results group by type (Notes, Maps, Scenes) with an uppercase JetBrains Mono category label.
 
 ### Scene Player (Signature Component)
 
@@ -277,7 +283,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 ### Do:
 
 - **Do** use Metamorphous exclusively for GM-authored content: note titles, map names, scene names, splash wordmark. Never on structural app chrome.
-- **Do** use tonal surface steps (Iron Deep / Iron Dark / Iron Raised) to convey depth. Three steps are enough; the Shadowless Rule completes the rest.
+- **Do** place every surface at one of the three levels (§4) and give it that level's treatment — border in the page, `shadow-float` floating, scrim for modal.
 - **Do** pair every error and success state with a status icon (circle-x / circle-check). Red and green are invisible to ~8% of male users; color alone is not accessible.
 - **Do** use Crimson only as a signal — selection, focus, the primary button, playing, and link underlines. Its scarcity is what makes it read as signal.
 - **Do** keep component height tied to `--row-h`. All three density settings are handled automatically.
@@ -290,7 +296,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 
 - **Don't** use leather textures, chrome bevels, glowing rune borders, or Diablo-style ornamentation. The game lives in the GM's content, not in the interface chrome.
 - **Don't** use parchment backgrounds, ambient fog overlays, or calligraphy fonts as structural UI elements. Atmosphere belongs to the content layer.
-- **Don't** apply `box-shadow` or `drop-shadow` to interface chrome. The Shadowless Rule is absolute.
+- **Don't** invent a shadow. If a surface floats it takes `shadow-float`; if it is in the page it takes none. No `backdrop-blur` anywhere.
 - **Don't** introduce a second accent color. The five presets are a single `--primary` family; they are not a multi-color palette.
 - **Don't** use color to categorize files, tags, or folders. Shape and text only.
 - **Don't** use Ember Faint (`#6b6460`) for body text or interactive labels. It is sub-AA and reserved for non-essential decorative text.

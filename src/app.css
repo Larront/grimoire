@@ -394,12 +394,50 @@
   --tab-bar-h: 32px;
 }
 
+/* ── Elevation ────────────────────────────────────────────────── */
+/*
+  THREE LEVELS, NAMED BY WHAT A SURFACE DOES — see DESIGN.md §4.
+
+    in the page   border only. Note blocks, cards, the docked detail rail, sticky
+                  bars that belong to their pane. No shadow: they sit IN the
+                  surface, and a tonal step plus Iron Border is enough to read.
+    floating      Iron Raised (`bg-popover`) + Iron Border + `shadow-float`. Every
+                  menu, popover, tooltip, suggestion list, link preview, the floating
+                  detail panel, and any control over the GM's imagery.
+    modal         a dim scrim (`bg-scrim`) behind a floating surface. No blur: the
+                  app stays legible behind a dialog, which is what lets a GM keep
+                  reading the read-aloud text while the palette is open.
+
+  This replaces the Shadowless Rule. It was right that chrome should not wear
+  shadows for decoration, and wrong that a raised tone alone separates a floating
+  surface: the dark ramp's steps are close together by design, a menu over the
+  editor needs to read as *above* it, and the rule had already been bypassed in ten
+  places by components that needed exactly that. One token, used everywhere it is
+  needed, beats ten ad-hoc shadows and a rule nobody could follow.
+
+  The shadow carries a real offset and a soft blur — it is depth, not a halo.
+*/
+:root {
+  --elevation-float: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.45);
+  --scrim: rgb(8 6 5 / 0.55);
+}
+
+.light {
+  --elevation-float:
+    0 12px 32px -10px rgb(31 26 29 / 0.22), 0 2px 8px -2px rgb(31 26 29 / 0.12);
+  --scrim: rgb(31 26 29 / 0.28);
+}
+
 /* ── Tailwind theme bridge ──────────────────────────────────────
    The colour, font and radius utilities are bridged in shared/tokens.css.
    This block adds only the shadcn aliases, which exist to satisfy the
    vendored component library and are not part of Grimoire's vocabulary. */
 
 @theme inline {
+  /* Elevation — `shadow-float` and `bg-scrim`, the only two depth utilities. */
+  --shadow-float: var(--elevation-float);
+  --color-scrim: var(--scrim);
+
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);
@@ -712,11 +750,15 @@
   #180's selectors are unchanged: a callout is still the ordinary quote wearing a
   type, and a quote with no type is still styled as the quote it is.
 */
+/* The frame every Note Block shares (DESIGN.md §4, "in the page"): 1px Iron Border,
+   elevated radius, Iron Raised at 40% — the same `border bg-card/40 rounded-lg` the
+   infobox, statblock and scene embeds draw. It used to be a 3px accent stripe over an
+   8% tint, which made the callout the loudest box in any note it sat in. */
 .tiptap blockquote[data-callout] {
   --callout-accent: var(--foreground-muted);
-  border-left: 3px solid var(--callout-accent);
-  border-radius: var(--radius-structural);
-  background: color-mix(in oklab, var(--callout-accent) 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-elevated);
+  background: color-mix(in oklab, var(--background-elevated) 40%, transparent);
   padding: 0.75rem 1rem;
   margin: 1.5rem 0;
   color: var(--foreground);
@@ -1056,24 +1098,14 @@ input[type="range"]:disabled {
   Everything below is styling only. What each toast *says*, how long it lives,
   and which are permitted to persist are decisions in $lib/toast.ts.
 
-  **The status spine.** A toast carries its semantic hue as a 3px left border
-  over a quiet surface. That is not a new invention: it is the same grammar the
-  editor already speaks for callouts and blockquotes — accent left border, faint
-  tint of the same hue (see `.tiptap blockquote[data-callout]` above). A toast is
-  the app saying something and a callout is a note saying something; they should
-  read as one language. It is also the only place a *neutral* toast can carry
-  colour at all, since neutral toasts have no status icon and no tinted surface.
-
   Roles, one hue per toast (`--toast-hue`), no second colour anywhere in it:
-    error   — error hue spine, 12% error tint on the surface
-    success — success hue spine, 12% success tint
-    neutral — the user's accent spine, surface left as plain Iron Raised
+    error   — error icon, 12% error tint on the surface
+    success — success icon, 12% success tint
+    neutral — plain Iron Raised; the accent appears only on its action button
 
-  Neutral keeps the untinted surface deliberately: a routine "Deleted X / Undo"
-  should not spend the accent on a whole surface (DESIGN.md — "use Crimson
-  sparingly … its scarcity is what makes it read as signal"). The spine alone is
-  enough to make the accent preset visible in toasts, which it previously was
-  not — a Verdant or Ice user never saw their accent here.
+  A neutral toast spends no accent on its surface: a routine "Deleted X / Undo" is
+  not a signal (DESIGN.md's Signal Rule), and its Undo button is the one thing in it
+  worth the accent.
 
   **On the specificity.** Every selector here is deliberately over-qualified,
   and that is load-bearing rather than defensive. Sonner sets its palette on
@@ -1152,20 +1184,19 @@ input[type="range"]:disabled {
 }
 
 /*
-  Shadowless Rule (DESIGN.md §4, absolute): sonner ships a drop-shadow on every
-  toast, but Grimoire chrome is flat — elevation reads from the raised surface
-  and its border, never a shadow.
+  A toast FLOATS (DESIGN.md §4): over whatever the GM is looking at, so it takes the
+  one floating shadow rather than sonner's own. Its frame is the plain 1px Iron Border
+  every floating surface wears — the 3px status spine is gone. Error and success still
+  read at a glance from their icon and tinted surface, and a neutral "Deleted X / Undo"
+  has no status to signal, so under the Signal Rule it carries no accent at all.
 
-  The spine goes on here too. `:not([data-type])` covers neutral toasts, which
-  carry no `data-type` attribute at all; both selectors sit at four attributes
-  so they beat rich-colour's `border-color`. `padding-left` drops the 2px the
-  thicker border added, keeping the text 16px from the outer edge.
+  `:not([data-type])` covers neutral toasts, which carry no `data-type` attribute;
+  both selectors sit at four attributes so they beat rich-colour's `border-color`.
 */
 [data-sonner-toast][data-rich-colors][data-styled="true"][data-type],
 [data-sonner-toast][data-rich-colors][data-styled="true"]:not([data-type]) {
-  box-shadow: none;
-  border-left: 3px solid var(--toast-hue);
-  padding-left: 13px;
+  box-shadow: var(--elevation-float);
+  border: 1px solid var(--border);
 }
 
 /* Two voices are not in play here — a toast is the tool speaking, never GM
@@ -1322,7 +1353,7 @@ input[type="range"]:disabled {
 
 /* Focus is a 2px accent outline at 2px offset everywhere in Grimoire. Sonner
    draws focus rings as black box-shadows, which both fails on Iron surfaces and
-   breaks the Shadowless Rule. (The report link inside a description needs no arm
+   is a shadow pretending to be a focus ring. (The report link inside a description needs no arm
    here — the base layer's `:focus-visible` rule already gives it this exact ring.
    It only had to stop transitioning its own outline-colour; see
    MigrationReportBody.) */

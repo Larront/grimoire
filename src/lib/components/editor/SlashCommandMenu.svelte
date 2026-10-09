@@ -33,7 +33,7 @@
   bind:this={menuEl}
   class="fixed z-50 min-w-[200px] max-h-[300px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
-         shadow-xl shadow-black/30"
+         shadow-float"
   role="listbox"
   aria-label="Slash commands"
 >

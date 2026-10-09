@@ -637,7 +637,7 @@
   {#if filterOpen}
     <div
       data-testid="filter-panel"
-      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
+      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-popover border border-border shadow-float p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto"
     >
       <p class="text-xs font-semibold text-foreground-muted uppercase tracking-wider">
         Filter by tag

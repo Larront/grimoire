@@ -579,7 +579,7 @@
             if (e.key === "Escape") renamingTitle = false;
           }}
           aria-label="Map name"
-          class="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5
+          class="bg-popover border border-border shadow-float rounded-lg px-3 py-1.5
                  font-heading text-sm shadow-sm"
         />
       {:else}
@@ -587,7 +587,7 @@
           onclick={startTitleRename}
           title="Click to rename"
           aria-label="Rename map"
-          class="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border/60
+          class="flex items-center gap-2 bg-popover border border-border shadow-float
                  rounded-lg px-3 py-1.5 hover:border-primary/60 transition-colors cursor-pointer shadow-sm"
         >
           <span class="font-heading text-sm tracking-wide whitespace-nowrap">
@@ -600,7 +600,7 @@
     <!-- Left vertical toolbar -->
     <div
       class="absolute left-3 top-1/2 -translate-y-1/2 z-1000 flex flex-col items-center
-             bg-background/90 backdrop-blur-sm border border-border/60 rounded-xl shadow-md p-1 gap-0.5"
+             bg-popover border border-border rounded-xl shadow-float p-1 gap-0.5"
       role="toolbar"
       aria-orientation="vertical"
       aria-label="Map tools"
@@ -636,7 +636,7 @@
             : "Click and drag to draw a circle"}
       <div class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none">
         <div
-          class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md"
+          class="bg-popover border border-border rounded-lg px-4 py-2 shadow-float"
         >
           <p class="text-xs text-muted-foreground">{hint}</p>
         </div>

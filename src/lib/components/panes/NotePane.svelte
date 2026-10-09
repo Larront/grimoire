@@ -450,7 +450,7 @@
             data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
+                   border-b border-border bg-background-elevated py-2.5"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -489,7 +489,7 @@
             data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
+                   border-b border-border bg-background-elevated py-2.5"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
