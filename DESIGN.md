@@ -45,6 +45,16 @@ typography:
     fontSize: "1.75rem"
     fontWeight: 400
     lineHeight: 1.25
+  heading-2:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "1.375rem"
+    fontWeight: 400
+    lineHeight: 1.25
+  heading-3:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "1.125rem"
+    fontWeight: 400
+    lineHeight: 1.25
   headline:
     fontFamily: "Nunito, sans-serif"
     fontSize: "1rem"
