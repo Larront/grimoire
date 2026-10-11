@@ -1,5 +1,6 @@
 use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene};
 use crate::db::schema::{maps, notes, pin_categories, pins, quick_notes, scene_slots, scenes};
+use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use std::path::Path;
 use tauri::{AppHandle, Manager};
@@ -27,6 +28,44 @@ pub fn copy_dir_tree(src: &Path, dst: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Resets the sandbox to a pristine copy of `src`, first letting go of it if it
+/// is still the open ledger.
+///
+/// The frontend closes the sample before exploring it again, but a webview
+/// reload returns it to the Splash without ever calling `close_ledger` — the
+/// backend is still holding the old sandbox. On Windows its open database and
+/// the search index's mapped files make the wipe fail with os error 32 until
+/// the app restarts, so the reset closes that ledger itself: `stop_watcher`
+/// first, as `close_ledger` does, then the state. Any other open ledger is left
+/// alone — the frontend is still showing it until the sample opens.
+fn reset_sandbox(
+    src: &Path,
+    sandbox: &Path,
+    ledger: &AppLedger,
+    stop_watcher: impl FnOnce(),
+) -> Result<(), String> {
+    let same = |a: &Path, b: &Path| match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    };
+    let sandbox_is_open = ledger
+        .lock()
+        .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
+        .path
+        .as_deref()
+        .is_some_and(|open| same(open, sandbox));
+
+    if sandbox_is_open {
+        stop_watcher();
+        ledger
+            .lock()
+            .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
+            .close();
+    }
+
+    copy_dir_tree(src, sandbox)
 }
 
 /// Seeds the Ashfen Region map, its default pin categories, and three pins into the
@@ -281,7 +320,9 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
     let sample_dst = app_data_dir.join("sample-world");
 
-    copy_dir_tree(&sample_src, &sample_dst)?;
+    reset_sandbox(&sample_src, &sample_dst, &app.state::<AppLedger>(), || {
+        crate::ledger_watch::stop(&app)
+    })?;
 
     // Pre-seed the DB so that the map and pins are present when the frontend's
     // subsequent open_ledger call runs (which only rebuilds derived indexes and
@@ -325,6 +366,7 @@ mod tests {
     use crate::commands::ledger::seed_default_categories;
     use crate::db::establish_connection;
     use crate::db::schema::{maps, note_links, notes, scene_slots, scenes};
+    use crate::ledger::LedgerState;
     use diesel::prelude::*;
     use std::fs;
     use tempfile::tempdir;
@@ -373,6 +415,76 @@ mod tests {
             fs::read_to_string(dst.join("second.md")).unwrap(),
             "Second"
         );
+    }
+
+    // ── reset_sandbox ─────────────────────────────────────────────────────────
+
+    /// A ledger state holding `path` open the way `open_ledger` leaves it: a live
+    /// database connection and a search index, both with files under `path`.
+    fn opened_at(path: &Path) -> AppLedger {
+        let mut state = LedgerState::new(String::new());
+        state.connection = Some(establish_connection(path).unwrap());
+        state.search_index = Some(crate::search::rebuild_index(path, &[], &[], &[]).unwrap());
+        state.path = Some(path.to_path_buf());
+        AppLedger::new(state)
+    }
+
+    /// Reloading the webview while the sample is open returns the frontend to the
+    /// Splash without ever calling `close_ledger`, so the backend is still holding
+    /// the sandbox when _Explore an example world_ is clicked again. On Windows the
+    /// open database and the index's mapped files make the wipe fail with os error
+    /// 32 until the app restarts — the reset has to let go of them first.
+    #[test]
+    fn reset_sandbox_releases_a_sandbox_that_is_still_open() {
+        let src = tempdir().unwrap();
+        fs::write(src.path().join("pristine.md"), "# Pristine").unwrap();
+        let parent = tempdir().unwrap();
+        let sandbox = parent.path().join("sample-world");
+        copy_dir_tree(src.path(), &sandbox).unwrap();
+        fs::write(sandbox.join("edited.md"), "# Edited").unwrap();
+
+        let ledger = opened_at(&sandbox);
+        // A real watcher over the sandbox, as `ledger_watch::start` leaves one:
+        // its drop only signals the thread, so the wipe follows it immediately.
+        let mut watcher = notify_debouncer_full::new_debouncer(
+            std::time::Duration::from_millis(150),
+            None,
+            |_: notify_debouncer_full::DebounceEventResult| {},
+        )
+        .unwrap();
+        watcher
+            .watch(&sandbox, notify_debouncer_full::notify::RecursiveMode::Recursive)
+            .unwrap();
+        let mut watcher = Some(watcher);
+        reset_sandbox(src.path(), &sandbox, &ledger, || drop(watcher.take())).unwrap();
+
+        assert!(watcher.is_none(), "the sandbox's watcher must be stopped before the wipe");
+        assert_eq!(
+            crate::ledger::ledger_path(&ledger).unwrap_err(),
+            crate::ledger::ERR_NO_LEDGER,
+            "the wiped sandbox must not still be recorded as the open ledger"
+        );
+        assert!(sandbox.join("pristine.md").exists());
+        assert!(!sandbox.join("edited.md").exists(), "the sandbox must be reset to pristine");
+    }
+
+    /// Exploring the sample from the palette while the GM's own ledger is open
+    /// must not close it: the frontend still shows it until the sample opens.
+    #[test]
+    fn reset_sandbox_leaves_another_open_ledger_alone() {
+        let src = tempdir().unwrap();
+        fs::write(src.path().join("pristine.md"), "# Pristine").unwrap();
+        let parent = tempdir().unwrap();
+        let sandbox = parent.path().join("sample-world");
+        let own = tempdir().unwrap();
+
+        let ledger = opened_at(own.path());
+        let mut watcher_stopped = false;
+        reset_sandbox(src.path(), &sandbox, &ledger, || watcher_stopped = true).unwrap();
+
+        assert!(!watcher_stopped, "another ledger's watcher must keep running");
+        assert_eq!(crate::ledger::ledger_path(&ledger).unwrap(), own.path());
+        assert!(sandbox.join("pristine.md").exists());
     }
 
     /// Adoption — _Make this world mine_ — is `copy_dir_tree` over the whole sandbox, so

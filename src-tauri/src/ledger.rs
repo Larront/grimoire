@@ -67,6 +67,19 @@ impl LedgerState {
             index: self.search_index.as_ref(),
         })
     }
+
+    /// Forget the open ledger. Dropping the connection and the search index is
+    /// what lets go of their files under the vault, so nothing here may keep a
+    /// clone of either. The caller stops the watcher first (`ledger_watch::stop`)
+    /// so no event fires against a half-closed ledger.
+    pub fn close(&mut self) {
+        self.connection = None;
+        self.path = None;
+        self.search_index = None;
+        self.pending_spotify_verifier = None;
+        self.pending_spotify_state = None;
+        // spotify_client_id is intentionally kept — it is app-level config, not ledger-specific
+    }
 }
 
 pub type AppLedger = Mutex<LedgerState>;

@@ -346,13 +346,10 @@ pub fn close_ledger(app: AppHandle, ledger: State<AppLedger>) -> Result<(), Stri
     // Tear the watcher down first so no event fires against a half-closed ledger.
     crate::ledger_watch::stop(&app);
 
-    let mut state = ledger.lock().map_err(|_| crate::ledger::ERR_LOCK_POISONED)?;
-    state.connection = None;
-    state.path = None;
-    state.search_index = None;
-    state.pending_spotify_verifier = None;
-    state.pending_spotify_state = None;
-    // spotify_client_id is intentionally kept — it is app-level config, not ledger-specific
+    ledger
+        .lock()
+        .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
+        .close();
     Ok(())
 }
 
