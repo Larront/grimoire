@@ -450,7 +450,7 @@
             data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
+                   border-b border-border bg-background-elevated py-2.5"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -489,7 +489,7 @@
             data-note-inset
             role="alert"
             class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
-                   border-b border-primary/20 bg-background/95 py-2.5 backdrop-blur"
+                   border-b border-border bg-background-elevated py-2.5"
           >
             <div class="flex items-center gap-2 min-w-0">
               <FileWarning class="size-4 shrink-0 text-primary" />
@@ -522,18 +522,18 @@
         <!-- The horizontal padding is in app.css under `[data-note-column]`, not here:
              its leading edge is the block gutter (#190) and is derived from the grip's
              own size, so it must not drift apart from a utility class. -->
-        <div data-note-column class="w-full mx-auto pt-10 pb-20 @5xl:max-w-[70%]">
+        <div data-note-column class="w-full mx-auto pt-10 pb-20 max-w-[46rem]">
           <input
             bind:this={titleInput}
             bind:value={draftTitle}
             class="w-full bg-transparent border-none outline-none p-0
-                   font-heading text-4xl leading-tight tracking-tight
+                   font-heading text-[2.75rem] leading-[1.15] tracking-tight
                    text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             placeholder="Untitled"
             onblur={commitTitle}
             onkeydown={handleTitleKeydown}
           />
-          <div class="mt-3 mb-8 h-px bg-linear-to-r from-primary/25 to-transparent"></div>
+          <div class="mt-3 mb-8 h-px bg-border"></div>
           {#if loadError}
             <!-- No Editor mounts in this state, so no autosave can recreate
                  the missing file. -->

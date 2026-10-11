@@ -7,9 +7,9 @@ colors:
   crimson-lit: "#f9f1f0"
   crimson-tint: "#c2483d1f"
   crimson-veil: "#c2483d3d"
-  iron-deep: "#181818"
-  iron-dark: "#1f1f1f"
-  iron-raised: "#262626"
+  iron-deep: "#131110"
+  iron-dark: "#1c1917"
+  iron-raised: "#2a2522"
   iron-border: "#ffffff14"
   hover-overlay: "#ffffff0a"
   ember-ash: "#f0ece8"
@@ -138,10 +138,10 @@ the heat.
 
 ### Neutral (Iron)
 
-- **Iron Deep** (`#181818`): The base body background. The cold metal everything sits on.
-- **Iron Dark** (`#1f1f1f`): One tonal step up — alternating section backgrounds
+- **Iron Deep** (`#131110`): The base body background. The cold metal everything sits on.
+- **Iron Dark** (`#1c1917`): One tonal step up — alternating section backgrounds
   (e.g. the Features band) to segment the page without borders alone.
-- **Iron Raised** (`#262626`): The highest tonal step — elevated surfaces like the
+- **Iron Raised** (`#2a2522`): The highest tonal step — elevated surfaces like the
   screenshot frame. "Raised" is expressed by tone, never by shadow.
 - **Iron Border** (`#ffffff14`): A ~8%-white hairline for all borders and dividers.
   The only "light" in the structure.
@@ -258,7 +258,7 @@ no elastic, no infinite loops.
 
 - **Corner Style:** `8px` (`rounded-elevated`) for the screenshot frame; `6px` for
   smaller structural elements.
-- **Background:** Iron Raised (`#262626`) for the one true elevated surface.
+- **Background:** Iron Raised (`#2a2522`) for the one true elevated surface.
 - **Shadow Strategy:** None — see Elevation. Lift is tone + border only.
 - **Border:** `1px` Iron Border (`#ffffff14`) on all sides. Never a colored side-stripe.
 - **Internal Padding:** Content-driven; the screenshot frame clips the image flush.
@@ -291,7 +291,7 @@ catching as you reach for it.
 
 - **Do** keep crimson to ≤10% of any screen — one primary CTA, the wordmark, and small
   labels. Its scarcity is the design (The One Ember Rule).
-- **Do** build depth from the iron tonal ramp (`#181818` → `#1f1f1f` → `#262626`) plus
+- **Do** build depth from the iron tonal ramp (`#131110` → `#1c1917` → `#2a2522`) plus
   `#ffffff14` hairline borders. Step the tone; never add a shadow (The No-Shadow Rule).
 - **Do** reserve Metamorphous for H1/H2 and the wordmark; set all working text and UI
   in Nunito, and technical facts in JetBrains Mono.

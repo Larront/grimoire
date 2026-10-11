@@ -4,7 +4,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { onMount, setContext, type ComponentProps } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
   import AppSearch from "../AppSearch.svelte";
@@ -14,6 +14,7 @@
     MapPinPlus,
     ChevronDown,
     Music2,
+    Plus,
     Inbox,
     Network,
     Settings,
@@ -26,6 +27,7 @@
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
+  import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
   import { slide } from "svelte/transition";
@@ -229,6 +231,15 @@
     }
   }
 
+  async function handleNewScene() {
+    try {
+      const scene = await scenes.createScene("New Scene");
+      tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
+    } catch (e) {
+      console.error("create scene failed:", e);
+    }
+  }
+
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
       await api.createFolder(`${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`);
@@ -304,65 +315,44 @@
             <AppSearch />
           </div>
           <!-- Creating is an expanded-sidebar act. `Ctrl/Cmd+N` (#227) covers the
-               common case from anywhere, and four more icons would be the least
-               session-critical controls doubling the strip's weight. -->
-          <div
-            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50 {EXPANDED_ONLY}"
-          >
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
+               common case from anywhere. ONE labelled menu rather than four bare
+               icons: the icons were unlabelled behind a 600ms tooltip, sat at the
+               weight of the session-critical rows below them, and the New Scene one
+               had no handler at all. A word a GM can read beats four glyphs to
+               decode, and the four acts are still one click and a choice away. -->
+          <div class="mx-3 mt-1.5 {EXPANDED_ONLY}">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                data-testid="sidebar-new"
                 class="{buttonVariants({
                   variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Note"
-                onclick={() => handleNewNote(null)}
+                  size: 'sm',
+                })} w-full justify-start gap-2 px-2 text-(--font-ui) text-foreground-muted hover:text-foreground"
               >
-                <FilePlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Note</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Folder"
-                onclick={() => handleNewFolder(null)}
-              >
-                <FolderPlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Folder</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Map"
-                onclick={() => handleNewMap(null)}
-              >
-                <MapPinPlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Map</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Scene"
-              >
-                <Music2 strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
-            </Tooltip.Root>
+                <Plus class="size-4" strokeWidth={1.75} />
+                New
+                <ChevronDown class="ms-auto size-3.5 opacity-60" />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="start" class="w-(--bits-dropdown-menu-anchor-width)">
+                <DropdownMenu.Item onSelect={() => handleNewNote(null)}>
+                  <FilePlus strokeWidth={1.5} />
+                  Note
+                  <DropdownMenu.Shortcut>Ctrl+N</DropdownMenu.Shortcut>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => handleNewFolder(null)}>
+                  <FolderPlus strokeWidth={1.5} />
+                  Folder
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => handleNewMap(null)}>
+                  <MapPinPlus strokeWidth={1.5} />
+                  Map
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={handleNewScene}>
+                  <Music2 strokeWidth={1.5} />
+                  Scene
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
           </div>
         </div>
       </Sidebar.GroupContent>
@@ -387,6 +377,59 @@
     {@render strip("sidebar-scenes-standin", "Scenes", Music2, () =>
       reveal("sidebar-scenes-section"),
     )}
+
+    <!-- Navigate: the two destinations that are neither a file nor a scene, as one
+         group directly under search. They used to float between the Scenes and
+         Templates groups as two orphan rows; together and near the top they read as
+         a set, and they stay out of the way of the long Files tree. Graph is on the
+         collapsed strip, Quick Notes is not — see #233 for why its count can't be. -->
+    <Sidebar.Group>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          <Sidebar.MenuItem>
+            <Sidebar.MenuButton>
+              {#snippet child({ props })}
+                <button
+                  type="button"
+                  {...props}
+                  data-testid="sidebar-graph"
+                  aria-label="Graph"
+                  onclick={shell.openGraph}
+                >
+                  <Network class={ROW_ICON} strokeWidth={1.5} />
+                  <span class={EXPANDED_ONLY}>Graph</span>
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+          </Sidebar.MenuItem>
+          <Sidebar.MenuItem class={EXPANDED_ONLY}>
+            <Sidebar.MenuButton>
+              {#snippet child({ props })}
+                <button
+                  type="button"
+                  {...props}
+                  data-testid="sidebar-quick-notes"
+                  aria-label="Quick Notes"
+                  onclick={shell.openQuickNotes}
+                >
+                  <Inbox class="size-4" strokeWidth={1.5} />
+                  <span>Quick Notes</span>
+                </button>
+              {/snippet}
+            </Sidebar.MenuButton>
+            {#if quickNotes.count > 0}
+              <Sidebar.MenuBadge data-testid="sidebar-quick-notes-count">
+                {quickNotes.count}
+              </Sidebar.MenuBadge>
+            {/if}
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+
+    <!-- Scenes before Files: switching the room's sound is the live-session act, so it
+         sits above the tree that grows longest. -->
+    <SidebarScenes />
 
     <!-- Files section -->
     <div id="sidebar-files-section" class={EXPANDED_ONLY}>
@@ -461,74 +504,7 @@
         </Sidebar.Group>
       </Collapsible.Root>
     </div>
-    <SidebarScenes />
 
-    <!-- Graph sits under the Scenes group rather than inside it (#235). It opens
-         a tab as those rows do, but it is not a scene and does not belong to
-         their list — a peer of the groups, like Quick Notes below it. -->
-    <Sidebar.Group>
-      <Sidebar.GroupContent>
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton>
-              {#snippet child({ props })}
-                <button
-                  type="button"
-                  {...props}
-                  data-testid="sidebar-graph"
-                  aria-label="Graph"
-                  onclick={shell.openGraph}
-                >
-                  <Network class={ROW_ICON} strokeWidth={1.5} />
-                  <span class={EXPANDED_ONLY}>Graph</span>
-                </button>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
-
-    <!-- Quick Notes: one button, and deliberately no list (#233). The pane and
-         the dialog are already the two surfaces a Quick Note has; a third list
-         here would want its own edit and delete affordances, or be a tease
-         without them. The badge is absent — never a `0` — when the pen is empty.
-
-         Expanded only, unlike Graph and Settings beside it. The strip is 48px
-         and the count has to be legible on it, which means a pill small enough
-         to clear a 20px glyph inside a 32px button — about 14px, carrying two
-         digits. That is a number a GM squints at, so the honest version of it is
-         no number at all: `Ctrl/Cmd+Shift+N` still catches a thought from
-         anywhere, so nothing is unreachable while collapsed, only unlisted —
-         which is what Templates already accepts. Diverges from #226's collapsed
-         order and its "legible collapsed and expanded" criterion, on purpose. -->
-    <Sidebar.Group class={EXPANDED_ONLY}>
-      <Sidebar.GroupContent>
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton>
-              {#snippet child({ props })}
-                <button
-                  type="button"
-                  {...props}
-                  data-testid="sidebar-quick-notes"
-                  aria-label="Quick Notes"
-                  onclick={shell.openQuickNotes}
-                >
-                  <Inbox class="size-4" strokeWidth={1.5} />
-                  <span class={EXPANDED_ONLY}>Quick Notes</span>
-                </button>
-              {/snippet}
-            </Sidebar.MenuButton>
-            {#if quickNotes.count > 0}
-              <Sidebar.MenuBadge data-testid="sidebar-quick-notes-count">
-                {quickNotes.count}
-              </Sidebar.MenuBadge>
-            {/if}
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
   </Sidebar.Content>
 
   <Sidebar.Footer>

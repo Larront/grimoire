@@ -33,7 +33,7 @@
   bind:this={menuEl}
   class="fixed z-50 min-w-[200px] max-h-[300px] overflow-y-auto
          rounded-lg border border-border bg-popover py-1
-         shadow-xl shadow-black/30"
+         shadow-float"
   role="listbox"
   aria-label="Slash commands"
 >
@@ -42,7 +42,7 @@
   {#each state.items as item, i (`${item.group}/${item.label}`)}
     {#if i === 0 || item.group !== state.items[i - 1].group}
       <div
-        class="px-3 pt-2.5 pb-0.5 font-heading text-[0.6rem] uppercase tracking-widest
+        class="px-3 pt-2.5 pb-0.5 text-[11px] font-medium uppercase tracking-wider
                text-muted-foreground/60 select-none pointer-events-none"
         aria-hidden="true"
       >

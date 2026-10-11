@@ -87,7 +87,7 @@
     <button
       type="button"
       onclick={openScene}
-      class="max-w-40 truncate font-heading text-xs text-muted-foreground hover:text-foreground transition-colors"
+      class="max-w-40 truncate text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
       aria-label="Open {scene.name} in Scenes"
     >
       {scene.name}

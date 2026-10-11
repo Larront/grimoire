@@ -86,7 +86,7 @@
     out:fly={surface.transition}
     class={[
       "absolute top-4 right-4 flex max-h-[calc(100%-2rem)] w-80 flex-col overflow-hidden",
-      "rounded-lg border border-background-border bg-background shadow-2xl",
+      "rounded-lg border border-background-border bg-popover shadow-float",
       surface.overStackedHost ? "z-1000" : "z-50",
     ]}
   >

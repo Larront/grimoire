@@ -1,5 +1,11 @@
 # Product
 
+<!-- impeccable:product-schema 1 -->
+
+## Platform
+
+web
+
 ## Register
 
 brand
@@ -32,6 +38,14 @@ The site exists to convert visitors into users. Success, in priority order:
 
 Underneath both: establish credibility. The visitor should leave certain this is a
 carefully made instrument by someone who understands the craft of running a game.
+
+## Positioning
+
+The same claim as the app (root `PRODUCT.md`): **notes, maps and ambient audio in
+one tool.** Lore, annotated maps and the soundscapes a GM plays at the table live
+together and link to each other, so running a session never means juggling apps.
+Local-first, plain Markdown, open source and no account are the credibility signals
+that back the claim, not the claim itself.
 
 ## Brand Personality
 
@@ -73,6 +87,20 @@ substance and ownership, not as an excuse for fantasy costume.
 5. **Metaphor, held lightly.** Lean on the grimoire/ledger/spellbook language for
    resonance, but always in service of clarity — never at the cost of a GM
    understanding exactly what they're downloading.
+
+## Evidence on Hand
+
+- Product screenshots in `site/public/`: `screenshot.png` (Sample Ledger in the
+  editor), `maps.webp` (map with a selected pin and its location note),
+  `audio-note.webp` (a scene embedded in a note), `audio-pdf.webp` (a scene pinned
+  to a PDF passage).
+- Live release data (version, per-OS download assets) fetched from GitHub at build time via
+  `site/src/lib/releases.ts`.
+
+Nothing else. There are no testimonials, user or download counts, press, reviews or
+community quotes. Do not invent them, and do not imply them with placeholder copy.
+Builds are unsigned and the app is a prerelease (`0.X.Y`); the site must not suggest
+otherwise.
 
 ## Accessibility & Inclusion
 

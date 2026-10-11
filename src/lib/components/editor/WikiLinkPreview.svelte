@@ -24,13 +24,13 @@
 
 <div
   class="fixed z-100 w-72 overflow-hidden rounded-lg border border-border
-         bg-popover shadow-xl shadow-black/40 pointer-events-none"
+         bg-popover shadow-float pointer-events-none"
   style="left: {x}px; top: {y}px;"
   role="tooltip"
 >
   <div class="px-3.5 pt-3 pb-1.5 border-b border-border/60">
     <div class="font-heading text-sm leading-tight text-foreground">{title}</div>
-    <div class="font-sans text-[0.65rem] text-muted-foreground/50 truncate mt-0.5">{path}</div>
+    <div class="font-sans text-[11px] text-muted-foreground/50 truncate mt-0.5">{path}</div>
   </div>
   <div class="px-3.5 py-2.5">
     <p

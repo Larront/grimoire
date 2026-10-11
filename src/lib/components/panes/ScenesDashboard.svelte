@@ -1,7 +1,9 @@
 <script lang="ts">
   import {
     Clapperboard,
+    Pause,
     Play,
+    SlidersHorizontal,
     Plus,
     Star,
     ExternalLink,
@@ -20,16 +22,27 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import type { SceneWithCount } from "$lib/types/ledger";
-  import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { ICON_OPTIONS, ICON_MAP, sceneThumbColors } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
-  function cardBg(scene: SceneWithCount): string {
-    return scene.thumbnail_color ?? ACCENT_BG[scene.id % 5];
-  }
+  const cardBg = (scene: SceneWithCount) => sceneThumbColors(scene).bg;
+  const cardFg = (scene: SceneWithCount) => sceneThumbColors(scene).fg;
 
-  function cardFg(scene: SceneWithCount): string {
-    return ACCENT_FG[scene.id % 5];
+  // THE CARD PLAYS. At the table the dashboard is where a GM goes to change the room's
+  // sound, so the card's main target — its whole picture — starts the scene, pauses it
+  // if it is the one playing, and resumes it if paused. Editing the scene is the
+  // deliberate act, and takes its own labelled button in the card's footer (and Open in
+  // the context menu). The play control on the picture is always visible: it used to
+  // appear only on hover, which hid the one action a GM came here for and left keyboard
+  // focus landing on an invisible button.
+  function togglePlay(scene: SceneWithCount) {
+    if (scene.id === audioEngine.activeSceneId) {
+      if (audioEngine.isScenePaused) void audioEngine.resumeScene();
+      else void audioEngine.pauseScene();
+    } else {
+      void audioEngine.playScene(scene.id);
+    }
   }
 
   let sortedScenes = $derived(
@@ -158,7 +171,7 @@
         New Scene
       </Button>
     </div>
-    <div class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"></div>
+    <div class="mt-3 h-px bg-border"></div>
 
     {#if scenes.scenes.length === 0}
       <div
@@ -182,6 +195,7 @@
       <div data-scenes-grid class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
+          {@const showPause = isPlaying && !audioEngine.isScenePaused}
           {@const ThumbnailIcon =
             (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Clapperboard}
           {@const cardImgUrl = thumbnailUrls[scene.id]}
@@ -190,22 +204,21 @@
               <div
                 data-scene-card
                 data-playing={isPlaying || undefined}
-                role="button"
-                tabindex="0"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-lg bg-card/60 transition-shadow hover:ring-1 hover:ring-border {isPlaying
-                  ? 'ring-2 ring-primary'
-                  : ''}"
-                onclick={() => openScene(scene)}
-                onkeydown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") openScene(scene);
-                }}
+                class="group flex flex-col overflow-hidden rounded-lg border bg-card/40 transition-colors {isPlaying
+                  ? 'border-primary/60'
+                  : 'border-border hover:border-foreground/20'}"
               >
-                <div
-                  class="relative flex aspect-[4/3] items-center justify-center"
+                <button
+                  type="button"
+                  data-play-btn
+                  aria-label="{showPause ? 'Pause' : 'Play'} {scene.name}"
+                  aria-pressed={isPlaying}
+                  class="relative flex aspect-[4/3] cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   style={cardImgUrl
                     ? `background-image: url(${cardImgUrl}); background-size: cover; background-position: center;`
                     : `background: ${cardBg(scene)}`}
                   data-has-thumbnail={scene.thumbnail_path ? true : undefined}
+                  onclick={() => togglePlay(scene)}
                 >
                   {#if cardImgUrl}
                     <div class="pointer-events-none absolute inset-0 bg-black/30"></div>
@@ -221,25 +234,27 @@
                   </span>
 
                   {#if scene.favorited}
-                    <div class="absolute top-2 left-2">
-                      <Star class="size-3.5 fill-amber-400 text-amber-400" />
+                    <div class="absolute top-2 left-2" aria-label="Favourite">
+                      <Star class="size-3.5 fill-foreground-muted text-foreground-muted" />
                     </div>
                   {/if}
 
-                  <button
-                    data-play-btn
-                    aria-label="Play {scene.name}"
-                    class="absolute right-2 bottom-2 flex size-8 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      audioEngine.playScene(scene.id);
-                    }}
+                  <span
+                    class="absolute right-2 bottom-2 flex size-9 items-center justify-center rounded-full shadow-float transition-colors {isPlaying
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-black/65 text-white group-hover:bg-primary group-hover:text-primary-foreground'}"
+                    aria-hidden="true"
                   >
-                    <Play class="size-3.5 fill-white text-white" />
-                  </button>
-                </div>
+                    {#if showPause}
+                      <Pause class="size-4 fill-current" />
+                    {:else}
+                      <Play class="size-4 fill-current" />
+                    {/if}
+                  </span>
+                </button>
 
-                <div class="px-3 py-2.5">
+                <div class="flex items-start gap-2 px-3 py-2.5">
+                  <div class="min-w-0 flex-1">
                   <Rename.Root
                     this="p"
                     class="truncate font-heading text-sm text-foreground"
@@ -265,6 +280,17 @@
                     {scene.slot_count}
                     {scene.slot_count === 1 ? "track" : "tracks"}
                   </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-edit-btn
+                    aria-label="Edit {scene.name}"
+                    title="Edit scene"
+                    class="-mr-1 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-hover-overlay hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onclick={() => openScene(scene)}
+                  >
+                    <SlidersHorizontal class="size-4" />
+                  </button>
                 </div>
               </div>
             </ContextMenu.Trigger>

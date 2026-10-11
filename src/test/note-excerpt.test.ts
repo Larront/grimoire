@@ -102,7 +102,13 @@ describe("inline notation", () => {
 
   it("keeps a wikilink's brackets, and takes a markdown link's text", () => {
     expect(noteExcerpt("Ruled by [[People/Aldric|Aldric]], see [the map](map.png)")).toBe(
-      "Ruled by [[People/Aldric|Aldric]], see the map",
+      "Ruled by [[Aldric]], see the map",
+    );
+  });
+
+  it("names a path-style wikilink by its title, not its file", () => {
+    expect(noteExcerpt("Edge of [[Lore/The Ashfen Marshes.md]] and [[Aldric#Tactics]]")).toBe(
+      "Edge of [[The Ashfen Marshes]] and [[Aldric]]",
     );
   });
 

@@ -106,9 +106,13 @@
   quietly missing from Settings.
 */
 
+/* Label-on-fill pairs are chosen per preset for >= 4.5:1, not by habit. Crimson
+   takes white (4.9:1; the old #f9f1f0 was 4.4). Arcane, Verdant and Ice are mid-tone
+   fills that pale text could not clear (3.6, 3.0, 2.7:1), so they take near-black
+   (4.8, 5.6, 6.1:1) the way Amber always has. */
 .accent-crimson {
   --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
+  --primary-foreground: #ffffff;
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 }
@@ -122,7 +126,7 @@
 
 .accent-arcane {
   --primary: #9b6bbf;
-  --primary-foreground: #f5f0fa;
+  --primary-foreground: #120d16;
   --primary-subtle: rgba(155, 107, 191, 0.12);
   --primary-muted: rgba(155, 107, 191, 0.24);
 }
@@ -136,7 +140,7 @@
 
 .accent-verdant {
   --primary: #5c9e6e;
-  --primary-foreground: #f0f9f3;
+  --primary-foreground: #1a1614;
   --primary-subtle: rgba(92, 158, 110, 0.12);
   --primary-muted: rgba(92, 158, 110, 0.24);
 }
@@ -150,7 +154,7 @@
 
 .accent-ice {
   --primary: #5b9ec9;
-  --primary-foreground: #f0f6fb;
+  --primary-foreground: #1a1614;
   --primary-subtle: rgba(91, 158, 201, 0.12);
   --primary-muted: rgba(91, 158, 201, 0.24);
 }
@@ -390,12 +394,50 @@
   --tab-bar-h: 32px;
 }
 
+/* ── Elevation ────────────────────────────────────────────────── */
+/*
+  THREE LEVELS, NAMED BY WHAT A SURFACE DOES — see DESIGN.md §4.
+
+    in the page   border only. Note blocks, cards, the docked detail rail, sticky
+                  bars that belong to their pane. No shadow: they sit IN the
+                  surface, and a tonal step plus Iron Border is enough to read.
+    floating      Iron Raised (`bg-popover`) + Iron Border + `shadow-float`. Every
+                  menu, popover, tooltip, suggestion list, link preview, the floating
+                  detail panel, and any control over the GM's imagery.
+    modal         a dim scrim (`bg-scrim`) behind a floating surface. No blur: the
+                  app stays legible behind a dialog, which is what lets a GM keep
+                  reading the read-aloud text while the palette is open.
+
+  This replaces the Shadowless Rule. It was right that chrome should not wear
+  shadows for decoration, and wrong that a raised tone alone separates a floating
+  surface: the dark ramp's steps are close together by design, a menu over the
+  editor needs to read as *above* it, and the rule had already been bypassed in ten
+  places by components that needed exactly that. One token, used everywhere it is
+  needed, beats ten ad-hoc shadows and a rule nobody could follow.
+
+  The shadow carries a real offset and a soft blur — it is depth, not a halo.
+*/
+:root {
+  --elevation-float: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.45);
+  --scrim: rgb(8 6 5 / 0.55);
+}
+
+.light {
+  --elevation-float:
+    0 12px 32px -10px rgb(31 26 29 / 0.22), 0 2px 8px -2px rgb(31 26 29 / 0.12);
+  --scrim: rgb(31 26 29 / 0.28);
+}
+
 /* ── Tailwind theme bridge ──────────────────────────────────────
    The colour, font and radius utilities are bridged in shared/tokens.css.
    This block adds only the shadcn aliases, which exist to satisfy the
    vendored component library and are not part of Grimoire's vocabulary. */
 
 @theme inline {
+  /* Elevation — `shadow-float` and `bg-scrim`, the only two depth utilities. */
+  --shadow-float: var(--elevation-float);
+  --color-scrim: var(--scrim);
+
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);
@@ -512,8 +554,14 @@
 
 /* ── TipTap Editor Prose ──────────────────────────────────────── */
 
+/* Prose sets one step above the chrome's body size: 16px at Balanced, where the shell
+   reads at 14. A note is read at arm's length mid-session, often in a dim room, and
+   the chrome's 14px is a list size, not a reading size. The column is capped at 46rem
+   (NotePane, TemplatePane) — about 72ch of Nunito at this size, the widest measure
+   that still lets an Infobox float beside the prose (it floats at a 640px column). */
 .tiptap {
-  line-height: 1.75;
+  font-size: calc(var(--font-body) + 2px);
+  line-height: 1.7;
   font-kerning: normal;
   /* The prose column is a query container, which is what lets a block respond to the
      width it actually has rather than to the window's (see the Infobox below). It is
@@ -623,28 +671,35 @@
   clear: both;
 }
 
+/* The note's type scale, each step ~1.25x the one below it and every step clearly
+   apart: title 44 (the pane's field) / H1 28 / H2 22 / H3 18 / H4 16 over 16px prose.
+   It was 36 / 30 / 24 / 20 / 18 over 14 — the title and H1 sat 6px apart, and with
+   almost every note opening on `# <title>` that was the same words twice at nearly
+   the same size. (The sample world and built-in templates no longer open on that echo.)
+   H4 matches the prose size and is told apart by the world's face and
+   the space above it. More space above a heading than below it, always. */
 .tiptap h1 {
-  font-size: 1.875rem;
+  font-size: 1.75rem;
   margin-top: 2.5rem;
-  margin-bottom: 1rem;
-}
-
-.tiptap h2 {
-  font-size: 1.5rem;
-  margin-top: 2rem;
   margin-bottom: 0.75rem;
 }
 
+.tiptap h2 {
+  font-size: 1.375rem;
+  margin-top: 2.25rem;
+  margin-bottom: 0.625rem;
+}
+
 .tiptap h3 {
-  font-size: 1.25rem;
-  margin-top: 1.5rem;
+  font-size: 1.125rem;
+  margin-top: 1.75rem;
   margin-bottom: 0.5rem;
 }
 
 .tiptap h4 {
-  font-size: 1.125rem;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .tiptap p {
@@ -677,7 +732,7 @@
 }
 
 .tiptap blockquote {
-  border-left: 2px solid var(--primary);
+  border-left: 2px solid var(--foreground-faint);
   padding-left: 1rem;
   margin: 1.5rem 0;
   color: var(--foreground-muted);
@@ -708,19 +763,28 @@
   #180's selectors are unchanged: a callout is still the ordinary quote wearing a
   type, and a quote with no type is still styled as the quote it is.
 */
+/* The frame every Note Block shares (DESIGN.md §4, "in the page"): 1px Iron Border,
+   elevated radius, Iron Raised at 40% — the same `border bg-card/40 rounded-lg` the
+   infobox, statblock and scene embeds draw. It used to be a 3px accent stripe over an
+   8% tint, which made the callout the loudest box in any note it sat in. */
 .tiptap blockquote[data-callout] {
   --callout-accent: var(--foreground-muted);
-  border-left: 3px solid var(--callout-accent);
-  border-radius: var(--radius-structural);
-  background: color-mix(in oklab, var(--callout-accent) 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-elevated);
+  background: color-mix(in oklab, var(--background-elevated) 40%, transparent);
   padding: 0.75rem 1rem;
   margin: 1.5rem 0;
   color: var(--foreground);
   font-style: normal;
 }
 
+/* A recognised type used to take the accent. It no longer does: the accent is reserved
+   for selection, focus, the primary action and what is playing, and a read-aloud box is
+   none of those. What tells `warning` from `encounter` is its icon and title word —
+   exactly what the One Accent Rule asked for in the first place. The attribute stays,
+   and so does this hook, so a future per-type treatment has one place to land. */
 .tiptap blockquote[data-callout-known] {
-  --callout-accent: var(--primary);
+  --callout-accent: var(--foreground-muted);
 }
 
 /* A note opening with a quote: the node view's wrapper element is the editor's first
@@ -751,7 +815,7 @@
   font-size: 0.8125rem;
   line-height: 1.3;
   letter-spacing: 0.02em;
-  color: var(--callout-accent);
+  color: var(--foreground);
 }
 
 /* Recessive but not faint: DESIGN.md's Sub-AA Exception reserves below-AA contrast
@@ -974,16 +1038,19 @@
   border-radius: 0;
 }
 
+/* External links speak like wikilinks (see "Wiki-link nodes" below): full foreground,
+   accent underline. One link grammar across the note, whichever kind it is. */
 .tiptap a {
-  color: var(--primary);
+  color: var(--foreground);
   text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: var(--primary-muted);
-  transition: text-decoration-color 0.15s;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--primary);
+  transition: text-decoration-thickness 0.15s;
 }
 
 .tiptap a:hover {
-  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
 }
 
 /* ── Range inputs ─────────────────────────────────────────────── */
@@ -1044,24 +1111,14 @@ input[type="range"]:disabled {
   Everything below is styling only. What each toast *says*, how long it lives,
   and which are permitted to persist are decisions in $lib/toast.ts.
 
-  **The status spine.** A toast carries its semantic hue as a 3px left border
-  over a quiet surface. That is not a new invention: it is the same grammar the
-  editor already speaks for callouts and blockquotes — accent left border, faint
-  tint of the same hue (see `.tiptap blockquote[data-callout]` above). A toast is
-  the app saying something and a callout is a note saying something; they should
-  read as one language. It is also the only place a *neutral* toast can carry
-  colour at all, since neutral toasts have no status icon and no tinted surface.
-
   Roles, one hue per toast (`--toast-hue`), no second colour anywhere in it:
-    error   — error hue spine, 12% error tint on the surface
-    success — success hue spine, 12% success tint
-    neutral — the user's accent spine, surface left as plain Iron Raised
+    error   — error icon, 12% error tint on the surface
+    success — success icon, 12% success tint
+    neutral — plain Iron Raised; the accent appears only on its action button
 
-  Neutral keeps the untinted surface deliberately: a routine "Deleted X / Undo"
-  should not spend the accent on a whole surface (DESIGN.md — "use Crimson
-  sparingly … its scarcity is what makes it read as signal"). The spine alone is
-  enough to make the accent preset visible in toasts, which it previously was
-  not — a Verdant or Ice user never saw their accent here.
+  A neutral toast spends no accent on its surface: a routine "Deleted X / Undo" is
+  not a signal (DESIGN.md's Signal Rule), and its Undo button is the one thing in it
+  worth the accent.
 
   **On the specificity.** Every selector here is deliberately over-qualified,
   and that is load-bearing rather than defensive. Sonner sets its palette on
@@ -1121,7 +1178,7 @@ input[type="range"]:disabled {
 
    `var(--background)` is the correct on-hue text in *both* themes without a
    per-mode branch: in dark mode it is Iron Dark against light semantic hues
-   (#1f1f1f on #d4645a = 4.6:1, on #6ab187 = 6.6:1) and in light mode it is
+   (#1c1917 on #d4645a = 4.7:1, on #6ab187 = 6.8:1) and in light mode it is
    Parchment against dark ones (#faf8f5 on #a02020 = 7.3:1, on #2e6e4a = 5.8:1).
    The accent ships its own designed pair. */
 [data-sonner-toaster] [data-sonner-toast] {
@@ -1140,20 +1197,19 @@ input[type="range"]:disabled {
 }
 
 /*
-  Shadowless Rule (DESIGN.md §4, absolute): sonner ships a drop-shadow on every
-  toast, but Grimoire chrome is flat — elevation reads from the raised surface
-  and its border, never a shadow.
+  A toast FLOATS (DESIGN.md §4): over whatever the GM is looking at, so it takes the
+  one floating shadow rather than sonner's own. Its frame is the plain 1px Iron Border
+  every floating surface wears — the 3px status spine is gone. Error and success still
+  read at a glance from their icon and tinted surface, and a neutral "Deleted X / Undo"
+  has no status to signal, so under the Signal Rule it carries no accent at all.
 
-  The spine goes on here too. `:not([data-type])` covers neutral toasts, which
-  carry no `data-type` attribute at all; both selectors sit at four attributes
-  so they beat rich-colour's `border-color`. `padding-left` drops the 2px the
-  thicker border added, keeping the text 16px from the outer edge.
+  `:not([data-type])` covers neutral toasts, which carry no `data-type` attribute;
+  both selectors sit at four attributes so they beat rich-colour's `border-color`.
 */
 [data-sonner-toast][data-rich-colors][data-styled="true"][data-type],
 [data-sonner-toast][data-rich-colors][data-styled="true"]:not([data-type]) {
-  box-shadow: none;
-  border-left: 3px solid var(--toast-hue);
-  padding-left: 13px;
+  box-shadow: var(--elevation-float);
+  border: 1px solid var(--border);
 }
 
 /* Two voices are not in play here — a toast is the tool speaking, never GM
@@ -1310,7 +1366,7 @@ input[type="range"]:disabled {
 
 /* Focus is a 2px accent outline at 2px offset everywhere in Grimoire. Sonner
    draws focus rings as black box-shadows, which both fails on Iron surfaces and
-   breaks the Shadowless Rule. (The report link inside a description needs no arm
+   is a shadow pretending to be a focus ring. (The report link inside a description needs no arm
    here — the base layer's `:focus-visible` rule already gives it this exact ring.
    It only had to stop transitioning its own outline-colour; see
    MigrationReportBody.) */
@@ -1328,19 +1384,43 @@ input[type="range"]:disabled {
 
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
 
-/* Wikilinks read as accent everywhere they appear — editor node views and the spans a
-   block's Linked Text Fields draw alike. Resolved links are full accent; unresolved stubs
-   ([data-broken], set by the editor's decoration plugin or a Linked Text Field) are
-   faded accent. Color/cursor live here so both render paths share one source. */
+/* Wikilinks are TEXT FIRST, LINK SECOND — editor node views and the spans a block's
+   Linked Text Fields draw alike. In a worldbuilding note nearly every proper noun is a
+   link, so painting links in the accent made it roughly a tenth of the prose: red stopped
+   meaning "selected" or "playing", and the names a GM scans for at the table were the
+   lowest-contrast words on the page (#c2483d on Iron is 3.4:1). A link now reads at full
+   foreground and declares itself with a full-accent underline, which thickens on hover.
+
+   Unresolved stubs ([data-broken], set by the editor's decoration plugin or a Linked
+   Text Field) keep readable muted text and swap the underline for a dotted one — "not
+   written yet" is a shape, not a fade. The old 45%-accent stub measured 1.6:1.
+
+   Color/cursor/underline live here so both render paths share one source. */
 [data-wiki-link] {
-  color: var(--primary);
+  color: var(--foreground);
   cursor: pointer;
   vertical-align: -0.03em;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--primary);
+  transition: text-decoration-thickness 0.15s;
+}
+
+[data-wiki-link]:hover {
+  text-decoration-thickness: 2px;
 }
 
 [data-wiki-link][data-broken] {
-  color: color-mix(in oklab, var(--primary) 45%, transparent);
-  cursor: pointer;
+  color: var(--foreground-muted);
+  text-decoration-style: dotted;
+  text-decoration-color: var(--foreground-muted);
+}
+
+[data-wiki-link][data-broken]:hover {
+  color: var(--foreground);
+  text-decoration-color: var(--foreground);
+  text-decoration-thickness: 1px;
 }
 
 /* ── Search-match pulse ───────────────────────────────────────── */

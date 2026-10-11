@@ -1,8 +1,6 @@
 ---
 tags: [session]
 ---
-# Session 1 — The Arrival
-
 **Date:** Night of the autumn equinox  
 **Location:** [[Locations/Thornhaven Village.md]]  
 **Present:** Four players

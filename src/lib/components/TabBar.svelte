@@ -219,13 +219,13 @@
             {#if tab.badge}
               <span
                 data-testid="tab-badge"
-                class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[10px] text-primary/80 leading-tight py-0.5"
+                class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[11px] text-primary/80 leading-tight py-0.5"
                 >{tab.badge}</span
               >
             {/if}
             <button
               type="button"
-              class="opacity-0 group-hover:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded hover:bg-destructive/20 hover:text-destructive transition-opacity"
+              class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded text-muted-foreground hover:bg-hover-overlay hover:text-foreground transition-opacity"
               onclick={(e) => {
                 e.stopPropagation();
                 tabs.closeTab(pane, i);

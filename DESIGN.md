@@ -3,18 +3,18 @@ name: Grimoire
 description: A desktop worldbuilding tool for Game Masters — where the tool disappears and the world remains.
 colors:
   # Surfaces — Iron palette (dark mode canonical)
-  iron-dark: "#1f1f1f"
-  iron-deep: "#181818"
-  iron-raised: "#262626"
-  iron-border: "#ffffff14"
-  hover-overlay: "#ffffff0a"
+  iron-dark: "#1c1917"
+  iron-deep: "#131110"
+  iron-raised: "#2a2522"
+  iron-border: "#ffeee217"
+  hover-overlay: "#fff0e60b"
   # Text — Ember palette
   ember-ash: "#f0ece8"
   ember-ash-muted: "#a39e99"
   ember-ash-faint: "#6b6460"
   # Primary accent — Crimson preset (default; five presets are user-switchable)
   crimson: "#c2483d"
-  crimson-lit: "#f9f1f0"
+  crimson-lit: "#ffffff"
   crimson-tint: "#c2483d1f"
   crimson-veil: "#c2483d3d"
   # Light mode surfaces (alt-theme reference)
@@ -35,9 +35,24 @@ colors:
   viz-cat-7: "#9085e9"
   viz-cat-8: "#e66767"
 typography:
+  title:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "2.75rem"
+    fontWeight: 400
+    lineHeight: 1.15
   display:
     fontFamily: "Metamorphous, Georgia, serif"
-    fontSize: "1.875rem"
+    fontSize: "1.75rem"
+    fontWeight: 400
+    lineHeight: 1.25
+  heading-2:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "1.375rem"
+    fontWeight: 400
+    lineHeight: 1.25
+  heading-3:
+    fontFamily: "Metamorphous, Georgia, serif"
+    fontSize: "1.125rem"
     fontWeight: 400
     lineHeight: 1.25
   headline:
@@ -45,10 +60,15 @@ typography:
     fontSize: "1rem"
     fontWeight: 600
     lineHeight: 1.4
-  title:
+  prose:
     fontFamily: "Nunito, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 500
+    fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.7
+  field-label:
+    fontFamily: "Nunito, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 600
     lineHeight: 1.4
   body:
     fontFamily: "Nunito, sans-serif"
@@ -62,10 +82,9 @@ typography:
     lineHeight: 1.4
   meta:
     fontFamily: "JetBrains Mono, monospace"
-    fontSize: "0.65625rem"
+    fontSize: "0.6875rem"
     fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: "0.05em"
 rounded:
   structural: "6px"
   elevated: "8px"
@@ -126,7 +145,7 @@ This system refuses theatricality. No leather textures, chrome bevels, glowing r
 - Dark-first. Iron surfaces are the default posture; light mode (Parchment) is a deliberate alt.
 - Two-voice typography. Nunito for the tool; Metamorphous for the world. Boundary is content ownership.
 - Single user-switchable accent. Five named presets (Crimson, Arcane, Verdant, Ice, Amber). No secondary palette.
-- Flat tonal layering. Depth via surface values only; no shadows on structural chrome.
+- Three levels of depth. In the page: border only. Floating: raised tone, border, one shared shadow. Modal: a dim scrim, no blur.
 - Restrained component geometry. 6px structural / 8px elevated / 100px pill. Consumer-app softness is refused.
 - Motion is purposeful. 150ms ease-out for state changes; nothing bounces.
 
@@ -136,23 +155,25 @@ Iron surfaces — warm dark neutrals tinted slightly toward the red-brown axis, 
 
 ### Primary
 
-- **Crimson** (`#c2483d` dark / `#a83228` light): The default accent. Active states, CTA buttons, links, focus rings, playing pulse, blockquote borders. Present on every screen; dominant on none.
-- **Crimson Tint** (`#c2483d1f` / rgba 12%): Selection backgrounds, hover row tints, active sidebar item background.
+- **Crimson** (`#c2483d` dark / `#a83228` light): The default accent, and a **signal**: selection (active row, active tab), focus rings, the primary action, what is playing, and the underline that marks a link. Not a text colour for small type, and not decoration.
+- **Crimson Tint** (`#c2483d1f` / rgba 12%): Selection backgrounds, active sidebar item background.
 - **Crimson Veil** (`#c2483d3d` / rgba 24%): Accent borders, secondary tints.
-- **Crimson Text** (`#f9f1f0`): Text on a Crimson-filled surface (primary button label).
+- **Crimson Text** (`#ffffff`): Text on a Crimson-filled surface (primary button label), 4.9:1.
 
-_Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same three-token structure. All five meet AA contrast on Iron Dark._
+_Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), Ice (`#5b9ec9` dark), Amber (`#c49a3c` dark) — follow the same structure. Each preset's label-on-fill pair clears 4.5:1: Crimson takes white; Arcane, Verdant, Ice and Amber take near-black, because pale text on a mid-tone fill cannot. **As text on Iron, no preset clears 4.5:1 at small sizes** (Crimson is 3.5:1) — which is the practical reason the accent marks links with an underline rather than colouring their words._
 
 ### Neutral
 
-- **Iron Dark** (`#1f1f1f`): Main canvas. The default surface for all content areas.
-- **Iron Deep** (`#181818`): Sidebar surface. Slightly recessed — establishes the content/chrome boundary.
-- **Iron Raised** (`#262626`): Cards, popovers, command palette, toasts. Sits above the main canvas.
-- **Iron Border** (`#ffffff14` / rgba 8%): Dividers, subtle borders, input strokes.
-- **Hover Overlay** (`#ffffff0a` / rgba 4%): Applied over any surface on hover. Light in dark mode; its inverse (`rgba(31,26,29,0.05)`) in light mode.
+- **Iron Dark** (`#1c1917`): Main canvas. The default surface for all content areas.
+- **Iron Deep** (`#131110`): Sidebar surface. Recessed — establishes the content/chrome boundary.
+- **Iron Raised** (`#2a2522`): Cards, popovers, command palette, toasts. Sits above the main canvas, 1.15:1 lighter.
+- **Iron Border** (`rgba(255,238,226,0.09)`): Dividers, subtle borders, input strokes. Warm-white, not pure white, so it does not read cold on the tinted ramp.
+- **Hover Overlay** (`rgba(255,240,230,0.045)`): Applied over any surface on hover. Light in dark mode; its inverse (`rgba(31,26,29,0.05)`) in light mode.
+
+_The ramp was pure grey (`#181818` / `#1f1f1f` / `#262626`, R=G=B) until October 2026, so the warmth this section promised came only from the text and the accent, and its steps sat 1.08:1 apart. It was re-tuned after a side-by-side trial in the running app._
 - **Ember Ash** (`#f0ece8`): Primary text. Warm cream, not white. Slight amber cast keeps the palette coherent.
 - **Ember Muted** (`#a39e99`): Secondary text, inactive labels, metadata, sidebar items at rest. AA contrast on Iron Dark.
-- **Ember Faint** (`#6b6460`): Decorative labels, placeholders, section headers. Intentionally sub-AA — non-essential and non-interactive only.
+- **Ember Faint** (`#6b6460`): Decorative marks and placeholders. Intentionally sub-AA — non-essential and non-interactive only. Not section headers: a label that names a field (Tags, Category, Backlinks) conveys meaning and takes Ember Muted.
 - **Parchment** (`#faf8f5`): Light mode canvas. The warm analogue to Iron Dark.
 - **Parchment Subtle** (`#f2ede8`): Light mode sidebar surface.
 
@@ -163,7 +184,9 @@ _Four alternate presets — Arcane (`#9b6bbf` dark), Verdant (`#5c9e6e` dark), I
 
 ### Named Rules
 
-**The One Accent Rule.** One accent family, one user-controlled preset. No secondary palette. The primary is present on every screen but dominant on none. If reaching for a second color for decorative reasons, reach for a foreground opacity step instead.
+**The One Accent Rule.** One accent family, one user-controlled preset. No secondary palette. If reaching for a second color for decorative reasons, reach for a foreground opacity step instead.
+
+**The Signal Rule.** The accent means one of five things: *selected*, *focused*, *the primary action*, *playing*, or *this is a link* (as an underline, never as the words' colour). Anything else stays neutral — create buttons, "you are in the sample", tag and alias pills, callouts, quotes, title rules, toggles in Settings. In a worldbuilding tool nearly every proper noun is a link; when links were painted crimson, the accent was a tenth of the prose and stopped meaning anything at all.
 
 **The No Decorative Color Rule.** Color never categorizes file types, tag categories, or organizes information visually. Only the five semantic families exist. Differentiate with shape, icon, or text.
 
@@ -185,36 +208,46 @@ _The channel this exception does not have._ A per-tag node shape was built as th
 
 ### Hierarchy
 
-- **Display** (Metamorphous 400, 30px / 1.875rem, lh 1.25): Note titles, map names, scene names, sidebar wordmark — anything the GM authored. Never bold; 400 weight only.
-- **Headline** (Nunito 600, 16px / 1rem, lh 1.4): Major content headings, modal titles, right rail "Details" header. App-constructed headers only.
-- **Title** (Nunito 500, 14px / 0.875rem, lh 1.4): Tab labels, command palette section groupings. Also used at 10.5px uppercase with 0.1em letter-spacing for sidebar section headers.
-- **Body** (Nunito 400, 14px / 0.875rem, lh 1.75): Editor prose, sidebar note rows, settings descriptions. Cap at 65–75ch in long-form reading contexts.
-- **Label** (Nunito 500, 13px / 0.8125rem, lh 1.4): Buttons, input text, tooltip labels, command palette result items.
-- **Meta** (JetBrains Mono 400, 10–10.5px, lh 1.4, ls 0.05em): Tags, right rail metadata (type, folder, date), inline code, section header caps.
+- **Title** (Metamorphous 400, 44px / 2.75rem, lh 1.15): The note's and template's own title field. The largest type in the app, and the only thing at this size.
+- **Display** (Metamorphous 400, 28 / 22 / 18 / 16px for H1–H4, lh 1.25): Note headings, map names, scene names, card names, the sidebar wordmark. Steps ~1.25x apart; more space above a heading than below it. Never bold; 400 weight only.
+- **Prose** (Nunito 400, body size + 2px — 16px at Balanced, lh 1.7): Editor prose. The note column is capped at 46rem, about 72ch at this size and the widest measure that still lets an Infobox float beside the text.
+- **Headline** (Nunito 600, 16px / 1rem, lh 1.4): Dialog and sheet titles, the detail panel header ("Details", "Pin"). App-constructed headers only.
+- **Body** (Nunito 400, 14px / 0.875rem, lh 1.75): Sidebar rows, settings descriptions, the chrome's running text.
+- **Label** (Nunito 500, 13px / 0.8125rem, lh 1.4): Buttons, input text, tooltip labels, command palette results.
+- **Field label** (Nunito 600, 12px / 0.75rem, Ember Muted, sentence or title case as written): The name above a field or section — Tags, Backlinks, Linked Note, Shape, Recent ledgers. Not uppercase mono: at 10.5px in caps the old treatment was the hardest text in the app to read, on the labels a GM scans for.
+- **Meta** (JetBrains Mono 400, 11px, lh 1.4): Data that is genuinely code-like — file paths, inline code, key hints. Not labels.
+
+**The 11px floor.** Nothing in the app is set smaller than 11px.
 
 ### Named Rules
 
-**The Two Voices Rule.** If the app constructed it, Nunito. If the GM named it, Metamorphous. This boundary holds even for the same piece of text in different contexts: a note title in the tab bar is Nunito (tool chrome); the same title as an editor heading is Metamorphous (world content). No exceptions.
+**The Two Voices Rule.** If the app constructed it, Nunito. If the GM named it, Metamorphous — *where the name is the subject*: a note's title, its headings, a map or scene name on its own surface, a card's name, the name at the top of a panel. Where a name is one item in a list — backlinks, palette results, pickers, the tab bar, the file tree — it is chrome listing things, and takes Nunito: Metamorphous's display letterforms slow a scan at 13–14px, and spent on every row it stops marking the threshold it exists to mark. Dialog titles are app-constructed and always Nunito.
 
 **The Fixed Scale Rule.** Type sizes do not change across density settings. Only spacing and component height change. Dense mode is not smaller text — it is less vertical space.
 
 ## 4. Elevation
 
-This system is entirely flat. No `box-shadow`. No `drop-shadow` on structural chrome. Depth is achieved through tonal layering: Iron Deep sits below Iron Dark, which sits below Iron Raised. Three surface steps are the complete elevation vocabulary.
+Depth has exactly three levels, named by what a surface *does*, not what kind of component it is. Each level has one treatment, and nothing invents a fourth.
 
-This is a direct expression of "the tool disappears." Shadows would make the chrome visible and present. Tonal steps make surfaces legible without drawing attention to the interface itself.
+| Level | What lives here | Treatment |
+| --- | --- | --- |
+| **In the page** | Note blocks (infobox, statblock, callout, scene embed), cards, the docked detail rail, the sidebar, sticky bars that belong to their pane | Iron Border, no shadow. Note blocks share one frame: 1px Iron Border, 8px radius, Iron Raised at 40%. |
+| **Floating** | Menus, popovers, tooltips, suggestion lists, link previews, the floating detail panel, toasts, controls over the GM's imagery | Iron Raised (`bg-popover`), Iron Border, `shadow-float` |
+| **Modal** | Dialogs, the command palette, sheets | A floating surface over `bg-scrim` — a dim, warm-black wash. No blur. |
+
+`shadow-float` and `bg-scrim` are the only two depth utilities (`--elevation-float` and `--scrim` in `src/app.css`, stepped per mode). The shadow carries a real offset and a soft blur: it reads as height, not as a glow.
 
 ### Surface Hierarchy
 
-- **Iron Deep** (`#181818`) — lowest tier: sidebar, recessed panels, secondary surfaces
-- **Iron Dark** (`#1f1f1f`) — base tier: main content canvas, default surface
-- **Iron Raised** (`#262626`) — elevated tier: cards, command palette, popovers, dialogs, toasts
+- **Iron Deep** (`#131110`) — lowest tier: sidebar, docked detail rail, recessed panels
+- **Iron Dark** (`#1c1917`) — base tier: main content canvas, default surface
+- **Iron Raised** (`#2a2522`) — elevated tier: every floating surface, and the 40% wash on note blocks
 
 ### Named Rules
 
-**The Shadowless Rule.** No `box-shadow` or `drop-shadow` on interface chrome. If a surface needs elevation, use Iron Raised background. If it needs separation, use Iron Border. Shadows exist in the GM's world — in scene art, map overlays, atmospheric imagery — not in the tool surrounding them.
+**The Three Levels Rule.** A surface is in the page, floating, or modal, and takes that level's treatment exactly. If you are adding a shadow, it is `shadow-float` on a floating surface; if you are blurring a backdrop, don't.
 
-_Where the line falls._ "Chrome" was doing unstated work in that sentence, and the ambiguity cost: a dozen popovers and dropdowns grew shadows while the toast stylesheet was busy stripping sonner's, both citing this rule. **The test is what the surface floats over, not what kind of component it is.** A panel over the app's own surfaces knows what is behind it — Iron Deep, Iron Dark, or Iron Raised — and separates on a tonal step plus Iron Border, so it takes no shadow: dropdowns, popovers, tooltips, pickers, toggle knobs, editor toolbars. A panel over the GM's own imagery does not: a map is whatever picture they dropped in, a PDF page is white, scene art is arbitrary, and against an unknown background a border alone can vanish. Those keep a shadow, and it is the one place in the app that has one. If you are adding a shadow, name the image it sits on; if you cannot, it does not get one.
+_Why this replaced the Shadowless Rule._ Grimoire used to be "entirely flat": no shadows, depth from tonal steps alone. That was right about decoration and wrong about floating surfaces. The dark ramp's steps are close together by design, so a menu over the editor could not read as *above* it on tone alone, and the rule had been quietly bypassed in about ten places by components that needed exactly that, each with its own ad-hoc shadow. One shared shadow wherever something genuinely floats keeps the intent (the tool does not decorate itself) and loses the inconsistency. The backdrop blur behind dialogs went for the opposite reason: it hid the note a GM was reading behind the palette, and bought nothing.
 
 ## 5. Components
 
@@ -231,7 +264,7 @@ Components respond with precision and without hurry. State transitions are 150ms
 
 ### Tags / Chips
 
-- **Style:** Iron Raised background, Iron Border stroke, JetBrains Mono 10.5px, Ember Muted text, pill radius (100px), 2px 10px padding.
+- **Style:** Iron Raised background, Iron Border stroke, Ember Ash text, pill radius (100px). Neutral — a tag is not a signal.
 - **Add Tag variant:** Dashed Iron Border, Ember Faint text. Hover: Crimson text, dashed Crimson border.
 - **No color-coded tags.** Type differentiation via text and icon only. The One Accent Rule applies here too.
 
@@ -239,10 +272,11 @@ Components respond with precision and without hurry. State transitions are 150ms
 
 - **Corner Style:** Elevated corners (8px)
 - **Background:** Iron Raised
-- **Shadow:** None — Shadowless Rule is absolute
+- **Shadow:** None — a card is in the page (§4)
 - **Border:** Iron Border
 - **Internal Padding:** 16px
-- **States:** Default, Hover (Hover Overlay layered over Iron Raised), Playing (Crimson Tint background), Loading (generated thumbnail fallback — warm background + music icon, never a broken image or blank)
+- **Behaviour:** The picture is the card's main target and plays / pauses the scene; an always-visible play control sits on it. A labelled Edit button in the footer opens the editor.
+- **States:** Default, Hover (border lifts), Playing (Crimson border + filled play control), No image (Iron Raised + the scene's icon, muted — or the GM's chosen colour; never an app-assigned hue)
 
 ### Inputs / Fields
 
@@ -258,11 +292,11 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 ### Navigation — Sidebar
 
-Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: uppercase JetBrains Mono 10.5px, Ember Faint, 0.1em letter-spacing.
+Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
 ### Command Palette (Signature Component)
 
-560px wide, horizontally centred over the content area. Iron Raised background, 8px radius. Not a full-screen overlay — the app remains visible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Scene name results render in Metamorphous; all other results and UI chrome in Nunito. Results group by type (Notes, Maps, Scenes) with an uppercase JetBrains Mono category label.
+560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
 
 ### Scene Player (Signature Component)
 
@@ -272,10 +306,10 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 
 ### Do:
 
-- **Do** use Metamorphous exclusively for GM-authored content: note titles, map names, scene names, splash wordmark. Never on structural app chrome.
-- **Do** use tonal surface steps (Iron Deep / Iron Dark / Iron Raised) to convey depth. Three steps are enough; the Shadowless Rule completes the rest.
+- **Do** use Metamorphous for GM-authored names where the name is the subject: note titles and headings, map and scene names on their own surfaces, card names, the splash wordmark. In lists, menus, tabs and dialog titles, Nunito.
+- **Do** place every surface at one of the three levels (§4) and give it that level's treatment — border in the page, `shadow-float` floating, scrim for modal.
 - **Do** pair every error and success state with a status icon (circle-x / circle-check). Red and green are invisible to ~8% of male users; color alone is not accessible.
-- **Do** use Crimson sparingly — active states, primary buttons, links, focus rings. Its scarcity is what makes it read as signal.
+- **Do** use Crimson only as a signal — selection, focus, the primary button, playing, and link underlines. Its scarcity is what makes it read as signal.
 - **Do** keep component height tied to `--row-h`. All three density settings are handled automatically.
 - **Do** give every icon-only button an `aria-label` — icon rail, toolbar buttons, close buttons, mute toggles.
 - **Do** return focus to the triggering element when overlays, dialogs, and command palette close.
@@ -286,7 +320,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 
 - **Don't** use leather textures, chrome bevels, glowing rune borders, or Diablo-style ornamentation. The game lives in the GM's content, not in the interface chrome.
 - **Don't** use parchment backgrounds, ambient fog overlays, or calligraphy fonts as structural UI elements. Atmosphere belongs to the content layer.
-- **Don't** apply `box-shadow` or `drop-shadow` to interface chrome. The Shadowless Rule is absolute.
+- **Don't** invent a shadow. If a surface floats it takes `shadow-float`; if it is in the page it takes none. No `backdrop-blur` anywhere.
 - **Don't** introduce a second accent color. The five presets are a single `--primary` family; they are not a multi-color palette.
 - **Don't** use color to categorize files, tags, or folders. Shape and text only.
 - **Don't** use Ember Faint (`#6b6460`) for body text or interactive labels. It is sub-AA and reserved for non-essential decorative text.

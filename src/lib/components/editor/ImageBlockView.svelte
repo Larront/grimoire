@@ -195,7 +195,7 @@
       <!-- Floating toolbar — bottom-center, overlaying the image -->
       <div
         class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-0.5
-               rounded border border-border bg-card/90 backdrop-blur-sm px-1 py-0.5"
+               rounded border border-border bg-popover shadow-float px-1 py-0.5"
         transition:fade={{ duration: 120 }}
       >
         <button
@@ -358,7 +358,7 @@
     <button
       type="button"
       class="fixed top-3 right-3 z-10 rounded-full bg-card/90 p-1.5 text-foreground
-             shadow-md hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+             shadow-float hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       aria-label="Close image viewer"
       data-lightbox-close
       onclick={closeLightbox}

@@ -81,7 +81,9 @@ describe("an Infobox draws its facts", () => {
 
   it("draws an empty title as nothing but its placeholder", () => {
     const { getByLabelText } = panel({ title: "" });
-    expect(getByLabelText("Infobox title")).toHaveTextContent("Untitled panel");
+    // The prompt is drawn but only shown on hover/focus, so a panel left untitled
+    // reads as untitled rather than printing "Untitled panel" as if it were content.
+    expect(getByLabelText("Infobox title")).toHaveTextContent("Add a title");
   });
 
   it("says so when there are no rows yet", () => {

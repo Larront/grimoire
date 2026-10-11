@@ -175,10 +175,26 @@ describe("AppSidebar — scene playing indicator", () => {
     expect(playingRows[0].textContent).toContain("Tavern Noise");
   });
 
-  it("non-favorite scenes do not show indicator even if active", () => {
-    mockSidebarScenes = [makeScene(1, "Forest Ambience", false)];
+  it("with favourites, a non-favourite scene is not listed even if active", () => {
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", false), makeScene(2, "Tavern Noise", true)];
     mockSidebarActiveSceneId = 1;
     const { container } = render(AppShell);
     expect(container.querySelector("[data-scene-playing]")).toBeNull();
+  });
+
+  it("with no favourites, lists the newest scenes so there is something to press", () => {
+    mockSidebarScenes = [
+      { ...makeScene(1, "Oldest", false), created_at: "2024-01-01" },
+      { ...makeScene(2, "Second", false), created_at: "2024-02-01" },
+      { ...makeScene(3, "Third", false), created_at: "2024-03-01" },
+      { ...makeScene(4, "Newest", false), created_at: "2024-04-01" },
+    ];
+    const { container } = render(AppShell);
+    const plays = [...container.querySelectorAll('[data-testid="sidebar-scene-play"]')];
+    expect(plays.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Play Newest",
+      "Play Third",
+      "Play Second",
+    ]);
   });
 });

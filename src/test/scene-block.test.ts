@@ -173,10 +173,10 @@ describe("scene reference resolution", () => {
     expect(container.textContent).toContain("Unknown scene");
     expect(getByLabelText("Open scene in Scenes")).toBeTruthy();
 
-    // Unresolved chip falls back to the accent theme rather than the scene's
-    // own colour, so a dangling reference tracks the current accent.
+    // Unresolved chip is neutral, like any scene with no colour chosen: the
+    // accent is a signal, and "this reference is dangling" is not one.
     const chip = container.querySelector('[style*="background-color"]') as HTMLElement;
-    expect(chip?.getAttribute("style")).toContain("--primary-subtle");
+    expect(chip?.getAttribute("style")).toContain("--background-elevated");
   });
 
   it("a stale cached name is not treated as authoritative", () => {

@@ -268,7 +268,7 @@
         >{/if}
     {/each}
   {:else}
-    <span class="text-muted-foreground/60 italic">{placeholder}</span>
+    <span data-placeholder class="text-muted-foreground/60 italic">{placeholder}</span>
   {/if}
 {/snippet}
 

@@ -1,8 +1,6 @@
 ---
 tags: [lore, timeline]
 ---
-# The Ashfen Chronicle
-
 A rough history of the Ashfen Vale, pieced together from Thornhaven's records and the accounts of [[Mira]] — who has lived near these marshes long enough to remember things she should not.
 
 ```timeline

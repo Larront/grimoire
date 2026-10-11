@@ -38,11 +38,16 @@
 @import "@fontsource-variable/jetbrains-mono/index.css";
 
 :root {
-  /* Background family */
-  --background: #1f1f1f;
-  --background-subtle: #181818;
-  --background-elevated: #262626;
-  --background-border: rgba(255, 255, 255, 0.08);
+  /* Background family — Iron, tinted toward red-brown.
+     The ramp used to be pure grey (#181818 / #1f1f1f / #262626, R=G=B), so the
+     warmth DESIGN.md promised came only from the cream text and the accent, and
+     its steps sat 1.08:1 apart — too close for tonal layering to read. These
+     carry a faint red-brown cast and a wider raised step (base>raised 1.15:1).
+     Body text on base is 14.9:1, muted 6.6:1. */
+  --background: #1c1917;
+  --background-subtle: #131110;
+  --background-elevated: #2a2522;
+  --background-border: rgba(255, 238, 226, 0.09);
 
   /* Foreground family */
   --foreground: #f0ece8;
@@ -51,7 +56,7 @@
 
   /* Primary family — default: Crimson preset */
   --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
+  --primary-foreground: #ffffff;
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 
@@ -60,7 +65,7 @@
   --success: #6ab187;
 
   /* Hover overlays */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
+  --hover-overlay: rgba(255, 240, 230, 0.045);
 
   /* Border radius scale */
   --radius-structural: 6px;

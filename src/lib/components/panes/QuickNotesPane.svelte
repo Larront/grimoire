@@ -143,7 +143,7 @@
   <div class="shrink-0 border-b border-border px-8 pt-8 pb-5">
     <div class="mx-auto w-full max-w-3xl">
       <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">Quick Notes</h1>
-      <div class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"></div>
+      <div class="mt-3 h-px bg-border"></div>
       <div class="relative mt-5">
         <WikiCaptureBox
           ariaLabel="Capture a Quick Note"

@@ -1,8 +1,6 @@
 ---
 tags: [lore]
 ---
-# The War of Embers
-
 A coalition war fought three centuries ago against [[The Order of Embers]] — the arcane order that built and held the [[Locations/The Ember Keep.md]].
 
 ## Background

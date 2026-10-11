@@ -26,7 +26,7 @@
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
+  import { ICON_MAP, sceneThumbColors } from "$lib/components/panes/thumbnail-presets";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
   // record spread over the props, so the rest element *is* the record and nothing here
@@ -123,18 +123,17 @@
     isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
   );
 
-  // Scene thumbnail chip (color + icon). A resolved scene uses its own identity
-  // color (its saved thumbnail_color, or a deterministic pick from the palette);
-  // when the scene reference is unresolved we fall back to the accent theme so
-  // the placeholder tracks the current accent rather than a fixed crimson.
-  const chipColor = $derived(
+  // Scene thumbnail chip (color + icon), the same colours the dashboard card wears
+  // (`sceneThumbColors`): the GM's chosen colour, or neutral Iron Raised when none was
+  // chosen — never a hue the app picked to tell scenes apart. An unresolved reference
+  // is neutral too.
+  const chipColors = $derived(
     thisScene
-      ? (thisScene.thumbnail_color ?? ACCENT_BG[thisScene.id % ACCENT_BG.length])
-      : "var(--primary-subtle)",
+      ? sceneThumbColors(thisScene)
+      : { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" },
   );
-  const chipIconColor = $derived(
-    thisScene ? ACCENT_FG[thisScene.id % ACCENT_FG.length] : "var(--primary)",
-  );
+  const chipColor = $derived(chipColors.bg);
+  const chipIconColor = $derived(chipColors.fg);
   const ChipIcon = $derived(
     thisScene?.thumbnail_icon ? (ICON_MAP[thisScene.thumbnail_icon] ?? Music2) : Music2,
   );
@@ -282,7 +281,7 @@
 
 {#if ref.sceneId === null}
   <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
-  <div class="my-1 rounded-md border border-border/60 bg-card px-3 py-2.5 select-none">
+  <div class="my-1 rounded-lg border border-border bg-card/40 px-3 py-2.5 select-none">
     <!-- Search. Every control here binds a scene, so a `/scene` inserted by accident
          used to strand the picker in the note — hence the trash can that sat beside the
          search field. Delete on the gutter handle's menu reaches a sealed block now
@@ -314,8 +313,8 @@
           {@const RowIcon = scene.thumbnail_icon
             ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
             : Music2}
-          {@const rowBg = scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]}
-          {@const rowFg = ACCENT_FG[scene.id % ACCENT_FG.length]}
+          {@const rowBg = sceneThumbColors(scene).bg}
+          {@const rowFg = sceneThumbColors(scene).fg}
           <button
             type="button"
             role="option"
@@ -371,12 +370,12 @@
 {:else}
   <!-- ── Active: compact strip + expandable mixer ───────────────────────────── -->
   <div
-    class="my-1 rounded-md border bg-card select-none overflow-hidden transition-colors duration-200
+    class="my-1 rounded-lg border bg-card/40 select-none overflow-hidden transition-colors duration-200
            {isThisScenePlaying
-      ? 'border-primary/25'
+      ? 'border-primary/60'
       : isThisSceneLoading
-        ? 'border-primary/12'
-        : 'border-border/60'}"
+        ? 'border-primary/30'
+        : 'border-border'}"
   >
     <!-- Compact strip -->
     <div class="flex items-center gap-2 px-2.5 py-2">
@@ -575,7 +574,7 @@
                 <!-- Row 1: source pill + label + play/pause -->
                 <div class="flex items-center gap-2 min-w-0 mb-1">
                   <span
-                    class="shrink-0 inline-flex items-center justify-center min-w-12 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[9px] tracking-wide text-muted-foreground leading-none"
+                    class="shrink-0 inline-flex items-center justify-center min-w-12 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-wide text-muted-foreground leading-none"
                     >{isSpotify ? "Spotify" : "Local"}</span
                   >
                   <span class="flex-1 truncate font-sans text-xs text-foreground">{slot.label}</span

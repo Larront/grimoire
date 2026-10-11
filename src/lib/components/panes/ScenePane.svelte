@@ -545,7 +545,7 @@
       >
         <button
           data-edit-thumbnail-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
           onclick={() => changeThumbnail(scene.id)}
         >
           <ImageIcon class="size-3" />
@@ -554,7 +554,7 @@
         {#if scene.thumbnail_path}
           <button
             data-remove-thumbnail-btn
-            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+            class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
             onclick={() => removeThumbnail(scene.id)}
           >
             <X class="size-3" />
@@ -563,7 +563,7 @@
         {/if}
         <button
           data-edit-color-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
           onclick={() => (colorPickerOpen = true)}
         >
           <Palette class="size-3" />
@@ -571,7 +571,7 @@
         </button>
         <button
           data-edit-icon-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
           onclick={() => (iconPickerOpen = true)}
         >
           <HeroIcon class="size-3" />
@@ -761,7 +761,7 @@
 
                   <!-- Source indicator -->
                   <span
-                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
+                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[11px] tracking-wide text-muted-foreground"
                     >{slot.source === "spotify" ? "Spotify" : "Local"}</span
                   >
 
@@ -1037,7 +1037,7 @@
                 Connect Spotify
               {/if}
             </Button>
-            <span class="text-[10px] text-muted-foreground">
+            <span class="text-[11px] text-muted-foreground">
               Open Settings from the icon rail to manage integrations.
             </span>
           </div>

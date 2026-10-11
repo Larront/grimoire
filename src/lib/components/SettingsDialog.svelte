@@ -139,7 +139,7 @@
   const segmentedBtn = (active: boolean) =>
     `px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
       active
-        ? "bg-primary text-primary-foreground font-medium"
+        ? "bg-foreground/10 text-foreground font-medium"
         : "text-foreground-muted hover:text-foreground"
     }`;
 </script>

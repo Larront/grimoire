@@ -552,7 +552,7 @@
       <!-- Find bar floats over the page surface, top-right -->
       {#if findOpen}
         <div
-          class="sticky top-0 z-10 ml-auto flex w-fit items-center gap-1 rounded-b-lg bg-background/95 p-1.5 shadow-md ring-1 ring-border backdrop-blur"
+          class="sticky top-0 z-10 ml-auto flex w-fit items-center gap-1 rounded-b-lg bg-popover p-1.5 shadow-float ring-1 ring-border"
           style="margin-right: 1rem;"
         >
           <Input
@@ -618,7 +618,7 @@
          dismissed when the selection clears or the page scrolls. -->
     {#if pendingSelection && !pickerOpen}
       <div
-        class="fixed z-30 rounded-md border border-border bg-popover shadow-md"
+        class="fixed z-30 rounded-md border border-border bg-popover shadow-float"
         style="left: {pendingSelection.rect.left}px; top: {Math.max(
           8,
           pendingSelection.rect.top - 40,

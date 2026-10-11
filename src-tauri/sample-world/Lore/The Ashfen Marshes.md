@@ -1,8 +1,6 @@
 ---
 tags: [location, lore]
 ---
-# The Ashfen Marshes
-
 The bogland surrounding the eastern half of the valley. Fog-prone, difficult to navigate without local knowledge, and home to plants that grow nowhere else in the region.
 
 ## Description

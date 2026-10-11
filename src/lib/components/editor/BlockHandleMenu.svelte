@@ -142,7 +142,7 @@
   id="block-handle-menu"
   data-block-handle-menu
   class="fixed z-50 min-w-[190px] rounded-lg border border-border bg-popover py-1
-         shadow-xl shadow-black/30"
+         shadow-float"
   role="menu"
   aria-label="Actions for {label}"
   tabindex={-1}
@@ -155,7 +155,7 @@
          verb the seven items below it are missing. -->
     {#if section.title}
       <div
-        class="px-3 pt-2.5 pb-0.5 font-heading text-[0.6rem] uppercase tracking-widest
+        class="px-3 pt-2.5 pb-0.5 text-[11px] font-medium uppercase tracking-wider
                text-muted-foreground/60 select-none pointer-events-none"
         aria-hidden="true"
       >

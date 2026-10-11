@@ -30,6 +30,7 @@
   import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
 
   interface Props {
     mapId: number;
@@ -60,6 +61,37 @@
   let loadError = $state(false);
   let selectedPin = $state<Pin | null>(null);
   let selectedAnnotation = $state<MapAnnotation | null>(null);
+
+  // KEEP THE SELECTION IN SIGHT. A map's detail panel always floats (ADR-0006) and
+  // floats top-right, so a pin in the east third of the map used to vanish under the
+  // panel describing it — the GM clicked to see *where* and the answer hid it. On
+  // each new selection the map pans just far enough to put the pin (or annotation
+  // anchor) in the uncovered region. `panInside` is a no-op when it is already clear,
+  // so a selection that was visible never moves the map.
+  //
+  // Keyed on the selection's identity alone: dragging a selected pin rewrites
+  // `selectedPin` on every save, and the map must not chase a pin the GM is moving.
+  const PANEL_CLEARANCE = 320 + 16 + 24; // DetailSurface w-80, its right-4 inset, breathing room
+  const focusKey = $derived(
+    selectedPin ? `pin:${selectedPin.id}` : selectedAnnotation ? `ann:${selectedAnnotation.id}` : null,
+  );
+  $effect(() => {
+    if (!focusKey) return;
+    untrack(() => {
+      const target = selectedPin ?? selectedAnnotation;
+      const m = leafletMap;
+      if (!target || !m || !mapData?.image_width || !mapData.image_height) return;
+      // A pane too narrow to leave a clear region past the panel gets what it can
+      // rather than a padding Leaflet cannot satisfy.
+      const right = Math.min(PANEL_CLEARANCE, Math.max(24, m.getSize().x - 120));
+      m.panInside([target.y * mapData.image_height, target.x * mapData.image_width], {
+        paddingTopLeft: [24, 24],
+        paddingBottomRight: [right, 24],
+        animate: !appPrefs.reduceMotion,
+      });
+    });
+  });
+
   let placingMode = $state(false);
   let annotationMode = $state<AnnotationKind | null>(null);
 
@@ -579,7 +611,7 @@
             if (e.key === "Escape") renamingTitle = false;
           }}
           aria-label="Map name"
-          class="bg-background/90 backdrop-blur-sm border border-border rounded-lg px-3 py-1.5
+          class="bg-popover border border-border shadow-float rounded-lg px-3 py-1.5
                  font-heading text-sm shadow-sm"
         />
       {:else}
@@ -587,7 +619,7 @@
           onclick={startTitleRename}
           title="Click to rename"
           aria-label="Rename map"
-          class="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border/60
+          class="flex items-center gap-2 bg-popover border border-border shadow-float
                  rounded-lg px-3 py-1.5 hover:border-primary/60 transition-colors cursor-pointer shadow-sm"
         >
           <span class="font-heading text-sm tracking-wide whitespace-nowrap">
@@ -600,7 +632,7 @@
     <!-- Left vertical toolbar -->
     <div
       class="absolute left-3 top-1/2 -translate-y-1/2 z-1000 flex flex-col items-center
-             bg-background/90 backdrop-blur-sm border border-border/60 rounded-xl shadow-md p-1 gap-0.5"
+             bg-popover border border-border rounded-xl shadow-float p-1 gap-0.5"
       role="toolbar"
       aria-orientation="vertical"
       aria-label="Map tools"
@@ -636,7 +668,7 @@
             : "Click and drag to draw a circle"}
       <div class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none">
         <div
-          class="bg-background/80 backdrop-blur-sm border border-border/60 rounded-lg px-4 py-2 shadow-md"
+          class="bg-popover border border-border rounded-lg px-4 py-2 shadow-float"
         >
           <p class="text-xs text-muted-foreground">{hint}</p>
         </div>
@@ -658,7 +690,7 @@
         }}
       >
         <DetailPanel
-          title={selectedPin!.title || "Pin"}
+          title="Pin"
           saveStatus={pinDetails.saveStatus}
           onRetrySave={pinDetails.retrySave}
           onclose={() => {

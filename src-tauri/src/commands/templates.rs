@@ -11,19 +11,19 @@ pub struct TemplateEntry {
 static BUILTIN_TEMPLATES: &[(&str, &str)] = &[
     (
         "NPC.md",
-        "---\ntags: [npc]\n---\n\n# Name\n\n## Description\n\n## Personality\n\n## Background\n\n## Notes\n",
+        "---\ntags: [npc]\n---\n\n## Description\n\n## Personality\n\n## Background\n\n## Notes\n",
     ),
     (
         "Location.md",
-        "---\ntags: [location]\n---\n\n# Name\n\n## Description\n\n## Notable Features\n\n## NPCs\n\n## Notes\n",
+        "---\ntags: [location]\n---\n\n## Description\n\n## Notable Features\n\n## NPCs\n\n## Notes\n",
     ),
     (
         "Session Log.md",
-        "---\ntags: [session]\n---\n\n# Session — Date\n\n## Summary\n\n## Events\n\n## NPCs Met\n\n## Loot & Rewards\n\n## Notes\n",
+        "---\ntags: [session]\n---\n\n## Summary\n\n## Events\n\n## NPCs Met\n\n## Loot & Rewards\n\n## Notes\n",
     ),
     (
         "Encounter.md",
-        "---\ntags: [encounter]\n---\n\n# Name\n\n## Description\n\n## Monsters\n\n## Loot\n\n## Notes\n",
+        "---\ntags: [encounter]\n---\n\n## Description\n\n## Monsters\n\n## Loot\n\n## Notes\n",
     ),
 ];
 

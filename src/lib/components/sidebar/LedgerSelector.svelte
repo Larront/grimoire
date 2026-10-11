@@ -42,13 +42,16 @@
 </script>
 
 {#if ledger.isSample}
-  <div class="flex flex-col gap-1 w-full px-1">
+  <!-- Neutral on purpose: the accent is reserved for selection, focus, the primary
+       action and what is playing, and "you are in the sample" is none of those. It is
+       a fact about where the GM is, said once, in the chrome's own quiet voice. -->
+  <div class="flex flex-col gap-0.5 w-full rounded-md border border-border p-1">
     <div
       data-testid="sample-world-marker"
-      class="flex items-center gap-2 px-2 py-1.5 rounded-md bg-primary/10"
+      class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
     >
-      <BookOpen class="size-3.5 shrink-0 text-primary" />
-      <span class="text-xs font-medium text-primary">Example World</span>
+      <BookOpen class="size-3.5 shrink-0" />
+      <span class="font-medium">Example World</span>
     </div>
     <button
       type="button"
@@ -58,7 +61,7 @@
       }}
       class={cn(
         buttonVariants({ variant: "ghost", size: "sm" }),
-        "w-full justify-start gap-2 px-2 text-xs text-primary/70 hover:text-primary",
+        "w-full justify-start gap-2 px-2 text-xs text-foreground",
       )}
     >
       <Heart class="size-3.5 shrink-0" />

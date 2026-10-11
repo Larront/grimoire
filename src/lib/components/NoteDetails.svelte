@@ -103,11 +103,11 @@
 {#if note}
   <DetailSection label="Tags" sectionKey="tags" first>
     {#if tagsLoadError}
-      <p class="font-mono text-[10px] text-error">Tags unavailable</p>
+      <p class="font-mono text-[11px] text-error">Tags unavailable</p>
     {:else}
       <TagChipEditor bind:tags suggestions={allTags} onchange={onTagsChange} />
       {#if tags.length === 0}
-        <p class="font-mono text-[10px] text-foreground-faint">
+        <p class="font-mono text-[11px] text-foreground-faint">
           Enter to add · Backspace to remove
         </p>
       {/if}
@@ -116,11 +116,11 @@
 
   <DetailSection label="Aliases" sectionKey="aliases">
     {#if aliasesLoadError}
-      <p class="font-mono text-[10px] text-error">Aliases unavailable</p>
+      <p class="font-mono text-[11px] text-error">Aliases unavailable</p>
     {:else}
       <AliasChipEditor bind:aliases onchange={onAliasesChange} />
       {#if aliases.length === 0}
-        <p class="font-mono text-[10px] text-foreground-faint">
+        <p class="font-mono text-[11px] text-foreground-faint">
           Enter or comma to add · Backspace to remove
         </p>
       {/if}
@@ -128,7 +128,7 @@
     {#each aliasCollisions as col (col.alias + col.other_note_id)}
       <p
         data-slot="alias-collision-warning"
-        class="flex items-start gap-1 font-mono text-[10px] text-warning leading-[1.4]"
+        class="flex items-start gap-1 font-mono text-[11px] text-warning leading-[1.4]"
       >
         <TriangleAlert class="size-3 mt-px shrink-0" />
         <span
@@ -141,7 +141,7 @@
 
   <DetailSection label="Backlinks" sectionKey="backlinks">
     {#if backlinks.length === 0}
-      <p class="font-mono text-[10px] text-foreground-faint italic">No backlinks yet</p>
+      <p class="font-mono text-[11px] text-foreground-faint italic">No backlinks yet</p>
     {:else}
       <div class="space-y-0.5">
         {#each displayedBacklinks as link (link.id)}
@@ -151,13 +151,13 @@
             onclick={() => onNavigateNote?.(link.id, link.title)}
             class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
           >
-            <div class="font-heading text-[11px] text-foreground leading-snug truncate">
+            <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
               {link.title}
             </div>
             {#if folder}
               <div
                 data-slot="link-folder"
-                class="font-sans text-[10px] text-foreground-muted truncate"
+                class="font-sans text-[11px] text-foreground-muted truncate"
               >
                 {folder}
               </div>
@@ -168,7 +168,7 @@
           <button
             data-slot="backlinks-expand"
             onclick={expandBacklinks}
-            class="w-full text-left font-mono text-[10px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
             >Show {hiddenBacklinksCount} more</button
           >
         {/if}
@@ -178,7 +178,7 @@
 
   <DetailSection label="Outbound Links" sectionKey="outbound">
     {#if outboundLinks.length === 0}
-      <p class="font-mono text-[10px] text-foreground-faint italic">No outbound links</p>
+      <p class="font-mono text-[11px] text-foreground-faint italic">No outbound links</p>
     {:else}
       <div class="space-y-0.5">
         {#each displayedOutbound as link (link.target_path)}
@@ -189,13 +189,13 @@
               onclick={() => onNavigateNote?.(link.resolved_id!, link.resolved_title!)}
               class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
             >
-              <div class="font-heading text-[11px] text-foreground leading-snug truncate">
+              <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.resolved_title}
               </div>
               {#if folder}
                 <div
                   data-slot="link-folder"
-                  class="font-sans text-[10px] text-foreground-muted truncate"
+                  class="font-sans text-[11px] text-foreground-muted truncate"
                 >
                   {folder}
                 </div>
@@ -207,10 +207,10 @@
               onclick={() => onCreateStub?.(link.target_path)}
               class="w-full text-left rounded px-1 py-0.5 opacity-50 hover:opacity-75 transition-opacity duration-100 cursor-pointer"
             >
-              <div class="font-heading text-[11px] text-foreground leading-snug truncate">
+              <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.target_path}
               </div>
-              <div class="font-mono text-[10px] text-foreground-faint italic">Not yet created</div>
+              <div class="font-mono text-[11px] text-foreground-faint italic">Not yet created</div>
             </button>
           {/if}
         {/each}
@@ -218,7 +218,7 @@
           <button
             data-slot="outbound-expand"
             onclick={expandOutbound}
-            class="w-full text-left font-mono text-[10px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
             >Show {hiddenOutboundCount} more</button
           >
         {/if}
@@ -228,7 +228,7 @@
 
   <DetailSection label="Folder" sectionKey="folder">
     <div
-      class="font-mono text-[10px] leading-[1.4] text-foreground-muted truncate"
+      class="font-mono text-[11px] leading-[1.4] text-foreground-muted truncate"
       title={note.path}
     >
       {formatBreadcrumb(note.path)}
@@ -236,7 +236,7 @@
   </DetailSection>
 
   <DetailSection label="Modified" sectionKey="modified">
-    <div class="font-mono text-[10px] leading-[1.4] text-foreground-muted">
+    <div class="font-mono text-[11px] leading-[1.4] text-foreground-muted">
       {formatRelativeTime(note.modified_at)}
     </div>
   </DetailSection>

@@ -719,13 +719,13 @@
      difference is visible: the tooltip read as a notification from a different program.
 
      The shadow stays. This floats over whatever image the GM dropped in, which is the
-     one case DESIGN.md's Shadowless Rule leaves open — a border alone can disappear into
+     floating case of DESIGN.md §4 — over an image a border alone can disappear into
      an arbitrary picture. */
   :global(.grimoire-tooltip) {
     background: var(--background-elevated);
     border: 1px solid var(--background-border);
     border-radius: var(--radius-structural);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--elevation-float);
     color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 12px;
