@@ -17,6 +17,7 @@
   import Search from "@lucide/svelte/icons/search";
 
   import { assignTagSlots, resolveTagColor, mutedColor } from "$lib/graph-palette";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
 
   /*
     Tags are told apart by COLOUR ALONE, and that is a decision rather than an oversight.
@@ -74,6 +75,7 @@
   // The running d3-force layout. Held at component scope (not just inside
   // onMount) so onDestroy can stop it explicitly — see the teardown note there.
   let sim: Layouts | null = null;
+  let settleFitTimer: ReturnType<typeof setTimeout> | undefined;
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -541,6 +543,32 @@
 
       cy.fit(undefined, 60);
 
+      // FIT AGAIN ONCE IT SETTLES. The fit above frames the seed ring, and the sim then
+      // pulls the nodes in to a fraction of it — so a small ledger opened on a tight
+      // cluster in the middle of an empty canvas, its labels too small to read. Once
+      // the sim has done most of its work, frame what is actually there; unless the GM
+      // has already taken the camera (wheel, drag, pan), which this never overrides.
+      // Capped at 1.75x so a five-node graph frames rather than fills.
+      let viewTouched = false;
+      const touch = () => (viewTouched = true);
+      container.addEventListener("wheel", touch, { passive: true, once: true });
+      container.addEventListener("pointerdown", touch, { once: true });
+      settleFitTimer = setTimeout(() => {
+        if (!cy || viewTouched) return;
+        const visible = cy.elements(":visible");
+        if (visible.empty()) return;
+        cy.animate({
+          fit: { eles: visible, padding: 72 },
+          duration: appPrefs.reduceMotion ? 0 : 450,
+          easing: "ease-out-cubic",
+          complete: () => {
+            if (cy && cy.zoom() > 1.75) {
+              cy.zoom({ level: 1.75, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+            }
+          },
+        });
+      }, 1800);
+
       // Apply initial visibility from tag_graph_styles (hidden tags are hidden at load)
       updateCyVisibility();
 
@@ -589,6 +617,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(settleFitTimer);
     observer?.disconnect();
     // Stop the d3-force simulation ourselves rather than trusting the plugin's
     // own `destroy` handler: it deregisters that handler the first time the sim

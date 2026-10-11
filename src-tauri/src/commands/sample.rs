@@ -1,4 +1,4 @@
-use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene};
+use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene, UpdateSceneThumbnail};
 use crate::db::schema::{maps, notes, pin_categories, pins, quick_notes, scene_slots, scenes};
 use diesel::prelude::*;
 use std::path::Path;
@@ -168,7 +168,13 @@ pub fn seed_sample_world_maps(conn: &mut SqliteConnection) -> Result<(), String>
 /// ledger-relative path under `.grimoire/audio/` (matching `copy_audio_file`), so the
 /// scenes resolve identically to user-imported audio and stay portable.
 /// Idempotent: skips if any scene rows already exist.
-pub fn seed_sample_world_scenes(conn: &mut SqliteConnection) -> Result<(), String> {
+///
+/// A scene's thumbnail art is picked up from `.grimoire/thumbnails/<slug>.<ext>` in the
+/// copied sandbox when the bundle carries one (`boss-battle`, `town-market`; webp, jpg,
+/// jpeg or png), and left unset when it does not — so art can be dropped into
+/// `sample-world/.grimoire/thumbnails/` without touching this code, and a missing file is
+/// never a broken image.
+pub fn seed_sample_world_scenes(conn: &mut SqliteConnection, ledger_root: &Path) -> Result<(), String> {
     let scene_count: i64 = scenes::table
         .count()
         .get_result(conn)
@@ -202,6 +208,17 @@ pub fn seed_sample_world_scenes(conn: &mut SqliteConnection) -> Result<(), Strin
             .get_result(conn)
             .map_err(|e| format!("Failed to insert sample scene '{}': {}", scene_name, e))?;
 
+        if let Some(thumb) = sample_scene_thumbnail(ledger_root, scene_name) {
+            diesel::update(scenes::table.find(scene.id))
+                .set(UpdateSceneThumbnail {
+                    thumbnail_path: Some(thumb),
+                    thumbnail_color: None,
+                    thumbnail_icon: None,
+                })
+                .execute(conn)
+                .map_err(|e| format!("Failed to set thumbnail for '{}': {}", scene_name, e))?;
+        }
+
         for (slot_order, (label, file, volume)) in slots.iter().enumerate() {
             diesel::insert_into(scene_slots::table)
                 .values(NewSceneSlot {
@@ -222,6 +239,16 @@ pub fn seed_sample_world_scenes(conn: &mut SqliteConnection) -> Result<(), Strin
     }
 
     Ok(())
+}
+
+/// The ledger-relative path of a sample scene's bundled thumbnail, if the sandbox has
+/// one: `Boss Battle` → `.grimoire/thumbnails/boss-battle.webp` (or .jpg/.jpeg/.png).
+fn sample_scene_thumbnail(ledger_root: &Path, scene_name: &str) -> Option<String> {
+    let slug = scene_name.to_lowercase().replace(' ', "-");
+    ["webp", "jpg", "jpeg", "png"].iter().find_map(|ext| {
+        let rel = format!(".grimoire/thumbnails/{}.{}", slug, ext);
+        ledger_root.join(&rel).is_file().then_some(rel)
+    })
 }
 
 /// Seeds the one Quick Note the sample world ships with, into the already-open
@@ -290,7 +317,7 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     crate::commands::ledger::seed_default_categories(&mut conn)?;
     crate::commands::import::reconcile_notes_with_disk(&sample_dst, &mut conn)?;
     seed_sample_world_maps(&mut conn)?;
-    seed_sample_world_scenes(&mut conn)?;
+    seed_sample_world_scenes(&mut conn, &sample_dst)?;
     seed_sample_world_quick_notes(&mut conn)?;
 
     Ok(sample_dst.to_string_lossy().to_string())
@@ -328,6 +355,23 @@ mod tests {
     use diesel::prelude::*;
     use std::fs;
     use tempfile::tempdir;
+
+    // ── sample scene thumbnails ───────────────────────────────────────────────
+
+    #[test]
+    fn sample_scene_thumbnail_is_picked_up_only_when_bundled() {
+        let tmp = tempdir().unwrap();
+        assert_eq!(sample_scene_thumbnail(tmp.path(), "Boss Battle"), None);
+
+        let dir = tmp.path().join(".grimoire").join("thumbnails");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("boss-battle.jpg"), b"x").unwrap();
+        assert_eq!(
+            sample_scene_thumbnail(tmp.path(), "Boss Battle").as_deref(),
+            Some(".grimoire/thumbnails/boss-battle.jpg")
+        );
+        assert_eq!(sample_scene_thumbnail(tmp.path(), "Town Market"), None);
+    }
 
     // ── copy_dir_tree ─────────────────────────────────────────────────────────
 
@@ -441,7 +485,7 @@ mod tests {
         );
 
         seed_sample_world_maps(&mut conn).unwrap();
-        seed_sample_world_scenes(&mut conn).unwrap();
+        seed_sample_world_scenes(&mut conn, tmp.path()).unwrap();
         seed_sample_world_quick_notes(&mut conn).unwrap();
 
         // Rebuild derived indexes (tags, links, aliases, search).

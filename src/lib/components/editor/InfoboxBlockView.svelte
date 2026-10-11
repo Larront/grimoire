@@ -254,8 +254,11 @@
       onCommit={setTitle}
       restrict={oneLine}
       ariaLabel="Infobox title"
-      placeholder="Untitled panel"
-      class="min-w-0 flex-1 font-heading text-sm leading-snug text-foreground"
+      placeholder="Add a title"
+      class="min-w-0 flex-1 font-heading text-sm leading-snug text-foreground
+             [&_[data-placeholder]]:opacity-0 [&_[data-placeholder]]:transition-opacity
+             group-hover/panel:[&_[data-placeholder]]:opacity-100
+             group-focus-within/panel:[&_[data-placeholder]]:opacity-100"
     />
     <div
       class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150
