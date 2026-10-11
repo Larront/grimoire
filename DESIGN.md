@@ -265,7 +265,8 @@ Components respond with precision and without hurry. State transitions are 150ms
 - **Shadow:** None — a card is in the page (§4)
 - **Border:** Iron Border
 - **Internal Padding:** 16px
-- **States:** Default, Hover (Hover Overlay layered over Iron Raised), Playing (Crimson Tint background), Loading (generated thumbnail fallback — warm background + music icon, never a broken image or blank)
+- **Behaviour:** The picture is the card's main target and plays / pauses the scene; an always-visible play control sits on it. A labelled Edit button in the footer opens the editor.
+- **States:** Default, Hover (border lifts), Playing (Crimson border + filled play control), No image (Iron Raised + the scene's icon, muted — or the GM's chosen colour; never an app-assigned hue)
 
 ### Inputs / Fields
 

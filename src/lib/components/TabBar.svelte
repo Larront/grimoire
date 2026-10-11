@@ -225,7 +225,7 @@
             {/if}
             <button
               type="button"
-              class="opacity-0 group-hover:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded hover:bg-destructive/20 hover:text-destructive transition-opacity"
+              class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded text-muted-foreground hover:bg-hover-overlay hover:text-foreground transition-opacity"
               onclick={(e) => {
                 e.stopPropagation();
                 tabs.closeTab(pane, i);

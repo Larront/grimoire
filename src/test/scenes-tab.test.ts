@@ -213,6 +213,21 @@ describe("ScenesDashboard", () => {
     const card = container.querySelector("[data-scene-card]");
     expect(card?.querySelector("[data-play-btn]")).toBeTruthy();
   });
+
+  it("pressing the card's picture plays the scene rather than opening it", async () => {
+    mockScenes = [makeScene(1, "Battle Music", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.click(container.querySelector("[data-play-btn]")!);
+    expect(audioEngine.playScene).toHaveBeenCalledWith(1);
+    expect(tabs.openTab).not.toHaveBeenCalled();
+  });
+
+  it("the card's edit button opens the scene editor", async () => {
+    mockScenes = [makeScene(1, "Battle Music", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.click(container.querySelector("[data-edit-btn]")!);
+    expect(tabs.openTab).toHaveBeenCalledWith({ type: "scene", id: 1, title: "Battle Music" });
+  });
 });
 
 // ── Context menu helpers ──────────────────────────────────────────────────────

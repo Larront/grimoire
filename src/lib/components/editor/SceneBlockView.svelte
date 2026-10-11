@@ -26,7 +26,7 @@
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "$lib/components/panes/thumbnail-presets";
+  import { ICON_MAP, sceneThumbColors } from "$lib/components/panes/thumbnail-presets";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
   // record spread over the props, so the rest element *is* the record and nothing here
@@ -123,18 +123,17 @@
     isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
   );
 
-  // Scene thumbnail chip (color + icon). A resolved scene uses its own identity
-  // color (its saved thumbnail_color, or a deterministic pick from the palette);
-  // when the scene reference is unresolved we fall back to the accent theme so
-  // the placeholder tracks the current accent rather than a fixed crimson.
-  const chipColor = $derived(
+  // Scene thumbnail chip (color + icon), the same colours the dashboard card wears
+  // (`sceneThumbColors`): the GM's chosen colour, or neutral Iron Raised when none was
+  // chosen — never a hue the app picked to tell scenes apart. An unresolved reference
+  // is neutral too.
+  const chipColors = $derived(
     thisScene
-      ? (thisScene.thumbnail_color ?? ACCENT_BG[thisScene.id % ACCENT_BG.length])
-      : "var(--primary-subtle)",
+      ? sceneThumbColors(thisScene)
+      : { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" },
   );
-  const chipIconColor = $derived(
-    thisScene ? ACCENT_FG[thisScene.id % ACCENT_FG.length] : "var(--primary)",
-  );
+  const chipColor = $derived(chipColors.bg);
+  const chipIconColor = $derived(chipColors.fg);
   const ChipIcon = $derived(
     thisScene?.thumbnail_icon ? (ICON_MAP[thisScene.thumbnail_icon] ?? Music2) : Music2,
   );
@@ -314,8 +313,8 @@
           {@const RowIcon = scene.thumbnail_icon
             ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
             : Music2}
-          {@const rowBg = scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]}
-          {@const rowFg = ACCENT_FG[scene.id % ACCENT_FG.length]}
+          {@const rowBg = sceneThumbColors(scene).bg}
+          {@const rowFg = sceneThumbColors(scene).fg}
           <button
             type="button"
             role="option"

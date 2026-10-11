@@ -43,3 +43,26 @@ export const ICON_OPTIONS = [
 export const ICON_MAP: Record<string, typeof Skull> = Object.fromEntries(
   ICON_OPTIONS.map(({ name, icon }) => [name, icon]),
 );
+
+/*
+  A scene's thumbnail colours, for every surface that draws one — the dashboard card and
+  the in-note scene player. A colour the GM chose is theirs, with the icon in that
+  preset's own swatch; a scene with none chosen wears Iron Raised and a muted icon.
+
+  The unchosen case used to cycle the accent presets by id, so an untouched ledger read
+  as a random purple, green and blue grid and the same random hues bled into every note
+  that embedded a scene. That was the app assigning colour to tell things apart, which
+  DESIGN.md's No Decorative Color Rule refuses: scenes are told apart by name and icon.
+  The PDF scene-link layer keeps the cycle above on purpose — there a hue pairs one
+  highlight on the page with its chip, which is identity, not decoration.
+*/
+export function sceneThumbColors(scene: { thumbnail_color: string | null }): {
+  bg: string;
+  fg: string;
+} {
+  if (!scene.thumbnail_color) {
+    return { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" };
+  }
+  const preset = ACCENT_PRESETS.find((p) => p.bg === scene.thumbnail_color);
+  return { bg: scene.thumbnail_color, fg: preset?.swatch ?? "var(--foreground)" };
+}
