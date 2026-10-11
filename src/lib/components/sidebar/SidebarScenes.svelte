@@ -75,7 +75,11 @@
                     {@const isPlaying = scene.id === activeSceneDisplayId}
                     {@const showPause = isPlaying && !audioEngine.isScenePaused}
                     <Sidebar.MenuItem>
-                      <Sidebar.MenuButton isActive={isPlaying}>
+                      <!-- No `isActive`: that background means "the page you are on", and
+                           a playing scene is not where the GM is. Playing is said by
+                           the crimson speaker and the crimson pause — signals of
+                           their own, on the row's two ends. -->
+                      <Sidebar.MenuButton>
                         {#snippet child({ props })}
                           <button
                             type="button"
