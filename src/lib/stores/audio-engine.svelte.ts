@@ -127,7 +127,12 @@ class LocalSlotPlayer implements SlotPlayer {
     if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
   }
 
+  // A fade is where the slot's volume is decided, so it is also what a resume must
+  // return to. Every slot starts at 0 and fades up; when only start() and setVolume()
+  // recorded the volume, a paused local track resumed at the 0 it was started at —
+  // playing, by every indicator in the app, and silent.
   fadeTo(targetVolume: number, durationSec: number): Promise<void> {
+    this.currentVolume = targetVolume;
     if (!this.gain) return Promise.resolve();
     this.gain.gain.linearRampToValueAtTime(
       targetVolume,
@@ -694,6 +699,9 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 // Exported for unit tests, which inject a fake slot-player factory to drive the
 // crossfade state machine. Production code uses the singleton below.
 export { createAudioEngine };
+// The local player is exported for its own tests: the fake factory above stands in for
+// it, so the engine's tests cannot see what it remembers between a stop and a resume.
+export { LocalSlotPlayer };
 export type { SlotPlayer, MakeSlotPlayer };
 
 export const audioEngine = createAudioEngine();
