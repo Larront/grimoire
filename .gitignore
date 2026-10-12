@@ -25,6 +25,6 @@ docs/research/*.local.md
 # append-only session journal it replays after an interrupted run. Machine- and
 # run-specific, so it never belongs to a branch. `.impeccable/design.json` and
 # the config beside it are project files and stay tracked.
-.impeccable/live/
+.impeccable
 
 
