@@ -683,11 +683,12 @@ describe("ScenesDashboard — thumbnail image upload", () => {
 // ── Thumbnail icon rendering ──────────────────────────────────────────────────
 
 describe("ScenesDashboard — thumbnail icon", () => {
-  it("shows default icon (Clapperboard) when thumbnail_icon is null", () => {
+  // The music note, as on every other surface that draws a scene (DEFAULT_SCENE_ICON).
+  it("shows the default music note when thumbnail_icon is null", () => {
     mockScenes = [makeScene(1, "Scene", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     const card = container.querySelector("[data-scene-card]");
-    expect(card?.querySelector("[data-thumbnail-icon='Clapperboard']")).toBeTruthy();
+    expect(card?.querySelector("[data-thumbnail-icon='Music2']")).toBeTruthy();
   });
 
   it("shows custom icon when thumbnail_icon is set", () => {
