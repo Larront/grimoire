@@ -12,19 +12,23 @@
   // **The one mode in the whole pattern, and it is scoped to structure rather than to
   // values** (ADR-0016 §6, #153):
   //
-  //   * **View mode makes every value live**, and the syntax picks the *kind* of input:
-  //     arithmetic on a pool's current half, a tick on a mark, a plain text input on
-  //     anything else. A value is never merely readable.
-  //   * **Behind the pencil**: labels, maximums, section headings, entry names and
-  //     prose, and every add / remove / reorder control.
+  //   * **View mode makes the playable values live** — arithmetic on a pool's current
+  //     half, a tick on a mark — and draws everything else as text.
+  //   * **Behind the pencil**: labels, maximums, every other value, section headings,
+  //     entry names and prose, and every add / remove / reorder control.
   //
   // It survives for exactly one reason. With both halves of `43/59` as adjacent hit
   // targets four pixels apart, a mis-click edits the creature's *definition* mid-fight.
   // Scoping the mode to structure makes that **impossible** rather than merely
-  // unlikely: in view mode the maximum is not a target at all. Three cheaper postures
-  // were built and cut — no mode (the mis-click), view-shows-only-playable-values (a
-  // free-text `Conditions:` row cost a mode round-trip), and raw-fence editing (a wall
-  // of monospace mid-note, and `[[` autocomplete re-implemented in a textarea).
+  // unlikely: in view mode the maximum is not a target at all.
+  //
+  // The same argument closed the other values. View mode used to open any non-playable
+  // value as a text field on one click, so a free-text `Conditions:` row needed no mode
+  // round-trip; but Armor Class sat 2px under the HP button, and a hit aimed a little low
+  // wrote "15-12" into the AC and left HP where it was, silently. A value that changes in
+  // play is written as a pool or a mark track — `Conditions: [ ] Prone [ ] Charmed` — and
+  // everything else is definition. Raw-fence editing was built and cut too: a wall of
+  // monospace mid-note, and `[[` autocomplete re-implemented in a textarea.
   //
   // Told apart by **input chrome appearing plus a dashed accent rail** — no banner. A
   // banner would say what the block already shows.
@@ -49,7 +53,9 @@
     Pencil,
     UnfoldHorizontal,
   } from "@lucide/svelte";
+  import { tick } from "svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
+  import { linkedPlainText } from "$lib/editor/linked-text";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
@@ -59,6 +65,7 @@
     applyArithmetic,
     classifyValue,
     isPlayable,
+    parseArithmetic,
     serializePool,
     serializeTrack,
     type Mark,
@@ -145,10 +152,20 @@
     editing = true;
   }
 
+  let pencil = $state<HTMLButtonElement | null>(null);
+
+  // Leaving the mode puts focus on the pencil that reopens it. The Done button it was
+  // pressed on leaves the page with the mode, and focus used to go to the document body.
+  async function stopEditing() {
+    editing = false;
+    await tick();
+    pencil?.focus();
+  }
+
   /** Escape leaves the mode, unless a field underneath has already claimed the key. */
   function handleKeydown(e: KeyboardEvent) {
     if (e.key !== "Escape" || e.defaultPrevented || !editing) return;
-    editing = false;
+    void stopEditing();
   }
 
   // Collapsing while the structure is open would hide the controls the GM is using and
@@ -188,6 +205,37 @@
   /** The row whose pool is open for arithmetic, and what has been typed into it. */
   let poolRow = $state<number | null>(null);
   let poolDraft = $state("");
+  /** Enter pressed on something that is not a number: the input stays, and says so. */
+  let poolRefused = $state(false);
+
+  /** Each pool's button, by row, so a hit committed from the keyboard can return to it. */
+  let poolButtons = $state<Record<number, HTMLButtonElement | null>>({});
+
+  /** The last change, said to assistive tech: "The Lurker HP 56 of 68". */
+  let announcement = $state("");
+
+  // The words a control is named by. "Row 1 current value" was every creature's HP in an
+  // encounter; the creature's name and the GM's own label are what tell them apart.
+  const creature = $derived(linkedPlainText(block.name).trim());
+  function rowName(index: number): string {
+    const label = linkedPlainText(block.rows[index]?.label ?? "").trim() || `Row ${index + 1}`;
+    return creature ? `${creature} ${label}` : label;
+  }
+
+  /** What Enter will do, drawn beside the input while the GM types. */
+  function poolPreview(current: number): string {
+    const parsed = parseArithmetic(poolDraft);
+    if (parsed.kind === "invalid") return "Not a number";
+    if (parsed.kind === "empty") return "";
+    return `→ ${applyArithmetic(current, poolDraft)}`;
+  }
+
+  // The block's own controls, sized and focused as every note block's are (28px, the
+  // app's outline ring), with a tooltip each: they are icons only.
+  const control =
+    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
+    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 
   /** The arithmetic input exists only while it is open, so its arrival is its cue. */
   function takeFocus(el: HTMLInputElement) {
@@ -196,20 +244,38 @@
 
   function openPool(index: number) {
     poolDraft = "";
+    poolRefused = false;
     poolRow = index;
   }
 
-  function commitPool(index: number) {
+  // Back to the pool's own button after Enter or Escape, so a second hit is one more
+  // Enter away and Ctrl+Z still has somewhere to go. Leaving by clicking elsewhere goes
+  // where the click went.
+  async function returnToPool(index: number) {
+    await tick();
+    poolButtons[index]?.focus();
+  }
+
+  function commitPool(index: number, fromKeyboard = false) {
     // Enter commits and closes the input, which in some browsers blurs it on the way
     // out. Without this the hit would land twice, and the second one is invisible.
     if (poolRow !== index) return;
     const value = classifyValue(block.rows[index].value);
+    // Junk is refused out loud from the keyboard — the input stays open saying so —
+    // because closing on it looked exactly like a hit that landed. Clicking away from
+    // junk is the GM moving on, and drops it.
+    if (fromKeyboard && parseArithmetic(poolDraft).kind === "invalid") {
+      poolRefused = true;
+      return;
+    }
     poolRow = null;
+    if (fromKeyboard) void returnToPool(index);
     if (value.kind !== "pool") return;
     const next = applyArithmetic(value.current, poolDraft);
     // An empty input, junk, or arithmetic landing where it started: nothing changed, so
     // nothing is written and no undo step is spent.
     if (next === value.current) return;
+    announcement = `${rowName(index)} ${next} of ${value.max}`;
     setRow(index, { value: serializePool(value, next) });
   }
 
@@ -219,7 +285,18 @@
     const marks: Mark[] = value.marks.map((m, i) =>
       i === mark ? { ...m, checked: !m.checked } : m,
     );
+    const changed = marks[mark];
+    announcement = `${rowName(index)} ${changed.label || `mark ${mark + 1}`} ${
+      changed.checked ? "ticked" : "cleared"
+    }`;
     setRow(index, { value: serializeTrack(marks, value.spaced) });
+  }
+
+  // A mark's label is part of its target: the word "Frightened" beside a box is what the
+  // GM aims at. A link inside the label stays the link's.
+  function toggleFromLabel(e: MouseEvent, index: number, mark: number) {
+    if ((e.target as HTMLElement).closest("[data-wiki-link]")) return;
+    toggleMark(index, mark);
   }
 
   /** What a collapsed statblock keeps: the rows a GM can play on, in their order. */
@@ -293,6 +370,7 @@
     block = { ...next, width: asStatblockWidth(next.width) };
     focus = null;
     poolRow = null;
+    poolRefused = false;
   }
 
   /**
@@ -378,84 +456,112 @@
 {#snippet playValue(row: LabelledRow, i: number)}
   {@const value = classifyValue(row.value)}
   {#if value.kind === "pool"}
-    <span class="inline-flex items-baseline gap-0.5 font-sans text-xs text-foreground">
+    <span class="inline-flex flex-wrap items-baseline gap-x-0.5 font-sans text-xs text-foreground">
       {#if poolRow === i}
         <!-- Arithmetic: signed is a delta, unsigned is absolute, empty is a no-op, and
-             nothing clamps. No dice — a GM rolls their own and types the number. -->
+             nothing clamps. No dice — a GM rolls their own and types the number. What
+             Enter will do is drawn beside it as the GM types: "68 → 56" for -12, and
+             "→ 12" for a bare 12, which is how "unsigned sets it" shows before it lands. -->
         <input
           type="text"
+          inputmode="numeric"
+          data-pool-row={i}
           use:takeFocus
           bind:value={poolDraft}
-          aria-label={`Row ${i + 1} current value`}
+          oninput={() => (poolRefused = false)}
+          aria-label="{rowName(i)}, {value.current} of {value.max}. Type -12 to take 12, +5 to add 5, or a number to set it"
+          aria-invalid={poolRefused}
+          aria-describedby="statblock-pool-hint-{i}"
           placeholder={String(value.current)}
-          class="w-12 bg-transparent border-b border-primary outline-none text-right
-                 font-sans text-xs tabular-nums text-foreground"
+          class="statblock-pool-input w-14 bg-transparent border-b outline-none text-right
+                 font-sans text-xs tabular-nums text-foreground
+                 {poolRefused ? 'border-destructive' : 'border-primary'}"
           onblur={() => commitPool(i)}
           onkeydown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              commitPool(i);
+              commitPool(i, true);
             } else if (e.key === "Escape") {
               e.preventDefault();
               poolRow = null;
+              void returnToPool(i);
             }
           }}
         />
       {:else}
+        <!-- A chip, so it reads as a thing to press before the pointer finds it, and a
+             28px target drawn at the text's size: the padding is the hit area, cancelled
+             by an equal negative margin so the row does not grow. Its neighbours are
+             text now, so the reach above and below lands on nothing it could mis-edit. -->
         <button
+          bind:this={poolButtons[i]}
           type="button"
-          aria-label={`Row ${i + 1} current value`}
-          class="rounded px-1 -mx-1 tabular-nums hover:bg-primary/10 cursor-pointer
-                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          onclick={() => openPool(i)}>{value.current}</button
+          data-pool-row={i}
+          aria-label="{rowName(i)}, {value.current} of {value.max}"
+          title="Take damage (-12), heal (+5), or set (30)"
+          class="statblock-pool -my-1.5 -mx-1 cursor-pointer px-1 py-1.5 tabular-nums
+                 focus-visible:outline-none"
+          onclick={() => openPool(i)}><span class="statblock-pool-face">{value.current}</span></button
         >
       {/if}
       <!-- The maximum is drawn, never targeted. That is the whole mis-click argument:
            there is no control here to slip onto. -->
       <span class="text-muted-foreground tabular-nums">{value.separator}{value.max}</span>
+      {#if poolRow === i}
+        <span
+          id="statblock-pool-hint-{i}"
+          class="ml-1.5 tabular-nums {poolRefused ? 'text-destructive' : 'text-muted-foreground'}"
+          >{poolPreview(value.current)}</span
+        >
+      {/if}
     </span>
   {:else if value.kind === "track"}
     <!-- Inline and wrapping, not stacked: a run of marks is one reading, and a column
          of checkboxes would make three boxes look like three rows. -->
-    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+    <span class="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1">
       {#each value.marks as mark, m (m)}
-        <span class="inline-flex items-center gap-1">
+        <!-- One mark and its word stay together on a line: a run wraps between marks,
+             never between a box and the label it is ticking. -->
+        <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <button
             type="button"
             aria-pressed={mark.checked}
-            aria-label={mark.label
-              ? `Row ${i + 1} mark ${m + 1}: ${mark.label}`
-              : `Row ${i + 1} mark ${m + 1}`}
+            data-mark="{i}-{m}"
+            aria-label="{rowName(i)} {mark.label ? linkedPlainText(mark.label) : `mark ${m + 1}`}"
             class="statblock-mark"
             onclick={() => toggleMark(i, m)}
           >
             {#if mark.checked}
-              <Check size={9} strokeWidth={3} aria-hidden="true" />
+              <Check size={11} strokeWidth={3} aria-hidden="true" />
             {/if}
           </button>
           {#if mark.label}
             <!-- A label is free text the GM typed, so `[x] Cursed by [[Vecna]]` is a
-                 live link here exactly as it is behind the pencil (ADR-0016 §8). -->
-            <LinkedTextField
-              value={mark.label}
-              readonly
-              ariaLabel={`Row ${i + 1} mark ${m + 1} label`}
-              class="font-sans text-xs leading-snug text-foreground"
-            />
+                 live link here exactly as it is behind the pencil (ADR-0016 §8). And it is
+                 the mark's target too, for the pointer — the button is the keyboard's, and
+                 names the label, so this is not a second stop. -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <span class="cursor-pointer" onclick={(e) => toggleFromLabel(e, i, m)}>
+              <LinkedTextField
+                value={mark.label}
+                readonly
+                ariaLabel={`${rowName(i)} mark ${m + 1} label`}
+                class="font-sans text-xs leading-snug text-foreground"
+              />
+            </span>
           {/if}
         </span>
       {/each}
     </span>
   {:else}
-    <!-- Everything else, including a bare integer: a plain text input, one click. It is
-         how a `Conditions:` row the GM wrote as prose stays editable without a mode
-         round-trip, and how a marker no system has a name for gets kept. -->
+    <!-- Everything else, including a bare integer, is definition, and reads as text: it
+         is edited behind the pencil. It used to open on one click, and Armor Class sat
+         2px under the HP button. No placeholder either — "Value" in an empty row is the
+         form describing itself to a GM reading the creature. -->
     <LinkedTextField
       value={row.value}
-      onCommit={(next) => setRow(i, { value: next })}
-      restrict={oneLine}
-      ariaLabel={`Row ${i + 1} value`}
-      placeholder="Value"
+      readonly
+      ariaLabel={`${rowName(i)} value`}
       class="font-sans text-xs leading-snug text-foreground"
     />
   {/if}
@@ -534,14 +640,14 @@
   >
     <button
       type="button"
-      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
-             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      class={control}
       aria-label={collapsed ? "Expand statblock" : "Collapse statblock"}
+      title={collapsed ? "Expand" : "Collapse to what's played"}
       aria-expanded={!collapsed}
       onclick={toggleCollapsed}
     >
       <ChevronDown
-        size={13}
+        size={14}
         class="transition-transform duration-150 motion-reduce:transition-none {collapsed
           ? '-rotate-90'
           : ''}"
@@ -552,45 +658,46 @@
          the arrangement is still there next session. -->
     <button
       type="button"
-      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
-             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      class={control}
       aria-label={block.width === "narrow" ? "Widen statblock" : "Narrow statblock"}
+      title={block.width === "narrow" ? "Widen" : "Narrow, to sit beside others in an encounter"}
       onclick={toggleWidth}
     >
       {#if block.width === "narrow"}
-        <UnfoldHorizontal size={13} />
+        <UnfoldHorizontal size={14} />
       {:else}
-        <FoldHorizontal size={13} />
+        <FoldHorizontal size={14} />
       {/if}
     </button>
     <button
       type="button"
-      class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
-             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      class={control}
       aria-label="Save shape as preset"
+      title="Save shape as preset"
       onclick={saveShapeAsPreset}
     >
-      <Bookmark size={13} />
+      <Bookmark size={14} />
     </button>
     {#if editing}
       <button
         type="button"
-        class="rounded p-0.5 text-primary hover:text-foreground cursor-pointer
-               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+        class="{control} text-primary"
         aria-label="Done editing statblock"
-        onclick={() => (editing = false)}
+        title="Done"
+        onclick={stopEditing}
       >
-        <Check size={13} />
+        <Check size={14} />
       </button>
     {:else}
       <button
+        bind:this={pencil}
         type="button"
-        class="rounded p-0.5 text-muted-foreground hover:text-foreground cursor-pointer
-               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+        class={control}
         aria-label="Edit statblock structure"
+        title="Edit"
         onclick={startEditing}
       >
-        <Pencil size={13} />
+        <Pencil size={14} />
       </button>
     {/if}
   </div>
@@ -600,7 +707,7 @@
        the two modes now draw the same *count*: the trash the mode used to add went with
        the rest of the per-block delete chrome (#219), so edit mode's collapse, width,
        preset and tick are four buttons against view mode's collapse, width, preset and
-       pencil. `pr-20` is the width four already had, not a fresh guess. -->
+       pencil. Four 28px controls and their gaps are 7.5rem. -->
   <LinkedTextField
     value={block.name}
     onCommit={setName}
@@ -608,7 +715,7 @@
     readonly={!editing}
     ariaLabel="Statblock name"
     placeholder="Unnamed statblock"
-    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-20"
+    class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-[7.5rem]"
   />
 
   {#if !collapsed && block.rows.length === 0}
@@ -618,7 +725,9 @@
   {#if collapsed}
     <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {#each playableRows as { row, index } (index)}
-        <span class="inline-flex items-baseline gap-1.5">
+        <!-- `shrink-0`: an item in a wrapping row could otherwise shrink to its narrowest
+             word, which stacked a row's two boxes one above the other. -->
+        <span class="inline-flex shrink-0 items-baseline gap-1.5">
           {@render rowLabel(row, index, false)}
           {@render playValue(row, index)}
         </span>
@@ -641,27 +750,33 @@
       onChange={handleSectionChange}
     />
   {:else}
-    <div class="statblock-split">
+    <!-- A creature with no sections — the common shape in a tiled fight — is its stats
+         alone: no empty second column, and no divider ruling off nothing. -->
+    <div class="statblock-split" class:statblock-split-solo={block.sections.length === 0}>
       <div class="statblock-stats">
         {#each block.rows as row, i (i)}
           {@render viewRow(row, i)}
         {/each}
       </div>
-      <div class="statblock-reference">
-        {#each block.sections as section, s (s)}
-          <div class="pt-2">
-            {@render sectionHeading(section, s, false)}
-            {#each section.entries as entry, i (i)}
-              <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
-            {/each}
-          </div>
-        {/each}
-      </div>
+      {#if block.sections.length > 0}
+        <div class="statblock-reference">
+          {#each block.sections as section, s (s)}
+            <div class="pt-2">
+              {@render sectionHeading(section, s, false)}
+              {#each section.entries as entry, i (i)}
+                <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
+              {/each}
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
 
 <SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={block.name} />
+<!-- What the last hit or tick did, said once, politely. -->
+<p class="sr-only" aria-live="polite">{announcement}</p>
 
 <style>
   /* The mode, made visible without a banner. Two signals, both of them the state
@@ -718,6 +833,10 @@
     padding-top: 0.25rem;
   }
 
+  .statblock-split-solo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   /* A hairline, not a filled gutter: the two columns are one card's two readings,
      and a heavier divider would make them read as two cards. */
   .statblock-reference {
@@ -745,20 +864,51 @@
     }
   }
 
-  /* One mark. Sized to the text it sits in rather than to a form control: a run of
-     these is read as a line of boxes, not as a stack of checkboxes. */
+  /* A pool's current value: a chip at the text's size, so it reads as a thing to press
+     at rest rather than only under a hovering pointer. The button around it is the 28px
+     target; the face is what is drawn. */
+  .statblock-pool-face {
+    display: inline-block;
+    min-width: 1.5rem;
+    padding: 0 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-structural);
+    background: color-mix(in oklab, var(--background) 50%, transparent);
+    text-align: center;
+    transition: border-color 150ms ease-out;
+  }
+
+  .statblock-pool:hover .statblock-pool-face {
+    border-color: var(--foreground-muted);
+  }
+
+  .statblock-pool:focus-visible .statblock-pool-face {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+
+  /* One mark: a 16px box, read as a line of boxes rather than a stack of form controls,
+     with a border a glance can find (Ember Muted, well over 3:1; Iron Border was 1.3:1).
+     `::after` reaches 4px past it on every side, so the target is 24px. */
   .statblock-mark {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 0.85rem;
-    height: 0.85rem;
+    width: 1rem;
+    height: 1rem;
     flex-shrink: 0;
-    border: 1px solid var(--border);
-    border-radius: 0.1875rem;
-    color: var(--primary-foreground);
+    border: 1px solid var(--foreground-muted);
+    border-radius: var(--radius-structural);
+    color: var(--background);
     cursor: pointer;
     transition: background-color 150ms ease-out;
+  }
+
+  .statblock-mark::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -767,17 +917,20 @@
     }
   }
 
+  /* Ticked fills with the text's own colour. Crimson is kept for what is playing, active
+     or selected; a box ticked for a spent legendary action is none of those, and a fight
+     with conditions and spell slots on four creatures was a field of accent. */
   .statblock-mark[aria-pressed="true"] {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--foreground);
+    border-color: var(--foreground);
   }
 
   .statblock-mark:hover {
-    border-color: var(--primary);
+    border-color: var(--foreground);
   }
 
   .statblock-mark:focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 </style>
