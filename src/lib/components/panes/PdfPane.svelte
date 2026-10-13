@@ -26,6 +26,9 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { pdfSceneLinks } from "$lib/stores/pdf-scene-links.svelte";
   import type { PdfSceneLink } from "$lib/bindings.gen";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { SvelteSet } from "svelte/reactivity";
+  import { toastError, toastUndo } from "$lib/toast";
 
   interface Props {
     pdfPath: string;
@@ -127,6 +130,18 @@
   }
   function resetZoom() {
     setScale(1.0);
+  }
+  // Fit the page's width, or the whole page, to the pane — what a GM reading at the table
+  // reaches for more often than a percentage. The 32px is the page column's padding.
+  function fitWidth() {
+    if (!scrollEl) return;
+    setScale(Math.max(0.25, (scrollEl.clientWidth - 32) / baseWidth));
+  }
+  function fitPage() {
+    if (!scrollEl) return;
+    const byWidth = (scrollEl.clientWidth - 32) / baseWidth;
+    const byHeight = (scrollEl.clientHeight - 48) / baseHeight;
+    setScale(Math.max(0.25, Math.min(byWidth, byHeight)));
   }
   // Keep the page the GM is reading anchored across a zoom change instead of
   // letting scrollTop drift as every page above grows or shrinks.
@@ -245,11 +260,14 @@
       findInputEl?.select();
     });
   }
+  let findButtonEl = $state<HTMLButtonElement | null>(null);
   function closeFind() {
     findOpen = false;
     query = "";
     matches = [];
     activeMatch = 0;
+    // Back where the GM came from, rather than dropped on the page.
+    void tick().then(() => findButtonEl?.focus());
   }
 
   function onFindKeydown(e: KeyboardEvent) {
@@ -264,11 +282,23 @@
 
   // Ctrl/Cmd+F opens find — but only for the focused pane, so a split view with
   // a PDF in each pane routes the shortcut to the one the GM is working in.
+  // Ctrl/Cmd + =, − and 0 zoom in, out and back to 100%, likewise for the focused pane.
   function onWindowKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
-      if (status !== "ready" || tabs.focusedPane !== pane) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+    if (status !== "ready" || tabs.focusedPane !== pane) return;
+    const key = e.key.toLowerCase();
+    if (key === "f") {
       e.preventDefault();
       openFind();
+    } else if (key === "=" || key === "+") {
+      e.preventDefault();
+      zoomIn();
+    } else if (key === "-") {
+      e.preventDefault();
+      zoomOut();
+    } else if (key === "0") {
+      e.preventDefault();
+      resetZoom();
     }
   }
 
@@ -278,8 +308,12 @@
   // (the DB row is already cascade-removed — issue #103). Links are grouped by
   // page for the per-page overlay.
   const scenesById = $derived(new Map(scenes.scenes.map((s) => [s.id, s])));
+  // Links removed but still inside their undo window: hidden at once, deleted later.
+  let pendingRemoval = new SvelteSet<number>();
   const visibleLinks = $derived(
-    pdfSceneLinks.linksForPath(pdfPath).filter((l) => scenesById.has(l.scene_id)),
+    pdfSceneLinks
+      .linksForPath(pdfPath)
+      .filter((l) => scenesById.has(l.scene_id) && !pendingRemoval.has(l.id)),
   );
   const linksByPage = $derived.by(() => {
     const map = new Map<number, PdfSceneLink[]>();
@@ -327,7 +361,15 @@
       await pdfSceneLinks.create(pdfPath, sel.page, sel.start, sel.end, sel.quote, sceneId);
     } catch (error) {
       console.error("create scene-link failed:", error);
+      toastError("Couldn't link the scene to that passage.");
     }
+  }
+
+  // A scene made from the picker is empty and called "New Scene": open it beside the PDF,
+  // where its name arrives selected, so naming it is the next keystroke rather than a
+  // trip to find it later.
+  function openNewSceneBeside(id: number, name: string) {
+    tabs.openTabOpposite({ type: "scene", id, title: name });
   }
 
   // "+ New scene" from the selection picker: create an empty Scene and link it to
@@ -342,8 +384,10 @@
     try {
       const scene = await scenes.createScene("New Scene");
       await pdfSceneLinks.create(pdfPath, sel.page, sel.start, sel.end, sel.quote, scene.id);
+      openNewSceneBeside(scene.id, scene.name);
     } catch (error) {
       console.error("create scene-link with new scene failed:", error);
+      toastError("Couldn't create a scene for that passage.");
     }
   }
 
@@ -354,6 +398,7 @@
       await pdfSceneLinks.update(pdfPath, linkId, sceneId);
     } catch (error) {
       console.error("re-link scene failed:", error);
+      toastError("Couldn't change the linked scene.");
     }
   }
 
@@ -363,17 +408,34 @@
     try {
       const scene = await scenes.createScene("New Scene");
       await pdfSceneLinks.update(pdfPath, linkId, scene.id);
+      openNewSceneBeside(scene.id, scene.name);
     } catch (error) {
       console.error("re-link to new scene failed:", error);
+      toastError("Couldn't create a scene for that passage.");
     }
   }
 
-  async function removeSceneLink(linkId: number) {
-    try {
-      await pdfSceneLinks.remove(pdfPath, linkId);
-    } catch (error) {
-      console.error("remove scene-link failed:", error);
-    }
+  // An undo toast, not an instant delete: Remove sits beside the volume slider, and a
+  // GM adjusting the level mid-session can hit it. The underline leaves at once; the
+  // link is deleted when the window closes, so Undo is a cancelled timer.
+  function removeSceneLink(linkId: number) {
+    const link = pdfSceneLinks.linksForPath(pdfPath).find((l) => l.id === linkId);
+    const name = link ? scenesById.get(link.scene_id)?.name : undefined;
+    pendingRemoval.add(linkId);
+    toastUndo(
+      name ? `Unlinked ${name} from this passage` : "Unlinked the scene from this passage",
+      async () => {
+        try {
+          await pdfSceneLinks.remove(pdfPath, linkId);
+        } catch (error) {
+          console.error("remove scene-link failed:", error);
+          toastError("Couldn't remove the link.");
+        } finally {
+          pendingRemoval.delete(linkId);
+        }
+      },
+      () => pendingRemoval.delete(linkId),
+    );
   }
 
   // The action bubble/picker are viewport-anchored to the selection rect, so a
@@ -428,16 +490,16 @@
     <div class="flex max-w-sm flex-col items-center text-center">
       <BookOpen class="size-10 text-muted-foreground/40" strokeWidth={1.5} />
       <p class="mt-4 text-sm font-medium text-foreground">Can't display this PDF</p>
-      <p class="mt-1 text-xs text-muted-foreground/70">
+      <p class="mt-1 text-xs text-muted-foreground">
         The file may be missing, corrupt, or password-protected.
       </p>
     </div>
   </div>
 {:else if doc}
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div class="@container flex min-h-0 flex-1 flex-col">
     <!-- Viewer toolbar -->
     <div
-      class="flex h-9 shrink-0 items-center gap-1 border-b border-border bg-background px-2 text-xs"
+      class="flex h-9 shrink-0 items-center gap-1 overflow-hidden border-b border-border bg-background px-2 text-xs"
     >
       <!-- Page indicator + jump -->
       {#if jumpEditing}
@@ -464,7 +526,7 @@
           onclick={beginJump}
           aria-label="Current page, click to jump"
         >
-          {currentPage} <span class="text-muted-foreground/60">/ {numPages}</span>
+          {currentPage} <span class="text-muted-foreground">/ {numPages}</span>
         </Button>
       {/if}
 
@@ -473,19 +535,20 @@
       <!-- Link Scene (discoverable path): opens the picker when text is selected,
            teaches the gesture otherwise. -->
       <div class="relative">
+        <!-- Named by its visible words, so "Link Scene" is what voice control hears. -->
         <Button
           variant="ghost"
           size="sm"
           class="gap-1.5 text-muted-foreground"
-          aria-label="Link a Scene to selected text"
+          title="Link a scene to the selected text"
           onclick={onLinkSceneButton}
         >
           <Link2 class="size-3.5" />
-          Link Scene
+          <span class="@max-md:sr-only">Link Scene</span>
         </Button>
         {#if showLinkHint}
           <div
-            class="absolute right-0 top-full z-20 mt-1 w-max rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground"
+            class="absolute right-0 top-full z-20 mt-1 w-max rounded-md border border-border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-float"
             role="status"
           >
             Select text to link a Scene
@@ -497,6 +560,7 @@
 
       <!-- Find toggle -->
       <Button
+        bind:ref={findButtonEl}
         variant="ghost"
         size="icon-sm"
         aria-label="Find in document"
@@ -518,15 +582,34 @@
       >
         <ZoomOut />
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="min-w-12 tabular-nums text-muted-foreground"
-        onclick={resetZoom}
-        aria-label="Reset zoom to 100%"
-      >
-        {Math.round(scale * 100)}%
-      </Button>
+      <!-- The percentage opens the zoom menu: the fits, then the steps. A fixed width,
+           so "50%" and "100%" don't shift the toolbar beside them. -->
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="ghost"
+              size="sm"
+              class="w-14 justify-center tabular-nums text-muted-foreground"
+              aria-label="Zoom, {Math.round(scale * 100)}%"
+            >
+              {Math.round(scale * 100)}%
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="min-w-40">
+          <DropdownMenu.Item onclick={fitWidth}>Fit width</DropdownMenu.Item>
+          <DropdownMenu.Item onclick={fitPage}>Fit page</DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          {#each ZOOM_STEPS as step (step)}
+            <DropdownMenu.Item onclick={() => setScale(step)}>
+              {Math.round(step * 100)}%
+              {#if step === 1}<DropdownMenu.Shortcut>Ctrl 0</DropdownMenu.Shortcut>{/if}
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
       <Button
         variant="ghost"
         size="icon-sm"
@@ -538,7 +621,9 @@
       </Button>
     </div>
 
-    <!-- Scroll surface -->
+    <!-- Scroll surface. Focusable so the keyboard can scroll it — PageDown, arrows,
+         Space — which a scrollable region needs and a click on the page now gives. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       bind:this={scrollEl}
       onscroll={() => {
@@ -547,8 +632,10 @@
       }}
       data-pdf-scroll
       data-pane-scroll
+      tabindex="0"
+      role="region"
       aria-label={`PDF: ${pdfTitle}`}
-      class="relative min-h-0 flex-1 overflow-auto bg-muted/40"
+      class="relative min-h-0 flex-1 overflow-auto bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
     >
       <!-- Find bar floats over the page surface, top-right -->
       {#if findOpen}
@@ -565,8 +652,12 @@
             aria-label="Find in document"
             class="h-7 w-48 text-xs"
           />
-          <span class="min-w-12 text-right text-xs tabular-nums text-muted-foreground">
-            {matches.length ? `${activeMatch + 1}/${matches.length}` : query ? "0/0" : ""}
+          <span
+            class="min-w-16 text-right text-xs tabular-nums text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            {matches.length ? `${activeMatch + 1}/${matches.length}` : query ? "No matches" : ""}
           </span>
           <Button
             variant="ghost"
