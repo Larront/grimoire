@@ -16,6 +16,16 @@
 // it most sharply, and Callout's title field (#181) needs it already.
 import { mount, unmount } from "svelte";
 import { closeHistory } from "@tiptap/pm/history";
+import { isTypingIn } from "$lib/utils/keyboard";
+
+/** Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y. */
+function isHistoryKey(event: Event): boolean {
+  if (event.type !== "keydown") return false;
+  const e = event as KeyboardEvent;
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+  const key = e.key.toLowerCase();
+  return key === "z" || key === "y";
+}
 import { NodeSelection } from "@tiptap/pm/state";
 import type { Component } from "svelte";
 import type { Editor } from "@tiptap/core";
@@ -341,6 +351,11 @@ export function createBlockNodeView<R extends BlockRecord, V extends BlockView<R
       dom,
 
       stopEvent(event: Event) {
+        // Undo and redo are the document's, wherever in a block focus sits — after a hit
+        // it sits on the pool the GM just played, and Ctrl+Z there used to do nothing
+        // until they clicked back into the prose. A field being typed in keeps them:
+        // its own undo is the text's.
+        if (isHistoryKey(event) && !isTypingIn(event.target)) return false;
         const decided = stopEventHole?.(event);
         if (decided !== undefined) return decided;
         const target = event.target as globalThis.Node | null;

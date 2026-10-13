@@ -100,6 +100,13 @@
   let editing = $state(false);
   let draft = $state("");
   let input = $state<HTMLInputElement | HTMLTextAreaElement>();
+  let display = $state<HTMLButtonElement>();
+  // Set by Enter and Escape, the two ways out from the keyboard. The input leaves the
+  // page as it closes, and focus used to go with it to the document body: a keyboard GM
+  // lost their place after every edit, and in a block with a mode a second Escape no
+  // longer reached the block to leave it. Leaving by pointer — clicking elsewhere — goes
+  // where the pointer went, so it does not set this.
+  let returnFocus = false;
 
   const segments = $derived(splitLinkedText(value));
 
@@ -168,12 +175,21 @@
     // the only ways out are leaving the field and Escape.
     if (e.key === "Enter" && !multiline) {
       e.preventDefault();
+      returnFocus = true;
       commit();
     } else if (e.key === "Escape") {
       e.preventDefault();
+      returnFocus = true;
       cancel();
     }
   }
+
+  // Back to the drawn value the GM opened, once it is drawn again.
+  $effect(() => {
+    if (editing || !display || !returnFocus) return;
+    returnFocus = false;
+    display.focus();
+  });
 
   // ── `[[` autocomplete ───────────────────────────────────────────────────────
   //
@@ -268,7 +284,7 @@
         >{/if}
     {/each}
   {:else}
-    <span data-placeholder class="text-muted-foreground/60 italic">{placeholder}</span>
+    <span data-placeholder class="text-muted-foreground italic">{placeholder}</span>
   {/if}
 {/snippet}
 
@@ -305,10 +321,11 @@
   />
 {:else}
   <button
+    bind:this={display}
     type="button"
     aria-label={ariaLabel}
     class="w-full text-left rounded border-b border-transparent whitespace-pre-wrap break-words
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
+           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
            {className}"
     onclick={handleClick}
   >

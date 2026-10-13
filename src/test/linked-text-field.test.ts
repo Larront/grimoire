@@ -274,3 +274,26 @@ describe("nothing in the field's path builds an HTML string", () => {
     expect(source).not.toMatch(HTML_TAG);
   });
 });
+
+// ─── Leaving by keyboard ────────────────────────────────────────────────────────
+
+describe("a Linked Text Field left from the keyboard keeps the GM's place", () => {
+  // The input leaves the page as it closes, and focus used to go with it to the body:
+  // a keyboard GM lost their place after every edit, and a block's own Escape no longer
+  // reached the block.
+  it.each([
+    ["Enter", "commits"],
+    ["Escape", "cancels"],
+  ])("%s %s and puts focus back on the value", async (key) => {
+    const { getByLabelText } = field({ value: "15" });
+    await fireEvent.click(getByLabelText("Value"));
+    const input = getByLabelText("Value") as HTMLInputElement;
+    expect(input.tagName).toBe("INPUT");
+
+    await fireEvent.keyDown(input, { key });
+
+    const shown = getByLabelText("Value");
+    expect(shown.tagName).toBe("BUTTON");
+    expect(document.activeElement).toBe(shown);
+  });
+});

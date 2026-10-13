@@ -292,12 +292,15 @@
   and the callout that tiles a fight sizes each column to it. If those two ever disagree
   the tiling silently mis-sizes, so there is one of each number.
 
-  Narrow is the TILING width, and the number is a derivation rather than a taste. Two of
-  them plus the gap between have to fit the body of a callout in a note pane — a pane that
-  has already given up the icon rail, the sidebar and its own padding — so the ceiling is
-  about (53rem - 1rem) / 2. 24rem sits under that with room for a narrower pane, and it is
-  comfortably below the 34rem at which the card folds its own two columns, which is the
-  other thing a tiled creature must do: read as one column, so it can sit beside another.
+  Narrow is the TILING width. It is comfortably below the 34rem at which the card folds
+  its own two columns, which is what a tiled creature must do: read as one column, so it
+  can sit beside another. And it is wide enough to read a creature at a glance mid-fight.
+
+  The callout holding a fight is what makes room for it, not this number. The prose
+  column is capped at 46rem, so a callout body inside it is about 39rem — under the two
+  of these plus a gap a fight needs (49rem). This used to be derived from a 53rem callout
+  the note column never had, and no encounter ever tiled. A callout that tiles now grows
+  past the prose measure, up to the pane: see "Tiling" below.
 
   Sizing narrow to the fold threshold instead (34rem) is the mistake this replaces. It
   folded correctly and never once tiled: two of them are 68rem, wider than any pane this
@@ -863,6 +866,25 @@
   margin-bottom: 0;
 }
 
+/* And its first block's top margin, so the space under the title is the header's own
+   gap rather than whatever the first block brings — a statblock's margin sat over the
+   cards of every fight. */
+.tiptap .callout-body > * > :first-child {
+  margin-top: 0;
+}
+
+/* The callout's own chrome keeps ordinary whitespace; only its body is editor text. The
+   editor preserves spaces (`break-spaces`), and the quote inherited that, so the template
+   whitespace between the header and the body drew as a blank line — 27px of nothing under
+   the title of every callout. */
+.tiptap blockquote.callout-block {
+  white-space: normal;
+}
+
+.tiptap .callout-body {
+  white-space: break-spaces;
+}
+
 /* A callout's body is a query container too, under the same name as the prose column.
    A panel inside a callout is inside a narrower column than the note's — the box has
    its own padding and border — and the float's threshold is a statement about the
@@ -899,6 +921,46 @@
    A flex row rather than a grid, because the blocks are not a matrix: they are as many as
    the GM put in the box, at whatever widths they chose, and a wrapping row is the one of
    the two that does not invent a column count on their behalf. */
+/* The room a fight needs. A callout holding two or more statblocks may grow past the
+   prose column — prose has a measure, and a row of creatures read at once does not — to
+   as many narrow creatures side by side as the pane has room for, up to three. Its width
+   snaps to a whole number of them (`round(down, …)`), because a box wider than its
+   creatures leaves a ragged gap at the end of every row. Centred on the column, so it
+   reads as the same box, wider. 34px is the callout's own padding and border.
+
+   The pane's width is read where the note column is, through a registered length: a
+   plain custom property would carry `100cqw` down unresolved and measure it against
+   whichever container sits nearest the callout (the prose column itself). Where nothing
+   sets it — a surface that is not a note pane — it is 0, and the box keeps its width. */
+@property --note-pane-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+[data-note-column] {
+  --note-pane-w: 100cqw;
+}
+
+.tiptap
+  [data-note-block="callout"]:has(
+    .callout-body > * > [data-note-block="statblock"] ~ [data-note-block="statblock"]
+  ) {
+  --encounter-step: calc(var(--statblock-narrow) + 1rem);
+  --encounter-w: max(
+    100%,
+    calc(
+      min(
+        round(down, calc(var(--note-pane-w) - 3rem - 34px + 1rem), var(--encounter-step)),
+        3 * var(--encounter-step)
+      ) -
+        1rem + 34px
+    )
+  );
+  width: var(--encounter-w);
+  margin-inline: calc((100% - var(--encounter-w)) / 2);
+}
+
 .tiptap .callout-body > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
   display: flex;
   flex-wrap: wrap;
