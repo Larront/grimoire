@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  snapToWords,
   offsetsFromRange,
   highlightRangesForOffsets,
   quoteForOffsets,
@@ -143,3 +144,34 @@ describe("rangeWithinDiv", () => {
     expect(rangeWithinDiv(div, 0, 0)).toBeNull();
   });
 });
+
+describe("snapToWords", () => {
+  // A drag rarely starts and ends exactly on word edges; a link that ends "…not th"
+  // underlines half a word. The selection grows to whole words and sheds the spaces
+  // around it.
+  const items = ["There is no sound. ", "Not the marsh, not the wind."];
+
+  it("grows a selection that cuts words to their whole words", () => {
+    // "e is no so" → "There is no sound"
+    const text = items.join("");
+    const start = text.indexOf("e is");
+    const end = text.indexOf("und.") - 1;
+    const snapped = snapToWords(items, start, end);
+    expect(text.slice(snapped.start, snapped.end)).toBe("There is no sound");
+  });
+
+  it("works across span boundaries", () => {
+    const text = items.join("");
+    // Starts inside "sound" and ends inside "marsh", in the next span.
+    const snapped = snapToWords(items, text.indexOf("und."), text.indexOf("he marsh") + 4);
+    expect(text.slice(snapped.start, snapped.end)).toBe("sound. Not the marsh");
+  });
+
+  it("trims surrounding whitespace and leaves whole words alone", () => {
+    const text = items.join("");
+    const start = text.indexOf(" no ");
+    const snapped = snapToWords(items, start, start + 4);
+    expect(text.slice(snapped.start, snapped.end)).toBe("no");
+  });
+});
+

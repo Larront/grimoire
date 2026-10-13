@@ -117,6 +117,29 @@ export function highlightRangesForOffsets(
   return rangesForMatch(index, { start, end });
 }
 
+// Letters, digits and the joiners inside a word ("Ashvale's", "well-known").
+const WORD_CHAR = /[\p{L}\p{N}'’-]/u;
+
+/**
+ * Grow `[start, end)` to whole words and shed the whitespace around it. A drag rarely
+ * starts and ends exactly on a word's edges, and a link stored as "…not th" underlines
+ * half a word for good. Offsets are in the same page-text space as everything here.
+ */
+export function snapToWords(
+  itemStrings: readonly string[],
+  start: number,
+  end: number,
+): { start: number; end: number } {
+  const text = buildPageIndex(itemStrings).text;
+  let s = Math.max(0, start);
+  let e = Math.min(text.length, end);
+  while (s < e && /\s/.test(text[s])) s++;
+  while (e > s && /\s/.test(text[e - 1])) e--;
+  while (s > 0 && WORD_CHAR.test(text[s - 1]) && WORD_CHAR.test(text[s])) s--;
+  while (e < text.length && WORD_CHAR.test(text[e]) && WORD_CHAR.test(text[e - 1])) e++;
+  return e > s ? { start: s, end: e } : { start, end };
+}
+
 /** The selected text for a `[start, end)` range — stored as the link's `quote`. */
 export function quoteForOffsets(
   itemStrings: readonly string[],
