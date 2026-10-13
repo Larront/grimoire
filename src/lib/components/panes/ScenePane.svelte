@@ -201,7 +201,8 @@
   // ---- Playback derived state ----
   // Every one of these asks about THIS scene. The paused check used to be the engine's
   // global one, so with Boss Battle paused, Town Market's editor offered "Resume" — and
-  // resumed the boss music. The in-note player has always scoped it; now both do.
+  // resumed the boss music. The in-note player made the same mistake, and both are scoped
+  // the same way now.
   let isThisSceneActive = $derived(scene !== null && audioEngine.isSceneActive(scene.id));
   let isThisSceneLoading = $derived(scene !== null && audioEngine.loadingSceneId === scene.id);
   let isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);

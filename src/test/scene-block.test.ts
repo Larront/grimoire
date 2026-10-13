@@ -13,12 +13,17 @@
 import { render, waitFor, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { audioEngine } from "../lib/stores/audio-engine.svelte";
 import SceneBlockView from "../lib/components/editor/SceneBlockView.svelte";
 import { SceneBlock, parseSceneBody, serializeSceneRef } from "../lib/editor/scene-block.svelte";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
 let mockSlots: SceneSlot[] = [];
+// Playback, for the cases that pin it: which scene the engine holds, and whether it is
+// paused. Nothing plays by default.
+let mockActiveId: number | null = null;
+let mockPaused = false;
 
 // Mirrors the real scenes store's read surface. Slot reads resolve from
 // mockSlots so a test can put a scene's tracks on screen without a ledger.
@@ -37,13 +42,14 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
   tabs: { openTab: vi.fn() },
 }));
 
-// The engine reports nothing playing throughout: playback state is not what
-// these tests pin, and a scene block renders the same details either way.
+// The engine reports nothing playing unless a case sets mockActiveId / mockPaused.
+// Like the real engine, isScenePlaying stays true through a pause.
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   // Keep in sync with the named export in audio-engine.svelte.ts
   isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
   audioEngine: {
     playScene: vi.fn(),
+    previewSlot: vi.fn().mockResolvedValue(undefined),
     pauseScene: vi.fn(),
     resumeScene: vi.fn(),
     stopAll: vi.fn(),
@@ -54,8 +60,8 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     toggleMasterMute: vi.fn(),
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
-    isSceneActive: vi.fn(() => false),
-    isScenePlaying: vi.fn(() => false),
+    isSceneActive: vi.fn((id: number) => id === mockActiveId),
+    isScenePlaying: vi.fn((id: number) => id === mockActiveId),
     isSlotPlaying: vi.fn(() => false),
     slotVolume: vi.fn(() => undefined),
     get isPlaying() {
@@ -71,7 +77,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
       return 1;
     },
     get isScenePaused() {
-      return false;
+      return mockPaused;
     },
     get isMasterMuted() {
       return false;
@@ -124,6 +130,8 @@ let outsideEl: HTMLElement | null = null;
 beforeEach(() => {
   mockScenes = [];
   mockSlots = [];
+  mockActiveId = null;
+  mockPaused = false;
   vi.clearAllMocks();
 });
 
@@ -560,3 +568,49 @@ describe("the scene fence", () => {
     );
   });
 });
+
+describe("playing from the note", () => {
+  it("a paused scene's button resumes it, rather than pausing again", async () => {
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+    mockActiveId = 4;
+    mockPaused = true;
+    const { getByLabelText } = renderView({ sceneId: 4 });
+
+    await fireEvent.click(getByLabelText("Resume Dark Forest"));
+    expect(audioEngine.resumeScene).toHaveBeenCalled();
+    expect(audioEngine.pauseScene).not.toHaveBeenCalled();
+  });
+
+  it("another scene's pause doesn't make this block offer Resume", () => {
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" }), makeScene({ id: 5, name: "Market" })];
+    mockActiveId = 5;
+    mockPaused = true;
+    const { getByLabelText } = renderView({ sceneId: 4 });
+    expect(getByLabelText("Play Dark Forest")).toBeTruthy();
+  });
+
+  it("a track's play previews it on its own while the scene is stopped", async () => {
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+    mockSlots = [makeSlot({ id: 11, scene_id: 4, label: "Wind" })];
+    const { findByLabelText } = renderView({ sceneId: 4 });
+
+    await fireEvent.click(await findByLabelText("Play Wind on its own"));
+    expect(audioEngine.previewSlot).toHaveBeenCalledWith(4, 11);
+    expect(audioEngine.resumeSlot).not.toHaveBeenCalled();
+  });
+
+  it("a collapsed mixer is out of the Tab order", async () => {
+    mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
+    mockSlots = [makeSlot({ id: 11, scene_id: 4, label: "Wind" })];
+    const { findByLabelText, getByLabelText } = renderView({ sceneId: 4 });
+
+    // jsdom does not reflect `inert` to an attribute, so read the property up the tree.
+    const insideInert = (el: Element | null): boolean =>
+      !!el && ((el as HTMLElement & { inert?: boolean }).inert === true || insideInert(el.parentElement));
+    const trackPlay = await findByLabelText("Play Wind on its own");
+    expect(insideInert(trackPlay)).toBe(true);
+    await fireEvent.click(getByLabelText("Expand mixer"));
+    expect(insideInert(trackPlay)).toBe(false);
+  });
+});
+

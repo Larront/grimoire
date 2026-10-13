@@ -25,6 +25,7 @@
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
+  import { tick } from "svelte";
   import {
     DEFAULT_SCENE_ICON,
     sceneIcon,
@@ -121,12 +122,18 @@
     ref.sceneId !== null && audioEngine.isSceneActive(ref.sceneId),
   );
   const isThisSceneLoading = $derived(audioEngine.loadingSceneId === ref.sceneId);
+  // Every state here is THIS scene's. `isScenePlaying` stays true through a pause — the
+  // engine's playing flag only drops on stop — so the block used to read a paused scene
+  // as playing: its button kept saying Pause, kept pausing, and the scene could not be
+  // resumed from the note. And the button's label read the engine's global paused flag,
+  // so with another scene paused this one announced "Resume". Scoped as the scene
+  // editor scopes them.
+  const isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);
   const isThisScenePlaying = $derived(
-    ref.sceneId !== null && audioEngine.isScenePlaying(ref.sceneId),
+    ref.sceneId !== null && audioEngine.isScenePlaying(ref.sceneId) && !isThisScenePaused,
   );
-  const showBars = $derived(
-    isThisSceneActive && (audioEngine.isPlaying || audioEngine.isCrossfading),
-  );
+  const showBars = $derived(isThisScenePlaying);
+  const sceneLabel = $derived(thisScene?.name ?? "scene");
 
   // Scene thumbnail chip (color + icon), the same colours the dashboard card wears
   // (`sceneThumbColors`): the GM's chosen colour, or neutral Iron Raised when none was
@@ -143,19 +150,29 @@
 
   // ── Pause / Resume / Stop (parity with ScenePane) ────────────────────────
 
+  // While the scene loads, a click is ignored rather than the button disabled: disabling
+  // the button under a keyboard GM's focus dropped their focus to the page.
   function handlePlayPause() {
     if (ref.sceneId === null || isThisSceneLoading) return;
     if (isThisScenePlaying) {
       audioEngine.pauseScene();
-    } else if (isThisSceneActive && audioEngine.isScenePaused) {
+    } else if (isThisScenePaused) {
       audioEngine.resumeScene();
     } else {
       audioEngine.playScene(ref.sceneId);
     }
   }
 
-  function handleStopScene() {
+  let playButton = $state<HTMLButtonElement | null>(null);
+
+  // Stop leaves the strip once the scene stops; focus goes to Play rather than the page.
+  async function handleStopScene(e: MouseEvent) {
+    const hadFocus = document.activeElement === e.currentTarget;
     audioEngine.stopAll();
+    if (hadFocus) {
+      await tick();
+      playButton?.focus();
+    }
   }
 
   function openInScenesTab() {
@@ -220,11 +237,16 @@
     }
   }
 
+  // A track's play button plays that track on its own while the scene is stopped, as in
+  // the scene editor; while the scene is active it brings the track in or out. It used to
+  // call resume on a track that had never started, which does nothing.
   async function toggleSlotPlayback(slot: SceneSlot) {
-    if (busySlots.has(slot.id)) return;
+    if (busySlots.has(slot.id) || ref.sceneId === null) return;
     busySlots.add(slot.id);
     try {
-      if (audioEngine.isSlotPlaying(slot.id)) {
+      if (!isThisSceneActive) {
+        await audioEngine.previewSlot(ref.sceneId, slot.id);
+      } else if (audioEngine.isSlotPlaying(slot.id)) {
         await audioEngine.pauseSlot(slot.id);
       } else {
         await audioEngine.resumeSlot(slot.id);
@@ -233,6 +255,14 @@
       busySlots.delete(slot.id);
     }
   }
+
+  // A track muted while the scene was stopped stays muted when it starts. The engine has
+  // no state for a stopped scene's tracks, so the mute was only drawn — the track then
+  // played at full volume under a slider showing 0.
+  $effect(() => {
+    if (!isThisSceneActive) return;
+    for (const id of slotMutedVolumes.keys()) audioEngine.setSlotVolume(id, 0);
+  });
 
   async function toggleLoop(slot: SceneSlot) {
     try {
@@ -373,15 +403,16 @@
     <div class="flex items-center gap-2 px-2.5 py-2">
       <!-- Play / Pause / Loading (primary toggle) -->
       <button
+        bind:this={playButton}
         onclick={handlePlayPause}
-        disabled={isThisSceneLoading}
+        aria-disabled={isThisSceneLoading}
         class="shrink-0 flex items-center justify-center size-6 rounded-sm
-               hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+               hover:bg-muted transition-colors aria-disabled:cursor-wait"
         aria-label={isThisScenePlaying
-          ? "Pause scene"
-          : audioEngine.isScenePaused
-            ? "Resume scene"
-            : "Play scene"}
+          ? `Pause ${sceneLabel}`
+          : isThisScenePaused
+            ? `Resume ${sceneLabel}`
+            : `Play ${sceneLabel}`}
       >
         {#if isThisSceneLoading}
           <LoaderCircle class="size-3.5 text-muted-foreground animate-spin" />
@@ -400,7 +431,7 @@
           onclick={handleStopScene}
           class="shrink-0 flex items-center justify-center size-6 rounded-sm
                  hover:bg-muted transition-colors"
-          aria-label="Stop scene"
+          aria-label="Stop {sceneLabel}"
         >
           <Square class="size-3 text-muted-foreground" />
         </button>
@@ -492,7 +523,9 @@
       class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
       style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
     >
-      <div class="min-h-0">
+      <!-- `inert` while collapsed: a closed mixer's controls were still Tab stops, invisible
+           ones, and arrow keys changed a volume nobody could see. -->
+      <div class="min-h-0" inert={!expanded}>
         <div class="border-t border-border/50 px-1 py-1">
           {#if slotsLoading}
             <div class="space-y-1.5 px-2 py-1.5" aria-hidden="true">
@@ -529,7 +562,11 @@
                     disabled={busySlots.has(slot.id)}
                     class="shrink-0 flex items-center justify-center size-5 rounded-sm
                            hover:bg-muted transition-colors disabled:opacity-40"
-                    aria-label={isPlaying ? `Pause ${slot.label}` : `Resume ${slot.label}`}
+                    aria-label={isPlaying
+                      ? `Pause ${slot.label}`
+                      : isThisSceneActive
+                        ? `Play ${slot.label}`
+                        : `Play ${slot.label} on its own`}
                   >
                     {#if isPlaying}
                       <Pause class="size-3 text-foreground" />
