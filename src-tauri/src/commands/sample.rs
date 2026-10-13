@@ -1,5 +1,9 @@
-use crate::db::models::{NewMap, NewPin, NewScene, NewSceneSlot, Scene, UpdateSceneThumbnail};
-use crate::db::schema::{maps, notes, pin_categories, pins, quick_notes, scene_slots, scenes};
+use crate::db::models::{
+    NewMap, NewPdfSceneLink, NewPin, NewScene, NewSceneSlot, Scene, UpdateSceneThumbnail,
+};
+use crate::db::schema::{
+    maps, notes, pdf_scene_links, pin_categories, pins, quick_notes, scene_slots, scenes,
+};
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use std::path::Path;
@@ -320,6 +324,67 @@ pub fn seed_sample_world_quick_notes(conn: &mut SqliteConnection) -> Result<(), 
     Ok(())
 }
 
+/// The one Scene-link the sample PDF ships with: the page-1 heading where the fight in
+/// "The Shadow in the Hall" begins, linked to Boss Battle. A first-time GM opening the
+/// PDF should find a passage that already plays — the link, its margin marker and the
+/// Scenes list are how they learn that a page can carry sound.
+///
+/// The offsets index the page's text exactly as the viewer does (PDF.js text items,
+/// concatenated). Nothing in Rust reads PDFs, so `src/test/sample-pdf-link.test.ts`
+/// reads these values out of this file and checks them against the bundled PDF — an
+/// edited PDF or a mistyped offset fails there, instead of the sample showing its
+/// first-time GM a link marked "the text here has changed".
+pub struct SamplePdfLink {
+    pub pdf_path: &'static str,
+    pub page: i32,
+    pub start_offset: i32,
+    pub end_offset: i32,
+    pub quote: &'static str,
+    pub scene: &'static str,
+}
+
+pub const SAMPLE_PDF_LINK: SamplePdfLink = SamplePdfLink {
+    pdf_path: "Encounters/The Shadow in the Hall.pdf",
+    page: 1,
+    start_offset: 1688,
+    end_offset: 1704,
+    quote: "Running the Hunt",
+    scene: "Boss Battle",
+};
+
+/// Seeds `SAMPLE_PDF_LINK`. Runs after `seed_sample_world_scenes`, whose Boss Battle it
+/// links to. Idempotent: skips if any Scene-link rows already exist.
+pub fn seed_sample_world_pdf_links(conn: &mut SqliteConnection) -> Result<(), String> {
+    let existing: i64 = pdf_scene_links::table
+        .count()
+        .get_result(conn)
+        .map_err(|e| e.to_string())?;
+    if existing > 0 {
+        return Ok(());
+    }
+
+    let link = &SAMPLE_PDF_LINK;
+    let scene_id: i32 = scenes::table
+        .filter(scenes::name.eq(link.scene))
+        .select(scenes::id)
+        .first(conn)
+        .map_err(|e| format!("Sample scene '{}' for the PDF link not found: {}", link.scene, e))?;
+
+    diesel::insert_into(pdf_scene_links::table)
+        .values(NewPdfSceneLink {
+            pdf_path: link.pdf_path.to_string(),
+            page: link.page,
+            start_offset: link.start_offset,
+            end_offset: link.end_offset,
+            quote: link.quote.to_string(),
+            scene_id,
+        })
+        .execute(conn)
+        .map_err(|e| format!("Failed to seed the sample PDF's Scene-link: {}", e))?;
+
+    Ok(())
+}
+
 /// Copies the bundled sample-world resource tree to a writable sandbox at
 /// `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 /// database with the sample map and pins, and returns the sandbox path.
@@ -360,6 +425,7 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
     seed_sample_world_maps(&mut conn)?;
     seed_sample_world_scenes(&mut conn, &sample_dst)?;
     seed_sample_world_quick_notes(&mut conn)?;
+    seed_sample_world_pdf_links(&mut conn)?;
 
     Ok(sample_dst.to_string_lossy().to_string())
 }
@@ -599,6 +665,7 @@ mod tests {
         seed_sample_world_maps(&mut conn).unwrap();
         seed_sample_world_scenes(&mut conn, tmp.path()).unwrap();
         seed_sample_world_quick_notes(&mut conn).unwrap();
+        seed_sample_world_pdf_links(&mut conn).unwrap();
 
         // Rebuild derived indexes (tags, links, aliases, search).
         let all_maps: Vec<crate::db::models::Map> =
@@ -708,6 +775,34 @@ mod tests {
             .get_result(&mut conn)
             .unwrap();
         assert_eq!(quick_count, 1, "re-seeding must not add a second Quick Note");
+
+        // ── PDF Scene-link: one, on a PDF the sample ships, to a seeded scene ───
+        //
+        // Its offsets are checked against the PDF's text by the frontend test named on
+        // `SAMPLE_PDF_LINK`; here, that it lands on a real file and a real scene, and
+        // that re-seeding (every open of the sandbox) adds no second copy.
+        let links: Vec<crate::db::models::PdfSceneLink> =
+            pdf_scene_links::table.load(&mut conn).unwrap();
+        assert_eq!(links.len(), 1, "expected exactly 1 seeded PDF Scene-link");
+        assert!(
+            tmp.path().join(&links[0].pdf_path).exists(),
+            "the seeded Scene-link's PDF '{}' is not in the sample",
+            links[0].pdf_path
+        );
+        let linked_scene: String = scenes::table
+            .find(links[0].scene_id)
+            .select(scenes::name)
+            .first(&mut conn)
+            .unwrap();
+        assert_eq!(linked_scene, SAMPLE_PDF_LINK.scene);
+        assert_eq!(
+            (links[0].end_offset - links[0].start_offset) as usize,
+            links[0].quote.chars().count(),
+            "the seeded link's offsets must span exactly its quote"
+        );
+        seed_sample_world_pdf_links(&mut conn).unwrap();
+        let link_count: i64 = pdf_scene_links::table.count().get_result(&mut conn).unwrap();
+        assert_eq!(link_count, 1, "re-seeding must not add a second Scene-link");
 
         // ── Map count ────────────────────────────────────────────────────────
         let map_count: i64 = maps::table.count().get_result(&mut conn).unwrap();
