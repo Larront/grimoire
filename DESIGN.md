@@ -340,6 +340,17 @@ A Scene-link makes a passage of an adventure PDF play its scene. It is built for
 - **Scenes in this PDF:** a toolbar list of every link in page order, to jump to or play.
 - **Drifted:** a link whose text no longer matches is drawn dashed in Ember Error, with a warning marker and a line in the bubble.
 
+### Statblock
+
+A creature to play on mid-fight, and a reference card the rest of the time. One mode, scoped to structure (ADR-0016 §6).
+
+- **View mode plays pools and marks, and nothing else.** Every other value reads as text and is edited behind the pencil with the rest of the creature's definition: a value that changes in play is written as a pool (`HP: 43/59`) or a mark track (`Conditions: [ ] Prone`).
+- **Pool:** the current value is a chip (Iron Border, 6px radius) inside a 28px target; the maximum is drawn, never targeted. Typing shows what Enter will do (`→ 56`), refuses junk in Ember Error rather than closing, and Enter or Escape returns focus to the chip.
+- **Marks:** 16px boxes with a 24px reach and an Ember Muted border; the word beside a box ticks it too. A ticked box fills with the foreground colour — not crimson, which the Signal Rule keeps for playing, active and selected.
+- **Names:** every control is named for the creature and the GM's label ("Kobold A HP, 3 of 5"), and a polite announcement says what each hit or tick did. Ctrl+Z works from the chip.
+- **Chrome:** collapse, width, save-as-preset and edit, 28px each with tooltips, revealed on hover or focus. Edit mode turns the frame dashed crimson.
+- **Encounters:** narrowed creatures in a callout tile; the callout grows past the prose column to as many 24rem creatures as the pane fits, up to three, its width snapped to whole cards.
+
 ### Volume Slider
 
 One component (`VolumeSlider`) for every level in the app: the scene editor, the in-note player, the mini player and the PDF scene-link bubble.
