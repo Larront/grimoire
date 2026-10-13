@@ -531,9 +531,15 @@
             class="statblock-mark"
             onclick={() => toggleMark(i, m)}
           >
-            {#if mark.checked}
-              <Check size={11} strokeWidth={3} aria-hidden="true" />
-            {/if}
+            <!-- Always drawn, hidden while unticked: an empty box took its baseline from
+                 its own bottom edge and a ticked one from the icon inside it, so ticking
+                 the first box moved the row's label 2.5px. -->
+            <Check
+              size={11}
+              strokeWidth={3}
+              aria-hidden="true"
+              class={mark.checked ? "" : "invisible"}
+            />
           </button>
           {#if mark.label}
             <!-- A label is free text the GM typed, so `[x] Cursed by [[Vecna]]` is a
