@@ -81,6 +81,16 @@ class LocalSlotPlayer implements SlotPlayer {
   private gain: GainNode | null = null;
   private currentSlot: SceneSlot | null = null;
   private currentVolume = 0;
+  // Pausing is stopping and resuming is starting again — an AudioBufferSourceNode can be
+  // played only once — so the player keeps what a resume needs: the decoded audio, and
+  // where in it playback had reached. It used to keep neither: resume() fetched and
+  // decoded the file again and started it from the top, so Pause then Play restarted
+  // every track, a second or more late.
+  private buffer: AudioBuffer | null = null;
+  /** Seconds into the file the current source began at. */
+  private offset = 0;
+  /** The context time the current source began. */
+  private startedAt = 0;
 
   constructor(private readonly localCtx: LocalAudioContext) {}
 
@@ -92,18 +102,24 @@ class LocalSlotPlayer implements SlotPlayer {
     const absolutePath = await api.getAudioAbsolutePath(slot.source_id);
     const assetUrl = convertFileSrc(absolutePath);
     const response = await fetch(assetUrl);
-    const buffer = await this.localCtx.ctx.decodeAudioData(await response.arrayBuffer());
+    this.buffer = await this.localCtx.ctx.decodeAudioData(await response.arrayBuffer());
+    this.offset = 0;
+    this.play(initialVolume);
+  }
 
+  private play(volume: number): void {
+    if (!this.buffer || !this.currentSlot) return;
     const source = this.localCtx.ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = slot.loop;
+    source.buffer = this.buffer;
+    source.loop = this.currentSlot.loop;
 
     const gain = this.localCtx.ctx.createGain();
-    gain.gain.value = initialVolume;
+    gain.gain.value = volume;
 
     source.connect(gain);
     gain.connect(this.localCtx.destination);
-    source.start();
+    source.start(0, this.offset);
+    this.startedAt = this.localCtx.ctx.currentTime;
 
     this.source = source;
     this.gain = gain;
@@ -111,6 +127,7 @@ class LocalSlotPlayer implements SlotPlayer {
 
   async stop(): Promise<void> {
     if (this.source) {
+      this.offset = this.positionNow();
       try {
         this.source.stop();
       } catch {
@@ -123,8 +140,19 @@ class LocalSlotPlayer implements SlotPlayer {
     this.gain = null;
   }
 
+  // Where playback has reached. A looping track wraps; one that played to its end and
+  // stopped starts again from the top when resumed.
+  private positionNow(): number {
+    const duration = this.buffer?.duration ?? 0;
+    const reached = this.offset + (this.localCtx.ctx.currentTime - this.startedAt);
+    if (duration <= 0) return 0;
+    if (this.currentSlot?.loop) return reached % duration;
+    return reached >= duration ? 0 : reached;
+  }
+
   async resume(): Promise<void> {
-    if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
+    if (this.buffer) this.play(this.currentVolume);
+    else if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
   }
 
   // A fade is where the slot's volume is decided, so it is also what a resume must
