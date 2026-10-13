@@ -8,8 +8,9 @@
   import { Play, Square, Trash2, Music2, Volume2, ChevronDown } from "@lucide/svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "./thumbnail-presets";
+  import { ICON_MAP, ACCENT_BG, ACCENT_FG, sceneThumbColors } from "./thumbnail-presets";
   import ScenePicker from "./ScenePicker.svelte";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import type { SceneWithCount } from "$lib/types/ledger";
 
   let {
@@ -25,7 +26,13 @@
   } = $props();
 
   const isPlaying = $derived(audioEngine.isScenePlaying(scene.id));
-  const chipBg = $derived(scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]);
+  // A chosen colour is drawn as everywhere else, a wash; any colour can be chosen now, and
+  // painted raw a picked hex would fill the chip at full strength.
+  const chipBg = $derived(
+    scene.thumbnail_color
+      ? sceneThumbColors(scene).bg
+      : ACCENT_BG[scene.id % ACCENT_BG.length],
+  );
   const chipFg = $derived(ACCENT_FG[scene.id % ACCENT_FG.length]);
   const ChipIcon = $derived(
     scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2,
@@ -40,10 +47,6 @@
 
   function openScene() {
     tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
-  }
-
-  function onMasterVolumeInput(e: Event) {
-    audioEngine.setMasterVolume(parseFloat((e.target as HTMLInputElement).value));
   }
 
   function changeScene(sceneId: number) {
@@ -108,25 +111,12 @@
 
     <!-- Master volume (global; no per-link override). -->
     <Volume2 class="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-    <div class="relative flex w-20 items-center">
-      <div class="relative h-1 w-full rounded-full bg-muted">
-        <div
-          class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-          style="width: {audioEngine.masterVolume * 100}%"
-        ></div>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={audioEngine.masterVolume}
-        class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-        aria-label="Master volume"
-        aria-valuetext="{Math.round(audioEngine.masterVolume * 100)}%"
-        oninput={onMasterVolumeInput}
-      />
-    </div>
+    <VolumeSlider
+      value={audioEngine.masterVolume}
+      label="Master volume"
+      active={audioEngine.isPlaying}
+      oninput={(v) => audioEngine.setMasterVolume(v)}
+    />
 
     <div class="mx-0.5 h-4 w-px bg-border"></div>
 

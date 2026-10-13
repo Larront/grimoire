@@ -330,13 +330,12 @@ describe("PinDetails — appearance section", () => {
     expect(container.querySelector('[data-section="appearance"]')).toBeTruthy();
   });
 
-  it("renders ColorSwatches in the appearance section", async () => {
+  it("renders the colour picker in the appearance section", async () => {
     const { container } = render(PinDetails, {
       props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
-    // ColorSwatches uses data-slot="color-swatches"
-    expect(container.querySelector('[data-slot="color-swatches"]')).toBeTruthy();
+    expect(container.querySelector("[data-color-picker]")).toBeTruthy();
   });
 });
 
@@ -414,5 +413,34 @@ describe("PinDetails — delete", () => {
     await flush();
     await fireEvent.click(getByTestId("pin-delete"));
     expect(onDelete).toHaveBeenCalledWith(basePin.id);
+  });
+});
+
+// ── Colour falls back as the map draws it ─────────────────────────────────────
+
+describe("PinDetails — colour picker fallback", () => {
+  it("a categorised pin with no colour of its own shows its category's", async () => {
+    const ruin: PinCategory = {
+      id: 7,
+      map_id: 5,
+      name: "Ruin",
+      icon: "landmark",
+      color: "#5b9ec9",
+      shape: "shield",
+    };
+    const { container } = render(PinDetails, {
+      props: {
+        pin: { ...basePin, category_id: 7 },
+        categories: [ruin],
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
+    });
+    await flush();
+    const hex = container.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+    expect(hex.placeholder).toBe("#5b9ec9");
+    const btn = container.querySelector("[data-color-default]") as HTMLElement;
+    expect(btn.textContent?.trim()).toBe("Category");
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
   });
 });

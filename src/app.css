@@ -488,6 +488,16 @@
   }
 
   /*
+    Selected text is the accent's tint, not the platform's blue. Selection is one of the
+    five things the accent means (DESIGN.md §2), and the system highlight was the one
+    piece of colour in the app that belonged to no part of it — a GM selecting a word in
+    a note or a scene's name saw Windows blue on warm iron.
+  */
+  ::selection {
+    background-color: var(--primary-muted);
+  }
+
+  /*
     `overflow-x: hidden` is why `minWidth` exists in `tauri.conf.json`, and the two are a
     pair rather than two separate settings. Clipping is right for this shell — a desktop
     app that grows a horizontal scrollbar has already lost — but clipping with no floor
@@ -610,8 +620,10 @@
   display: block;
 }
 
-/* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
-[data-note-scroll] {
+/* Pane scroll container — scrollbar sits at the pane edge, fades in on hover. Notes
+   first; the scene editor wears the same one rather than the platform's light bar. */
+[data-note-scroll],
+[data-pane-scroll] {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -619,30 +631,38 @@
 }
 
 [data-note-scroll]:hover,
-[data-note-scroll]:focus-within {
+[data-note-scroll]:focus-within,
+[data-pane-scroll]:hover,
+[data-pane-scroll]:focus-within {
   scrollbar-color: var(--background-border) transparent;
 }
 
-[data-note-scroll]::-webkit-scrollbar {
+[data-note-scroll]::-webkit-scrollbar,
+[data-pane-scroll]::-webkit-scrollbar {
   width: 8px;
 }
 
-[data-note-scroll]::-webkit-scrollbar-track {
+[data-note-scroll]::-webkit-scrollbar-track,
+[data-pane-scroll]::-webkit-scrollbar-track {
   background: transparent;
 }
 
-[data-note-scroll]::-webkit-scrollbar-thumb {
+[data-note-scroll]::-webkit-scrollbar-thumb,
+[data-pane-scroll]::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 4px;
   transition: background 150ms ease;
 }
 
 [data-note-scroll]:hover::-webkit-scrollbar-thumb,
-[data-note-scroll]:focus-within::-webkit-scrollbar-thumb {
+[data-note-scroll]:focus-within::-webkit-scrollbar-thumb,
+[data-pane-scroll]:hover::-webkit-scrollbar-thumb,
+[data-pane-scroll]:focus-within::-webkit-scrollbar-thumb {
   background: var(--background-border);
 }
 
-[data-note-scroll]::-webkit-scrollbar-thumb:hover {
+[data-note-scroll]::-webkit-scrollbar-thumb:hover,
+[data-pane-scroll]::-webkit-scrollbar-thumb:hover {
   background: var(--foreground-faint);
 }
 
@@ -1098,6 +1118,35 @@ input[type="range"]::-moz-range-thumb {
 input[type="range"]:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+/* The colour picker's hue strip: the whole spectrum as its track, and a ring rather than
+   a crimson dot as its handle, so the handle shows the hue under it instead of the
+   accent. The thin dark edge keeps the white ring visible over yellow. */
+input[type="range"].hue-slider {
+  height: 12px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+input[type="range"].hue-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+input[type="range"].hue-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+input[type="range"].hue-slider:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* ── Sonner toasts ───────────────────────────────────────────── */

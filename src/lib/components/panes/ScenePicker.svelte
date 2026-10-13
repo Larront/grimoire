@@ -5,9 +5,9 @@
      creates an empty Scene and links it immediately, so a GM can attach a Scene to
      a passage before authoring its audio (issue #104). -->
 <script lang="ts">
-  import { Search, Music2, Plus } from "@lucide/svelte";
+  import { Search, Plus } from "@lucide/svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "./thumbnail-presets";
+  import { sceneIcon, sceneThumbColors } from "./thumbnail-presets";
   import { tick } from "svelte";
 
   let {
@@ -56,11 +56,9 @@
       <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">No scenes match.</p>
     {:else}
       {#each filtered as scene (scene.id)}
-        {@const RowIcon = scene.thumbnail_icon
-          ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
-          : Music2}
-        {@const rowBg = scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]}
-        {@const rowFg = ACCENT_FG[scene.id % ACCENT_FG.length]}
+        {@const RowIcon = sceneIcon(scene)}
+        {@const rowBg = sceneThumbColors(scene).bg}
+        {@const rowFg = sceneThumbColors(scene).fg}
         <button
           type="button"
           role="option"

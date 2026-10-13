@@ -4,6 +4,7 @@
   import type { SceneSlot } from "$lib/types/ledger";
   import MiniPlayerTrack from "./MiniPlayerTrack.svelte";
   import MiniPlayerVisualizer from "./MiniPlayerVisualizer.svelte";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import { Play, Pause, Square, Volume2, VolumeOff, ChevronUp, LoaderCircle } from "@lucide/svelte";
 
   let expanded = $state(false);
@@ -46,11 +47,6 @@
 
   function handleStop() {
     audioEngine.stopAll();
-  }
-
-  function handleMasterVolumeInput(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
-    audioEngine.setMasterVolume(value);
   }
 </script>
 
@@ -118,26 +114,13 @@
           {/if}
         </button>
 
-        <!-- Master volume slider -->
-        <div class="relative flex flex-1 items-center">
-          <div class="relative h-1 w-full rounded-full bg-sidebar-accent">
-            <div
-              class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-              style="width: {audioEngine.masterVolume * 100}%"
-            ></div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={audioEngine.masterVolume}
-            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            aria-label="Master volume"
-            aria-valuetext="{Math.round(audioEngine.masterVolume * 100)}%"
-            oninput={handleMasterVolumeInput}
-          />
-        </div>
+        <VolumeSlider
+          class="w-auto flex-1"
+          value={audioEngine.masterVolume}
+          label="Master volume"
+          active={audioEngine.isPlaying}
+          oninput={(v) => audioEngine.setMasterVolume(v)}
+        />
       </div>
     </div>
 
