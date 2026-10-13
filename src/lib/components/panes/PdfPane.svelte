@@ -546,8 +546,9 @@
         dismissSelectionOnScroll();
       }}
       data-pdf-scroll
+      data-pane-scroll
       aria-label={`PDF: ${pdfTitle}`}
-      class="relative min-h-0 flex-1 overflow-y-auto bg-muted/40"
+      class="relative min-h-0 flex-1 overflow-auto bg-muted/40"
     >
       <!-- Find bar floats over the page surface, top-right -->
       {#if findOpen}

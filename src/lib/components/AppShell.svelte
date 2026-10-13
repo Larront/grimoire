@@ -103,10 +103,15 @@
     <SearchPalette />
     <QuickNoteDialog />
     <SampleEffects />
-    <div class="flex min-h-svh flex-1">
+    <!-- The shell is exactly the window's height, not at least it. With only a minimum,
+         any pane whose content was taller than the window — a PDF's pages, a long track
+         list — grew the shell instead of scrolling inside itself, and the whole app
+         scrolled: tab bar, toolbar and all. Bounded here, every pane's `flex-1 min-h-0`
+         chain gets a height to divide and its own scroll area does the scrolling. -->
+    <div class="flex h-svh min-h-0 flex-1 overflow-hidden">
       <AppSidebar />
-      <main class="flex min-w-0 flex-1 flex-col">
-        <Sidebar.Inset>
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <Sidebar.Inset class="min-h-0">
           <!-- Split pane content area -->
           <div class="flex flex-1 min-h-0 overflow-hidden">
             <!-- Left pane (always present) -->

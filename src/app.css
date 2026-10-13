@@ -640,6 +640,12 @@
 [data-note-scroll]::-webkit-scrollbar,
 [data-pane-scroll]::-webkit-scrollbar {
   width: 8px;
+  /* The horizontal bar, for a pane wider than it is — a PDF zoomed in or in a split. */
+  height: 8px;
+}
+
+[data-pane-scroll]::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 [data-note-scroll]::-webkit-scrollbar-track,
