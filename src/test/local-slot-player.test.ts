@@ -21,17 +21,22 @@ const { LocalSlotPlayer } = await import("../lib/stores/audio-engine.svelte");
 
 /** The gain each started source plays through, in order of start(). */
 let gains: Array<{ gain: { value: number; ramps: number[] } }>;
+/** Where in the file each started source began playing, in seconds, in order. */
+let startOffsets: number[];
+
+/** A two-minute track. */
+const DURATION = 120;
 
 function fakeLocalCtx() {
   const ctx = {
     currentTime: 0,
-    decodeAudioData: vi.fn(() => Promise.resolve({})),
+    decodeAudioData: vi.fn(() => Promise.resolve({ duration: DURATION })),
     createBufferSource: () => ({
       buffer: null,
       loop: false,
       connect: vi.fn(),
       disconnect: vi.fn(),
-      start: vi.fn(),
+      start: vi.fn((_when?: number, offset?: number) => startOffsets.push(offset ?? 0)),
       stop: vi.fn(),
     }),
     createGain: () => {
@@ -68,6 +73,7 @@ const slot: SceneSlot = {
 
 beforeEach(() => {
   gains = [];
+  startOffsets = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.resolve({ arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) })),
@@ -100,3 +106,60 @@ describe("LocalSlotPlayer resume", () => {
     expect(gains[1].gain.value).toBe(0.25);
   });
 });
+
+describe("LocalSlotPlayer pause", () => {
+  // The engine pauses a track by stopping it and resumes it with resume(). Stopping
+  // threw the playing sound away and resume() fetched, decoded and started the file again
+  // from its beginning — so Pause then Play restarted every track.
+  it("resumes where it was paused, without loading the file again", async () => {
+    const local = fakeLocalCtx();
+    const player = new LocalSlotPlayer(local as never);
+    await player.start(slot, 0.6);
+    local.ctx.currentTime = 5;
+    await player.stop();
+    local.ctx.currentTime = 30;
+    await player.resume();
+
+    expect(startOffsets).toEqual([0, 5]);
+    expect(local.ctx.decodeAudioData).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps counting from where it resumed across a second pause", async () => {
+    const local = fakeLocalCtx();
+    const player = new LocalSlotPlayer(local as never);
+    await player.start(slot, 0.6);
+    local.ctx.currentTime = 5;
+    await player.stop();
+    local.ctx.currentTime = 30;
+    await player.resume();
+    local.ctx.currentTime = 40;
+    await player.stop();
+    await player.resume();
+
+    expect(startOffsets).toEqual([0, 5, 15]);
+  });
+
+  it("a looping track paused past its end resumes at the matching point in the loop", async () => {
+    const local = fakeLocalCtx();
+    const player = new LocalSlotPlayer(local as never);
+    await player.start({ ...slot, loop: true }, 0.6);
+    local.ctx.currentTime = DURATION + 7;
+    await player.stop();
+    await player.resume();
+
+    expect(startOffsets[1]).toBeCloseTo(7);
+  });
+
+  it("a track that played to its end and stopped starts again from the top", async () => {
+    const local = fakeLocalCtx();
+    const player = new LocalSlotPlayer(local as never);
+    await player.start({ ...slot, loop: false }, 0.6);
+    local.ctx.currentTime = DURATION + 7;
+    await player.stop();
+    await player.resume();
+
+    expect(startOffsets[1]).toBe(0);
+  });
+});
+

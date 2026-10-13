@@ -57,7 +57,7 @@
     /** A text selection is being dragged on this page: let it pass through the links. */
     selecting?: boolean;
     onChangeScene: (linkId: number, sceneId: number) => void;
-    onNewScene: (linkId: number) => void;
+    onNewScene: (linkId: number, name: string) => void;
     onRemove: (linkId: number) => void;
   } = $props();
 
@@ -279,7 +279,7 @@
               scene={box.scene}
               drifted={box.drifted}
               onChangeScene={(sceneId) => onChangeScene(box.link.id, sceneId)}
-              onNewScene={() => onNewScene(box.link.id)}
+              onNewScene={(name) => onNewScene(box.link.id, name)}
               onRemove={() => onRemove(box.link.id)}
             />
           </div>

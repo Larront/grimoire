@@ -42,7 +42,7 @@
     scenesList: SceneWithCount[];
     onSceneLinkSelect: (selection: SceneLinkSelection) => void;
     onChangeSceneLink: (linkId: number, sceneId: number) => void;
-    onNewSceneForLink: (linkId: number) => void;
+    onNewSceneForLink: (linkId: number, name: string) => void;
     onRemoveSceneLink: (linkId: number) => void;
   }
   let {

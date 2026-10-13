@@ -20,8 +20,8 @@
 //   * `word`  — lower case, how a sentence says it. "Delete numbered list".
 //
 // They are declared rather than derived from one another. `Bullet List` is a plain "list"
-// in a sentence and `Ambient Scene` is a plain "scene", so a lower-casing rule would be
-// wrong for two of fourteen entries and there would be no way to tell which two.
+// in a sentence and `Scene` is a "scene player", so a lower-casing rule would be wrong
+// for two of fourteen entries and there would be no way to tell which two.
 import type { BlockIconName } from "$lib/components/editor/block-icons";
 
 /** A block the menus offer. The seven a text block can turn into are the first seven. */
@@ -110,9 +110,12 @@ export const BLOCK_VOCABULARY: Record<BlockVocabularyKey, BlockVocabularyEntry> 
     icon: "Minus",
     node: "horizontalRule",
   },
+  // The menus call it what the domain does — a Scene, the word `/scene` already uses.
+  // A sentence calls it the scene *player*: "Delete scene" read as deleting the scene
+  // itself, when the gutter handle's Delete takes out only the block in the note.
   scene: {
-    label: "Ambient Scene",
-    word: "scene",
+    label: "Scene",
+    word: "scene player",
     icon: "Music2",
     node: "sceneBlock",
   },

@@ -231,8 +231,31 @@ export const SceneBlock = Node.create({
       // dom is ours — is not enough, because when the mouse strays outside dom
       // during a drag the target is no longer inside it, so ProseMirror's
       // document-level mousemove handler takes over and kills the drag.
+      //
+      // And the native one: ProseMirror marks a draggable node's element `draggable`, so
+      // the grip can carry it, and in Chromium a range input inside a draggable element
+      // drags the element — pressing a volume slider picked up the whole block. While a
+      // pointer is down on a slider the block is not draggable; the decision is made at
+      // the press, so this listens for pointerdown, which comes before mousedown.
       stopEvent: ({ dom }) => {
         let isDraggingSlider = false;
+        dom.addEventListener(
+          "pointerdown",
+          (e) => {
+            const t = e.target as HTMLElement;
+            if (!(t instanceof HTMLInputElement && t.type === "range")) return;
+            const wasDraggable = dom.draggable;
+            dom.draggable = false;
+            window.addEventListener(
+              "pointerup",
+              () => {
+                dom.draggable = wasDraggable;
+              },
+              { once: true },
+            );
+          },
+          { capture: true },
+        );
         dom.addEventListener("mousedown", (e) => {
           const t = e.target as HTMLElement;
           if (t instanceof HTMLInputElement && t.type === "range") {

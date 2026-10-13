@@ -25,7 +25,7 @@
     /** The passage under this link no longer matches what was linked. */
     drifted?: boolean;
     onChangeScene: (sceneId: number) => void;
-    onNewScene: () => void;
+    onNewScene: (name: string) => void;
     onRemove: () => void;
   } = $props();
 
@@ -55,9 +55,9 @@
     onChangeScene(sceneId);
   }
 
-  function newScene() {
+  function newScene(name: string) {
     changeOpen = false;
-    onNewScene();
+    onNewScene(name);
   }
 </script>
 
@@ -156,7 +156,12 @@
 
   {#if changeOpen}
     <div class="absolute left-0 top-full z-20 mt-1">
-      <ScenePicker currentSceneId={scene.id} onSelect={changeScene} onNewScene={newScene} />
+      <ScenePicker
+        currentSceneId={scene.id}
+        onSelect={changeScene}
+        onNewScene={newScene}
+        onCancel={() => (changeOpen = false)}
+      />
     </div>
   {/if}
 </div>
