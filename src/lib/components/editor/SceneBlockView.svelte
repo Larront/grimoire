@@ -3,7 +3,6 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import {
-    Search,
     Play,
     Square,
     Volume2,
@@ -16,14 +15,17 @@
     SkipBack,
     SkipForward,
     LoaderCircle,
-    ChevronLeft,
-    Plus,
-    ExternalLink,
+    ArrowLeftRight,
+    PanelRightOpen,
+    CircleAlert,
   } from "@lucide/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import * as Popover from "$lib/components/ui/popover";
+  import ScenePicker from "$lib/components/panes/ScenePicker.svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
   import { api } from "$lib/api";
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
-  import type { Scene, SceneSlot } from "$lib/types/ledger";
+  import type { SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { tick } from "svelte";
   import {
@@ -65,30 +67,41 @@
   // a mixer was an edit that synced to every other machine.
   let expanded = $state(false);
 
-  // ── Placeholder search ────────────────────────────────────────────────────
-
-  let searchQuery = $state("");
-  const filteredScenes = $derived(
-    scenes.scenes.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase())),
-  );
+  // ── Choosing a scene ──────────────────────────────────────────────────────
 
   // The name written into the fence beside the id comes from the store, never from
   // the file — a scene the picker just listed is one the store has a live name for.
-  function selectScene(scene: Scene) {
-    onUpdate({ sceneId: scene.id, sceneName: scene.name });
+  function bindScene(id: number) {
+    const scene = scenes.scenes.find((s) => s.id === id);
+    if (scene) onUpdate({ sceneId: scene.id, sceneName: scene.name });
   }
 
-  async function createNewScene() {
+  // A scene made here is empty, so it opens beside the note: adding its tracks is the
+  // GM's next step, and it is one gesture away rather than a trip to find it.
+  async function createAndBind(name: string) {
     try {
-      const trimmed = searchQuery.trim();
-      const name = trimmed || "New Scene";
-      const scene = await scenes.createScene(name);
+      const scene = await scenes.createScene(name || "New Scene");
       onUpdate({ sceneId: scene.id, sceneName: scene.name });
-      searchQuery = "";
+      tabs.openTabOpposite({ type: "scene", id: scene.id, title: scene.name });
     } catch (e) {
       console.error("create scene failed:", e);
     }
   }
+
+  // The picker takes focus when it appears because of something the GM just did —
+  // `/scene` typed in the editor, or "Choose a scene" on a deleted one — and not when a
+  // note that happens to hold an empty block is opened.
+  let focusPicker = $state(
+    typeof document !== "undefined" && !!document.activeElement?.closest(".ProseMirror"),
+  );
+
+  // A deleted scene's block offers to choose another: back to the picker, focused.
+  function chooseAnother() {
+    focusPicker = true;
+    onUpdate({ sceneId: null, sceneName: "" });
+  }
+
+  let changeOpen = $state(false);
 
   // ── Active state ──────────────────────────────────────────────────────────
 
@@ -134,6 +147,9 @@
   );
   const showBars = $derived(isThisScenePlaying);
   const sceneLabel = $derived(thisScene?.name ?? "scene");
+  // A scene with no tracks has nothing to play; starting it would silently stop whatever
+  // the room is hearing. Play is unavailable and the strip offers to add tracks.
+  const isEmpty = $derived(!slotsLoading && activeSlots.length === 0);
 
   // Scene thumbnail chip (color + icon), the same colours the dashboard card wears
   // (`sceneThumbColors`): the GM's chosen colour, or neutral Iron Raised when none was
@@ -154,6 +170,7 @@
   // the button under a keyboard GM's focus dropped their focus to the page.
   function handlePlayPause() {
     if (ref.sceneId === null || isThisSceneLoading) return;
+    if (isEmpty && !isThisSceneActive) return;
     if (isThisScenePlaying) {
       audioEngine.pauseScene();
     } else if (isThisScenePaused) {
@@ -175,13 +192,11 @@
     }
   }
 
-  function openInScenesTab() {
+  // Beside the note, not in its place: opening the scene used to replace the note the GM
+  // was reading at the table.
+  function openBeside() {
     if (!thisScene) return;
-    tabs.openTab({ type: "scene", id: thisScene.id, title: thisScene.name });
-  }
-
-  function unbindScene() {
-    onUpdate({ sceneId: null, sceneName: "" });
+    tabs.openTabOpposite({ type: "scene", id: thisScene.id, title: thisScene.name });
   }
 
   function toggleExpanded() {
@@ -303,265 +318,208 @@
   }
 </script>
 
-{#if ref.sceneId === null}
-  <!-- ── Placeholder: scene picker ─────────────────────────────────────────── -->
-  <div class="my-1 rounded-lg border border-border bg-card/40 px-3 py-2.5 select-none">
-    <!-- Search. Every control here binds a scene, so a `/scene` inserted by accident
-         used to strand the picker in the note — hence the trash can that sat beside the
-         search field. Delete on the gutter handle's menu reaches a sealed block now
-         (#194), so this is a search field and nothing else. -->
-    <div class="relative mb-1.5">
-      <Search
-        class="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50 pointer-events-none"
-      />
-      <input
-        type="text"
-        placeholder="Search scenes…"
-        bind:value={searchQuery}
-        class="w-full pl-6 pr-2 py-1 font-sans text-xs bg-background border border-border/50
-               rounded-md text-foreground placeholder:text-muted-foreground/40
-               focus:outline-none focus:border-primary/60 transition-colors"
+<div class="@container my-3">
+  {#if ref.sceneId === null}
+    <!-- ── No scene chosen: the shared picker, inside the block's own frame ────────── -->
+    <div class="rounded-lg border border-border bg-card/40 p-2 select-none">
+      <p class="px-1 pb-1.5 text-xs font-semibold text-muted-foreground">
+        Choose a scene to play from this note
+      </p>
+      <ScenePicker
+        tint="scene"
+        framed={false}
+        autofocus={focusPicker}
+        onSelect={bindScene}
+        onNewScene={createAndBind}
       />
     </div>
+  {:else if !thisScene && scenes.isLoading}
+    <div class="h-11 animate-pulse rounded-lg border border-border bg-card/40" aria-hidden="true"></div>
+  {:else if !thisScene}
+    <!-- ── The scene was deleted. Its own state, not a player whose every control does
+         nothing. The name the fence remembers is not shown: a stale copy lies (#185). -->
+    <div
+      class="flex items-center gap-2.5 rounded-lg border border-border bg-card/40 px-3 py-2 select-none"
+      data-scene-missing
+    >
+      <CircleAlert class="size-4 shrink-0 text-muted-foreground" />
+      <p class="min-w-0 flex-1 text-sm text-muted-foreground">This scene no longer exists.</p>
+      <Button variant="outline" size="sm" onclick={chooseAnother}>Choose a scene</Button>
+    </div>
+  {:else}
+    <!-- ── Compact strip + expandable mixer ─────────────────────────────────────── -->
+    <div
+      class="overflow-hidden rounded-lg border bg-card/40 select-none transition-colors duration-200
+             {isThisScenePlaying ? 'border-primary/60' : 'border-border'}"
+    >
+      <div class="flex items-center gap-1 px-1.5 py-1.5">
+        <!-- Play / Pause / Resume: the strip's one keyboard play control. -->
+        <button
+          bind:this={playButton}
+          onclick={handlePlayPause}
+          aria-disabled={isThisSceneLoading || (isEmpty && !isThisSceneActive)}
+          title={isEmpty && !isThisSceneActive ? "No tracks yet" : undefined}
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                 aria-disabled:cursor-default aria-disabled:opacity-50
+                 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          aria-label={isThisScenePlaying
+            ? `Pause ${sceneLabel}`
+            : isThisScenePaused
+              ? `Resume ${sceneLabel}`
+              : `Play ${sceneLabel}`}
+        >
+          {#if isThisSceneLoading}
+            <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+          {:else if isThisScenePlaying}
+            <Pause class="size-4 text-foreground" />
+          {:else}
+            <Play class="size-4 text-foreground" />
+          {/if}
+        </button>
 
-    <!-- Scene list -->
-    <div class="max-h-40 overflow-y-auto flex flex-col" role="listbox" aria-label="Scenes">
-      {#if scenes.scenes.length === 0}
-        <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">
-          No scenes yet. Create one to get started.
-        </p>
-      {:else if filteredScenes.length === 0}
-        <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">No scenes match.</p>
-      {:else}
-        {#each filteredScenes as scene (scene.id)}
-          {@const RowIcon = sceneIcon(scene)}
-          {@const rowBg = sceneThumbColors(scene).bg}
-          {@const rowFg = sceneThumbColors(scene).fg}
+        {#if isThisSceneActive}
+          <button
+            onclick={handleStopScene}
+            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                   focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            aria-label="Stop {sceneLabel}"
+          >
+            <Square class="size-3.5 text-muted-foreground" />
+          </button>
+        {/if}
+
+        <!-- The scene itself — chip and name — is the play target for the pointer, as a
+             dashboard card's picture and a PDF passage are. Not a second Tab stop: the
+             button beside it is the keyboard's. -->
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors
+                 {isEmpty && !isThisSceneActive ? '' : 'cursor-pointer hover:bg-muted/60'}"
+          onclick={handlePlayPause}
+        >
+          <span
+            class="flex size-6 shrink-0 items-center justify-center rounded-sm"
+            style="background-color: {chipColor}"
+            aria-hidden="true"
+          >
+            <ChipIcon class="size-3.5" style="color: {chipIconColor}" strokeWidth={1.75} />
+          </span>
+          <span class="font-heading min-w-0 truncate text-sm leading-tight text-foreground">
+            {thisScene.name}
+          </span>
+          {#if showBars}
+            <NowPlayingBars />
+          {/if}
+        </div>
+
+        {#if isEmpty}
           <button
             type="button"
-            role="option"
-            aria-selected="false"
-            onclick={() => selectScene(scene)}
-            class="group w-full text-left flex items-center gap-2.5 px-2 py-1.5 rounded-md
-                   text-muted-foreground cursor-pointer transition-colors
-                   hover:bg-primary/10 hover:text-foreground
-                   focus-visible:bg-primary/10 focus-visible:text-foreground
-                   focus-visible:outline-none"
+            onclick={openBeside}
+            class="shrink-0 rounded-sm px-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline
+                   focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           >
-            <span
-              class="shrink-0 flex size-6 items-center justify-center rounded-sm ring-1 ring-inset ring-transparent transition-[box-shadow] group-hover:ring-primary/30"
-              style="background-color: {rowBg}"
-              aria-hidden="true"
-            >
-              <RowIcon class="size-3.5" style="color: {rowFg}" strokeWidth={1.75} />
-            </span>
-            <span class="truncate font-heading text-sm">{scene.name}</span>
+            No tracks · Add some
           </button>
-        {/each}
-      {/if}
-    </div>
-
-    <!-- Create new scene -->
-    {#if scenes.scenes.length > 0}
-      <div class="-mx-3 mt-1.5 mb-1.5 border-t border-border/40"></div>
-    {/if}
-    <button
-      type="button"
-      onclick={createNewScene}
-      class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer
-             font-sans text-xs text-muted-foreground transition-colors
-             hover:bg-primary/10 hover:text-foreground
-             focus-visible:bg-primary/10 focus-visible:text-foreground focus-visible:outline-none"
-    >
-      <span
-        class="shrink-0 flex size-6 items-center justify-center rounded-sm bg-muted text-muted-foreground"
-        aria-hidden="true"
-      >
-        <Plus class="size-3.5" strokeWidth={1.75} />
-      </span>
-      {#if searchQuery.trim()}
-        <span
-          >Create scene <span class="font-heading text-foreground">“{searchQuery.trim()}”</span
-          ></span
-        >
-      {:else}
-        <span>Create new scene</span>
-      {/if}
-    </button>
-  </div>
-{:else}
-  <!-- ── Active: compact strip + expandable mixer ───────────────────────────── -->
-  <div
-    class="my-1 rounded-lg border bg-card/40 select-none overflow-hidden transition-colors duration-200
-           {isThisScenePlaying
-      ? 'border-primary/60'
-      : isThisSceneLoading
-        ? 'border-primary/30'
-        : 'border-border'}"
-  >
-    <!-- Compact strip -->
-    <div class="flex items-center gap-2 px-2.5 py-2">
-      <!-- Play / Pause / Loading (primary toggle) -->
-      <button
-        bind:this={playButton}
-        onclick={handlePlayPause}
-        aria-disabled={isThisSceneLoading}
-        class="shrink-0 flex items-center justify-center size-6 rounded-sm
-               hover:bg-muted transition-colors aria-disabled:cursor-wait"
-        aria-label={isThisScenePlaying
-          ? `Pause ${sceneLabel}`
-          : isThisScenePaused
-            ? `Resume ${sceneLabel}`
-            : `Play ${sceneLabel}`}
-      >
-        {#if isThisSceneLoading}
-          <LoaderCircle class="size-3.5 text-muted-foreground animate-spin" />
-        {:else if isThisScenePlaying}
-          <Pause class="size-3 text-foreground" />
-        {:else}
-          <Play
-            class="size-3.5 {isThisSceneActive ? 'text-foreground' : 'text-muted-foreground'}"
-          />
         {/if}
-      </button>
 
-      <!-- Stop (only when active) -->
-      {#if isThisSceneActive}
         <button
-          onclick={handleStopScene}
-          class="shrink-0 flex items-center justify-center size-6 rounded-sm
-                 hover:bg-muted transition-colors"
-          aria-label="Stop {sceneLabel}"
+          onclick={openBeside}
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          aria-label="Open {sceneLabel} beside this note"
+          title="Open beside this note"
         >
-          <Square class="size-3 text-muted-foreground" />
+          <PanelRightOpen class="size-3.5 text-muted-foreground" />
         </button>
-      {/if}
 
-      <!-- Scene identity chip (color tint + icon) -->
-      <span
-        class="shrink-0 flex size-5 items-center justify-center rounded-sm"
-        style="background-color: {chipColor}"
-        aria-hidden="true"
-      >
-        <ChipIcon class="size-3" style="color: {chipIconColor}" strokeWidth={1.75} />
-      </span>
+        <!-- Change scene: a dropdown that keeps the current scene until another is
+             chosen. It used to unbind at once, 32px from Expand, leaving the GM a picker
+             with no way back but Ctrl+Z. -->
+        <Popover.Root bind:open={changeOpen}>
+          <Popover.Trigger>
+            {#snippet child({ props })}
+              <button
+                {...props}
+                class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                       focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                aria-label="Change scene"
+                title="Change scene"
+              >
+                <ArrowLeftRight class="size-3.5 text-muted-foreground" />
+              </button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content align="end" class="w-64 p-1.5">
+            <ScenePicker
+              tint="scene"
+              framed={false}
+              currentSceneId={thisScene.id}
+              onSelect={(id) => {
+                changeOpen = false;
+                bindScene(id);
+              }}
+              onNewScene={(name) => {
+                changeOpen = false;
+                void createAndBind(name);
+              }}
+              onCancel={() => (changeOpen = false)}
+            />
+          </Popover.Content>
+        </Popover.Root>
 
-      <!-- Scene name — Metamorphous (world content), clickable → opens scene -->
-      <button
-        type="button"
-        onclick={openInScenesTab}
-        class="group flex-1 min-w-0 flex items-center gap-1 text-left
-               truncate font-heading text-xs leading-tight transition-colors duration-200
-               {isThisScenePlaying
-          ? 'text-foreground'
-          : 'text-muted-foreground hover:text-foreground'}"
-        aria-label="Open {thisScene?.name ?? 'scene'} in Scenes"
-      >
-        <span class="truncate">{thisScene?.name ?? "Unknown scene"}</span>
-        <ExternalLink class="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-      </button>
-
-      <!-- Playing indicator -->
-      {#if showBars}
-        <NowPlayingBars />
-      {/if}
-
-      <!-- Master mute toggle -->
-      <button
-        onclick={() => audioEngine.toggleMasterMute()}
-        class="shrink-0 flex items-center justify-center size-6 rounded-sm
-               hover:bg-muted transition-colors"
-        aria-label={audioEngine.isMasterMuted ? "Unmute" : "Mute all"}
-      >
-        {#if audioEngine.isMasterMuted}
-          <VolumeOff class="size-3 text-muted-foreground/50" />
-        {:else}
-          <Volume2 class="size-3 text-muted-foreground/60" />
-        {/if}
-      </button>
-
-      <VolumeSlider
-        value={audioEngine.masterVolume}
-        label="Master volume"
-        active={audioEngine.isPlaying}
-        oninput={(v) => audioEngine.setMasterVolume(v)}
-      />
-
-      <!-- Change scene (return to picker). It used to stand beside a trash can, and the
-           distinction between them was worth the two buttons: unbinding leaves the block
-           waiting for a scene, removal took it out of the note. Only the unbinding is a
-           scene-block gesture — Delete lives on the gutter handle's menu now (#194), and
-           neither one touches the scene in the Scenes pane. -->
-      <button
-        onclick={unbindScene}
-        class="shrink-0 flex items-center justify-center size-6 rounded-sm
-               hover:bg-muted transition-colors"
-        aria-label="Change scene"
-        title="Change scene"
-      >
-        <ChevronLeft class="size-3.5 text-muted-foreground" />
-      </button>
-
-      <!-- Expand / Collapse -->
-      <button
-        onclick={toggleExpanded}
-        class="shrink-0 flex items-center justify-center size-6 rounded-sm
-               hover:bg-muted transition-colors"
-        aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
-        aria-expanded={expanded}
-      >
-        {#if expanded}
-          <ChevronUp class="size-3.5 text-muted-foreground" />
-        {:else}
-          <ChevronDown class="size-3.5 text-muted-foreground" />
-        {/if}
-      </button>
-    </div>
-
-    <!-- Expandable mixer panel — grid-rows slide (snaps under reduced-motion) -->
-    <div
-      class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
-      style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
-    >
-      <!-- `inert` while collapsed: a closed mixer's controls were still Tab stops, invisible
-           ones, and arrow keys changed a volume nobody could see. -->
-      <div class="min-h-0" inert={!expanded}>
-        <div class="border-t border-border/50 px-1 py-1">
-          {#if slotsLoading}
-            <div class="space-y-1.5 px-2 py-1.5" aria-hidden="true">
-              {#each { length: 2 } as _, i (i)}
-                <div class="h-8 rounded-md bg-muted/50 animate-pulse"></div>
-              {/each}
-            </div>
-          {:else if activeSlots.length === 0}
-            <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">
-              No tracks yet. <button
-                class="underline-offset-2 hover:underline"
-                onclick={openInScenesTab}>Open this scene</button
-              > to add some.
-            </p>
+        <button
+          onclick={toggleExpanded}
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
+          aria-expanded={expanded}
+        >
+          {#if expanded}
+            <ChevronUp class="size-4 text-muted-foreground" />
           {:else}
-            {#each activeSlots as slot (slot.id)}
-              {@const isPlaying = audioEngine.isSlotPlaying(slot.id)}
-              {@const displayVol = getSlotDisplayVolume(slot)}
-              {@const isMuted = slotMutedVolumes.has(slot.id)}
-              {@const isSpotify = slot.source === "spotify"}
-              {@const isPlaylist = isPlaylistSlot(slot)}
+            <ChevronDown class="size-4 text-muted-foreground" />
+          {/if}
+        </button>
+      </div>
 
-              <div class="group rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
-                <!-- Row 1: source pill + label + play/pause -->
-                <div class="flex items-center gap-2 min-w-0 mb-1">
-                  <span
-                    class="shrink-0 inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground leading-none"
-                    >{isSpotify ? "Spotify" : "Local"}</span
-                  >
-                  <span class="flex-1 truncate font-sans text-xs text-foreground">{slot.label}</span
-                  >
+      <!-- Expandable mixer panel — grid-rows slide (snaps under reduced-motion) -->
+      <div
+        class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
+        style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
+      >
+        <!-- `inert` while collapsed: a closed mixer's controls were still Tab stops,
+             invisible ones, and arrow keys changed a volume nobody could see. -->
+        <div class="min-h-0" inert={!expanded}>
+          <div class="border-t border-border px-1 py-1">
+            {#if slotsLoading}
+              <div class="space-y-1 px-1 py-1" aria-hidden="true">
+                {#each { length: 2 } as _, i (i)}
+                  <div class="h-8 animate-pulse rounded-md bg-muted/50"></div>
+                {/each}
+              </div>
+            {:else if activeSlots.length === 0}
+              <p class="px-2 py-2 text-xs text-muted-foreground">
+                No tracks yet. <button
+                  class="rounded-sm text-foreground underline underline-offset-2
+                         focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                  onclick={openBeside}>Add tracks</button
+                > in the scene editor.
+              </p>
+            {:else}
+              {#each activeSlots as slot (slot.id)}
+                {@const isPlaying = isThisSceneActive && audioEngine.isSlotPlaying(slot.id)}
+                {@const displayVol = getSlotDisplayVolume(slot)}
+                {@const isMuted = slotMutedVolumes.has(slot.id)}
+                {@const isPlaylist = isPlaylistSlot(slot)}
+
+                <!-- One row per track, as in the scene editor. -->
+                <div class="flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50">
                   <button
                     onclick={() => toggleSlotPlayback(slot)}
-                    disabled={busySlots.has(slot.id)}
-                    class="shrink-0 flex items-center justify-center size-5 rounded-sm
-                           hover:bg-muted transition-colors disabled:opacity-40"
+                    aria-disabled={busySlots.has(slot.id)}
+                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
                     aria-label={isPlaying
                       ? `Pause ${slot.label}`
                       : isThisSceneActive
@@ -569,29 +527,55 @@
                         : `Play ${slot.label} on its own`}
                   >
                     {#if isPlaying}
-                      <Pause class="size-3 text-foreground" />
+                      <Pause class="size-3.5 text-foreground" />
                     {:else}
-                      <Play class="size-3 text-muted-foreground" />
+                      <Play class="size-3.5 text-muted-foreground" />
                     {/if}
                   </button>
-                </div>
 
-                <!-- Row 2: [mute + volume] left, [loop + shuffle] right -->
-                <div class="flex items-center gap-1.5">
+                  <!-- Skip, for a playlist that is sounding: they act on the playing queue,
+                       so they appear with it, in the row rather than as a row of their own. -->
+                  {#if isPlaylist && isPlaying}
+                    <button
+                      onclick={() => audioEngine.skipPrev()}
+                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                      aria-label="Previous track in {slot.label}"
+                    >
+                      <SkipBack class="size-3.5 text-muted-foreground" />
+                    </button>
+                    <button
+                      onclick={() => audioEngine.skipNext()}
+                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                      aria-label="Next track in {slot.label}"
+                    >
+                      <SkipForward class="size-3.5 text-muted-foreground" />
+                    </button>
+                  {/if}
+
+                  <span class="min-w-0 flex-1 truncate px-1 text-sm text-foreground">{slot.label}</span>
+                  <span
+                    class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] leading-none font-medium text-muted-foreground @max-md:hidden"
+                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span
+                  >
+
                   <button
                     onclick={() => toggleSlotMute(slot)}
-                    class="shrink-0 flex items-center justify-center size-5 rounded-sm
-                           hover:bg-muted transition-colors"
-                    aria-label={isMuted ? `Unmute ${slot.label}` : `Mute ${slot.label}`}
+                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                    aria-label="Mute {slot.label}"
+                    aria-pressed={isMuted}
                   >
                     {#if isMuted}
-                      <VolumeOff class="size-3 text-muted-foreground/50" />
+                      <VolumeOff class="size-3.5 text-muted-foreground" />
                     {:else}
-                      <Volume2 class="size-3 text-muted-foreground/60" />
+                      <Volume2 class="size-3.5 text-muted-foreground" />
                     {/if}
                   </button>
 
                   <VolumeSlider
+                    class="w-24 @max-sm:w-14"
                     value={displayVol}
                     label="{slot.label} volume"
                     active={isPlaying}
@@ -599,72 +583,43 @@
                     onchange={(v) => handleSlotVolumeChange(v, slot)}
                   />
 
-                  <div class="ml-auto flex items-center gap-1.5">
-                    <!-- Loop -->
+                  <!-- Loop and shuffle: named once and pressed or not, rather than a label
+                       that changed underneath an aria-pressed saying the same thing. Off is
+                       Ember Muted, the app's resting colour for a live control; 30% read as
+                       disabled. Shuffle only for a Spotify playlist. -->
+                  <button
+                    onclick={() => toggleLoop(slot)}
+                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                    aria-label="Loop {slot.label}"
+                    aria-pressed={slot.loop}
+                    title="Loop"
+                  >
+                    <Repeat class="size-3.5 {slot.loop ? 'text-primary' : 'text-muted-foreground'}" />
+                  </button>
+                  {#if isPlaylist}
                     <button
-                      onclick={() => toggleLoop(slot)}
-                      class="shrink-0 flex items-center justify-center size-5 rounded-sm
-                             hover:bg-muted transition-colors"
-                      aria-label={slot.loop
-                        ? `Disable loop for ${slot.label}`
-                        : `Enable loop for ${slot.label}`}
-                      aria-pressed={slot.loop}
+                      onclick={() => toggleShuffle(slot)}
+                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                      aria-label="Shuffle {slot.label}"
+                      aria-pressed={!!slot.shuffle}
+                      title="Shuffle"
                     >
-                      <Repeat
-                        class="size-3 {slot.loop ? 'text-primary' : 'text-muted-foreground/30'}"
+                      <Shuffle
+                        class="size-3.5 {slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
                       />
                     </button>
-
-                    <!-- Shuffle (Spotify playlists only) -->
-                    {#if isPlaylist}
-                      <button
-                        onclick={() => toggleShuffle(slot)}
-                        class="shrink-0 flex items-center justify-center size-5 rounded-sm
-                               hover:bg-muted transition-colors"
-                        aria-label={slot.shuffle
-                          ? `Disable shuffle for ${slot.label}`
-                          : `Enable shuffle for ${slot.label}`}
-                        aria-pressed={!!slot.shuffle}
-                      >
-                        <Shuffle
-                          class="size-3 {slot.shuffle
-                            ? 'text-primary'
-                            : 'text-muted-foreground/30'}"
-                        />
-                      </button>
-                    {/if}
-                  </div>
+                  {/if}
                 </div>
-
-                <!-- Row 3: Spotify skip controls when playlist is playing -->
-                {#if isSpotify && isPlaylist && isPlaying}
-                  <div class="flex items-center justify-center gap-1 mt-1">
-                    <button
-                      onclick={() => audioEngine.skipPrev()}
-                      class="flex items-center justify-center size-5 rounded-sm
-                             hover:bg-muted transition-colors"
-                      aria-label="Previous track"
-                    >
-                      <SkipBack class="size-3 text-muted-foreground" />
-                    </button>
-                    <button
-                      onclick={() => audioEngine.skipNext()}
-                      class="flex items-center justify-center size-5 rounded-sm
-                             hover:bg-muted transition-colors"
-                      aria-label="Next track"
-                    >
-                      <SkipForward class="size-3 text-muted-foreground" />
-                    </button>
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          {/if}
+              {/each}
+            {/if}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
   @media (prefers-reduced-motion: reduce) {

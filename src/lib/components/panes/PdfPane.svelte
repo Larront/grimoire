@@ -378,14 +378,14 @@
   // "+ New scene" from the selection picker: create an empty Scene and link it to
   // the pending selection immediately, so a GM can attach a Scene to a passage
   // before authoring its audio (issue #104; the name is clicked through later).
-  async function linkNewScene() {
+  async function linkNewScene(name: string) {
     const sel = pendingSelection;
     if (!sel) return;
     pickerOpen = false;
     pendingSelection = null;
     window.getSelection()?.removeAllRanges();
     try {
-      const scene = await scenes.createScene("New Scene");
+      const scene = await scenes.createScene(name || "New Scene");
       await pdfSceneLinks.create(pdfPath, sel.page, sel.start, sel.end, sel.quote, scene.id);
       openNewSceneBeside(scene.id, scene.name);
     } catch (error) {
@@ -407,9 +407,9 @@
 
   // "+ New scene" from the change dropdown: create an empty Scene and re-link the
   // existing span to it.
-  async function newSceneForLink(linkId: number) {
+  async function newSceneForLink(linkId: number, name: string) {
     try {
-      const scene = await scenes.createScene("New Scene");
+      const scene = await scenes.createScene(name || "New Scene");
       await pdfSceneLinks.update(pdfPath, linkId, scene.id);
       openNewSceneBeside(scene.id, scene.name);
     } catch (error) {
@@ -781,7 +781,14 @@
           (typeof window !== 'undefined' ? window.innerHeight : 800) - 280,
         )}px;"
       >
-        <ScenePicker onSelect={linkScene} onNewScene={linkNewScene} />
+        <ScenePicker
+          onSelect={linkScene}
+          onNewScene={linkNewScene}
+          onCancel={() => {
+            pickerOpen = false;
+            pendingSelection = null;
+          }}
+        />
       </div>
       <!-- Click-away closes the picker without linking. -->
       <button

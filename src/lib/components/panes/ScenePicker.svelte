@@ -1,9 +1,10 @@
 <!-- src/lib/components/panes/ScenePicker.svelte
-     Searchable picker over existing Scenes, each shown with its icon + colour chip in
-     the hue its link will wear on the page. Used by the PDF "+ Link Scene" flow (both
-     the selection bubble and the link bubble's change-Scene dropdown). A persistent
-     "＋ New scene" footer creates an empty Scene and links it immediately, so a GM can
-     attach a Scene to a passage before authoring its audio (issue #104).
+     The one searchable picker over existing Scenes, wherever a GM chooses one: the PDF's
+     Link Scene flow and its link bubble's change dropdown, and a note's scene block (its
+     empty state and its change dropdown). The block used to draw a second picker of its
+     own, which drifted — Metamorphous rows, a crimson hover, no keyboard. A persistent
+     footer creates a Scene — named from the search when there is one — and binds it at
+     once, so a GM can attach a Scene before authoring its audio (issue #104).
 
      Keyboard: the search keeps focus; ↑/↓ move the highlighted row and Enter picks it,
      so typing "town" ⏎ links Town Market. The highlight is announced through
@@ -11,20 +12,39 @@
 <script lang="ts">
   import { Search, Plus, Check } from "@lucide/svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { sceneIcon, sceneLinkHue } from "./thumbnail-presets";
+  import { sceneIcon, sceneLinkHue, sceneThumbColors } from "./thumbnail-presets";
   import { wash } from "$lib/color";
   import { tick } from "svelte";
 
   let {
     currentSceneId = null,
+    tint = "link",
+    framed = true,
+    autofocus = true,
     onSelect,
     onNewScene,
+    onCancel,
   }: {
-    /** The scene a link already has, when re-linking — marked, and skipped as a pick. */
+    /** The scene already chosen, when changing it — marked, and skipped as a pick. */
     currentSceneId?: number | null;
+    /** Chip colours: the hue a PDF link wears (`link`), or the scene's own (`scene`),
+        neutral when it has none. */
+    tint?: "link" | "scene";
+    /** Draw its own floating surface. Off where something else frames it. */
+    framed?: boolean;
+    autofocus?: boolean;
+    /** Called with the search text (trimmed; may be empty) to name the new scene. */
+    onNewScene: (name: string) => void;
     onSelect: (sceneId: number) => void;
-    onNewScene: () => void;
+    /** Escape. */
+    onCancel?: () => void;
   } = $props();
+
+  function chip(scene: { id: number; thumbnail_color: string | null }): { bg: string; fg: string } {
+    if (tint === "scene") return sceneThumbColors(scene);
+    const hue = sceneLinkHue(scene);
+    return { bg: wash(hue, 0.18), fg: hue };
+  }
 
   const uid = $props.id();
   let query = $state("");
@@ -42,16 +62,18 @@
     active = 0;
   });
 
-  // Autofocus the search the moment the picker mounts.
+  // Focus the search once the picker is up. A frame later rather than on mount: inside a
+  // popover, the popover focuses its own panel as it opens and would take focus back.
   $effect(() => {
-    void tick().then(() => inputEl?.focus());
+    if (!autofocus) return;
+    void tick().then(() => requestAnimationFrame(() => inputEl?.focus()));
   });
 
   function pick(i: number) {
     if (i < filtered.length) {
       if (filtered[i].id !== currentSceneId) onSelect(filtered[i].id);
     } else {
-      onNewScene();
+      onNewScene(query.trim());
     }
   }
 
@@ -65,13 +87,21 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       pick(active);
+    } else if (e.key === "Escape" && onCancel) {
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
     }
   }
 
   const optionId = (i: number) => `${uid}-opt-${i}`;
 </script>
 
-<div class="w-64 rounded-lg border border-border bg-popover p-1.5 shadow-float select-none">
+<div
+  class="select-none {framed
+    ? 'w-64 rounded-lg border border-border bg-popover p-1.5 shadow-float'
+    : 'w-full'}"
+>
   <div class="relative mb-1.5">
     <Search
       class="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground"
@@ -103,7 +133,7 @@
     {:else}
       {#each filtered as scene, i (scene.id)}
         {@const RowIcon = sceneIcon(scene)}
-        {@const hue = sceneLinkHue(scene)}
+        {@const colors = chip(scene)}
         {@const current = scene.id === currentSceneId}
         <!-- Each scene in the hue its link will wear on the page, so the GM sees the
              pairing while choosing. -->
@@ -120,10 +150,10 @@
         >
           <span
             class="flex size-6 shrink-0 items-center justify-center rounded-sm"
-            style="background-color: {wash(hue, 0.18)}"
+            style="background-color: {colors.bg}"
             aria-hidden="true"
           >
-            <RowIcon class="size-3.5" style="color: {hue}" strokeWidth={1.75} />
+            <RowIcon class="size-3.5" style="color: {colors.fg}" strokeWidth={1.75} />
           </span>
           <span class="flex-1 truncate text-sm font-medium">{scene.name}</span>
           {#if current}
@@ -154,7 +184,9 @@
       >
         <Plus class="size-3.5" />
       </span>
-      <span class="text-sm font-medium">New scene</span>
+      <span class="truncate text-sm font-medium">
+        {query.trim() ? `Create “${query.trim()}”` : "New scene"}
+      </span>
     </button>
   </div>
 </div>

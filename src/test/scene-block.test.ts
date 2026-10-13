@@ -39,7 +39,7 @@ vi.mock("../lib/stores/scenes.svelte", () => ({
 }));
 
 vi.mock("../lib/stores/tabs.svelte", () => ({
-  tabs: { openTab: vi.fn() },
+  tabs: { openTab: vi.fn(), openTabOpposite: vi.fn() },
 }));
 
 // The engine reports nothing playing unless a case sets mockActiveId / mockPaused.
@@ -162,9 +162,9 @@ describe("scene reference resolution", () => {
     mockSlots = [makeSlot({ scene_id: 4, label: "Wind" })];
     const { container, getByLabelText } = renderView({ sceneId: 4 });
 
-    // The scene's name, and a control that opens that scene by name.
+    // The scene's name, and a control that opens that scene, by name, beside the note.
     expect(container.textContent).toContain("Dark Forest");
-    expect(getByLabelText("Open Dark Forest in Scenes")).toBeTruthy();
+    expect(getByLabelText("Open Dark Forest beside this note")).toBeTruthy();
 
     // And the scene's tracks, fetched for the id the block references.
     await waitFor(() => expect(container.textContent).toContain("Wind"));
@@ -175,16 +175,14 @@ describe("scene reference resolution", () => {
   });
 
   it("a reference that does not resolve renders its not-found state", () => {
+    // Its own state, not a player: every control on it used to do nothing.
     mockScenes = [makeScene({ id: 4 })];
-    const { container, getByLabelText } = renderView({ sceneId: 99 });
+    const { container, getByText, queryByLabelText } = renderView({ sceneId: 99 });
 
-    expect(container.textContent).toContain("Unknown scene");
-    expect(getByLabelText("Open scene in Scenes")).toBeTruthy();
-
-    // Unresolved chip is neutral, like any scene with no colour chosen: the
-    // accent is a signal, and "this reference is dangling" is not one.
-    const chip = container.querySelector('[style*="background-color"]') as HTMLElement;
-    expect(chip?.getAttribute("style")).toContain("--background-elevated");
+    expect(container.textContent).toContain("This scene no longer exists.");
+    expect(getByText("Choose a scene")).toBeTruthy();
+    expect(queryByLabelText(/^Play /)).toBeNull();
+    expect(queryByLabelText("Expand mixer")).toBeNull();
   });
 
   it("a stale cached name is not treated as authoritative", () => {
@@ -197,7 +195,7 @@ describe("scene reference resolution", () => {
     const gone = render(SceneBlockView, {
       props: { sceneId: 99, sceneName: "Dark Forest", onUpdate: vi.fn() },
     });
-    expect(gone.container.textContent).toContain("Unknown scene");
+    expect(gone.container.textContent).toContain("This scene no longer exists.");
     expect(gone.container.textContent).not.toContain("Dark Forest");
     cleanup();
 
@@ -213,7 +211,7 @@ describe("scene reference resolution", () => {
     const { container, getByPlaceholderText } = renderView({ sceneId: null });
 
     expect(getByPlaceholderText("Search scenes…")).toBeTruthy();
-    expect(container.textContent).not.toContain("Unknown scene");
+    expect(container.textContent).not.toContain("no longer exists");
   });
 
   it("draws no removal control of its own, bound or unbound", () => {
@@ -232,11 +230,10 @@ describe("scene reference resolution", () => {
     expect(bound.queryByLabelText("Remove scene block")).toBeNull();
   });
 
-  it("still offers unbinding, the one gesture the block kept", () => {
-    // The two used to sit beside each other and the distinction was worth both buttons:
-    // unbinding leaves the block waiting for a scene, removal took the block out. Only
-    // unbinding is the block's own gesture now, and it still touches nothing in the
-    // Scenes pane.
+  it("still offers changing the scene, the one gesture the block kept", () => {
+    // Changing and removing used to sit side by side. Removal lives on the gutter
+    // handle's menu now (#194); changing is the block's own gesture, and it touches
+    // nothing in the Scenes pane.
     mockScenes = [makeScene({ id: 4, name: "Dark Forest" })];
     const { getByLabelText } = renderView({ sceneId: 4 });
 
@@ -360,9 +357,10 @@ function mountNodeView(attrs: Record<string, unknown> = { sceneId: 1 }) {
   return { view, writes };
 }
 
-/** A node view showing a resolvable scene, plus an element outside it. */
+/** A node view showing a resolvable scene with one track, plus an element outside it. */
 function mountWithOutsideElement(attrs?: Record<string, unknown>) {
   mockScenes = [makeScene({ id: 1 })];
+  mockSlots = [makeSlot({ id: 11, scene_id: 1, label: "Wind" })];
   mounted = mountNodeView(attrs);
   outsideEl = document.body.appendChild(document.createElement("div"));
   return {
@@ -372,11 +370,15 @@ function mountWithOutsideElement(attrs?: Record<string, unknown>) {
 }
 
 describe("SceneBlock node view — slider drag", () => {
-  it("a drag that continues after the pointer leaves the node view keeps tracking", () => {
+  it("a drag that continues after the pointer leaves the node view keeps tracking", async () => {
     const { view, outsideEvent } = mountWithOutsideElement();
 
-    const slider = view.dom.querySelector('input[type="range"]') as HTMLInputElement;
-    expect(slider).toBeTruthy();
+    // A track's volume slider in the mixer (the strip no longer carries the master).
+    const slider = await waitFor(() => {
+      const el = view.dom.querySelector('input[type="range"]') as HTMLInputElement | null;
+      if (!el) throw new Error("no slider yet");
+      return el;
+    });
 
     // A pointer event landing outside the node view is ProseMirror's business.
     expect(view.stopEvent(outsideEvent)).toBe(false);
@@ -410,17 +412,32 @@ describe("SceneBlock node view — slider drag", () => {
 });
 
 describe("SceneBlock node view — attribute write-back", () => {
+  // Changing the scene opens the shared picker (in a popover, so in document.body) and
+  // keeps the binding until another scene is chosen.
+  async function changeTo(view: TestNodeView, name: string, writes?: RecordedAttrWrite[]) {
+    await fireEvent.click(view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement);
+    // Opening the picker changes nothing; only a choice does.
+    if (writes) expect(writes).toHaveLength(0);
+    const option = await waitFor(() => {
+      const el = [...document.body.querySelectorAll('[role="option"]')].find((o) =>
+        o.textContent?.includes(name),
+      ) as HTMLElement | undefined;
+      if (!el) throw new Error("no option " + name);
+      return el;
+    });
+    await fireEvent.click(option);
+  }
+
   it("writes the changed attribute back at the node's position", async () => {
-    mockScenes = [makeScene({ id: 1 })];
+    mockScenes = [makeScene({ id: 1 }), makeScene({ id: 2, name: "Market" })];
     mounted = mountNodeView({ sceneId: 1 });
     const { view, writes } = mounted;
 
-    const change = view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement;
-    await fireEvent.click(change);
+    await changeTo(view, "Market", writes);
 
     expect(writes).toHaveLength(1);
     expect(writes[0].pos).toBe(7);
-    expect(writes[0].attrs.sceneId).toBe(null);
+    expect(writes[0].attrs.sceneId).toBe(2);
   });
 
   it("binding a scene writes its name beside the id, so the fence stays legible", async () => {
@@ -439,11 +456,15 @@ describe("SceneBlock node view — attribute write-back", () => {
   });
 
   it("unbinding clears the remembered name with the id", async () => {
-    mockScenes = [makeScene({ id: 1, name: "Dark Forest" })];
+    // A deleted scene's "Choose a scene" is where a block unbinds now.
+    mockScenes = [];
     mounted = mountNodeView({ sceneId: 1, sceneName: "Dark Forest" });
     const { view, writes } = mounted;
 
-    await fireEvent.click(view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement);
+    const choose = [...view.dom.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Choose a scene",
+    ) as HTMLElement;
+    await fireEvent.click(choose);
 
     expect(writes[0].attrs.sceneId).toBe(null);
     expect(writes[0].attrs.sceneName).toBe("");
@@ -467,12 +488,11 @@ describe("SceneBlock node view — attribute write-back", () => {
   // on the node. Green since #172 — the shared node-view connector merges rather
   // than replaces, so the bug is gone by construction rather than by patch.
   it("write-back merges attributes, leaving the others intact", async () => {
-    mockScenes = [makeScene({ id: 1 })];
+    mockScenes = [makeScene({ id: 1 }), makeScene({ id: 2, name: "Market" })];
     mounted = mountNodeView({ sceneId: 1, marker: "keep me" });
     const { view, writes } = mounted;
 
-    const change = view.dom.querySelector('[aria-label="Change scene"]') as HTMLElement;
-    await fireEvent.click(change);
+    await changeTo(view, "Market");
 
     expect(writes[0].attrs.marker).toBe("keep me");
   });
