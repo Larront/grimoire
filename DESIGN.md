@@ -312,6 +312,17 @@ The scene's own surface (`ScenePane`), built for the table as much as for prep.
 - **Track rows:** play (which plays that track on its own while the scene is stopped), the name (click to rename), a Nunito source pill, volume, loop, shuffle (Spotify playlists only), and a visible menu (Rename `F2`, Remove `Del`) beside the right-click one. Removing a track is an undo toast. In a narrow pane the row sheds its pill and narrows its slider rather than overlapping.
 - **Empty:** a Metamorphous headline, one line, and Add Track as the primary action.
 
+### PDF Scene-links
+
+A Scene-link makes a passage of an adventure PDF play its scene. It is built for the GM at the table: find the passage, play it, in one gesture.
+
+- **Underline:** in the scene's hue, set just below the text (it scales with zoom) so it never crosses the letters. The hue is the one place a scene with no chosen colour still gets one — it pairs the passage with its scene — and `sceneLinkHue` is its only source, for the underline, the bubble's chip and the picker alike.
+- **Marker:** a small chip in the page's left margin, beside the line where the link starts: the scene's icon in its hue, or the crimson playing bars while it sounds. It reads from across the table without relying on colour, and it is the link's button and only keyboard stop.
+- **Playing:** clicking the passage or the marker plays or stops the scene. A playing passage takes a wash of its hue.
+- **Bubble:** on hover or focus, floating level. Play/Stop, master volume (crimson only while this scene plays), the scene's name (opens it beside the PDF), change scene, and Remove with an undo toast. A scene with no tracks cannot be played from a link, and the bubble says why.
+- **Scenes in this PDF:** a toolbar list of every link in page order, to jump to or play.
+- **Drifted:** a link whose text no longer matches is drawn dashed in Ember Error, with a warning marker and a line in the bubble.
+
 ### Volume Slider
 
 One component (`VolumeSlider`) for every level in the app: the scene editor, the in-note player, the mini player and the PDF scene-link bubble.

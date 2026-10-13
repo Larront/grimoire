@@ -18,20 +18,21 @@ import { storedColorHex, wash } from "$lib/color";
 const SCENE_WASH_ALPHA = 0.18;
 
 /*
-  A scene thumbnail's colour layer is the accent presets and nothing else. This file used
-  to state the five of them a second time, under a name of its own, which is how the
-  pickers in one app came to disagree about what colour "crimson" is (#222). They live in
-  `$lib/entity-colors` now, with the pin and annotation rows drawn from the same table,
-  and the scene pickers iterate `ACCENT_PRESETS` directly rather than through an alias
-  here — one name for one thing.
+  A scene's hue on a PDF page: the colour its links are underlined in, and the colour its
+  chip wears in the link's bubble and the picker. On a page a hue is identity, not
+  decoration — it pairs a passage with its scene — so a scene the GM has not coloured
+  still needs one, and takes the accent preset its id lands on.
 
-  What stays is the two CYCLES below, and only the PDF scene-link layer reads them: there
-  a hue pairs one highlight on the page with its chip, which is identity, not decoration.
-  Every other surface draws a scene through `sceneThumbColors` and `sceneIcon` further
-  down, so one scene looks like one thing wherever it appears.
+  One function for all three. The underline, the chip's wash and the chip's icon used to
+  read three different sources, so a scene coloured gold had a gold chip behind a blue
+  icon over a blue underline. Every other surface draws a scene through
+  `sceneThumbColors` and `sceneIcon` below, where an uncoloured scene stays neutral.
 */
-export const ACCENT_BG = ACCENT_PRESETS.map((p) => p.bg);
-export const ACCENT_FG = ACCENT_PRESETS.map((p) => p.swatch);
+const LINK_CYCLE = ACCENT_PRESETS.map((p) => p.swatch);
+
+export function sceneLinkHue(scene: { id: number; thumbnail_color: string | null }): string {
+  return storedColorHex(scene.thumbnail_color) ?? LINK_CYCLE[scene.id % LINK_CYCLE.length];
+}
 
 /** `name` is what a scene stores and must never change; `label` is what a GM reads. */
 export const ICON_OPTIONS = [

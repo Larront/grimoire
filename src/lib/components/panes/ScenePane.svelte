@@ -98,7 +98,6 @@
   // current choice. The popover stays open as choices land, so a GM can try a colour
   // against the icon without reopening anything.
   let appearanceOpen = $state(false);
-  let appearancePanel = $state<HTMLElement | null>(null);
 
   async function applyColor(color: string | null) {
     if (!scene) return;
@@ -675,19 +674,7 @@
             <Palette class="size-3.5 text-muted-foreground" />
             <span class="@max-md:sr-only">Appearance</span>
           </Popover.Trigger>
-          <!-- Focus lands on the panel, not its first button: opened by mouse, a ring on
-               "Choose picture" read as that being the current choice. Tab walks in from
-               here. -->
-          <Popover.Content
-            align="end"
-            class="flex w-72 flex-col gap-4"
-            bind:ref={appearancePanel}
-            tabindex={-1}
-            onOpenAutoFocus={(e) => {
-              e.preventDefault();
-              appearancePanel?.focus();
-            }}
-          >
+          <Popover.Content align="end" class="flex w-72 flex-col gap-4">
             <!-- Picture -->
             <section class="flex flex-col gap-1.5">
               <h3 class="text-xs font-semibold text-muted-foreground">Picture</h3>

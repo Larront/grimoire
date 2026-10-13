@@ -8,6 +8,8 @@
 // declaration for one function is cheaper than a dependency that would newly type
 // every global in the app's own code. If `@types/node` ever does land, delete this
 // file — the real declarations replace it, and this one would collide with them.
+//
+// `sample-pdf-link.test.ts` reads the bundled PDF's bytes, hence base64 as well as utf8.
 declare module "node:fs" {
-  export function readFileSync(path: string, encoding: "utf8"): string;
+  export function readFileSync(path: string, encoding: "utf8" | "base64"): string;
 }
