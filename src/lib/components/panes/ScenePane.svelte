@@ -7,7 +7,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import * as Popover from "$lib/components/ui/popover";
@@ -31,6 +31,7 @@
     X,
     ChevronLeft,
     VolumeOff,
+    Ellipsis,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
@@ -45,6 +46,8 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
+  import { SvelteSet } from "svelte/reactivity";
+  import { toastUndo } from "$lib/toast";
 
   interface Props {
     sceneId: number;
@@ -246,11 +249,22 @@
   }
 
   // ---- Slot play/pause ----
-  async function toggleSlotPlayback(slotId: number) {
-    if (audioEngine.isSlotPlaying(slotId)) {
-      await audioEngine.pauseSlot(slotId);
-    } else {
-      await audioEngine.resumeSlot(slotId);
+  // slot ids with a play/pause in flight, so a double click is one toggle
+  let busySlots = new SvelteSet<number>();
+
+  async function playSlot(slot: SceneSlot) {
+    if (!scene || busySlots.has(slot.id)) return;
+    busySlots.add(slot.id);
+    try {
+      if (!isThisSceneActive) {
+        await audioEngine.previewSlot(scene.id, slot.id);
+      } else if (audioEngine.isSlotPlaying(slot.id)) {
+        await audioEngine.pauseSlot(slot.id);
+      } else {
+        await audioEngine.resumeSlot(slot.id);
+      }
+    } finally {
+      busySlots.delete(slot.id);
     }
   }
 
@@ -294,6 +308,16 @@
     renamingSlotId = slot.id;
   }
 
+  // Leaving the field unmounts it, and focus fell to the page. Put it back on the row's
+  // menu button — unless the GM left by clicking something else, which keeps its focus.
+  async function endSlotRename(slotId: number) {
+    renamingSlotId = null;
+    await tick();
+    if (document.activeElement === document.body || document.activeElement === null) {
+      document.querySelector<HTMLElement>(`[data-slot-menu="${slotId}"]`)?.focus();
+    }
+  }
+
   async function handleSlotRename(slotId: number, newLabel: string) {
     const trimmed = newLabel.trim();
     if (!trimmed) {
@@ -313,22 +337,41 @@
     } catch (e) {
       console.error("Failed to rename slot:", e);
     } finally {
-      renamingSlotId = null;
+      endSlotRename(slotId);
     }
   }
 
-  // ---- Delete slot ----
-  let deleteSlotTarget = $state<SceneSlot | null>(null);
+  // ---- Remove slot ----
+  // An undo toast rather than a confirmation dialog (DESIGN.md: modals are
+  // disproportionate for this). The row leaves at once and falls silent; nothing is
+  // removed until the undo window closes, so Undo is a cancelled timer. Removing a track
+  // only takes it out of the scene — its audio file stays in the ledger — which the old
+  // dialog's "This action cannot be undone" made sound otherwise.
+  let pendingRemoval = new SvelteSet<number>();
+  let visibleSlots = $derived(slots.filter((s) => !pendingRemoval.has(s.id)));
 
-  async function confirmDeleteSlot() {
-    if (!deleteSlotTarget || !scene) return;
-    try {
-      slots = await scenes.deleteSlot(scene.id, deleteSlotTarget.id);
-    } catch (e) {
-      console.error("Failed to delete slot:", e);
-    } finally {
-      deleteSlotTarget = null;
-    }
+  function deleteSlot(slot: SceneSlot) {
+    if (!scene) return;
+    const sceneId = scene.id;
+    const wasPlaying = audioEngine.isSceneActive(sceneId) && audioEngine.isSlotPlaying(slot.id);
+    pendingRemoval.add(slot.id);
+    if (wasPlaying) void audioEngine.pauseSlot(slot.id);
+    toastUndo(
+      `Removed "${slot.label}" from the scene`,
+      async () => {
+        try {
+          slots = await scenes.deleteSlot(sceneId, slot.id);
+        } catch (e) {
+          console.error("Failed to delete slot:", e);
+        } finally {
+          pendingRemoval.delete(slot.id);
+        }
+      },
+      () => {
+        pendingRemoval.delete(slot.id);
+        if (wasPlaying && audioEngine.isSceneActive(sceneId)) void audioEngine.resumeSlot(slot.id);
+      },
+    );
   }
 
   // ---- Add track dialog ----
@@ -833,88 +876,72 @@
         </div>
       {:else}
         <div class="space-y-2">
-          {#each slots as slot (slot.id)}
+          {#each visibleSlots as slot (slot.id)}
+            {@const slotPlaying = isThisSceneActive && audioEngine.isSlotPlaying(slot.id)}
+            {@const playlist = isPlaylistSlot(slot)}
             <ContextMenu.Root>
               <ContextMenu.Trigger>
                 <div
-                  class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/50 hover:bg-card transition-colors"
+                  data-slot-row
+                  class="flex items-center gap-2 rounded-lg bg-card/50 py-2 pr-2 pl-1.5 transition-colors hover:bg-card"
                 >
-                  <!-- Playback group: skip-back · play/pause · skip-forward -->
-                  <div class="flex shrink-0 items-center gap-1">
-                    {#if isPlaylistSlot(slot)}
-                      {#if isThisScenePlaying}
-                        <Button
-                          data-slot-skip-controls
-                          variant="ghost"
-                          size="icon"
-                          class="size-7 shrink-0"
-                          onclick={() => audioEngine.skipPrev()}
-                        >
-                          <SkipBack class="size-3.5" />
-                        </Button>
-                      {:else}
-                        <div
-                          data-slot-skip-controls
-                          class="flex size-7 shrink-0 items-center justify-center"
-                        >
-                          <SkipBack class="size-3.5 text-muted-foreground/30" />
-                        </div>
-                      {/if}
+                  <!-- Play this track. While the scene is stopped it previews the track on
+                       its own; while the scene is active it brings the track in or out. It
+                       used to be a faint glyph that did nothing until the whole scene
+                       played. -->
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 shrink-0"
+                    disabled={busySlots.has(slot.id) || isThisSceneLoading}
+                    aria-label={slotPlaying
+                      ? `Pause ${slot.label}`
+                      : isThisSceneActive
+                        ? `Play ${slot.label}`
+                        : `Play ${slot.label} on its own`}
+                    title={isThisSceneActive ? undefined : "Play this track on its own"}
+                    onclick={() => playSlot(slot)}
+                  >
+                    {#if slotPlaying}
+                      <Pause class="size-3.5 text-foreground" />
                     {:else}
-                      <div class="size-7 shrink-0"></div>
+                      <Play class="size-3.5 text-muted-foreground" />
                     {/if}
+                  </Button>
 
-                    {#if isThisScenePlaying}
+                  <!-- Skip, for a playlist that is sounding: they act on the playing queue,
+                       so they appear with it rather than as placeholders. -->
+                  {#if playlist && slotPlaying}
+                    <div data-slot-skip-controls class="flex shrink-0 items-center">
                       <Button
                         variant="ghost"
                         size="icon"
-                        class="size-7 shrink-0"
-                        onclick={() => toggleSlotPlayback(slot.id)}
+                        class="size-7"
+                        aria-label="Previous track in {slot.label}"
+                        onclick={() => audioEngine.skipPrev()}
                       >
-                        {#if audioEngine.isSlotPlaying(slot.id)}
-                          <Pause class="size-3.5 text-foreground" />
-                        {:else}
-                          <Play class="size-3.5 text-foreground" />
-                        {/if}
+                        <SkipBack class="size-3.5" />
                       </Button>
-                    {:else}
-                      <div class="flex size-7 shrink-0 items-center justify-center">
-                        <Play class="size-3.5 text-muted-foreground/30" />
-                      </div>
-                    {/if}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-7"
+                        aria-label="Next track in {slot.label}"
+                        onclick={() => audioEngine.skipNext()}
+                      >
+                        <SkipForward class="size-3.5" />
+                      </Button>
+                    </div>
+                  {/if}
 
-                    {#if isPlaylistSlot(slot)}
-                      {#if isThisScenePlaying}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-7 shrink-0"
-                          onclick={() => audioEngine.skipNext()}
-                        >
-                          <SkipForward class="size-3.5" />
-                        </Button>
-                      {:else}
-                        <div class="flex size-7 shrink-0 items-center justify-center">
-                          <SkipForward class="size-3.5 text-muted-foreground/30" />
-                        </div>
-                      {/if}
-                    {:else}
-                      <div class="size-7 shrink-0"></div>
-                    {/if}
-                  </div>
-
-                  <!-- Source indicator -->
-                  <span
-                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[11px] tracking-wide text-muted-foreground"
-                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span
-                  >
-
-                  <!-- Label (renameable) -->
-                  <div class="min-w-0 flex-1">
+                  <!-- Label: click (or F2 from the row's menu button) to rename. -->
+                  <div class="flex min-w-0 flex-1 items-center gap-2">
                     <Rename.Root
                       this="span"
-                      class="truncate text-sm text-foreground"
-                      inputClass="bg-transparent px-0 py-0 text-sm"
+                      class="min-w-0 cursor-text truncate text-sm {slotPlaying
+                        ? 'text-foreground'
+                        : 'text-foreground/90'}"
+                      inputClass="w-full bg-transparent px-0 py-0 text-sm"
                       bind:value={
                         () => (renamingSlotId === slot.id ? renameSlotValue : slot.label),
                         (val) => {
@@ -924,41 +951,49 @@
                       bind:mode={
                         () => (renamingSlotId === slot.id ? "edit" : "view"),
                         (val) => {
-                          if (val === "view") renamingSlotId = null;
+                          // Both directions: the field enters editing itself when its text
+                          // is clicked, and ignoring that snapped it straight back, which
+                          // is why renaming only worked from the context menu.
+                          if (val === "edit") startSlotRename(slot);
+                          else if (renamingSlotId === slot.id) endSlotRename(slot.id);
                         }
                       }
                       onSave={(val) => handleSlotRename(slot.id, val)}
-                      onCancel={() => {
-                        renamingSlotId = null;
-                      }}
+                      onCancel={() => endSlotRename(slot.id)}
                     />
+                    <span
+                      class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground @max-md:hidden"
+                      >{slot.source === "spotify" ? "Spotify" : "Local"}</span
+                    >
                   </div>
 
-                  <!-- Volume slider -->
                   <VolumeSlider
-                    class="w-24"
+                    class="w-24 @max-sm:w-14"
                     value={slot.volume}
                     label="{slot.label} volume"
-                    active={audioEngine.isSlotPlaying(slot.id)}
+                    active={slotPlaying}
                     oninput={(v) => handleSlotVolumeInput(slot, v)}
                     onchange={(v) => handleSlotVolumeChange(slot, v)}
                   />
 
                   <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
-                         which measures about 1.6:1 on Iron Dark — under the 3:1 that
-                         WCAG 1.4.11 asks of a control's own graphics, and reading as
-                         disabled when the control is live and one click from changing
-                         what the table hears. Ember Muted is the resting state for an
-                         enabled-but-inactive control everywhere else in the app.
+                       which measures about 1.6:1 on Iron Dark — under the 3:1 that
+                       WCAG 1.4.11 asks of a control's own graphics, and reading as
+                       disabled when the control is live and one click from changing
+                       what the table hears. Ember Muted is the resting state for an
+                       enabled-but-inactive control everywhere else in the app.
 
-                         `aria-pressed` because these are toggles and were announcing
-                         state only through a label that changed underneath. -->
+                       `aria-pressed` because these are toggles and were announcing
+                       state only through a label that changed underneath. Shuffle
+                       only for a Spotify playlist, the one source it means anything
+                       for — as the in-note player already does. -->
                   <Button
                     variant="ghost"
                     size="icon"
                     class="size-7 shrink-0"
-                    aria-label="Loop"
+                    aria-label="Loop {slot.label}"
                     aria-pressed={!!slot.loop}
+                    title="Loop"
                     onclick={() => toggleLoop(slot)}
                   >
                     <Repeat
@@ -966,18 +1001,55 @@
                     />
                   </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-7 shrink-0"
-                    aria-label="Shuffle"
-                    aria-pressed={!!slot.shuffle}
-                    onclick={() => toggleShuffle(slot)}
-                  >
-                    <Shuffle
-                      class="size-3.5 {!!slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
-                    />
-                  </Button>
+                  {#if playlist}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-7 shrink-0"
+                      aria-label="Shuffle {slot.label}"
+                      aria-pressed={!!slot.shuffle}
+                      title="Shuffle"
+                      onclick={() => toggleShuffle(slot)}
+                    >
+                      <Shuffle
+                        class="size-3.5 {slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
+                      />
+                    </Button>
+                  {/if}
+
+                  <!-- The row's menu, findable without a right-click. -->
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger
+                      data-slot-menu={slot.id}
+                      class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors
+                             hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      aria-label="More for {slot.label}"
+                      onkeydown={(e: KeyboardEvent) => {
+                        if (e.key === "F2") {
+                          e.preventDefault();
+                          startSlotRename(slot);
+                        } else if (e.key === "Delete") {
+                          e.preventDefault();
+                          deleteSlot(slot);
+                        }
+                      }}
+                    >
+                      <Ellipsis class="size-4" />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onclick={() => startSlotRename(slot)}>
+                        <Pencil class="size-4" />
+                        Rename
+                        <DropdownMenu.Shortcut>F2</DropdownMenu.Shortcut>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item variant="destructive" onclick={() => deleteSlot(slot)}>
+                        <Trash2 class="size-4" />
+                        Remove from scene
+                        <DropdownMenu.Shortcut>Del</DropdownMenu.Shortcut>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 </div>
               </ContextMenu.Trigger>
               <ContextMenu.Content>
@@ -986,9 +1058,9 @@
                   Rename
                 </ContextMenu.Item>
                 <ContextMenu.Separator />
-                <ContextMenu.Item variant="destructive" onclick={() => (deleteSlotTarget = slot)}>
+                <ContextMenu.Item variant="destructive" onclick={() => deleteSlot(slot)}>
                   <Trash2 class="size-4" />
-                  Delete
+                  Remove from scene
                 </ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
@@ -998,9 +1070,10 @@
         <!-- Add track button -->
         <button
           onclick={() => (addDialogOpen = true)}
-          class="w-full mt-3 py-3 rounded-lg border border-dashed border-border/60 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
+          class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-3 text-sm text-muted-foreground transition-colors
+                 hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          <Plus class="size-4 inline" />
+          <Plus class="size-4" />
           Add Track
         </button>
       {/if}
@@ -1148,28 +1221,3 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-<!-- Delete slot confirmation -->
-<AlertDialog.Root
-  open={deleteSlotTarget !== null}
-  onOpenChange={(o) => {
-    if (!o) deleteSlotTarget = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete track</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete
-        <span class="font-medium text-foreground">{deleteSlotTarget?.label}</span>? This action
-        cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" onclick={confirmDeleteSlot}>
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

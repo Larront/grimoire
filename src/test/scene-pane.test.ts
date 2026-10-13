@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
 import { audioEngine } from "../lib/stores/audio-engine.svelte";
+import { toastUndo } from "../lib/toast";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
@@ -52,6 +53,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
   isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
   audioEngine: {
     playScene: vi.fn(),
+    previewSlot: vi.fn().mockResolvedValue(undefined),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
     setSlotVolume: vi.fn(),
@@ -89,6 +91,8 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     },
   },
 }));
+
+vi.mock("../lib/toast", () => ({ toastUndo: vi.fn(), toastError: vi.fn() }));
 
 vi.mock("../lib/utils/spotify-auth", () => ({
   getSpotifyStatus: vi.fn().mockResolvedValue({ is_connected: false, expires_at: "" }),
@@ -196,9 +200,11 @@ describe("ScenePane hero header", () => {
     });
   });
 
-  it("shows skip controls in the slot row for a Spotify playlist slot", async () => {
+  it("shows skip controls in the slot row while a Spotify playlist slot plays", async () => {
     mockScenes = [makeScene()];
     mockSlots = [makeSlot({ source: "spotify", source_id: "spotify:playlist:abc123" })];
+    mockActiveSceneId = 1;
+    mockSlotPlayingMap = new Map([[1, true]]);
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
@@ -466,5 +472,56 @@ describe("ScenePane — transport reflects this scene only", () => {
       const play = getAllByRole("button").find((b) => b.textContent?.trim() === "Play Scene");
       expect(play?.hasAttribute("disabled")).toBe(true);
     });
+  });
+});
+
+describe("ScenePane — track rows", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene()];
+    mockSlots = [
+      makeSlot({ id: 1, label: "Heavy Rain" }),
+      makeSlot({ id: 2, label: "Thunder", slot_order: 1 }),
+    ];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlotPlayingMap = new Map();
+    vi.clearAllMocks();
+  });
+
+  it("a track's play button previews it on its own while the scene is stopped", async () => {
+    const { findByLabelText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await fireEvent.click(await findByLabelText("Play Thunder on its own"));
+    expect(audioEngine.previewSlot).toHaveBeenCalledWith(1, 2);
+    expect(audioEngine.playScene).not.toHaveBeenCalled();
+  });
+
+  it("shuffle is offered only for a Spotify playlist", async () => {
+    mockSlots = [
+      makeSlot({ id: 1, label: "Heavy Rain" }),
+      makeSlot({ id: 2, label: "Tavern", source: "spotify", source_id: "spotify:playlist:p1" }),
+    ];
+    const { findByLabelText, queryByLabelText } = render(ScenePane, {
+      props: { sceneId: 1, pane: "left" },
+    });
+    expect(await findByLabelText("Shuffle Tavern")).toBeTruthy();
+    expect(queryByLabelText("Shuffle Heavy Rain")).toBeNull();
+  });
+
+  it("removing a track hides it at once and defers the delete behind an undo toast", async () => {
+    const { findAllByLabelText, queryByText, findByText } = render(ScenePane, {
+      props: { sceneId: 1, pane: "left" },
+    });
+    await findByText("Thunder");
+    const menu = (await findAllByLabelText("More for Thunder"))[0];
+    await fireEvent.keyDown(menu, { key: "Delete" });
+
+    await waitFor(() => expect(queryByText("Thunder")).toBeNull());
+    expect(toastUndo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("delete_scene_slot", expect.anything());
+
+    // Undo puts it back.
+    const onUndo = vi.mocked(toastUndo).mock.calls[0][2]!;
+    onUndo();
+    expect(await findByText("Thunder")).toBeTruthy();
   });
 });

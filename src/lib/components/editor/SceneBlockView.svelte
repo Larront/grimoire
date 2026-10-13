@@ -519,7 +519,7 @@
                 <!-- Row 1: source pill + label + play/pause -->
                 <div class="flex items-center gap-2 min-w-0 mb-1">
                   <span
-                    class="shrink-0 inline-flex items-center justify-center min-w-12 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[11px] tracking-wide text-muted-foreground leading-none"
+                    class="shrink-0 inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground leading-none"
                     >{isSpotify ? "Spotify" : "Local"}</span
                   >
                   <span class="flex-1 truncate font-sans text-xs text-foreground">{slot.label}</span
