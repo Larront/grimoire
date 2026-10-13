@@ -229,43 +229,43 @@ describe("ScenePane hero header — thumbnail pickers", () => {
     vi.clearAllMocks();
   });
 
-  it("hero header has a color picker button", () => {
+  // Picture, colour and icon live in one Appearance popover. They used to be three
+  // buttons shown only on hover, which a keyboard user met as invisible Tab stops.
+  it("hero header has an always-present Appearance button", () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-color-btn]")).toBeTruthy();
+    const btn = container.querySelector("[data-appearance-btn]") as HTMLElement;
+    expect(btn).toBeTruthy();
+    expect(btn.className).not.toMatch(/opacity-0/);
   });
 
-  it("hero header has an icon picker button", () => {
+  it("Appearance opens the colour and icon pickers together", async () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-icon-btn]")).toBeTruthy();
-  });
-
-  it("clicking the color button opens a color picker", async () => {
-    mockScenes = [makeScene()];
-    const { container } = render(ScenePane, {
-      props: { sceneId: 1, pane: "left" },
-    });
-    const btn = container.querySelector("[data-edit-color-btn]") as HTMLElement;
-    await fireEvent.click(btn);
+    await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
     await waitFor(() => {
       expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
+      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
     });
   });
 
-  it("clicking the icon button opens an icon picker", async () => {
-    mockScenes = [makeScene()];
+  it("the pickers mark the current choice", async () => {
+    mockScenes = [makeScene({ thumbnail_icon: "Skull", thumbnail_color: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-edit-icon-btn]") as HTMLElement;
-    await fireEvent.click(btn);
+    await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
     await waitFor(() => {
-      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
+      expect(
+        document.body.querySelector('[data-icon-btn="Skull"]')?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        document.body.querySelector('[data-color-swatch="default"]')?.getAttribute("aria-pressed"),
+      ).toBe("true");
     });
   });
 
@@ -286,6 +286,11 @@ describe("ScenePane hero header — thumbnail pickers", () => {
   });
 });
 
+async function openAppearance(container: HTMLElement) {
+  await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
+  await waitFor(() => expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy());
+}
+
 describe("ScenePane hero header — thumbnail image upload", () => {
   beforeEach(() => {
     mockScenes = [];
@@ -296,12 +301,13 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     vi.clearAllMocks();
   });
 
-  it("hero header has a change thumbnail button", () => {
+  it("Appearance has a change picture button", async () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
   });
 
   it("clicking change thumbnail opens file picker filtered to image types", async () => {
@@ -310,7 +316,8 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-edit-thumbnail-btn]") as HTMLElement;
+    await openAppearance(container);
+    const btn = document.body.querySelector("[data-edit-thumbnail-btn]") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
       expect(vi.mocked(open)).toHaveBeenCalledWith(
@@ -325,20 +332,22 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     });
   });
 
-  it("remove thumbnail button not visible when thumbnail_path is null", () => {
+  it("remove thumbnail button not visible when thumbnail_path is null", async () => {
     mockScenes = [makeScene({ thumbnail_path: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
   });
 
-  it("remove thumbnail button visible when thumbnail_path is set", () => {
+  it("remove thumbnail button visible when thumbnail_path is set", async () => {
     mockScenes = [makeScene({ thumbnail_path: ".grimoire/thumbnails/img.jpg" })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeTruthy();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-remove-thumbnail-btn]")).toBeTruthy();
   });
 
   it("clicking remove thumbnail calls update_scene_thumbnail with thumbnailPath null", async () => {
@@ -346,7 +355,8 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-remove-thumbnail-btn]") as HTMLElement;
+    await openAppearance(container);
+    const btn = document.body.querySelector("[data-remove-thumbnail-btn]") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
@@ -423,6 +433,38 @@ describe("ScenePane — scene-level pause/resume (engine interface)", () => {
       const btns = getAllByRole("button");
       expect(btns.some((b) => b.textContent?.trim() === "Pause")).toBe(true);
       expect(btns.some((b) => b.textContent?.trim() === "Stop")).toBe(true);
+    });
+  });
+});
+
+describe("ScenePane — transport reflects this scene only", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene({ id: 1 }), makeScene({ id: 2, name: "Town Market" })];
+    mockSlots = [makeSlot()];
+    vi.clearAllMocks();
+  });
+
+  it("another scene's pause does not offer Resume here", async () => {
+    // Boss Battle (1) is paused; Town Market's (2) editor must offer Play, not Resume —
+    // Resume would bring back the boss music.
+    mockActiveSceneId = 1;
+    mockIsScenePaused = true;
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
+    await waitFor(() => {
+      const labels = getAllByRole("button").map((b) => b.textContent?.trim());
+      expect(labels).toContain("Play Scene");
+      expect(labels).not.toContain("Resume");
+    });
+  });
+
+  it("Play Scene is disabled on a scene with no tracks", async () => {
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlots = [];
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
+    await waitFor(() => {
+      const play = getAllByRole("button").find((b) => b.textContent?.trim() === "Play Scene");
+      expect(play?.hasAttribute("disabled")).toBe(true);
     });
   });
 });

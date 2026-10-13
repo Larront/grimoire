@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { api } from "$lib/api";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -10,6 +10,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
+  import * as Popover from "$lib/components/ui/popover";
   import Input from "$lib/components/ui/input/input.svelte";
   import {
     Music2,
@@ -26,17 +27,24 @@
     SkipBack,
     SkipForward,
     Palette,
-    Image as ImageIcon,
+    ImagePlus,
     X,
     ChevronLeft,
+    VolumeOff,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
-  import { ICON_OPTIONS, sceneIcon, sceneThumbColors } from "./thumbnail-presets";
+  import {
+    ICON_OPTIONS,
+    DEFAULT_SCENE_ICON,
+    sceneIcon,
+    sceneThumbColors,
+  } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
+  import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
 
   interface Props {
     sceneId: number;
@@ -75,9 +83,14 @@
     }
   });
 
-  // ---- Thumbnail pickers ----
-  let colorPickerOpen = $state(false);
-  let iconPickerOpen = $state(false);
+  // ---- Appearance ----
+  // Picture, colour and icon live in one popover anchored to an always-visible button.
+  // They used to be three buttons that appeared only on hover — so a keyboard user's
+  // first three Tab stops were invisible — each opening a modal that did not mark the
+  // current choice. The popover stays open as choices land, so a GM can try a colour
+  // against the icon without reopening anything.
+  let appearanceOpen = $state(false);
+  let appearancePanel = $state<HTMLElement | null>(null);
 
   async function applyColor(color: string | null) {
     if (!scene) return;
@@ -85,8 +98,6 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
-    } finally {
-      colorPickerOpen = false;
     }
   }
 
@@ -96,8 +107,6 @@
       await scenes.applyThumbnailIcon(scene.id, icon);
     } catch (e) {
       console.error("update thumbnail icon failed:", e);
-    } finally {
-      iconPickerOpen = false;
     }
   }
 
@@ -135,6 +144,21 @@
     }
   }
 
+  // A scene just made from "New Scene" opens with its placeholder name selected, so the
+  // GM's first keystroke names it rather than hunting for the field.
+  let nameInput = $state<HTMLInputElement | null>(null);
+  let offeredRename = false;
+  const PLACEHOLDER_NAMES = ["New Scene", "Untitled Scene"];
+
+  $effect(() => {
+    if (offeredRename || !scene || slotsLoading || !nameInput) return;
+    offeredRename = true;
+    if (slots.length === 0 && PLACEHOLDER_NAMES.includes(scene.name)) {
+      nameInput.focus();
+      nameInput.select();
+    }
+  });
+
   function handleNameKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -164,8 +188,16 @@
   });
 
   // ---- Playback derived state ----
-  let isThisScenePlaying = $derived(scene !== null && audioEngine.isScenePlaying(scene.id));
-  let isThisSceneLoading = $derived(audioEngine.loadingSceneId === scene?.id);
+  // Every one of these asks about THIS scene. The paused check used to be the engine's
+  // global one, so with Boss Battle paused, Town Market's editor offered "Resume" — and
+  // resumed the boss music. The in-note player has always scoped it; now both do.
+  let isThisSceneActive = $derived(scene !== null && audioEngine.isSceneActive(scene.id));
+  let isThisSceneLoading = $derived(scene !== null && audioEngine.loadingSceneId === scene.id);
+  let isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);
+  let isThisScenePlaying = $derived(
+    scene !== null && audioEngine.isScenePlaying(scene.id) && !isThisScenePaused,
+  );
+  let hasTracks = $derived(!slotsLoading && slots.length > 0);
 
   // ---- Play / Stop ----
   async function handlePlayStop() {
@@ -195,7 +227,7 @@
   function handleSlotVolumeInput(slot: SceneSlot, value: number) {
     const idx = slots.findIndex((s) => s.id === slot.id);
     if (idx !== -1) slots[idx] = { ...slots[idx], volume: value };
-    if (isThisScenePlaying) audioEngine.setSlotVolume(slot.id, value);
+    if (isThisSceneActive) audioEngine.setSlotVolume(slot.id, value);
   }
 
   async function handleSlotVolumeChange(slot: SceneSlot, value: number) {
@@ -495,7 +527,7 @@
   }
 </script>
 
-<div class="flex flex-1 flex-col overflow-y-auto">
+<div class="@container flex flex-1 flex-col overflow-y-auto">
   {#if scenes.isLoading}
     <!-- Loading state -->
     <div class="flex flex-1 items-center justify-center">
@@ -507,81 +539,52 @@
       <p class="text-sm text-muted-foreground">Scene not found</p>
     </div>
   {:else}
-    <!-- HERO HEADER -->
+    <!-- HERO HEADER
+         A shorter band than it was (208px → 128px): the scene's picture and name still
+         open the editor, but Play and the tracks are no longer a quarter of the way down
+         the pane. Its content sits on the same column as the transport and the tracks, so
+         the name, "All Scenes" and the first track share a left edge. -->
     {@const HeroIcon = sceneIcon(scene)}
     <div
       data-hero-header
-      class="group relative flex min-h-52 flex-col justify-end overflow-hidden"
+      class="relative shrink-0 overflow-hidden"
       style="background-color: {heroColor}; {thumbnailUrl
         ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;`
         : ''}"
     >
-      <!-- Gradient overlay for legibility (stronger on images) -->
-      <div
-        class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-      ></div>
+      <!-- Legibility over the GM's picture. Only over a picture: on a plain colour it
+           only muddied the colour they chose. -->
+      {#if thumbnailUrl}
+        <div
+          class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent"
+        ></div>
+      {/if}
 
-      <!-- Icon — always rendered per ADR-0002 -->
-      <div
-        data-hero-icon
-        data-icon-name={scene.thumbnail_icon ?? "Music2"}
-        class="pointer-events-none absolute top-5 right-6"
-      >
-        <HeroIcon
-          class="size-14 opacity-70"
-          strokeWidth={1.5}
-          style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl
-            ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))'
-            : ''}"
-        />
-      </div>
+      <div class="relative mx-auto flex min-h-32 w-full max-w-3xl items-end gap-3 px-8 pt-8 pb-5">
+        <!-- Icon — always rendered per ADR-0002 -->
+        <div
+          data-hero-icon
+          data-icon-name={scene.thumbnail_icon ?? "Music2"}
+          class="pointer-events-none mb-1 shrink-0"
+        >
+          <HeroIcon
+            class="size-8"
+            strokeWidth={1.5}
+            style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl
+              ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))'
+              : ''}"
+          />
+        </div>
 
-      <!-- Thumbnail edit buttons (visible on hover) -->
-      <div
-        class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <button
-          data-edit-thumbnail-btn
-          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
-          onclick={() => changeThumbnail(scene.id)}
-        >
-          <ImageIcon class="size-3" />
-          Image
-        </button>
-        {#if scene.thumbnail_path}
-          <button
-            data-remove-thumbnail-btn
-            class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
-            onclick={() => removeThumbnail(scene.id)}
-          >
-            <X class="size-3" />
-            Remove
-          </button>
-        {/if}
-        <button
-          data-edit-color-btn
-          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
-          onclick={() => (colorPickerOpen = true)}
-        >
-          <Palette class="size-3" />
-          Color
-        </button>
-        <button
-          data-edit-icon-btn
-          class="flex items-center gap-1 rounded-md bg-black/65 px-2 py-1 text-xs text-white transition-colors hover:bg-black/80"
-          onclick={() => (iconPickerOpen = true)}
-        >
-          <HeroIcon class="size-3" />
-          Icon
-        </button>
-      </div>
-
-      <!-- Scene name (editable) -->
-      <div class="relative z-10 px-8 pb-5">
+        <!-- Scene name (editable). H1 on the type scale; a long name ends in an ellipsis
+             at rest and scrolls while it is being edited. -->
         <input
+          bind:this={nameInput}
           data-scene-name
+          aria-label="Scene name"
           bind:value={draftName}
-          class="font-heading w-full bg-transparent border-none outline-none p-0 text-3xl leading-tight tracking-tight placeholder:opacity-40 focus:ring-0"
+          class="font-heading min-w-0 flex-1 truncate rounded-sm border-none bg-transparent p-0 text-[1.75rem] leading-tight tracking-tight
+                 outline-none placeholder:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl
             ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)'
             : ''}"
@@ -589,30 +592,157 @@
           onblur={commitName}
           onkeydown={handleNameKeydown}
         />
+
+        <!-- Appearance. A control over the GM's imagery, so it takes the floating
+             treatment (DESIGN.md §4) and is always there to find. -->
+        <Popover.Root bind:open={appearanceOpen}>
+          <Popover.Trigger
+            data-appearance-btn
+            class="mb-1 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-popover px-2.5 text-[0.8125rem] font-medium text-foreground
+                   shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-muted
+                   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <Palette class="size-3.5 text-muted-foreground" />
+            <span class="@max-md:sr-only">Appearance</span>
+          </Popover.Trigger>
+          <!-- Focus lands on the panel, not its first button: opened by mouse, a ring on
+               "Choose picture" read as that being the current choice. Tab walks in from
+               here. -->
+          <Popover.Content
+            align="end"
+            class="flex w-72 flex-col gap-4"
+            bind:ref={appearancePanel}
+            tabindex={-1}
+            onOpenAutoFocus={(e) => {
+              e.preventDefault();
+              appearancePanel?.focus();
+            }}
+          >
+            <!-- Picture -->
+            <section class="flex flex-col gap-1.5">
+              <h3 class="text-xs font-semibold text-muted-foreground">Picture</h3>
+              <div class="flex gap-2">
+                <Button
+                  data-edit-thumbnail-btn
+                  variant="outline"
+                  size="sm"
+                  onclick={() => changeThumbnail(scene.id)}
+                >
+                  <ImagePlus class="size-3.5" />
+                  {scene.thumbnail_path ? "Change picture" : "Choose picture"}
+                </Button>
+                {#if scene.thumbnail_path}
+                  <Button
+                    data-remove-thumbnail-btn
+                    variant="ghost"
+                    size="sm"
+                    onclick={() => removeThumbnail(scene.id)}
+                  >
+                    <X class="size-3.5" />
+                    Remove
+                  </Button>
+                {/if}
+              </div>
+            </section>
+
+            <!-- Colour: the five accent swatches as data, plus the neutral default. The
+                 current choice is marked, as in the pin colour row. -->
+            <section class="flex flex-col gap-1.5">
+              <h3 class="text-xs font-semibold text-muted-foreground">Color</h3>
+              <div data-color-picker class="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-color-swatch="default"
+                  aria-label="Default"
+                  aria-pressed={!scene.thumbnail_color}
+                  title="Default"
+                  class="size-6 rounded-full border-2 bg-background-elevated transition-[border-color,transform]
+                         {!scene.thumbnail_color
+                    ? 'scale-110 border-primary'
+                    : 'border-border hover:border-foreground/30'}"
+                  onclick={() => applyColor(null)}
+                ></button>
+                {#each ACCENT_PRESETS as preset (preset.name)}
+                  {@const chosen = scene.thumbnail_color === preset.bg}
+                  <button
+                    type="button"
+                    data-color-swatch={preset.name}
+                    aria-label={preset.label}
+                    aria-pressed={chosen}
+                    title={preset.label}
+                    class="size-6 rounded-full border-2 transition-[border-color,transform]
+                           {chosen ? 'scale-110 border-primary' : 'border-transparent hover:border-foreground/30'}"
+                    style="background: {preset.swatch}"
+                    onclick={() => applyColor(preset.bg)}
+                  ></button>
+                {/each}
+              </div>
+            </section>
+
+            <!-- Icon -->
+            <section class="flex flex-col gap-1.5">
+              <h3 class="text-xs font-semibold text-muted-foreground">Icon</h3>
+              <div data-icon-picker class="grid grid-cols-6 gap-1">
+                <button
+                  type="button"
+                  data-icon-btn="default"
+                  aria-label="Default (music note)"
+                  aria-pressed={!scene.thumbnail_icon}
+                  title="Default"
+                  class="flex size-9 items-center justify-center rounded-md transition-colors
+                         {!scene.thumbnail_icon
+                    ? 'bg-primary/12 text-foreground ring-1 ring-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+                  onclick={() => applyIcon(null)}
+                >
+                  <DEFAULT_SCENE_ICON class="size-4" />
+                </button>
+                {#each ICON_OPTIONS as { name, label, icon: Icon } (name)}
+                  {@const chosen = scene.thumbnail_icon === name}
+                  <button
+                    type="button"
+                    data-icon-btn={name}
+                    aria-label={label}
+                    aria-pressed={chosen}
+                    title={label}
+                    class="flex size-9 items-center justify-center rounded-md transition-colors
+                           {chosen
+                      ? 'bg-primary/12 text-foreground ring-1 ring-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+                    onclick={() => applyIcon(name)}
+                  >
+                    <Icon class="size-4" />
+                  </button>
+                {/each}
+              </div>
+            </section>
+          </Popover.Content>
+        </Popover.Root>
       </div>
     </div>
 
-    <!-- CONTROLS BAR -->
-    <div class="flex items-center justify-between border-b border-border/60 px-8 py-3">
-      <!-- Playback controls -->
-      <div class="flex items-center gap-3">
+    <!-- TRANSPORT
+         Pinned under the header while the tracks scroll: at the table, Play and Stop must
+         not scroll away with a long track list. -->
+    <div class="sticky top-0 z-10 shrink-0 border-b border-border bg-background">
+      <div class="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 px-8 py-3">
         <Button
           variant="ghost"
           size="sm"
-          class="text-muted-foreground"
-          aria-label="All Scenes"
+          class="-ml-2.5 text-muted-foreground"
           onclick={() => tabs.openTab({ type: "scenes", id: 0, title: "All Scenes" })}
         >
           <ChevronLeft class="size-3.5" />
           All Scenes
         </Button>
-        <div class="h-4 w-px bg-border/60"></div>
-        {#if isThisSceneLoading || audioEngine.isCrossfading}
+        <div class="h-4 w-px bg-border"></div>
+
+        {#if isThisSceneLoading}
           <Button variant="secondary" size="sm" disabled>
             <LoaderCircle class="size-3.5 animate-spin" />
-            Loading...
+            Loading…
           </Button>
-        {:else if audioEngine.isScenePaused}
+        {:else if isThisScenePaused}
           <Button variant="default" size="sm" onclick={handleResume}>
             <Play class="size-3.5" />
             Resume
@@ -626,28 +756,55 @@
             <Pause class="size-3.5" />
             Pause
           </Button>
-          <Button variant="secondary" size="sm" onclick={handlePlayStop}>
+          <Button variant="secondary" size="sm" onclick={handleStop}>
             <Square class="size-3.5" />
             Stop
           </Button>
+          <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <NowPlayingBars />
+            Playing
+          </span>
         {:else}
-          <Button variant="default" size="sm" onclick={handlePlayStop}>
+          <!-- With no tracks there is nothing to play, and a crimson button that did
+               nothing was the loudest thing on an empty scene. -->
+          <Button
+            variant="default"
+            size="sm"
+            disabled={!hasTracks}
+            title={hasTracks ? undefined : "Add a track first"}
+            onclick={handlePlayStop}
+          >
             <Play class="size-3.5" />
             Play Scene
           </Button>
         {/if}
-      </div>
 
-      <!-- Master volume -->
-      <div class="flex items-center gap-2">
-        <Volume2 class="size-4 text-muted-foreground" />
-        <VolumeSlider
-          class="w-28"
-          value={audioEngine.masterVolume}
-          label="Master volume"
-          active={audioEngine.isPlaying}
-          oninput={(v) => audioEngine.setMasterVolume(v)}
-        />
+        <!-- Master volume — every scene, not this one, so it says so. -->
+        <div class="ml-auto flex items-center gap-1.5">
+          <span class="text-xs font-semibold text-muted-foreground @max-md:sr-only">Master</span>
+          <button
+            type="button"
+            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onclick={() => audioEngine.toggleMasterMute()}
+            aria-label={audioEngine.isMasterMuted ? "Unmute all" : "Mute all"}
+            aria-pressed={audioEngine.isMasterMuted}
+            title={audioEngine.isMasterMuted ? "Unmute all" : "Mute all"}
+          >
+            {#if audioEngine.isMasterMuted}
+              <VolumeOff class="size-4 text-muted-foreground" />
+            {:else}
+              <Volume2 class="size-4 text-muted-foreground" />
+            {/if}
+          </button>
+          <VolumeSlider
+            class="w-28 @max-md:w-20"
+            value={audioEngine.masterVolume}
+            label="Master volume"
+            active={audioEngine.isPlaying}
+            oninput={(v) => audioEngine.setMasterVolume(v)}
+          />
+        </div>
       </div>
     </div>
 
@@ -850,77 +1007,6 @@
     </div>
   {/if}
 </div>
-
-<!-- Color picker dialog -->
-<Dialog.Root
-  open={colorPickerOpen}
-  onOpenChange={(o) => {
-    colorPickerOpen = o;
-  }}
->
-  <Dialog.Content style="max-width: 18rem">
-    <Dialog.Header>
-      <Dialog.Title>Choose color</Dialog.Title>
-    </Dialog.Header>
-    <div data-color-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ACCENT_PRESETS as preset (preset.name)}
-          <button
-            data-color-swatch={preset.name}
-            aria-label={preset.label}
-            class="size-9 rounded-lg border-2 border-transparent transition-[transform,border-color] hover:scale-110 hover:border-foreground/30"
-            style="background: {preset.swatch}"
-            onclick={() => applyColor(preset.bg)}
-          ></button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyColor(null)}
-      >
-        Reset to default
-      </Button>
-    </div>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Icon picker dialog -->
-<Dialog.Root
-  open={iconPickerOpen}
-  onOpenChange={(o) => {
-    iconPickerOpen = o;
-  }}
->
-  <Dialog.Content style="max-width: 22rem">
-    <Dialog.Header>
-      <Dialog.Title>Choose icon</Dialog.Title>
-    </Dialog.Header>
-    <div data-icon-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ICON_OPTIONS as { name, icon: Icon } (name)}
-          <button
-            data-icon-btn={name}
-            aria-label={name}
-            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
-            onclick={() => applyIcon(name)}
-          >
-            <Icon class="size-5 text-foreground/70" />
-          </button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyIcon(null)}
-      >
-        Reset to default
-      </Button>
-    </div>
-  </Dialog.Content>
-</Dialog.Root>
 
 <!-- Add Track dialog -->
 <Dialog.Root

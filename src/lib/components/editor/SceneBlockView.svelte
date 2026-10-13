@@ -31,6 +31,7 @@
     sceneThumbColors,
   } from "$lib/components/panes/thumbnail-presets";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
+  import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
   // record spread over the props, so the rest element *is* the record and nothing here
@@ -431,24 +432,7 @@
 
       <!-- Playing indicator -->
       {#if showBars}
-        <span class="flex items-end gap-[2px] h-3 shrink-0" aria-hidden="true">
-          <span
-            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
-            style="--bar-dur: 620ms; animation-delay: 0ms"
-          ></span>
-          <span
-            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
-            style="--bar-dur: 780ms; animation-delay: 80ms"
-          ></span>
-          <span
-            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
-            style="--bar-dur: 670ms; animation-delay: 160ms"
-          ></span>
-          <span
-            class="w-[2.5px] rounded-sm bg-primary/70 now-playing-bar"
-            style="--bar-dur: 730ms; animation-delay: 240ms"
-          ></span>
-        </span>
+        <NowPlayingBars />
       {/if}
 
       <!-- Master mute toggle -->
@@ -646,26 +630,7 @@
 {/if}
 
 <style>
-  .now-playing-bar {
-    height: 100%;
-    transform-origin: bottom;
-    animation: nowPlaying var(--bar-dur, 700ms) ease-in-out infinite alternate;
-  }
-
-  @keyframes nowPlaying {
-    from {
-      transform: scaleY(0.2);
-    }
-    to {
-      transform: scaleY(1);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .now-playing-bar {
-      animation: none;
-      transform: scaleY(0.6);
-    }
     .mixer-panel {
       transition: none;
     }
