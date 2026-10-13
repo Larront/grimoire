@@ -6,6 +6,7 @@ import {
   wash,
   storedColorHex,
 } from "../lib/color";
+import { sceneLinkHue } from "../lib/components/panes/thumbnail-presets";
 
 describe("normalizeHex", () => {
   it("accepts the forms a person types and returns #rrggbb", () => {
@@ -49,5 +50,18 @@ describe("storedColorHex", () => {
 
   it("is null when nothing was chosen", () => {
     expect(storedColorHex(null)).toBeNull();
+  });
+});
+
+describe("sceneLinkHue", () => {
+  it("is the GM's chosen colour when there is one", () => {
+    expect(sceneLinkHue({ id: 3, thumbnail_color: "#d9a21b" })).toBe("#d9a21b");
+    // An old preset wash reads back as its hue.
+    expect(sceneLinkHue({ id: 3, thumbnail_color: wash("#5c9e6e", 0.18) })).toBe("#5c9e6e");
+  });
+
+  it("falls back to the preset the scene's id lands on, so every link has a hue", () => {
+    expect(sceneLinkHue({ id: 1, thumbnail_color: null })).toBe("#9b6bbf");
+    expect(sceneLinkHue({ id: 6, thumbnail_color: null })).toBe("#9b6bbf");
   });
 });

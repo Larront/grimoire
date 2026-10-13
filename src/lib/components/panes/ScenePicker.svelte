@@ -7,7 +7,8 @@
 <script lang="ts">
   import { Search, Plus } from "@lucide/svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
-  import { sceneIcon, sceneThumbColors } from "./thumbnail-presets";
+  import { sceneIcon, sceneLinkHue } from "./thumbnail-presets";
+  import { wash } from "$lib/color";
   import { tick } from "svelte";
 
   let {
@@ -57,8 +58,10 @@
     {:else}
       {#each filtered as scene (scene.id)}
         {@const RowIcon = sceneIcon(scene)}
-        {@const rowBg = sceneThumbColors(scene).bg}
-        {@const rowFg = sceneThumbColors(scene).fg}
+        <!-- Each scene in the hue its link will wear on the page, so the GM sees the
+             pairing while choosing. -->
+        {@const rowBg = wash(sceneLinkHue(scene), 0.18)}
+        {@const rowFg = sceneLinkHue(scene)}
         <button
           type="button"
           role="option"

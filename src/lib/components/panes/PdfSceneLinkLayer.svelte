@@ -15,7 +15,7 @@
     quoteMatchesAtOffsets,
     rangeWithinDiv,
   } from "$lib/pdf/scene-link-anchor";
-  import { ACCENT_FG } from "./thumbnail-presets";
+  import { sceneLinkHue } from "./thumbnail-presets";
   import SceneLinkBubble from "./SceneLinkBubble.svelte";
   import type { PdfSceneLink } from "$lib/bindings.gen";
   import type { SceneWithCount } from "$lib/types/ledger";
@@ -112,7 +112,9 @@
       out.push({
         link,
         scene,
-        accent: drifted ? "var(--error)" : ACCENT_FG[link.scene_id % ACCENT_FG.length],
+        accent: drifted
+          ? "var(--error)"
+          : sceneLinkHue(scene ?? { id: link.scene_id, thumbnail_color: null }),
         bars,
         drifted,
       });

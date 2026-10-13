@@ -5,10 +5,11 @@
      change-dropdown (the same searchable picker, including ＋ New scene), and
      Remove the link. Master volume is global (no per-link override). -->
 <script lang="ts">
-  import { Play, Square, Trash2, Music2, Volume2, ChevronDown } from "@lucide/svelte";
+  import { Play, Square, Trash2, Volume2, ChevronDown } from "@lucide/svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG, sceneThumbColors } from "./thumbnail-presets";
+  import { sceneIcon, sceneLinkHue } from "./thumbnail-presets";
+  import { wash } from "$lib/color";
   import ScenePicker from "./ScenePicker.svelte";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import type { SceneWithCount } from "$lib/types/ledger";
@@ -26,17 +27,12 @@
   } = $props();
 
   const isPlaying = $derived(audioEngine.isScenePlaying(scene.id));
-  // A chosen colour is drawn as everywhere else, a wash; any colour can be chosen now, and
-  // painted raw a picked hex would fill the chip at full strength.
-  const chipBg = $derived(
-    scene.thumbnail_color
-      ? sceneThumbColors(scene).bg
-      : ACCENT_BG[scene.id % ACCENT_BG.length],
-  );
-  const chipFg = $derived(ACCENT_FG[scene.id % ACCENT_FG.length]);
-  const ChipIcon = $derived(
-    scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2,
-  );
+  // The chip pairs with the underline on the page: the same hue, as a wash behind the
+  // icon and in the icon itself.
+  const hue = $derived(sceneLinkHue(scene));
+  const chipBg = $derived(wash(hue, 0.18));
+  const chipFg = $derived(hue);
+  const ChipIcon = $derived(sceneIcon(scene));
 
   let changeOpen = $state(false);
 
