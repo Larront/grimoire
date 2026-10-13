@@ -34,7 +34,9 @@ describe("the sample PDF's seeded Scene-link", () => {
     const end = Number(field("end_offset"));
     const quote = field("quote");
 
-    const data = new Uint8Array(readFileSync(`src-tauri/sample-world/${pdfPath}`));
+    // Read as base64: the project's `readFileSync` types know only the string overload.
+    const base64 = readFileSync(`src-tauri/sample-world/${pdfPath}`, "base64");
+    const data = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const doc = await getDocument({ data }).promise;
     const content = await (await doc.getPage(page)).getTextContent();
     const text = content.items
