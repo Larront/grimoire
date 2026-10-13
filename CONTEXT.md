@@ -119,7 +119,7 @@ The primary scene management surface, opened via "All Scenes" in the sidebar. Re
 
 ### Scene Editor
 
-The individual scene configuration surface (ScenePane). Opened as a tab. Layout: hero header (thumbnail + scene name overlaid + play controls), then the slot list below. The primary place to manage slots and scene appearance.
+The individual scene configuration surface (ScenePane). Opened as a tab. Layout: a header band (picture or colour, icon, scene name, and the Appearance popover for picture, colour and icon), a transport pinned beneath it that reflects this scene only, then the slot list. The primary place to manage slots and scene appearance, and usable mid-session: a slot's play button previews that one track while the scene is stopped (`previewSlot`).
 
 ### Slot
 

@@ -300,7 +300,25 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 
 ### Scene Player (Signature Component)
 
-Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), animated pulse dot (Crimson) when playing. Expanded body: transport row with primary play/pause button (Crimson Tint background, Crimson icon; hover fills solid Crimson), track list with Crimson-gradient level meters. Track hover: level meter hides, a volume range slider appears in its place via grid row swap — no visible layout jump.
+Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), and the crimson now-playing bars (`NowPlayingBars`) while it plays. Expanded body: one row per track, each with its own volume slider. _The in-note player has not had its own design review yet; this entry describes what ships rather than a settled design._
+
+### Scene Editor
+
+The scene's own surface (`ScenePane`), built for the table as much as for prep.
+
+- **Header:** a 128px band carrying the scene's picture, or its colour, or neutral Iron Raised (`sceneThumbColors`, as on its card), with the icon, the name in Metamorphous at H1 (28px), and an **Appearance** button. The dark legibility gradient sits only over a picture. Header, transport and tracks share one centred column, so their left edges align.
+- **Appearance:** one popover (`ui/popover`, floating level) holding picture, colour and icon, each marking the current choice; it stays open while the GM tries things. The button is always visible and takes the floating treatment, because it sits over the GM's imagery.
+- **Transport:** pinned under the header while the tracks scroll. It reflects _this_ scene only: Play Scene, then Pause + Stop with the now-playing bars, then Resume + Stop. Play Scene is disabled on a scene with no tracks. The master volume is labelled "Master" and carries a mute.
+- **Track rows:** play (which plays that track on its own while the scene is stopped), the name (click to rename), a Nunito source pill, volume, loop, shuffle (Spotify playlists only), and a visible menu (Rename `F2`, Remove `Del`) beside the right-click one. Removing a track is an undo toast. In a narrow pane the row sheds its pill and narrows its slider rather than overlapping.
+- **Empty:** a Metamorphous headline, one line, and Add Track as the primary action.
+
+### Volume Slider
+
+One component (`VolumeSlider`) for every level in the app: the scene editor, the in-note player, the mini player and the PDF scene-link bubble.
+
+- **Construction:** the real range input sits over a drawn track at opacity 0 and is the only thing the pointer touches. This keeps several sliders on the same level in step, and it stays. The input fills its 20px-tall wrapper, which is the hit area.
+- **Drawing:** a 4px track, a fill and a 12px handle. The fill and handle are **crimson only while the audio the slider sets is playing** (the Signal Rule's _playing_), and neutral at rest.
+- **Access:** every slider has a name ("Master volume", "Heavy Rain volume") and a value in percent. A keyboard focus ring is drawn on the track.
 
 ## 6. Do's and Don'ts
 
@@ -314,7 +332,7 @@ Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), 
 - **Do** give every icon-only button an `aria-label` — icon rail, toolbar buttons, close buttons, mute toggles.
 - **Do** return focus to the triggering element when overlays, dialogs, and command palette close.
 - **Do** make empty states purposeful: a Metamorphous headline, one Nunito orienting line, one CTA.
-- **Do** use `prefers-reduced-motion` to snap all transitions to instant and replace animated elements (waveform visualizer → static level bar, pulse dot → static dot).
+- **Do** use `prefers-reduced-motion` to snap all transitions to instant and replace animated elements (waveform visualizer → static level bar, now-playing bars → still bars).
 
 ### Don't:
 
