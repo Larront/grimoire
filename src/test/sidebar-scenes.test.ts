@@ -106,9 +106,6 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get isMasterMuted() {
       return false;
     },
-    get analyserNode() {
-      return null;
-    },
     playScene: vi.fn(),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),

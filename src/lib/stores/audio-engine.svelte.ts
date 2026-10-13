@@ -52,17 +52,12 @@ interface PlaylistSlotPlayer extends SlotPlayer {
 class LocalAudioContext {
   readonly ctx: AudioContext;
   private readonly masterGain: GainNode;
-  readonly analyser: AnalyserNode;
 
   constructor() {
     this.ctx = new AudioContext();
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 1;
-    this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 256;
-    this.analyser.smoothingTimeConstant = 0.8;
-    this.masterGain.connect(this.analyser);
-    this.analyser.connect(this.ctx.destination);
+    this.masterGain.connect(this.ctx.destination);
   }
 
   get destination(): GainNode {
@@ -891,9 +886,6 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     /** Something is audible: a scene is playing and not every track of it is paused. */
     get isSounding() {
       return isPlaying && !allSlotsPaused();
-    },
-    get analyserNode(): AnalyserNode | null {
-      return localCtx?.analyser ?? null;
     },
     playScene,
     previewSlot,
