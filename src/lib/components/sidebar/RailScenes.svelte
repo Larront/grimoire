@@ -23,14 +23,6 @@
   const sceneState = $derived(audioEngine.sceneState(sceneId));
   const isSounding = $derived(sceneState === "playing" || sceneState === "loading");
   const isPaused = $derived(sceneState === "paused");
-
-  // As the mini player's: a scene still starting ignores the press rather than the
-  // button being disabled under a keyboard GM's focus.
-  function togglePause() {
-    if (sceneState === "loading") return;
-    if (isPaused) void audioEngine.resumeScene();
-    else void audioEngine.pauseScene();
-  }
 </script>
 
 <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
@@ -74,7 +66,7 @@
                 aria-disabled={sceneState === "loading"}
                 aria-label={isPaused ? `Resume ${sceneName}` : `Pause ${sceneName}`}
                 title={isPaused ? `Resume ${sceneName}` : `Pause ${sceneName}`}
-                onclick={togglePause}
+                onclick={() => audioEngine.togglePauseScene()}
               >
                 {#if isPaused}
                   <Play class={STRIP_ICON} strokeWidth={1.5} />

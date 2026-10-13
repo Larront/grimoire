@@ -47,6 +47,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     slotVolume: () => undefined,
     pauseScene: vi.fn().mockResolvedValue(undefined),
     resumeScene: vi.fn().mockResolvedValue(undefined),
+    togglePauseScene: vi.fn().mockResolvedValue(undefined),
     stopAll: vi.fn(),
     toggleMasterMute: vi.fn(),
     setMasterVolume: vi.fn(),
@@ -139,7 +140,7 @@ describe("MiniPlayer", () => {
     expect(player(container)?.textContent).toContain("Paused");
     expect(bars(container)).toBeNull();
     await fireEvent.click(getByLabelText("Resume Town Market"));
-    expect(audioEngine.resumeScene).toHaveBeenCalled();
+    expect(audioEngine.togglePauseScene).toHaveBeenCalled();
   });
 
   it("during a scene change names the scene starting, and Stop still stops", async () => {
@@ -154,12 +155,11 @@ describe("MiniPlayer", () => {
     await fireEvent.click(stop);
     expect(audioEngine.stopAll).toHaveBeenCalled();
 
-    // Pause waits for the scene to start: ignored, not disabled, so focus stays put.
+    // Pause waits for the scene to start (the engine leaves a starting scene alone):
+    // marked unavailable, not disabled, so a keyboard GM's focus stays put.
     const pause = getByLabelText("Pause Town Market") as HTMLButtonElement;
     expect(pause.disabled).toBe(false);
     expect(pause.getAttribute("aria-disabled")).toBe("true");
-    await fireEvent.click(pause);
-    expect(audioEngine.pauseScene).not.toHaveBeenCalled();
   });
 
   it("the scene's name opens the scene", async () => {

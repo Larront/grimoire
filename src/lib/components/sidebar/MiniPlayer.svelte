@@ -54,14 +54,6 @@
     };
   });
 
-  // Ignored while the scene starts rather than disabled: a disabled button under a
-  // keyboard GM's focus drops their focus to the page.
-  function togglePause() {
-    if (isLoading) return;
-    if (isPaused) void audioEngine.resumeScene();
-    else void audioEngine.pauseScene();
-  }
-
   function openScene() {
     if (!scene) return;
     tabs.navigateOpen({ type: "scene", id: scene.id, title: scene.name });
@@ -151,7 +143,7 @@
     <div class="mt-0.5 flex items-center gap-0.5">
       <button
         type="button"
-        onclick={togglePause}
+        onclick={() => audioEngine.togglePauseScene()}
         aria-disabled={isLoading}
         class={button}
         aria-label={isPaused ? `Resume ${sceneName}` : `Pause ${sceneName}`}

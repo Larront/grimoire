@@ -113,6 +113,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     toggleMasterMute: vi.fn(),
     pauseScene: vi.fn().mockResolvedValue(undefined),
     resumeScene: vi.fn().mockResolvedValue(undefined),
+    togglePauseScene: vi.fn().mockResolvedValue(undefined),
     pauseSlot: vi.fn().mockResolvedValue(undefined),
     resumeSlot: vi.fn().mockResolvedValue(undefined),
     isSceneActive: vi.fn(() => false),
@@ -252,7 +253,7 @@ describe("collapsed strip — the scene playing", () => {
     expect(standin(container).querySelector(".now-playing-bar")).toBeTruthy();
     expect(pause(container)?.getAttribute("aria-label")).toBe("Pause Forest Ambience");
     await fireEvent.click(pause(container)!);
-    expect(audioEngine.pauseScene).toHaveBeenCalled();
+    expect(audioEngine.togglePauseScene).toHaveBeenCalled();
   });
 
   it("while it is paused, draws no bars and resumes it", async () => {
@@ -260,7 +261,8 @@ describe("collapsed strip — the scene playing", () => {
     mockSidebarPaused = true;
     const { container } = render(AppShell);
     expect(standin(container).querySelector(".now-playing-bar")).toBeNull();
+    expect(pause(container)?.getAttribute("aria-label")).toBe("Resume Forest Ambience");
     await fireEvent.click(pause(container)!);
-    expect(audioEngine.resumeScene).toHaveBeenCalled();
+    expect(audioEngine.togglePauseScene).toHaveBeenCalled();
   });
 });

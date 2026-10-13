@@ -653,6 +653,16 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     }
   }
 
+  // Pause the active scene, or resume it if paused: what the mini player's button, the
+  // collapsed strip's, the command palette's and the keyboard's play/pause all mean. A
+  // scene still starting is left to start.
+  async function togglePauseScene(): Promise<void> {
+    const id = loadingSceneId ?? activeSceneId;
+    const state = sceneState(id);
+    if (state === "paused") await resumeScene();
+    else if (state === "playing") await pauseScene();
+  }
+
   function isSceneActive(id: number): boolean {
     return activeSceneId === id;
   }
@@ -897,6 +907,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     toggleMasterMute,
     pauseScene,
     resumeScene,
+    togglePauseScene,
     pauseSlot,
     resumeSlot,
     isSceneActive,

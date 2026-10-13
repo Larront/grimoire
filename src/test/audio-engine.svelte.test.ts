@@ -400,6 +400,37 @@ describe("sceneState — one answer per scene", () => {
   });
 });
 
+describe("togglePauseScene — every surface's play/pause", () => {
+  it("pauses a playing scene and resumes a paused one", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+
+    await engine.togglePauseScene();
+    expect(engine.sceneState(1)).toBe("paused");
+    await engine.togglePauseScene();
+    expect(engine.sceneState(1)).toBe("playing");
+  });
+
+  it("leaves a scene that is still starting to start", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    expect(engine.sceneState(1)).toBe("loading");
+
+    await engine.togglePauseScene();
+    await settle();
+
+    expect(engine.sceneState(1)).toBe("playing");
+  });
+
+  it("does nothing with nothing playing", async () => {
+    const engine = makeEngine();
+    await engine.togglePauseScene();
+    expect(engine.activeSceneId).toBe(null);
+    expect(created).toHaveLength(0);
+  });
+});
+
 describe("track mute — the engine's, for every surface", () => {
   it("mutes a playing track without losing its level", async () => {
     const engine = makeEngine();

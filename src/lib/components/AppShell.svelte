@@ -13,6 +13,7 @@
   import * as Sidebar from "./ui/sidebar";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { ledger, failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
@@ -70,6 +71,18 @@
 
 <svelte:window
   onkeydown={(e) => {
+    // Pause or resume the playing scene from anywhere, typing included — no text field
+    // means anything by it. A keyboard's own play/pause key does the same while the
+    // window has focus.
+    if (
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === "Space") ||
+      e.key === "MediaPlayPause"
+    ) {
+      if (audioEngine.activeSceneId === null && audioEngine.loadingSceneId === null) return;
+      e.preventDefault();
+      void audioEngine.togglePauseScene();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
       tabs.closeActiveTab();
