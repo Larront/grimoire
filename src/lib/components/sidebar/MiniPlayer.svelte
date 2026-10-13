@@ -77,10 +77,13 @@
 </script>
 
 {#if sceneId !== null}
+  <!-- Framed as the in-note player is — a raised panel with a crimson border while the
+       scene sounds — so it reads as its own thing, not one more row of the footer. -->
   <section
     aria-label="Now playing"
     data-mini-player
-    class="border-t border-sidebar-border px-2 pt-1.5 pb-2 group-data-[collapsible=icon]:hidden"
+    class="mb-2 rounded-lg border bg-card/40 px-1.5 pt-1 pb-1.5 transition-colors duration-200 group-data-[collapsible=icon]:hidden
+           {sceneState === 'playing' ? 'border-primary/60' : 'border-border'}"
   >
     <!-- The scene: what it is doing, its name (which opens it), and its tracks. -->
     <div class="flex min-w-0 items-center gap-1">

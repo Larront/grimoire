@@ -308,7 +308,7 @@ A scene embedded in a note (`/scene`), played from the note the GM is reading at
 
 ### Mini Player
 
-The scene that is playing, in the sidebar's footer, for a GM whose eyes are on a note. Two rows and nothing more, so the footer never pushes the file tree away.
+The scene that is playing, in the sidebar's footer, for a GM whose eyes are on a note. Two rows and nothing more, so the footer never pushes the file tree away. Framed as the in-note player is — a raised panel (`bg-card/40`, 8px radius, a border) whose border is crimson while the scene sounds — so it reads as its own section rather than one more footer row.
 
 - **The scene:** the crimson playing bars (a pause mark when paused, a spinner while starting), the scene's name in Metamorphous (14px), which opens the scene, "Paused" or "Starting" in words when that is true, and **Tracks**.
 - **Transport:** Pause/Resume and Stop, then — set apart by a rule — Mute all and the master volume, which is every scene's level. Stop always works, including during a crossfade. Pause ignores a press while a scene starts rather than greying out, so keyboard focus stays put.
