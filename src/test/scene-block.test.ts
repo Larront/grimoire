@@ -634,3 +634,32 @@ describe("playing from the note", () => {
   });
 });
 
+
+describe("SceneBlock node view — a slider is not a handle", () => {
+  it("pressing a volume slider stops the block being draggable until release", async () => {
+    // ProseMirror marks the block draggable for its grip; in Chromium a range input inside
+    // a draggable element drags the element, so pressing a slider picked up the block.
+    const { view } = mountWithOutsideElement();
+    view.dom.draggable = true;
+    const slider = await waitFor(() => {
+      const el = view.dom.querySelector('input[type="range"]') as HTMLInputElement | null;
+      if (!el) throw new Error("no slider yet");
+      return el;
+    });
+
+    slider.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(view.dom.draggable).toBe(false);
+
+    window.dispatchEvent(new Event("pointerup"));
+    expect(view.dom.draggable).toBe(true);
+  });
+
+  it("pressing anything else leaves the block draggable", () => {
+    const { view } = mountWithOutsideElement();
+    view.dom.draggable = true;
+    (view.dom.querySelector("button") as HTMLElement).dispatchEvent(
+      new Event("pointerdown", { bubbles: true }),
+    );
+    expect(view.dom.draggable).toBe(true);
+  });
+});

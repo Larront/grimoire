@@ -16,7 +16,7 @@
     SkipForward,
     LoaderCircle,
     ArrowLeftRight,
-    PanelRightOpen,
+    Columns2,
     CircleAlert,
   } from "@lucide/svelte";
   import { Button } from "$lib/components/ui/button";
@@ -430,7 +430,9 @@
           aria-label="Open {sceneLabel} beside this note"
           title="Open beside this note"
         >
-          <PanelRightOpen class="size-3.5 text-muted-foreground" />
+          <!-- Two equal columns, no direction: the scene opens in the other pane, which
+               may be left or right of this one. -->
+          <Columns2 class="size-3.5 text-muted-foreground" />
         </button>
 
         <!-- Change scene: a dropdown that keeps the current scene until another is
