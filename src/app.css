@@ -863,6 +863,25 @@
   margin-bottom: 0;
 }
 
+/* And its first block's top margin, so the space under the title is the header's own
+   gap rather than whatever the first block brings — a statblock's margin sat over the
+   cards of every fight. */
+.tiptap .callout-body > * > :first-child {
+  margin-top: 0;
+}
+
+/* The callout's own chrome keeps ordinary whitespace; only its body is editor text. The
+   editor preserves spaces (`break-spaces`), and the quote inherited that, so the template
+   whitespace between the header and the body drew as a blank line — 27px of nothing under
+   the title of every callout. */
+.tiptap blockquote.callout-block {
+  white-space: normal;
+}
+
+.tiptap .callout-body {
+  white-space: break-spaces;
+}
+
 /* A callout's body is a query container too, under the same name as the prose column.
    A panel inside a callout is inside a narrower column than the note's — the box has
    its own padding and border — and the float's threshold is a statement about the
