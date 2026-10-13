@@ -11,6 +11,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import * as Popover from "$lib/components/ui/popover";
+  import * as Tabs from "$lib/components/ui/tabs";
   import Input from "$lib/components/ui/input/input.svelte";
   import {
     Music2,
@@ -32,6 +33,7 @@
     ChevronLeft,
     VolumeOff,
     Ellipsis,
+    CircleX,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
@@ -376,7 +378,8 @@
 
   // ---- Add track dialog ----
   let addDialogOpen = $state(false);
-  let addTab = $state<"local" | "spotify">("local");
+  // "local" | "spotify" — a string because the tabs primitive binds one.
+  let addTab = $state("local");
   let addLabel = $state("");
   let addLoop = $state(true);
   let addShuffle = $state(false);
@@ -441,10 +444,27 @@
 
   let parsedSpotifyInput = $derived(parseSpotifyInput(addSpotifyUri.trim()));
 
-  let canAdd = $derived(
-    addLabel.trim() !== "" &&
-      (addTab === "local" ? !!addSourcePath || !!addDroppedFile : !!parsedSpotifyInput),
+  let spotifyInputInvalid = $derived(
+    addTab === "spotify" && addSpotifyUri.trim() !== "" && !parsedSpotifyInput,
   );
+
+  // A Spotify track may be added unnamed: it takes its name from Spotify. Requiring a
+  // name here was what kept that lookup in handleAddTrack from ever running.
+  let canAdd = $derived(
+    addTab === "local"
+      ? (!!addSourcePath || !!addDroppedFile) && addLabel.trim() !== ""
+      : !!parsedSpotifyInput,
+  );
+
+  // Why Add is disabled, said beside it rather than left to guess.
+  let addBlockedReason = $derived.by(() => {
+    if (canAdd) return null;
+    if (addTab === "local") {
+      return addSourcePath || addDroppedFile ? "Give the track a name." : "Choose a file to add.";
+    }
+    if (!spotifyAuth?.is_connected || spotifyInputInvalid) return null;
+    return "Paste a Spotify link to add.";
+  });
 
   function resetAddDialog() {
     addDialogOpen = false;
@@ -559,7 +579,7 @@
         volume: 0.8,
         loop: addLoop,
         slotOrder: slots.length,
-        shuffle: addShuffle,
+        shuffle: source === "spotify" && parseSpotifyInput(sourceId)?.type === "playlist" && addShuffle,
       });
       resetAddDialog();
     } catch (e) {
@@ -570,7 +590,7 @@
   }
 </script>
 
-<div class="@container flex flex-1 flex-col overflow-y-auto">
+<div data-pane-scroll class="@container flex flex-1 flex-col overflow-y-auto">
   {#if scenes.isLoading}
     <!-- Loading state -->
     <div class="flex flex-1 items-center justify-center">
@@ -627,7 +647,7 @@
           aria-label="Scene name"
           bind:value={draftName}
           class="font-heading min-w-0 flex-1 truncate rounded-sm border-none bg-transparent p-0 text-[1.75rem] leading-tight tracking-tight
-                 outline-none placeholder:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                 placeholder:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl
             ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)'
             : ''}"
@@ -860,16 +880,20 @@
           {/each}
         </div>
       {:else if slots.length === 0}
-        <!-- Empty state -->
-        <div class="flex flex-col items-center justify-center py-20">
-          <div class="flex size-14 items-center justify-center rounded-lg bg-primary/10">
-            <Music2 class="size-7 text-primary/60" strokeWidth={1.5} />
+        <!-- Empty state: a Metamorphous headline, one orienting line, one action
+             (DESIGN.md §6). Add Track is the primary here — it is the only next step, and
+             Play is disabled until there is something to play. -->
+        <div class="flex flex-col items-center justify-center py-16 text-center">
+          <div class="flex size-12 items-center justify-center rounded-lg bg-muted">
+            <DEFAULT_SCENE_ICON class="size-6 text-muted-foreground" strokeWidth={1.5} />
           </div>
-          <h2 class="mt-5 font-sans text-lg font-semibold text-foreground">No tracks yet</h2>
-          <p class="mt-2 max-w-sm text-center text-sm text-muted-foreground">
-            Add audio tracks to build your soundscape. Layer ambient sounds, music, and effects.
+          <h2 class="font-heading mt-5 text-[1.375rem] leading-tight font-normal text-foreground">
+            No tracks yet
+          </h2>
+          <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+            Layer rain, a crowd and music. They all play together when you press Play.
           </p>
-          <Button variant="outline" size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
+          <Button size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
             <Plus class="size-3.5" />
             Add Track
           </Button>
@@ -1093,130 +1117,135 @@
       <Dialog.Title>Add Track</Dialog.Title>
     </Dialog.Header>
 
-    <!-- Tab buttons -->
-    <div class="flex border-b border-border">
-      <button
-        class="flex-1 px-4 py-2 text-sm transition-colors {addTab === 'local'
-          ? 'border-b-2 border-primary text-primary font-medium'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (addTab = "local")}
-      >
-        Local File
-      </button>
-      <button
-        class="flex-1 px-4 py-2 text-sm transition-colors {addTab === 'spotify'
-          ? 'border-b-2 border-primary text-primary font-medium'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (addTab = "spotify")}
-      >
-        Spotify
-      </button>
-    </div>
+    <!-- Source. The shared tabs primitive rather than hand-built buttons: it is a real
+         tablist to assistive tech, and its selected tab is not crimson text, which the
+         Signal Rule keeps off small type (3.1:1 on the dialog). -->
+    <Tabs.Root bind:value={addTab}>
+      <Tabs.List class="w-full">
+        <Tabs.Trigger value="local">Local file</Tabs.Trigger>
+        <Tabs.Trigger value="spotify">Spotify</Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
 
-    <!-- Tab content -->
-    {#if addTab === "local"}
-      <div
-        class="space-y-4 pt-4"
-        role="presentation"
-        ondragover={handleAudioDragOver}
-        ondragleave={() => (isAudioDropTarget = false)}
-        ondrop={handleAudioDrop}
-      >
-        {#if addFileName}
-          <div
-            class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors {isAudioDropTarget
-              ? 'ring-2 ring-primary/50'
-              : ''}"
-          >
-            <Music2 class="size-4 text-primary/60" />
-            <span class="flex-1 truncate text-foreground">{addFileName}</span>
-            <Button variant="ghost" size="xs" onclick={handleFilePick}>Change</Button>
-          </div>
-        {:else}
-          <button
-            onclick={handleFilePick}
-            class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors {isAudioDropTarget
-              ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/40'
-              : 'border-border hover:border-primary/50 hover:bg-primary/5'}"
-          >
-            <Music2
-              class="size-6 mx-auto mb-2 text-muted-foreground/60 transition-colors group-hover:text-primary/70"
-            />
-            <div class="text-sm font-medium text-foreground">
-              {isAudioDropTarget ? "Drop to add" : "Click to choose an audio file"}
-            </div>
-            <div class="text-xs text-muted-foreground/60 mt-1">
-              or drag &amp; drop · mp3, wav, ogg, flac
-            </div>
-          </button>
-        {/if}
-      </div>
-    {:else}
-      <div class="space-y-4 pt-4">
-        {#if !spotifyAuthChecked}
-          <div class="flex items-center justify-center py-6">
-            <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
-          </div>
-        {:else if !spotifyAuth?.is_connected}
-          <div
-            class="flex flex-col items-center gap-3 rounded-lg bg-card/50 border border-border p-6 text-center"
-          >
-            <span class="text-sm text-foreground font-medium"> Connect Spotify to add tracks </span>
-            <span class="text-xs text-muted-foreground max-w-[280px]">
-              Link your Spotify Premium account to add tracks and playlists to your scenes.
-            </span>
-            <Button size="sm" onclick={handleInlineSpotifyConnect} disabled={isSpotifyConnecting}>
-              {#if isSpotifyConnecting}
-                <LoaderCircle class="size-3.5 animate-spin" />
-                Connecting...
-              {:else}
-                Connect Spotify
-              {/if}
-            </Button>
-            <span class="text-[11px] text-muted-foreground">
-              Open Settings from the icon rail to manage integrations.
-            </span>
-          </div>
-        {:else}
-          <div>
-            <label for="add-spotify-uri" class="text-xs text-muted-foreground mb-1.5 block">
-              Spotify URI
-            </label>
-            <Input
-              id="add-spotify-uri"
-              bind:value={addSpotifyUri}
-              placeholder="Paste Spotify link or URI..."
-            />
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Shared fields -->
-    <div class="space-y-3 pt-3">
-      <div>
-        <label for="add-track-label" class="text-xs text-muted-foreground mb-1.5 block">Label</label
+    <!-- One height for both tabs, so switching does not make the dialog jump. -->
+    <div class="flex min-h-56 flex-col gap-4">
+      {#if addTab === "local"}
+        <div
+          role="presentation"
+          ondragover={handleAudioDragOver}
+          ondragleave={() => (isAudioDropTarget = false)}
+          ondrop={handleAudioDrop}
         >
-        <Input id="add-track-label" bind:value={addLabel} placeholder="Track name" />
-      </div>
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" bind:checked={addLoop} class="accent-primary" />
-          Loop
-        </label>
-        <label class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" bind:checked={addShuffle} class="accent-primary" />
-          Shuffle
-        </label>
-      </div>
+          {#if addFileName}
+            <div
+              class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors {isAudioDropTarget
+                ? 'ring-2 ring-foreground/30'
+                : ''}"
+            >
+              <Music2 class="size-4 shrink-0 text-muted-foreground" />
+              <span class="flex-1 truncate text-foreground">{addFileName}</span>
+              <Button variant="ghost" size="xs" onclick={handleFilePick}>Change</Button>
+            </div>
+          {:else}
+            <button
+              type="button"
+              onclick={handleFilePick}
+              class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors
+                     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring {isAudioDropTarget
+                ? 'border-foreground/40 bg-muted/60'
+                : 'border-border hover:border-foreground/30 hover:bg-muted/40'}"
+            >
+              <Music2
+                class="mx-auto mb-2 size-6 text-muted-foreground transition-colors group-hover:text-foreground"
+              />
+              <div class="text-sm font-medium text-foreground">
+                {isAudioDropTarget ? "Drop to add" : "Choose an audio file"}
+              </div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                or drop one here · MP3, WAV, OGG, FLAC, M4A or AAC
+              </div>
+            </button>
+          {/if}
+        </div>
+      {:else if !spotifyAuthChecked}
+        <div class="flex flex-1 items-center justify-center">
+          <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+        </div>
+      {:else if !spotifyAuth?.is_connected}
+        <div
+          class="flex flex-col items-center gap-3 rounded-lg border border-border bg-card/50 p-6 text-center"
+        >
+          <span class="text-sm font-medium text-foreground">Connect Spotify to add tracks</span>
+          <span class="max-w-[280px] text-xs text-muted-foreground">
+            Link a Spotify Premium account to add tracks, albums and playlists to your scenes.
+          </span>
+          <Button size="sm" onclick={handleInlineSpotifyConnect} disabled={isSpotifyConnecting}>
+            {#if isSpotifyConnecting}
+              <LoaderCircle class="size-3.5 animate-spin" />
+              Connecting…
+            {:else}
+              Connect Spotify
+            {/if}
+          </Button>
+          <span class="text-xs text-muted-foreground">
+            You can manage the connection in Settings → Integrations.
+          </span>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-1.5">
+          <label for="add-spotify-uri" class="text-xs font-semibold text-muted-foreground">
+            Link or URI
+          </label>
+          <Input
+            id="add-spotify-uri"
+            bind:value={addSpotifyUri}
+            placeholder="https://open.spotify.com/playlist/…"
+            aria-invalid={spotifyInputInvalid}
+            aria-describedby={spotifyInputInvalid ? "add-spotify-uri-error" : undefined}
+          />
+          {#if spotifyInputInvalid}
+            <p id="add-spotify-uri-error" class="flex items-center gap-1.5 text-xs text-error">
+              <CircleX class="size-3.5 shrink-0" />
+              That isn't a Spotify track, album or playlist link.
+            </p>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Name and options, once there is something to name. -->
+      {#if addTab === "local" || spotifyAuth?.is_connected}
+        <div class="flex flex-col gap-1.5">
+          <label for="add-track-label" class="text-xs font-semibold text-muted-foreground">
+            Name
+          </label>
+          <Input
+            id="add-track-label"
+            bind:value={addLabel}
+            placeholder={addTab === "spotify" ? "Uses the name on Spotify if left blank" : "Track name"}
+          />
+        </div>
+        <div class="flex items-center gap-5">
+          <label class="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" bind:checked={addLoop} class="accent-primary" />
+            Loop
+          </label>
+          {#if addTab === "spotify" && parsedSpotifyInput?.type === "playlist"}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" bind:checked={addShuffle} class="accent-primary" />
+              Shuffle
+            </label>
+          {/if}
+        </div>
+      {/if}
     </div>
 
-    <Dialog.Footer>
-      <Dialog.Close>
-        <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
-      </Dialog.Close>
+    <Dialog.Footer class="items-center">
+      {#if addBlockedReason}
+        <p class="mr-auto text-xs text-muted-foreground">{addBlockedReason}</p>
+      {/if}
+      <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
       <Button onclick={handleAddTrack} disabled={!canAdd || isAdding}>
-        {#if isAdding}Adding...{:else}Add{/if}
+        {#if isAdding}Adding…{:else}Add{/if}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
