@@ -270,7 +270,7 @@ describe("ScenePane hero header — thumbnail pickers", () => {
         document.body.querySelector('[data-icon-btn="Skull"]')?.getAttribute("aria-pressed"),
       ).toBe("true");
       expect(
-        document.body.querySelector('[data-color-swatch="default"]')?.getAttribute("aria-pressed"),
+        document.body.querySelector("[data-color-default]")?.getAttribute("aria-pressed"),
       ).toBe("true");
     });
   });

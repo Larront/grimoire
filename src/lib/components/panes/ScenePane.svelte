@@ -44,7 +44,8 @@
     sceneIcon,
     sceneThumbColors,
   } from "./thumbnail-presets";
-  import { ACCENT_PRESETS } from "$lib/entity-colors";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
+  import { sceneColorHex } from "$lib/color";
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
@@ -62,10 +63,12 @@
 
   // ---- Hero header ----
 
-  // The scene's own colours, as its dashboard card and the in-note player draw them.
+  // The scene's own colours, as its dashboard card and the in-note player draw them —
+  // or, while the GM drags the colour picker, the colour under their hand.
+  let draftColor = $state<string | null>(null);
   let heroColors = $derived(
     scene
-      ? sceneThumbColors(scene)
+      ? sceneThumbColors({ thumbnail_color: draftColor ?? scene.thumbnail_color })
       : { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" },
   );
   let heroColor = $derived(heroColors.bg);
@@ -103,6 +106,10 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
+    } finally {
+      // Hand the header back to the stored colour — unless the GM has already moved on
+      // to another one while this save was in flight.
+      if (draftColor === color || color === null) draftColor = null;
     }
   }
 
@@ -708,38 +715,15 @@
               </div>
             </section>
 
-            <!-- Colour: the five accent swatches as data, plus the neutral default. The
-                 current choice is marked, as in the pin colour row. -->
+            <!-- Colour: any colour, picked freely, or none. The header follows the drag
+                 and the scene saves when the GM lets go. -->
             <section class="flex flex-col gap-1.5">
               <h3 class="text-xs font-semibold text-muted-foreground">Color</h3>
-              <div data-color-picker class="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  data-color-swatch="default"
-                  aria-label="Default"
-                  aria-pressed={!scene.thumbnail_color}
-                  title="Default"
-                  class="size-6 rounded-full border-2 bg-background-elevated transition-[border-color,transform]
-                         {!scene.thumbnail_color
-                    ? 'scale-110 border-primary'
-                    : 'border-border hover:border-foreground/30'}"
-                  onclick={() => applyColor(null)}
-                ></button>
-                {#each ACCENT_PRESETS as preset (preset.name)}
-                  {@const chosen = scene.thumbnail_color === preset.bg}
-                  <button
-                    type="button"
-                    data-color-swatch={preset.name}
-                    aria-label={preset.label}
-                    aria-pressed={chosen}
-                    title={preset.label}
-                    class="size-6 rounded-full border-2 transition-[border-color,transform]
-                           {chosen ? 'scale-110 border-primary' : 'border-transparent hover:border-foreground/30'}"
-                    style="background: {preset.swatch}"
-                    onclick={() => applyColor(preset.bg)}
-                  ></button>
-                {/each}
-              </div>
+              <ColorPicker
+                value={sceneColorHex(scene.thumbnail_color)}
+                oninput={(hex) => (draftColor = hex)}
+                onchange={applyColor}
+              />
             </section>
 
             <!-- Icon -->

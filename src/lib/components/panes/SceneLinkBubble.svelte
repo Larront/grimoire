@@ -8,7 +8,7 @@
   import { Play, Square, Trash2, Music2, Volume2, ChevronDown } from "@lucide/svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { ICON_MAP, ACCENT_BG, ACCENT_FG } from "./thumbnail-presets";
+  import { ICON_MAP, ACCENT_BG, ACCENT_FG, sceneThumbColors } from "./thumbnail-presets";
   import ScenePicker from "./ScenePicker.svelte";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import type { SceneWithCount } from "$lib/types/ledger";
@@ -26,7 +26,13 @@
   } = $props();
 
   const isPlaying = $derived(audioEngine.isScenePlaying(scene.id));
-  const chipBg = $derived(scene.thumbnail_color ?? ACCENT_BG[scene.id % ACCENT_BG.length]);
+  // A chosen colour is drawn as everywhere else, a wash; any colour can be chosen now, and
+  // painted raw a picked hex would fill the chip at full strength.
+  const chipBg = $derived(
+    scene.thumbnail_color
+      ? sceneThumbColors(scene).bg
+      : ACCENT_BG[scene.id % ACCENT_BG.length],
+  );
   const chipFg = $derived(ACCENT_FG[scene.id % ACCENT_FG.length]);
   const ChipIcon = $derived(
     scene.thumbnail_icon ? (ICON_MAP[scene.thumbnail_icon] ?? Music2) : Music2,

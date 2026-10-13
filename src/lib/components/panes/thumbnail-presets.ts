@@ -12,6 +12,10 @@ import {
   BookOpen,
 } from "@lucide/svelte";
 import { ACCENT_PRESETS } from "$lib/entity-colors";
+import { sceneColorHex, wash } from "$lib/color";
+
+/** The strength of a scene colour's fill behind its icon — the presets' own 18%. */
+const SCENE_WASH_ALPHA = 0.18;
 
 /*
   A scene thumbnail's colour layer is the accent presets and nothing else. This file used
@@ -61,8 +65,9 @@ export function sceneIcon(scene: { thumbnail_icon: string | null }): typeof Skul
 
 /*
   A scene's thumbnail colours, for every surface that draws one — the dashboard card, the
-  scene editor's header, the in-note scene player and its picker. A colour the GM chose is theirs, with the icon in that
-  preset's own swatch; a scene with none chosen wears Iron Raised and a muted icon.
+  scene editor's header, the in-note scene player and its picker. A colour the GM chose is
+  theirs — any colour, from the picker — with the icon drawn in it; a scene with none
+  chosen wears Iron Raised and a muted icon.
 
   The unchosen case used to cycle the accent presets by id, so an untouched ledger read
   as a random purple, green and blue grid and the same random hues bled into every note
@@ -77,9 +82,11 @@ export function sceneThumbColors(scene: { thumbnail_color: string | null }): {
   bg: string;
   fg: string;
 } {
-  if (!scene.thumbnail_color) {
+  const hex = sceneColorHex(scene.thumbnail_color);
+  if (!hex) {
     return { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" };
   }
-  const preset = ACCENT_PRESETS.find((p) => p.bg === scene.thumbnail_color);
-  return { bg: scene.thumbnail_color, fg: preset?.swatch ?? "var(--foreground)" };
+  // Any colour the GM picks is drawn as a preset always was: an 18% wash behind the
+  // icon, the icon in the colour itself.
+  return { bg: wash(hex, SCENE_WASH_ALPHA), fg: hex };
 }

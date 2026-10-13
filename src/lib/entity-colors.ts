@@ -29,12 +29,9 @@
   added here belongs to the Iron/Ember/accent families or it does not belong here.
 */
 
-/** `#rrggbb` at the given alpha. The five fills are derived rather than written out, so
-    a retuned preset cannot leave its own wash behind on the old hue. */
-function wash(hex: string, alpha: number): string {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return `rgba(${r},${g},${b},${alpha})`;
-}
+// The five fills are derived with `wash` rather than written out, so a retuned preset
+// cannot leave its own wash behind on the old hue.
+import { wash } from "./color";
 
 const ACCENTS = [
   { name: "crimson", label: "Crimson", swatch: "#c2483d" },

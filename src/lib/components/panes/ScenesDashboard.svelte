@@ -27,7 +27,8 @@
     sceneIcon,
     sceneThumbColors,
   } from "./thumbnail-presets";
-  import { ACCENT_PRESETS } from "$lib/entity-colors";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
+  import { sceneColorHex } from "$lib/color";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
   const cardBg = (scene: SceneWithCount) => sceneThumbColors(scene).bg;
@@ -129,9 +130,9 @@
       await scenes.applyThumbnailColor(scene.id, color);
     } catch (e) {
       console.error("update thumbnail color failed:", e);
-    } finally {
-      colorPickerScene = null;
     }
+    // The dialog stays open: a picker is something to try colours in, and the card
+    // behind it shows each one as it lands. Escape or the close button ends it.
   }
 
   async function applyIcon(scene: SceneWithCount | null, icon: string | null) {
@@ -364,29 +365,16 @@
 >
   <Dialog.Content style="max-width: 18rem">
     <Dialog.Header>
-      <Dialog.Title>Choose color</Dialog.Title>
+      <Dialog.Title>Color</Dialog.Title>
     </Dialog.Header>
-    <div data-color-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ACCENT_PRESETS as preset (preset.name)}
-          <button
-            data-color-swatch={preset.name}
-            aria-label={preset.label}
-            class="size-9 rounded-lg border-2 border-transparent transition-[transform,border-color] hover:scale-110 hover:border-foreground/30"
-            style="background: {preset.swatch}"
-            onclick={() => applyColor(colorPickerScene, preset.bg)}
-          ></button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyColor(colorPickerScene, null)}
-      >
-        Reset to default
-      </Button>
-    </div>
+    {#if colorPickerScene}
+      <ColorPicker
+        value={sceneColorHex(
+          scenes.scenes.find((s) => s.id === colorPickerScene?.id)?.thumbnail_color ?? null,
+        )}
+        onchange={(hex) => applyColor(colorPickerScene, hex)}
+      />
+    {/if}
   </Dialog.Content>
 </Dialog.Root>
 

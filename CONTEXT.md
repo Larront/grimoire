@@ -36,7 +36,7 @@ Five named presets drive `--primary`. All are evocative, never generic — no ne
 
 `--primary-subtle` (12% opacity) and `--primary-muted` (24% opacity) are derived from `--primary`. There is no separate `--accent` token — `--primary` is the single accent family.
 
-The preset table lives in `src/app.css` under `.accent-*`; `shared/tokens.css` additionally ships Crimson's two values as the default `--primary`, which is what a GM who has never opened Settings is looking at. One deliberate third copy: `src/lib/entity-colors.ts` holds the five dark hexes frozen as **data**, because a colour a GM picks for a pin, an annotation or a scene thumbnail is written into their ledger and must not re-resolve when they change accent or mode. That file is the only source of a colour-picker row anywhere in the app — the entity pickers, the scene thumbnails and Settings' own accent list all build from it — and `src/test/entity-colors.test.ts` fails if the copies drift.
+The preset table lives in `src/app.css` under `.accent-*`; `shared/tokens.css` additionally ships Crimson's two values as the default `--primary`, which is what a GM who has never opened Settings is looking at. One deliberate third copy: `src/lib/entity-colors.ts` holds the five dark hexes frozen as **data**, because a colour a GM picks for a pin, an annotation or a scene thumbnail is written into their ledger and must not re-resolve when they change accent or mode. That file is the only source of a colour-picker row anywhere in the app — the pin and annotation pickers and Settings' own accent list all build from it — and `src/test/entity-colors.test.ts` fails if the copies drift. A scene thumbnail's colour is the one exception: it comes from a full colour picker (`ColorPicker`) and is stored as `#rrggbb`. Ledgers from before hold a preset's 18% wash instead, which `sceneColorHex` reads back as the hue it washes; nothing is rewritten.
 
 ### Color Families
 
@@ -104,7 +104,7 @@ A named container of audio slots used during tabletop sessions. Scenes have a vi
 
 The visual identity of a scene card. Composed of two independent layers:
 
-- **Background layer** — user-uploaded image, or derived accent color when no image is set
+- **Background layer** — user-uploaded image, or, when no image is set, the colour the GM picked (any colour, drawn as an 18% wash behind the icon) or neutral Iron Raised
 - **Icon layer** — a Lucide icon (default or user-overridden) that renders on top of both image and color backgrounds
 
 The icon persists regardless of whether an image is uploaded. Uploading an image replaces the color background only — the icon layer is always present.

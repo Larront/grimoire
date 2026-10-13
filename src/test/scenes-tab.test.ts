@@ -468,41 +468,41 @@ describe("ScenesDashboard — color picker", () => {
     });
   });
 
-  it("selecting a color swatch calls update_scene_thumbnail and reloads", async () => {
+  it("a colour entered in the picker is saved as hex and reloads", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCustomiseSubmenu(container);
     const item = await clickMenuItem("Change color");
     await fireEvent.click(item);
-    const swatch = await waitFor(() => {
-      const el = document.body.querySelector("[data-color-swatch]") as HTMLElement;
-      if (!el) throw new Error("color swatch not found");
+    const hex = await waitFor(() => {
+      const el = document.body.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+      if (!el) throw new Error("hex field not found");
       return el;
     });
-    await fireEvent.click(swatch);
+    await fireEvent.input(hex, { target: { value: "3a7fa8" } });
+    await fireEvent.keyDown(hex, { key: "Enter" });
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
-        expect.objectContaining({ id: 1 }),
+        expect.objectContaining({ id: 1, thumbnailColor: "#3a7fa8" }),
       );
       expect(scenes.load).toHaveBeenCalled();
     });
   });
 
-  it("Reset to default clears thumbnail_color", async () => {
+  it("Default clears thumbnail_color", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCustomiseSubmenu(container);
     const item = await clickMenuItem("Change color");
     await fireEvent.click(item);
     await waitFor(() => document.body.querySelector("[data-color-picker]"));
-    const resetBtn = await waitFor(() => {
-      const btns = Array.from(document.body.querySelectorAll("button"));
-      const btn = btns.find((b) => b.textContent?.includes("Reset")) as HTMLElement | undefined;
-      if (!btn) throw new Error("Reset button not found");
+    const defaultBtn = await waitFor(() => {
+      const btn = document.body.querySelector("[data-color-default]") as HTMLElement | null;
+      if (!btn) throw new Error("Default button not found");
       return btn;
     });
-    await fireEvent.click(resetBtn);
+    await fireEvent.click(defaultBtn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
