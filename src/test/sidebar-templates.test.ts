@@ -127,6 +127,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get slotStates() {
       return new Map();
     },
+    sceneState: () => "idle",
     playScene: vi.fn(),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),

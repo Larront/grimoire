@@ -46,6 +46,7 @@
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
   import SidebarScenes from "./SidebarScenes.svelte";
+  import RailScenes from "./RailScenes.svelte";
   import SidebarTemplates from "./SidebarTemplates.svelte";
 
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
@@ -374,9 +375,9 @@
     -->
     {@render strip("sidebar-search-icon", "Search", Search, shell.openSearch)}
     {@render strip("sidebar-files-standin", "Files", Files, () => reveal("sidebar-files-section"))}
-    {@render strip("sidebar-scenes-standin", "Scenes", Music2, () =>
-      reveal("sidebar-scenes-section"),
-    )}
+    <!-- Scenes is its own component: while a scene plays it carries the playing bars
+         and, under it, that scene's pause — the mini player cannot be 48px wide. -->
+    <RailScenes onReveal={() => reveal("sidebar-scenes-section")} />
 
     <!-- Navigate: the two destinations that are neither a file nor a scene, as one
          group directly under search. They used to float between the Scenes and

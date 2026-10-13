@@ -1,7 +1,8 @@
-import { render, cleanup } from "@testing-library/svelte";
+import { render, cleanup, fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import AppShell from "../lib/components/AppShell.svelte";
 import type { SceneWithCount } from "../lib/types/ledger";
+import { audioEngine } from "../lib/stores/audio-engine.svelte";
 
 let mockSidebarScenes: SceneWithCount[] = [];
 let mockSidebarActiveSceneId: number | null = null;
@@ -218,5 +219,48 @@ describe("AppSidebar — scene playing indicator", () => {
       "Play Third",
       "Play Second",
     ]);
+  });
+});
+
+// The collapsed strip's Scenes stand-in. Collapsing the sidebar to focus used to take
+// every sign of the music with it, and every control for it.
+describe("collapsed strip — the scene playing", () => {
+  beforeEach(() => {
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true)];
+    mockSidebarActiveSceneId = null;
+    mockSidebarLoadingSceneId = null;
+    mockSidebarPaused = false;
+  });
+
+  const standin = (c: HTMLElement) =>
+    c.querySelector('[data-testid="sidebar-scenes-standin"]') as HTMLElement;
+  const pause = (c: HTMLElement) =>
+    c.querySelector('[data-testid="sidebar-scenes-pause"]') as HTMLElement | null;
+
+  it("with nothing playing, is the plain stand-in and offers no pause", () => {
+    const { container } = render(AppShell);
+    expect(standin(container).getAttribute("aria-label")).toBe("Scenes");
+    expect(pause(container)).toBeNull();
+  });
+
+  it("while a scene plays, says so and pauses it", async () => {
+    mockSidebarActiveSceneId = 1;
+    const { container } = render(AppShell);
+    expect(standin(container).getAttribute("aria-label")).toBe(
+      "Scenes — Forest Ambience playing",
+    );
+    expect(standin(container).querySelector(".now-playing-bar")).toBeTruthy();
+    expect(pause(container)?.getAttribute("aria-label")).toBe("Pause Forest Ambience");
+    await fireEvent.click(pause(container)!);
+    expect(audioEngine.pauseScene).toHaveBeenCalled();
+  });
+
+  it("while it is paused, draws no bars and resumes it", async () => {
+    mockSidebarActiveSceneId = 1;
+    mockSidebarPaused = true;
+    const { container } = render(AppShell);
+    expect(standin(container).querySelector(".now-playing-bar")).toBeNull();
+    await fireEvent.click(pause(container)!);
+    expect(audioEngine.resumeScene).toHaveBeenCalled();
   });
 });
