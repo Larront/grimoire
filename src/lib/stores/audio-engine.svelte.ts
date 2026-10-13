@@ -394,6 +394,9 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   let loadingSceneId = $state<number | null>(null);
   let slotStates = $state(new Map<number, SlotPlaybackState>());
   let pendingSceneId = $state<number | null>(null);
+  // The slot a queued preview is for, so a preview that waits behind a crossfade is still
+  // a preview when it runs.
+  let pendingSoloSlotId: number | null = null;
   let masterVolume = $state(1);
   let preMuteVolume = $state<number | null>(null);
 
@@ -424,9 +427,19 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     await crossfadeTo(sceneId);
   }
 
+  // Play one track of a scene that is not playing, so a GM building a scene can hear a
+  // track on its own. It is the scene starting with every other slot parked — loaded,
+  // paused at its own volume — so the rest of the transport works as it does for any
+  // playing scene: each parked row's play button brings that track in, Pause and Stop
+  // act on the whole scene, and playing another scene crossfades away from it.
+  async function previewSlot(sceneId: number, slotId: number): Promise<void> {
+    await crossfadeTo(sceneId, slotId);
+  }
+
   function stopAll(): void {
     crossfadeAborted = true;
     pendingSceneId = null;
+    pendingSoloSlotId = null;
     loadingSceneId = null;
     for (const player of slotPlayers.values()) {
       void player.stop();
@@ -527,10 +540,11 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     await activePlaylistPlayer?.skipPrev();
   }
 
-  async function crossfadeTo(newSceneId: number): Promise<void> {
+  async function crossfadeTo(newSceneId: number, soloSlotId?: number): Promise<void> {
     if (newSceneId === activeSceneId) return;
     if (isCrossfading) {
       pendingSceneId = newSceneId;
+      pendingSoloSlotId = soloSlotId ?? null;
       return;
     }
 
@@ -565,8 +579,16 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
           // setMasterVolume must be called before fadeTo so streaming players
           // scale to the correct final volume
           player.setMasterVolume(masterVolume);
-          void player.fadeTo(slot.volume, fadeSec);
-          newStates.set(slot.id, { slot, volume: slot.volume, playing: true });
+          const sounding = soloSlotId === undefined || slot.id === soloSlotId;
+          if (sounding) {
+            void player.fadeTo(slot.volume, fadeSec);
+          } else {
+            // Parked: started at 0 and stopped before it is heard, with its own volume
+            // recorded for the resume that brings it in.
+            await player.stop();
+            player.setVolume(slot.volume);
+          }
+          newStates.set(slot.id, { slot, volume: slot.volume, playing: sounding });
           newPlayers.set(slot.id, player);
           if (isPlaylistSlot(slot)) newPlaylistPlayer = player as PlaylistSlotPlayer;
         } catch (e) {
@@ -612,8 +634,10 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 
     if (pendingSceneId !== null && pendingSceneId !== activeSceneId) {
       const next = pendingSceneId;
+      const solo = pendingSoloSlotId ?? undefined;
       pendingSceneId = null;
-      crossfadeTo(next);
+      pendingSoloSlotId = null;
+      crossfadeTo(next, solo);
     }
   }
 
@@ -678,6 +702,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       return localCtx?.analyser ?? null;
     },
     playScene,
+    previewSlot,
     stopAll,
     setSlotVolume,
     setMasterVolume,

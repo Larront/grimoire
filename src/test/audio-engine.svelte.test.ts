@@ -288,3 +288,45 @@ describe("scene verbs over the fake adapter", () => {
     }
   });
 });
+
+describe("previewSlot — one track of a stopped scene", () => {
+  it("starts the scene with only that slot sounding and the rest parked", async () => {
+    const engine = makeEngine();
+    engine.previewSlot(1, 12);
+    await settle();
+
+    expect(engine.activeSceneId).toBe(1);
+    expect(engine.isSlotPlaying(12)).toBe(true);
+    expect(engine.isSlotPlaying(11)).toBe(false);
+    // A preview is the scene playing, not the scene paused: the transport offers Pause.
+    expect(engine.isPlaying).toBe(true);
+    expect(engine.isScenePaused).toBe(false);
+
+    const [parked, sounding] = playersForScene(1);
+    expect(sounding.fades.map((f) => f.target)).toEqual([0.8]);
+    expect(parked.fades).toEqual([]);
+    expect(parked.stops).toBe(1);
+  });
+
+  it("a parked slot joins at its own volume when its row is played", async () => {
+    const engine = makeEngine();
+    engine.previewSlot(1, 12);
+    await settle();
+
+    await engine.resumeSlot(11);
+
+    expect(engine.isSlotPlaying(11)).toBe(true);
+    expect(playersForScene(1)[0].resumes).toBe(1);
+  });
+
+  it("a preview queued behind a crossfade keeps its slot", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(2);
+    engine.previewSlot(1, 11);
+    await settle();
+
+    expect(engine.activeSceneId).toBe(1);
+    expect(engine.isSlotPlaying(11)).toBe(true);
+    expect(engine.isSlotPlaying(12)).toBe(false);
+  });
+});
