@@ -111,7 +111,7 @@ The icon persists regardless of whether an image is uploaded. Uploading an image
 
 ### Fallback Thumbnail
 
-The thumbnail treatment when no image has been uploaded: a colour + icon. Both layers are independently user-overridable (stored as nullable `thumbnail_color` and `thumbnail_icon` on the scene). `NULL` colour means neutral Iron Raised with a muted icon — not a hue the app picks (`sceneThumbColors` in `thumbnail-presets.ts`); `NULL` icon means the default clapperboard.
+The thumbnail treatment when no image has been uploaded: a colour + icon. Both layers are independently user-overridable (stored as nullable `thumbnail_color` and `thumbnail_icon` on the scene). `NULL` colour means neutral Iron Raised with a muted icon — not a hue the app picks (`sceneThumbColors` in `thumbnail-presets.ts`); `NULL` icon means the default music note (`DEFAULT_SCENE_ICON`), on every surface that draws a scene.
 
 ### Scene Dashboard
 

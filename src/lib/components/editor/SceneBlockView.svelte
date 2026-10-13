@@ -10,7 +10,6 @@
     VolumeOff,
     ChevronDown,
     ChevronUp,
-    Music2,
     Pause,
     Repeat,
     Shuffle,
@@ -26,7 +25,11 @@
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import { ICON_MAP, sceneThumbColors } from "$lib/components/panes/thumbnail-presets";
+  import {
+    DEFAULT_SCENE_ICON,
+    sceneIcon,
+    sceneThumbColors,
+  } from "$lib/components/panes/thumbnail-presets";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
@@ -135,9 +138,7 @@
   );
   const chipColor = $derived(chipColors.bg);
   const chipIconColor = $derived(chipColors.fg);
-  const ChipIcon = $derived(
-    thisScene?.thumbnail_icon ? (ICON_MAP[thisScene.thumbnail_icon] ?? Music2) : Music2,
-  );
+  const ChipIcon = $derived(thisScene ? sceneIcon(thisScene) : DEFAULT_SCENE_ICON);
 
   // ── Pause / Resume / Stop (parity with ScenePane) ────────────────────────
 
@@ -302,9 +303,7 @@
         <p class="px-2 py-2 font-sans text-xs text-muted-foreground/50">No scenes match.</p>
       {:else}
         {#each filteredScenes as scene (scene.id)}
-          {@const RowIcon = scene.thumbnail_icon
-            ? (ICON_MAP[scene.thumbnail_icon] ?? Music2)
-            : Music2}
+          {@const RowIcon = sceneIcon(scene)}
           {@const rowBg = sceneThumbColors(scene).bg}
           {@const rowFg = sceneThumbColors(scene).fg}
           <button

@@ -142,15 +142,16 @@ describe("ScenePane hero header", () => {
     expect(container.querySelector("[data-hero-header]")).toBeTruthy();
   });
 
-  it("hero header uses derived accent color when no thumbnail_path or thumbnail_color", () => {
-    // id=1, 1%5=1 → arcane: rgba(155,107,191,0.18)
+  it("hero header is neutral, not a hue picked by id, when no colour is chosen", () => {
+    // The dashboard card and the in-note player draw an uncoloured scene in Iron Raised;
+    // the editor used to cycle the accent presets by id (id 1 → Arcane's purple).
     mockScenes = [makeScene({ id: 1, thumbnail_color: null, thumbnail_path: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
     const hero = container.querySelector("[data-hero-header]") as HTMLElement;
-    // JSDOM normalizes rgba(r,g,b,a) → rgba(r, g, b, a) with spaces
-    expect(hero?.getAttribute("style")).toMatch(/155.*107.*191/);
+    expect(hero?.getAttribute("style")).toContain("var(--background-elevated)");
+    expect(hero?.getAttribute("style")).not.toMatch(/155.*107.*191/);
   });
 
   it("hero header uses thumbnail_color when set and no thumbnail_path", () => {

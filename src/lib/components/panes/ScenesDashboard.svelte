@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    Clapperboard,
     Pause,
     Play,
     SlidersHorizontal,
@@ -22,7 +21,12 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
   import type { SceneWithCount } from "$lib/types/ledger";
-  import { ICON_OPTIONS, ICON_MAP, sceneThumbColors } from "./thumbnail-presets";
+  import {
+    ICON_OPTIONS,
+    DEFAULT_SCENE_ICON as DefaultSceneIcon,
+    sceneIcon,
+    sceneThumbColors,
+  } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
@@ -179,7 +183,7 @@
         class="mt-16 flex flex-col items-center justify-center py-20 text-center"
       >
         <div class="flex size-20 items-center justify-center rounded-lg bg-primary-subtle">
-          <Clapperboard class="size-10 text-primary" strokeWidth={1.5} />
+          <DefaultSceneIcon class="size-10 text-primary" strokeWidth={1.5} />
         </div>
         <p class="mt-6 font-heading text-xl text-foreground">Set the mood</p>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
@@ -196,8 +200,7 @@
         {#each sortedScenes as scene (scene.id)}
           {@const isPlaying = scene.id === activeSceneDisplayId}
           {@const showPause = isPlaying && !audioEngine.isScenePaused}
-          {@const ThumbnailIcon =
-            (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Clapperboard}
+          {@const ThumbnailIcon = sceneIcon(scene)}
           {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
@@ -223,7 +226,7 @@
                   {#if cardImgUrl}
                     <div class="pointer-events-none absolute inset-0 bg-black/30"></div>
                   {/if}
-                  <span data-thumbnail-icon={scene.thumbnail_icon ?? "Clapperboard"}>
+                  <span data-thumbnail-icon={scene.thumbnail_icon ?? "Music2"}>
                     <ThumbnailIcon
                       class="size-10 opacity-80"
                       strokeWidth={1.5}
@@ -399,10 +402,10 @@
     </Dialog.Header>
     <div data-icon-picker class="flex flex-col gap-3">
       <div class="grid grid-cols-5 gap-2">
-        {#each ICON_OPTIONS as { name, icon: Icon } (name)}
+        {#each ICON_OPTIONS as { name, label, icon: Icon } (name)}
           <button
             data-icon-btn={name}
-            aria-label={name}
+            aria-label={label}
             class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
             onclick={() => applyIcon(iconPickerScene, name)}
           >

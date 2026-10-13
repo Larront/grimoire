@@ -33,7 +33,7 @@
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
-  import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
+  import { ICON_OPTIONS, sceneIcon, sceneThumbColors } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
@@ -49,10 +49,14 @@
 
   // ---- Hero header ----
 
-  let heroColor = $derived(
-    scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0],
+  // The scene's own colours, as its dashboard card and the in-note player draw them.
+  let heroColors = $derived(
+    scene
+      ? sceneThumbColors(scene)
+      : { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" },
   );
-  let heroIconColor = $derived(scene ? ACCENT_FG[scene.id % 5] : ACCENT_FG[0]);
+  let heroColor = $derived(heroColors.bg);
+  let heroIconColor = $derived(heroColors.fg);
   let thumbnailUrl = $state<string | null>(null);
 
   $effect(() => {
@@ -504,7 +508,7 @@
     </div>
   {:else}
     <!-- HERO HEADER -->
-    {@const HeroIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Music2}
+    {@const HeroIcon = sceneIcon(scene)}
     <div
       data-hero-header
       class="group relative flex min-h-52 flex-col justify-end overflow-hidden"
