@@ -16,7 +16,8 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
     masterVolume: 1,
-    isScenePlaying: (id: number) => mockPlayingSceneId === id,
+    resumeScene: vi.fn(),
+    sceneState: (id: number) => (mockPlayingSceneId === id ? "playing" : "idle"),
   },
 }));
 

@@ -400,6 +400,22 @@ function createSlotPlayer(
   }
 }
 
+// ---- SceneState --------------------------------------------------------------------
+
+/**
+ * Where one scene stands, for any surface that shows or plays it. Every surface used to
+ * work this out for itself from the engine's flags, and they disagreed: the engine's
+ * playing flag stays up through a pause, so a paused scene drew the playing bars on a
+ * PDF passage and kept the mini player crimson, while the in-note player had learned to
+ * subtract the pause. One answer, asked by scene:
+ *
+ * - `loading` — starting: its tracks are loading or fading in.
+ * - `playing` — sounding.
+ * - `paused` — the active scene, with every track paused.
+ * - `idle` — anything else, including the scene a crossfade is leaving.
+ */
+export type SceneState = "idle" | "loading" | "playing" | "paused";
+
 // ---- SlotPlaybackState -------------------------------------------------------------
 
 interface SlotPlaybackState {
@@ -427,6 +443,11 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   let pendingSoloSlotId: number | null = null;
   let masterVolume = $state(1);
   let preMuteVolume = $state<number | null>(null);
+  // Muted tracks, by slot id. The engine's rather than each surface's, so a track muted
+  // in the mini player is muted in the note's mixer too; and kept for a scene that is not
+  // playing, so a track muted before its scene starts starts silent. A mute is for the
+  // session: it is not saved, and a track's volume is untouched by it.
+  let mutedSlotIds = $state(new Set<number>());
 
   // Non-reactive player state — not exposed to components
   let localCtx: LocalAudioContext | null = null;
@@ -496,13 +517,33 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     preMuteVolume = null;
   }
 
+  // Moving a track's level unmutes it: the GM is setting what they want to hear.
   function setSlotVolume(slotId: number, volume: number): void {
+    if (mutedSlotIds.has(slotId)) {
+      const next = new Set(mutedSlotIds);
+      next.delete(slotId);
+      mutedSlotIds = next;
+    }
     const state = slotStates.get(slotId);
     if (!state) return;
     slotPlayers.get(slotId)?.setVolume(volume);
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, volume });
     slotStates = updated;
+  }
+
+  function toggleSlotMute(slotId: number): void {
+    const next = new Set(mutedSlotIds);
+    const muted = !next.has(slotId);
+    if (muted) next.add(slotId);
+    else next.delete(slotId);
+    mutedSlotIds = next;
+    const state = slotStates.get(slotId);
+    if (state) slotPlayers.get(slotId)?.setVolume(muted ? 0 : state.volume);
+  }
+
+  function isSlotMuted(slotId: number): boolean {
+    return mutedSlotIds.has(slotId);
   }
 
   function applyMasterVolume(v: number): void {
@@ -571,8 +612,21 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     return activeSceneId === id;
   }
 
-  function isScenePlaying(id: number): boolean {
-    return activeSceneId === id && isPlaying;
+  function allSlotsPaused(): boolean {
+    return (
+      activeSceneId !== null &&
+      slotStates.size > 0 &&
+      [...slotStates.values()].every((s) => !s.playing)
+    );
+  }
+
+  function sceneState(id: number | null): SceneState {
+    if (id === null) return "idle";
+    if (loadingSceneId === id) return "loading";
+    // Being crossfaded away from: the GM has already chosen the next scene.
+    if (loadingSceneId !== null) return "idle";
+    if (activeSceneId !== id || !isPlaying) return "idle";
+    return allSlotsPaused() ? "paused" : "playing";
   }
 
   function isSlotPlaying(slotId: number): boolean {
@@ -641,13 +695,14 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
           // scale to the correct final volume
           player.setMasterVolume(masterVolume);
           const sounding = soloSlotId === undefined || slot.id === soloSlotId;
+          const level = mutedSlotIds.has(slot.id) ? 0 : slot.volume;
           if (sounding) {
-            void player.fadeTo(slot.volume, fadeSec);
+            void player.fadeTo(level, fadeSec);
           } else {
             // Parked: started at 0 and stopped before it is heard, with its own volume
             // recorded for the resume that brings it in.
             await player.stop();
-            player.setVolume(slot.volume);
+            player.setVolume(level);
           }
           newStates.set(slot.id, { slot, volume: slot.volume, playing: sounding });
           newPlayers.set(slot.id, player);
@@ -729,6 +784,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       boundLedgerPath = path;
       if (firstBinding) return;
       stopAll();
+      mutedSlotIds = new Set();
       localCtx?.close();
       localCtx = null;
       spotifyCtx?.disconnect();
@@ -759,11 +815,11 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       return preMuteVolume !== null;
     },
     get isScenePaused() {
-      return (
-        activeSceneId !== null &&
-        slotStates.size > 0 &&
-        [...slotStates.values()].every((s) => !s.playing)
-      );
+      return allSlotsPaused();
+    },
+    /** Something is audible: a scene is playing and not every track of it is paused. */
+    get isSounding() {
+      return isPlaying && !allSlotsPaused();
     },
     get analyserNode(): AnalyserNode | null {
       return localCtx?.analyser ?? null;
@@ -772,6 +828,8 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     previewSlot,
     stopAll,
     setSlotVolume,
+    toggleSlotMute,
+    isSlotMuted,
     setMasterVolume,
     toggleMasterMute,
     pauseScene,
@@ -779,7 +837,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     pauseSlot,
     resumeSlot,
     isSceneActive,
-    isScenePlaying,
+    sceneState,
     isSlotPlaying,
     slotVolume,
     skipNext,

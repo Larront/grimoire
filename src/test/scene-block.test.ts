@@ -43,7 +43,6 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 }));
 
 // The engine reports nothing playing unless a case sets mockActiveId / mockPaused.
-// Like the real engine, isScenePlaying stays true through a pause.
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   // Keep in sync with the named export in audio-engine.svelte.ts
   isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
@@ -61,7 +60,11 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
     isSceneActive: vi.fn((id: number) => id === mockActiveId),
-    isScenePlaying: vi.fn((id: number) => id === mockActiveId),
+    sceneState: vi.fn((id: number | null) =>
+      id !== null && id === mockActiveId ? (mockPaused ? "paused" : "playing") : "idle",
+    ),
+    isSlotMuted: vi.fn(() => false),
+    toggleSlotMute: vi.fn(),
     isSlotPlaying: vi.fn(() => false),
     slotVolume: vi.fn(() => undefined),
     get isPlaying() {

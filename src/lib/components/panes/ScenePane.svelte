@@ -199,16 +199,16 @@
   });
 
   // ---- Playback derived state ----
-  // Every one of these asks about THIS scene. The paused check used to be the engine's
-  // global one, so with Boss Battle paused, Town Market's editor offered "Resume" — and
-  // resumed the boss music. The in-note player made the same mistake, and both are scoped
-  // the same way now.
+  // Every one of these asks about THIS scene, through the engine's one answer for it
+  // (`sceneState`). The paused check used to be the engine's global one, so with Boss
+  // Battle paused, Town Market's editor offered "Resume" — and resumed the boss music.
+  // Active is wider than playing: a paused scene is still the active one, and its tracks
+  // still answer their own controls.
   let isThisSceneActive = $derived(scene !== null && audioEngine.isSceneActive(scene.id));
-  let isThisSceneLoading = $derived(scene !== null && audioEngine.loadingSceneId === scene.id);
-  let isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);
-  let isThisScenePlaying = $derived(
-    scene !== null && audioEngine.isScenePlaying(scene.id) && !isThisScenePaused,
-  );
+  let sceneState = $derived(audioEngine.sceneState(scene?.id ?? null));
+  let isThisSceneLoading = $derived(sceneState === "loading");
+  let isThisScenePaused = $derived(sceneState === "paused");
+  let isThisScenePlaying = $derived(sceneState === "playing");
   let hasTracks = $derived(!slotsLoading && slots.length > 0);
 
   // ---- Play / Stop ----
@@ -836,7 +836,7 @@
             class="w-28 @max-md:w-20"
             value={audioEngine.masterVolume}
             label="Master volume"
-            active={audioEngine.isPlaying}
+            active={audioEngine.isSounding}
             oninput={(v) => audioEngine.setMasterVolume(v)}
           />
         </div>

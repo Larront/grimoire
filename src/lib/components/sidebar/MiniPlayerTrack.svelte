@@ -18,21 +18,13 @@
 
   let { slot }: { slot: SceneSlot } = $props();
 
-  let mutedVolume = $state<number | null>(null);
-
   let isSlotPlaying = $derived(audioEngine.isSlotPlaying(slot.id));
   let currentVolume = $derived(audioEngine.slotVolume(slot.id) ?? slot.volume);
-  let isMuted = $derived(mutedVolume !== null);
+  let isMuted = $derived(audioEngine.isSlotMuted(slot.id));
   let isSpotify = $derived(slot.source === "spotify");
   let isPlaylist = $derived(
     isSpotify && (slot.source_id.includes(":playlist:") || slot.source_id.includes(":album:")),
   );
-
-  // Fix 1: Reset mute state when slot identity changes
-  $effect(() => {
-    slot.id; // track slot identity
-    mutedVolume = null; // reset mute when a different slot is bound
-  });
 
   // Fix 3: Busy guard to prevent double-invocation
   let busy = $state(false);
@@ -52,18 +44,11 @@
   }
 
   function toggleMute() {
-    if (mutedVolume !== null) {
-      audioEngine.setSlotVolume(slot.id, mutedVolume);
-      mutedVolume = null;
-    } else {
-      mutedVolume = currentVolume;
-      audioEngine.setSlotVolume(slot.id, 0);
-    }
+    audioEngine.toggleSlotMute(slot.id);
   }
 
   function handleVolumeInput(value: number) {
     audioEngine.setSlotVolume(slot.id, value);
-    if (mutedVolume !== null) mutedVolume = null;
   }
 
   async function handleVolumeChange(value: number) {

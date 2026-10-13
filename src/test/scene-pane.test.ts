@@ -65,7 +65,9 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
     isSceneActive: vi.fn((id: number) => id === mockActiveSceneId),
-    isScenePlaying: vi.fn((id: number) => id === mockActiveSceneId),
+    sceneState: vi.fn((id: number | null) =>
+      id !== null && id === mockActiveSceneId ? (mockIsScenePaused ? "paused" : "playing") : "idle",
+    ),
     isSlotPlaying: vi.fn((id: number) => mockSlotPlayingMap.get(id) ?? false),
     slotVolume: vi.fn((_id: number) => undefined),
     get activeSceneId() {
@@ -85,6 +87,9 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     },
     get isScenePaused() {
       return mockIsScenePaused;
+    },
+    get isSounding() {
+      return mockActiveSceneId !== null && !mockIsScenePaused;
     },
     get isMasterMuted() {
       return mockIsMasterMuted;

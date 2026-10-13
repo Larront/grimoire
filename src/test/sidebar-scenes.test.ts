@@ -6,6 +6,7 @@ import type { SceneWithCount } from "../lib/types/ledger";
 let mockSidebarScenes: SceneWithCount[] = [];
 let mockSidebarActiveSceneId: number | null = null;
 let mockSidebarLoadingSceneId: number | null = null;
+let mockSidebarPaused = false;
 
 vi.mock("../lib/stores/ledger.svelte", () => ({
   ledger: {
@@ -117,7 +118,19 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     pauseSlot: vi.fn().mockResolvedValue(undefined),
     resumeSlot: vi.fn().mockResolvedValue(undefined),
     isSceneActive: vi.fn(() => false),
-    isScenePlaying: vi.fn(() => false),
+    // As the engine answers: the scene starting is "loading", and the one it is leaving
+    // reads as idle.
+    sceneState: vi.fn((id: number | null) =>
+      id === null
+        ? "idle"
+        : id === mockSidebarLoadingSceneId
+          ? "loading"
+          : mockSidebarLoadingSceneId === null && id === mockSidebarActiveSceneId
+            ? mockSidebarPaused
+              ? "paused"
+              : "playing"
+            : "idle",
+    ),
     isSlotPlaying: vi.fn(() => false),
     slotVolume: vi.fn(() => undefined),
     skipNext: vi.fn(),
@@ -148,6 +161,7 @@ describe("AppSidebar — scene playing indicator", () => {
     mockSidebarScenes = [];
     mockSidebarActiveSceneId = null;
     mockSidebarLoadingSceneId = null;
+    mockSidebarPaused = false;
   });
 
   it("no scene row has data-scene-playing when both IDs are null", () => {
@@ -173,6 +187,17 @@ describe("AppSidebar — scene playing indicator", () => {
     const playingRows = container.querySelectorAll("[data-scene-playing]");
     expect(playingRows.length).toBe(1);
     expect(playingRows[0].textContent).toContain("Tavern Noise");
+  });
+
+  it("a paused scene's row is not marked playing, and offers Play to resume it", () => {
+    // Crimson means sounding. The row used to stay crimson through a pause.
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true)];
+    mockSidebarActiveSceneId = 1;
+    mockSidebarPaused = true;
+    const { container } = render(AppShell);
+    expect(container.querySelector("[data-scene-playing]")).toBeNull();
+    const play = container.querySelector('[data-testid="sidebar-scene-play"]');
+    expect(play?.getAttribute("aria-label")).toBe("Play Forest Ambience");
   });
 
   it("with favourites, a non-favourite scene is not listed even if active", () => {

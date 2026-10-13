@@ -134,17 +134,14 @@
   const isThisSceneActive = $derived(
     ref.sceneId !== null && audioEngine.isSceneActive(ref.sceneId),
   );
-  const isThisSceneLoading = $derived(audioEngine.loadingSceneId === ref.sceneId);
-  // Every state here is THIS scene's. `isScenePlaying` stays true through a pause — the
-  // engine's playing flag only drops on stop — so the block used to read a paused scene
-  // as playing: its button kept saying Pause, kept pausing, and the scene could not be
-  // resumed from the note. And the button's label read the engine's global paused flag,
-  // so with another scene paused this one announced "Resume". Scoped as the scene
-  // editor scopes them.
-  const isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);
-  const isThisScenePlaying = $derived(
-    ref.sceneId !== null && audioEngine.isScenePlaying(ref.sceneId) && !isThisScenePaused,
-  );
+  // Every state here is THIS scene's, from the engine's one answer for it (`sceneState`),
+  // as the scene editor's are. The block used to read a paused scene as playing — the
+  // engine's playing flag stays up through a pause — so its button kept saying Pause and
+  // the scene could not be resumed from the note.
+  const sceneState = $derived(audioEngine.sceneState(ref.sceneId));
+  const isThisSceneLoading = $derived(sceneState === "loading");
+  const isThisScenePaused = $derived(sceneState === "paused");
+  const isThisScenePlaying = $derived(sceneState === "playing");
   const showBars = $derived(isThisScenePlaying);
   const sceneLabel = $derived(thisScene?.name ?? "scene");
   // A scene with no tracks has nothing to play; starting it would silently stop whatever
@@ -205,36 +202,21 @@
 
   // ── Per-slot controls ─────────────────────────────────────────────────────
 
-  // slot.id → volume saved before muting
-  let slotMutedVolumes = new SvelteMap<number, number>();
   // slot.id → volume shown in the fill bar (updated immediately on drag)
   let slotDisplayVols = new SvelteMap<number, number>();
   // slot.ids with in-flight play/pause toggle
   let busySlots = new SvelteSet<number>();
 
+  // A track's mute is the engine's, shared with the mini player, and kept for a scene
+  // that has not started; its level is untouched by it, and moving the slider unmutes.
   function getSlotDisplayVolume(slot: SceneSlot): number {
-    if (slotMutedVolumes.has(slot.id)) return 0;
+    if (audioEngine.isSlotMuted(slot.id)) return 0;
     return slotDisplayVols.get(slot.id) ?? slot.volume;
-  }
-
-  function toggleSlotMute(slot: SceneSlot) {
-    if (slotMutedVolumes.has(slot.id)) {
-      const savedVol = slotMutedVolumes.get(slot.id)!;
-      slotDisplayVols.set(slot.id, savedVol);
-      audioEngine.setSlotVolume(slot.id, savedVol);
-      slotMutedVolumes.delete(slot.id);
-    } else {
-      const liveVol = slotDisplayVols.get(slot.id) ?? slot.volume;
-      slotMutedVolumes.set(slot.id, liveVol);
-      slotDisplayVols.set(slot.id, 0);
-      audioEngine.setSlotVolume(slot.id, 0);
-    }
   }
 
   function handleSlotVolumeInput(value: number, slot: SceneSlot) {
     slotDisplayVols.set(slot.id, value);
     audioEngine.setSlotVolume(slot.id, value);
-    slotMutedVolumes.delete(slot.id);
   }
 
   async function handleSlotVolumeChange(value: number, slot: SceneSlot) {
@@ -270,14 +252,6 @@
       busySlots.delete(slot.id);
     }
   }
-
-  // A track muted while the scene was stopped stays muted when it starts. The engine has
-  // no state for a stopped scene's tracks, so the mute was only drawn — the track then
-  // played at full volume under a slider showing 0.
-  $effect(() => {
-    if (!isThisSceneActive) return;
-    for (const id of slotMutedVolumes.keys()) audioEngine.setSlotVolume(id, 0);
-  });
 
   async function toggleLoop(slot: SceneSlot) {
     try {
@@ -512,7 +486,7 @@
               {#each activeSlots as slot (slot.id)}
                 {@const isPlaying = isThisSceneActive && audioEngine.isSlotPlaying(slot.id)}
                 {@const displayVol = getSlotDisplayVolume(slot)}
-                {@const isMuted = slotMutedVolumes.has(slot.id)}
+                {@const isMuted = audioEngine.isSlotMuted(slot.id)}
                 {@const isPlaylist = isPlaylistSlot(slot)}
 
                 <!-- One row per track, as in the scene editor. -->
@@ -563,7 +537,7 @@
                   >
 
                   <button
-                    onclick={() => toggleSlotMute(slot)}
+                    onclick={() => audioEngine.toggleSlotMute(slot.id)}
                     class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
                            focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
                     aria-label="Mute {slot.label}"

@@ -6,7 +6,12 @@ import type { PdfSceneLink } from "../lib/bindings.gen";
 import type { SceneWithCount } from "../lib/types/ledger";
 
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
-  audioEngine: { playScene: vi.fn(), stopAll: vi.fn(), isScenePlaying: () => false },
+  audioEngine: {
+    playScene: vi.fn(),
+    resumeScene: vi.fn(),
+    stopAll: vi.fn(),
+    sceneState: () => "idle",
+  },
 }));
 const { audioEngine } = await import("../lib/stores/audio-engine.svelte");
 

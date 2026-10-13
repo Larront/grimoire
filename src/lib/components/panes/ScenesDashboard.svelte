@@ -57,8 +57,6 @@
     }),
   );
 
-  let activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
-
   async function createScene() {
     try {
       const scene = await scenes.createScene("New Scene");
@@ -199,8 +197,11 @@
     {:else}
       <div data-scenes-grid class="mt-8 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
         {#each sortedScenes as scene (scene.id)}
-          {@const isPlaying = scene.id === activeSceneDisplayId}
-          {@const showPause = isPlaying && !audioEngine.isScenePaused}
+          <!-- Crimson while it sounds or is starting; a paused scene's card is at rest,
+               and its play control resumes it. -->
+          {@const sceneState = audioEngine.sceneState(scene.id)}
+          {@const isPlaying = sceneState === "playing" || sceneState === "loading"}
+          {@const showPause = isPlaying}
           {@const ThumbnailIcon = sceneIcon(scene)}
           {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
