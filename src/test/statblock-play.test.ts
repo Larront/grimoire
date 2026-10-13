@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyArithmetic,
+  parseArithmetic,
   classifyValue,
   serializePool,
   serializeTrack,
@@ -64,6 +65,7 @@ describe("a value declares its own playability", () => {
         { checked: false, label: "" },
         { checked: false, label: "" },
       ],
+      spaced: false,
     });
   });
 
@@ -74,6 +76,7 @@ describe("a value declares its own playability", () => {
         { checked: true, label: "Prone" },
         { checked: false, label: "Charmed" },
       ],
+      spaced: false,
     });
   });
 
@@ -127,7 +130,15 @@ describe("a played value writes itself back", () => {
     const track = classifyValue("[x][ ] Prone");
     if (track.kind !== "track") throw new Error("expected a track");
     expect(serializeTrack(track.marks)).toBe("[x] [ ] Prone");
-    expect(classifyValue("[x] [ ] Prone")).toEqual(track);
+    expect(classifyValue("[x] [ ] Prone")).toMatchObject({ marks: track.marks });
+  });
+
+  it("keeps unlabelled boxes apart when the GM wrote them apart", () => {
+    // The bundled Lurker writes `[ ] [ ]`; its first tick used to close them up.
+    const track = classifyValue("[ ] [ ]");
+    if (track.kind !== "track") throw new Error("expected a track");
+    const ticked = track.marks.map((m, i) => (i === 0 ? { ...m, checked: true } : m));
+    expect(serializeTrack(ticked, track.spaced)).toBe("[x] [ ]");
   });
 
   it("round-trips both forms byte-identically", () => {
@@ -166,5 +177,20 @@ describe("pool arithmetic", () => {
   it("does not clamp, at either end", () => {
     expect(applyArithmetic(3, "-9")).toBe(-6);
     expect(applyArithmetic(3, "+400")).toBe(403);
+  });
+
+  it("takes a sign with a space after it, and the typographic minus", () => {
+    // The same hit a GM meant by -12; dropping them read as a hit that landed.
+    expect(applyArithmetic(68, "- 12")).toBe(56);
+    expect(applyArithmetic(68, "−12")).toBe(56);
+    expect(applyArithmetic(68, "+ 5")).toBe(73);
+  });
+
+  it("tells junk apart from an empty input, so junk can be refused out loud", () => {
+    expect(parseArithmetic("")).toEqual({ kind: "empty" });
+    expect(parseArithmetic("-2d6")).toEqual({ kind: "invalid" });
+    expect(parseArithmetic("12-")).toEqual({ kind: "invalid" });
+    expect(parseArithmetic("-12")).toEqual({ kind: "delta", amount: -12 });
+    expect(parseArithmetic("30")).toEqual({ kind: "absolute", value: 30 });
   });
 });

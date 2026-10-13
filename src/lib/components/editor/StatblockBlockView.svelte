@@ -219,7 +219,7 @@
     const marks: Mark[] = value.marks.map((m, i) =>
       i === mark ? { ...m, checked: !m.checked } : m,
     );
-    setRow(index, { value: serializeTrack(marks) });
+    setRow(index, { value: serializeTrack(marks, value.spaced) });
   }
 
   /** What a collapsed statblock keeps: the rows a GM can play on, in their order. */

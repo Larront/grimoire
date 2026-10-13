@@ -48,6 +48,12 @@ export interface Pool {
 export interface Track {
   kind: "track";
   marks: Mark[];
+  /**
+   * Whether unlabelled boxes were written apart, `[ ] [ ]`, rather than `[ ][ ]`. Carried
+   * so a tick rewrites the box and nothing else — the bundled Lurker's own legendary
+   * actions are spaced, and its first tick used to close them up.
+   */
+  spaced: boolean;
 }
 
 /** What a row's value is, decided by its characters alone. */
@@ -91,7 +97,7 @@ export function classifyValue(value: string): PlayValue {
         label: mark[2].trim(),
       });
     }
-    return { kind: "track", marks };
+    return { kind: "track", marks, spaced: /\]\s+\[/.test(value) };
   }
 
   return { kind: "inert" };
@@ -113,11 +119,11 @@ export function serializePool(pool: Pool, current: number): string {
  * An upper-case `[X]` the GM (or Obsidian) wrote is normalised to `[x]` here, the one
  * rewrite in this file, and only ever on a row the GM has just changed.
  */
-export function serializeTrack(marks: Mark[]): string {
+export function serializeTrack(marks: Mark[], spaced = false): string {
   const labelled = marks.some((mark) => mark.label !== "");
   return marks
     .map((mark) => `[${mark.checked ? "x" : " "}]${mark.label ? ` ${mark.label}` : ""}`)
-    .join(labelled ? " " : "");
+    .join(labelled || spaced ? " " : "");
 }
 
 /**
@@ -134,11 +140,34 @@ export function serializeTrack(marks: Mark[]): string {
  * dice and types the number, which is what they were doing before Grimoire existed.
  */
 export function applyArithmetic(current: number, input: string): number {
-  const raw = input.trim();
-  if (!raw) return current;
-  if (/^[+-]\d+$/.test(raw)) return current + Number(raw);
-  if (/^\d+$/.test(raw)) return Number(raw);
+  const parsed = parseArithmetic(input);
+  if (parsed.kind === "delta") return current + parsed.amount;
+  if (parsed.kind === "absolute") return parsed.value;
   return current;
+}
+
+/** What the GM typed into a pool, read before it is applied. */
+export type Arithmetic =
+  | { kind: "empty" }
+  | { kind: "delta"; amount: number }
+  | { kind: "absolute"; value: number }
+  | { kind: "invalid" };
+
+/**
+ * The grammar `applyArithmetic` applies, exposed so the input can say what will happen
+ * before Enter — and say so when the answer is "nothing, that isn't a number".
+ *
+ * A sign may be followed by a space and may be the typographic minus or an en dash:
+ * `- 12` and `−12` are the same hit a GM meant by `-12`, and a field that quietly threw
+ * them away read as a hit that landed.
+ */
+export function parseArithmetic(input: string): Arithmetic {
+  const raw = input.trim().replace(/[\u2212\u2013]/g, "-");
+  if (!raw) return { kind: "empty" };
+  const signed = /^([+-])\s*(\d+)$/.exec(raw);
+  if (signed) return { kind: "delta", amount: Number(signed[1] + signed[2]) };
+  if (/^\d+$/.test(raw)) return { kind: "absolute", value: Number(raw) };
+  return { kind: "invalid" };
 }
 
 /** Whether a row is one a GM can play on — what a collapsed statblock still shows. */
