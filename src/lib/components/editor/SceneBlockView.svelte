@@ -27,6 +27,7 @@
   import type { Scene, SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { ICON_MAP, sceneThumbColors } from "$lib/components/panes/thumbnail-presets";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
   // record spread over the props, so the rest element *is* the record and nothing here
@@ -168,13 +169,6 @@
     expanded = !expanded;
   }
 
-  // ── Master volume ─────────────────────────────────────────────────────────
-
-  function handleMasterVolumeInput(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
-    audioEngine.setMasterVolume(value);
-  }
-
   // ── Per-slot controls ─────────────────────────────────────────────────────
 
   // slot.id → volume saved before muting
@@ -203,15 +197,13 @@
     }
   }
 
-  function handleSlotVolumeInput(e: Event, slot: SceneSlot) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  function handleSlotVolumeInput(value: number, slot: SceneSlot) {
     slotDisplayVols.set(slot.id, value);
     audioEngine.setSlotVolume(slot.id, value);
     slotMutedVolumes.delete(slot.id);
   }
 
-  async function handleSlotVolumeChange(e: Event, slot: SceneSlot) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  async function handleSlotVolumeChange(value: number, slot: SceneSlot) {
     try {
       await api.updateSceneSlot(
         slot.id,
@@ -474,42 +466,12 @@
         {/if}
       </button>
 
-      <!-- Master volume: visual track + transparent input + visible thumb.
-
-           `width` and `left` here are a deliberate exception to DESIGN.md's rule against
-           animating layout properties, and the reason is that both alternatives are
-           worse. `scaleX` on the fill squashes the pill's rounded ends as it grows —
-           a visible defect traded for an invisible saving. Driving the thumb by
-           `transform` needs the offset in pixels, which means measuring a 20px track
-           every frame to avoid animating `left`. The rule is about panels and drawers
-           sweeping across the pane; this is a 4px-tall bar inside its own containing
-           block, animating for 75ms while a GM drags a slider. -->
-      <div class="relative flex h-3 w-20 shrink-0 items-center">
-        <div
-          class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40"
-        >
-          <div
-            class="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-[width] duration-75"
-            style="width: {audioEngine.masterVolume * 100}%"
-          ></div>
-          <div
-            class="pointer-events-none absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-primary ring-1 ring-card transition-[left] duration-75"
-            style="left: calc({audioEngine.masterVolume * 100}% - 6px)"
-            aria-hidden="true"
-          ></div>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={audioEngine.masterVolume}
-          class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          aria-label="Master volume"
-          aria-valuetext="{Math.round(audioEngine.masterVolume * 100)}%"
-          oninput={handleMasterVolumeInput}
-        />
-      </div>
+      <VolumeSlider
+        value={audioEngine.masterVolume}
+        label="Master volume"
+        active={audioEngine.isPlaying}
+        oninput={(v) => audioEngine.setMasterVolume(v)}
+      />
 
       <!-- Change scene (return to picker). It used to stand beside a trash can, and the
            distinction between them was worth the two buttons: unbinding leaves the block
@@ -609,34 +571,13 @@
                     {/if}
                   </button>
 
-                  <!-- Volume: visual track + transparent input + visible thumb -->
-                  <div class="relative flex h-3 w-20 shrink-0 items-center">
-                    <div
-                      class="relative h-1 w-full rounded-full bg-foreground/10 ring-1 ring-inset ring-border/40"
-                    >
-                      <div
-                        class="absolute inset-y-0 left-0 rounded-full bg-primary/50 transition-[width] duration-75"
-                        style="width: {displayVol * 100}%"
-                      ></div>
-                      <div
-                        class="pointer-events-none absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-primary ring-1 ring-card transition-[left] duration-75"
-                        style="left: calc({displayVol * 100}% - 6px)"
-                        aria-hidden="true"
-                      ></div>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={displayVol}
-                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      aria-label="{slot.label} volume"
-                      aria-valuetext="{Math.round(displayVol * 100)}%"
-                      oninput={(e) => handleSlotVolumeInput(e, slot)}
-                      onchange={(e) => handleSlotVolumeChange(e, slot)}
-                    />
-                  </div>
+                  <VolumeSlider
+                    value={displayVol}
+                    label="{slot.label} volume"
+                    active={isPlaying}
+                    oninput={(v) => handleSlotVolumeInput(v, slot)}
+                    onchange={(v) => handleSlotVolumeChange(v, slot)}
+                  />
 
                   <div class="ml-auto flex items-center gap-1.5">
                     <!-- Loop -->

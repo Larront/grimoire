@@ -36,6 +36,7 @@
   import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
   import { open } from "@tauri-apps/plugin-dialog";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
 
   interface Props {
     sceneId: number;
@@ -186,22 +187,14 @@
     audioEngine.stopAll();
   }
 
-  // ---- Master volume ----
-  function handleMasterVolumeInput(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
-    audioEngine.setMasterVolume(value);
-  }
-
   // ---- Slot volume ----
-  function handleSlotVolumeInput(slot: SceneSlot, e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  function handleSlotVolumeInput(slot: SceneSlot, value: number) {
     const idx = slots.findIndex((s) => s.id === slot.id);
     if (idx !== -1) slots[idx] = { ...slots[idx], volume: value };
     if (isThisScenePlaying) audioEngine.setSlotVolume(slot.id, value);
   }
 
-  async function handleSlotVolumeChange(slot: SceneSlot, e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  async function handleSlotVolumeChange(slot: SceneSlot, value: number) {
     try {
       await api.updateSceneSlot(
         slot.id,
@@ -644,23 +637,13 @@
       <!-- Master volume -->
       <div class="flex items-center gap-2">
         <Volume2 class="size-4 text-muted-foreground" />
-        <div class="relative flex items-center">
-          <div class="relative h-1 w-28 rounded-full bg-muted">
-            <div
-              class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-              style="width: {audioEngine.masterVolume * 100}%"
-            ></div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={audioEngine.masterVolume}
-            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            oninput={handleMasterVolumeInput}
-          />
-        </div>
+        <VolumeSlider
+          class="w-28"
+          value={audioEngine.masterVolume}
+          label="Master volume"
+          active={audioEngine.isPlaying}
+          oninput={(v) => audioEngine.setMasterVolume(v)}
+        />
       </div>
     </div>
 
@@ -791,24 +774,14 @@
                   </div>
 
                   <!-- Volume slider -->
-                  <div class="relative flex shrink-0 items-center">
-                    <div class="relative h-1 w-24 rounded-full bg-muted">
-                      <div
-                        class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-                        style="width: {slot.volume * 100}%"
-                      ></div>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={slot.volume}
-                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      oninput={(e) => handleSlotVolumeInput(slot, e)}
-                      onchange={(e) => handleSlotVolumeChange(slot, e)}
-                    />
-                  </div>
+                  <VolumeSlider
+                    class="w-24"
+                    value={slot.volume}
+                    label="{slot.label} volume"
+                    active={audioEngine.isSlotPlaying(slot.id)}
+                    oninput={(v) => handleSlotVolumeInput(slot, v)}
+                    onchange={(v) => handleSlotVolumeChange(slot, v)}
+                  />
 
                   <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
                          which measures about 1.6:1 on Iron Dark — under the 3:1 that

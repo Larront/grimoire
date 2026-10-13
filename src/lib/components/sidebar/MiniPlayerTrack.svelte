@@ -3,6 +3,7 @@
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import type { SceneSlot } from "$lib/types/ledger";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import {
     Play,
     Pause,
@@ -60,14 +61,12 @@
     }
   }
 
-  function handleVolumeInput(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  function handleVolumeInput(value: number) {
     audioEngine.setSlotVolume(slot.id, value);
     if (mutedVolume !== null) mutedVolume = null;
   }
 
-  async function handleVolumeChange(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  async function handleVolumeChange(value: number) {
     try {
       await api.updateSceneSlot(
         slot.id,
@@ -162,26 +161,14 @@
       {/if}
     </button>
 
-    <div class="relative flex flex-1 items-center">
-      <div class="relative h-1 w-full rounded-full bg-sidebar-accent">
-        <div
-          class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-          style="width: {(isMuted ? 0 : currentVolume) * 100}%"
-        ></div>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={isMuted ? 0 : currentVolume}
-        class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-        oninput={handleVolumeInput}
-        onchange={handleVolumeChange}
-        aria-label="Track volume"
-        aria-valuetext="{Math.round((isMuted ? 0 : currentVolume) * 100)}%"
-      />
-    </div>
+    <VolumeSlider
+      class="w-auto flex-1"
+      value={isMuted ? 0 : currentVolume}
+      label="{slot.label} volume"
+      active={isSlotPlaying}
+      oninput={handleVolumeInput}
+      onchange={handleVolumeChange}
+    />
 
     <button
       class="shrink-0 flex items-center justify-center size-5 rounded-sm hover:bg-sidebar-accent transition-colors"
