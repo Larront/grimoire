@@ -95,6 +95,12 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get isPlaying() {
       return false;
     },
+    sceneState: (id: number) =>
+      id === mockLoadingSceneId
+        ? "loading"
+        : mockLoadingSceneId === null && id === mockActiveSceneId
+          ? "playing"
+          : "idle",
   },
 }));
 

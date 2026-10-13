@@ -75,6 +75,7 @@ Dark. Light and System are available in Settings.
 - **Sidebar** — docked on ≥1024px, overlay sheet on ≤1023px. **Collapsed, it _is_ the 48px icon strip**; there is no separate always-present rail beside it. Expanded it carries the search bar, a create toolbar, Files (tree), Scenes (dashboard, favourites and Graph), Quick Notes, and a footer of Templates, the mini player, the ledger selector and Settings.
   - **Collapsed** it carries, top to bottom: Search, Files, Scenes, Graph, and Settings in the footer. What cannot be 48px wide is hidden rather than squeezed — the create toolbar, the file tree, the scene favourites, Quick Notes, Templates, the mini player and the ledger selector. Search, Files and Scenes are **stand-ins** — buttons drawn only when collapsed, standing in for a surface that cannot be 48px wide. Files and Scenes each expand the sidebar and scroll to their group; Search opens the [[Command Palette]], as its expanded bar does. Graph and Settings are ordinary rows that simply lose their labels.
   - **Quick Notes is expanded-only**, unlike Graph and Settings beside it. A count legible on the strip needs a pill small enough to clear a 20px glyph inside a 32px button — about 14px, which a two-digit number does not fit comfortably. `Ctrl/Cmd+Shift+N` catches a thought from anywhere regardless, so collapsing leaves Quick Notes unlisted rather than unreachable, as Templates already is.
+  - **The Scenes stand-in carries the playing scene.** While a scene sounds it draws the playing bars instead of its glyph, and the scene's Pause/Resume sits beneath it as an entry of its own — collapsing to focus on a note costs the mini player, not the GM's hold on the music.
   - **Collapsed or expanded persists** across restarts, in `localStorage` beside the drag-to-resize width. Expanding restores the remembered width; a drag never collapses the sidebar.
   - **Toggled** by the trigger in the left pane's tab bar and by `Cmd/Ctrl+\`. There is no brand-mark toggle — the wordmark is the expanded header's identity and nothing replaces it collapsed.
   - Below 1024px there is **no strip at all**: the sidebar is a sheet, and the tab bar's trigger is the way in.
@@ -91,6 +92,10 @@ Opens as a dialog. Not embedded in the sidebar, not a full-screen page.
 ### Scene Player Panel
 
 Invisible until at least one scene exists in the ledger. Once a scene exists, the collapsible panel persists at the bottom of the sidebar scroll area above the footer.
+
+### Mini Player
+
+The scene that is playing, in the sidebar's footer: its name (which opens it), Pause/Resume, Stop, Mute all and the master volume, with the scene's tracks in a floating panel beside the sidebar rather than folding open in the footer. Present only while a scene is the active one. It names the scene the GM last chose — the one starting, during a crossfade — and, like every surface that shows a scene, takes that scene's state from the engine's one answer for it: idle, loading, playing or paused. A track's mute is the engine's too, kept for the session and never saved, so it shows wherever the track does. Pause/Resume is also `Ctrl/Cmd+Shift+Space` and the command palette's first commands while a scene is active.
 
 ---
 

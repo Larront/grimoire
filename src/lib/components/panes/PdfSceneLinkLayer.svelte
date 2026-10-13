@@ -170,8 +170,9 @@
     if (!group.contains(e.relatedTarget as Node | null) && focusedId === id) focusedId = null;
   }
 
+  // Playing means sounding: a paused scene draws no bars, and a click resumes it.
   function isPlaying(box: LinkBox) {
-    return audioEngine.isScenePlaying(box.link.scene_id);
+    return audioEngine.sceneState(box.link.scene_id) === "playing";
   }
 
   // A scene with no tracks has nothing to play, and starting it would silently stop
@@ -181,6 +182,8 @@
     if (!box.scene) return;
     if (isPlaying(box)) {
       audioEngine.stopAll();
+    } else if (audioEngine.sceneState(box.scene.id) === "paused") {
+      void audioEngine.resumeScene();
     } else if (box.scene.slot_count === 0) {
       enter(box.link.id);
     } else {

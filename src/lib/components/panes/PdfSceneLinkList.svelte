@@ -27,7 +27,9 @@
   );
 
   function toggle(scene: SceneWithCount) {
-    if (audioEngine.isScenePlaying(scene.id)) audioEngine.stopAll();
+    const state = audioEngine.sceneState(scene.id);
+    if (state === "playing") audioEngine.stopAll();
+    else if (state === "paused") void audioEngine.resumeScene();
     else if (scene.slot_count > 0) void audioEngine.playScene(scene.id);
   }
 </script>
@@ -45,7 +47,7 @@
         {#if scene}
           {@const hue = sceneLinkHue(scene)}
           {@const Icon = sceneIcon(scene)}
-          {@const playing = audioEngine.isScenePlaying(scene.id)}
+          {@const playing = audioEngine.sceneState(scene.id) === "playing"}
           <li class="flex items-center gap-1 rounded-md transition-colors hover:bg-muted">
             <button
               type="button"

@@ -303,8 +303,19 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 A scene embedded in a note (`/scene`), played from the note the GM is reading at the table. In the page: the shared note-block frame, with a crimson border while its scene plays.
 
 - **Strip:** Play/Pause/Resume, Stop while active, then the scene — its chip and its Metamorphous name (14px) — which plays and pauses it for the pointer, as a card's picture and a PDF passage do; the button beside it is the keyboard's. The crimson now-playing bars follow the name while it sounds. Then Open beside the note, Change scene, and Expand. No master volume: that is global and lives in the mini player.
-- **States are this scene's own.** Paused, playing and loading are asked of this scene, never the engine at large, so one block's controls never answer for another's.
-- **Mixer:** one row per track, as in the scene editor — play (a preview while the scene is stopped), the label, a source pill that drops when narrow, mute, volume, loop, and shuffle for a Spotify playlist. Collapsed, it is `inert`.
+- **States are this scene's own.** Paused, playing and loading are asked of this scene (the engine's `sceneState`, which every surface that shows a scene asks), never the engine at large, so one block's controls never answer for another's.
+- **Mixer:** one `SceneTrackRow` per track, the row the mini player's track list draws too — play (a preview while the scene is stopped), skip while a Spotify playlist sounds, the label, a source pill that drops when narrow, mute, volume, loop, and shuffle for a Spotify playlist. A track's mute is the engine's, so it shows wherever the track does; muted is drawn louder, not quieter. Collapsed, the mixer is `inert`.
+
+### Mini Player
+
+The scene that is playing, in the sidebar's footer, for a GM whose eyes are on a note. Two rows and nothing more, so the footer never pushes the file tree away. Framed as the in-note player is — a raised panel (`bg-card/40`, 8px radius, a border) whose border is crimson while the scene sounds — so it reads as its own section rather than one more footer row.
+
+- **The scene:** the crimson playing bars (a pause mark when paused, a spinner while starting), the scene's name in Metamorphous (14px), which opens the scene, "Paused" or "Starting" in words when that is true, and **Tracks**.
+- **Transport:** Pause/Resume and Stop, then — set apart by a rule — Mute all and the master volume, which is every scene's level. Stop always works, including during a crossfade. Pause ignores a press while a scene starts rather than greying out, so keyboard focus stays put.
+- **Which scene:** the one the GM last chose. During a crossfade that is the scene starting, not the one fading out, on every surface.
+- **Tracks:** a floating panel beside the sidebar (floating level), one `SceneTrackRow` per track. It used to fold open in the footer and took nearly half the window.
+- **Collapsed sidebar:** the Scenes stand-in draws the playing bars while a scene sounds, and that scene's Pause/Resume sits beneath it.
+- **Keyboard:** `Ctrl/Cmd+Shift+Space` (or a media play/pause key) pauses and resumes from anywhere; while a scene is active the command palette leads with Pause, Stop audio and Mute all audio.
 - **Change scene:** the shared `ScenePicker` in a dropdown, marking the current scene and keeping it until another is chosen. With no scene chosen, the same picker sits inside the block's frame.
 - **Empty and missing:** a scene with no tracks can't be started and the strip offers to add some; a deleted scene shows "This scene no longer exists" and Choose a scene, not a player.
 

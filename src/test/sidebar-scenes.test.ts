@@ -1,11 +1,13 @@
-import { render, cleanup } from "@testing-library/svelte";
+import { render, cleanup, fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import AppShell from "../lib/components/AppShell.svelte";
 import type { SceneWithCount } from "../lib/types/ledger";
+import { audioEngine } from "../lib/stores/audio-engine.svelte";
 
 let mockSidebarScenes: SceneWithCount[] = [];
 let mockSidebarActiveSceneId: number | null = null;
 let mockSidebarLoadingSceneId: number | null = null;
+let mockSidebarPaused = false;
 
 vi.mock("../lib/stores/ledger.svelte", () => ({
   ledger: {
@@ -105,19 +107,29 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get isMasterMuted() {
       return false;
     },
-    get analyserNode() {
-      return null;
-    },
     playScene: vi.fn(),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
     toggleMasterMute: vi.fn(),
     pauseScene: vi.fn().mockResolvedValue(undefined),
     resumeScene: vi.fn().mockResolvedValue(undefined),
+    togglePauseScene: vi.fn().mockResolvedValue(undefined),
     pauseSlot: vi.fn().mockResolvedValue(undefined),
     resumeSlot: vi.fn().mockResolvedValue(undefined),
     isSceneActive: vi.fn(() => false),
-    isScenePlaying: vi.fn(() => false),
+    // As the engine answers: the scene starting is "loading", and the one it is leaving
+    // reads as idle.
+    sceneState: vi.fn((id: number | null) =>
+      id === null
+        ? "idle"
+        : id === mockSidebarLoadingSceneId
+          ? "loading"
+          : mockSidebarLoadingSceneId === null && id === mockSidebarActiveSceneId
+            ? mockSidebarPaused
+              ? "paused"
+              : "playing"
+            : "idle",
+    ),
     isSlotPlaying: vi.fn(() => false),
     slotVolume: vi.fn(() => undefined),
     skipNext: vi.fn(),
@@ -148,6 +160,7 @@ describe("AppSidebar — scene playing indicator", () => {
     mockSidebarScenes = [];
     mockSidebarActiveSceneId = null;
     mockSidebarLoadingSceneId = null;
+    mockSidebarPaused = false;
   });
 
   it("no scene row has data-scene-playing when both IDs are null", () => {
@@ -175,6 +188,17 @@ describe("AppSidebar — scene playing indicator", () => {
     expect(playingRows[0].textContent).toContain("Tavern Noise");
   });
 
+  it("a paused scene's row is not marked playing, and offers Play to resume it", () => {
+    // Crimson means sounding. The row used to stay crimson through a pause.
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true)];
+    mockSidebarActiveSceneId = 1;
+    mockSidebarPaused = true;
+    const { container } = render(AppShell);
+    expect(container.querySelector("[data-scene-playing]")).toBeNull();
+    const play = container.querySelector('[data-testid="sidebar-scene-play"]');
+    expect(play?.getAttribute("aria-label")).toBe("Play Forest Ambience");
+  });
+
   it("with favourites, a non-favourite scene is not listed even if active", () => {
     mockSidebarScenes = [makeScene(1, "Forest Ambience", false), makeScene(2, "Tavern Noise", true)];
     mockSidebarActiveSceneId = 1;
@@ -196,5 +220,49 @@ describe("AppSidebar — scene playing indicator", () => {
       "Play Third",
       "Play Second",
     ]);
+  });
+});
+
+// The collapsed strip's Scenes stand-in. Collapsing the sidebar to focus used to take
+// every sign of the music with it, and every control for it.
+describe("collapsed strip — the scene playing", () => {
+  beforeEach(() => {
+    mockSidebarScenes = [makeScene(1, "Forest Ambience", true)];
+    mockSidebarActiveSceneId = null;
+    mockSidebarLoadingSceneId = null;
+    mockSidebarPaused = false;
+  });
+
+  const standin = (c: HTMLElement) =>
+    c.querySelector('[data-testid="sidebar-scenes-standin"]') as HTMLElement;
+  const pause = (c: HTMLElement) =>
+    c.querySelector('[data-testid="sidebar-scenes-pause"]') as HTMLElement | null;
+
+  it("with nothing playing, is the plain stand-in and offers no pause", () => {
+    const { container } = render(AppShell);
+    expect(standin(container).getAttribute("aria-label")).toBe("Scenes");
+    expect(pause(container)).toBeNull();
+  });
+
+  it("while a scene plays, says so and pauses it", async () => {
+    mockSidebarActiveSceneId = 1;
+    const { container } = render(AppShell);
+    expect(standin(container).getAttribute("aria-label")).toBe(
+      "Scenes — Forest Ambience playing",
+    );
+    expect(standin(container).querySelector(".now-playing-bar")).toBeTruthy();
+    expect(pause(container)?.getAttribute("aria-label")).toBe("Pause Forest Ambience");
+    await fireEvent.click(pause(container)!);
+    expect(audioEngine.togglePauseScene).toHaveBeenCalled();
+  });
+
+  it("while it is paused, draws no bars and resumes it", async () => {
+    mockSidebarActiveSceneId = 1;
+    mockSidebarPaused = true;
+    const { container } = render(AppShell);
+    expect(standin(container).querySelector(".now-playing-bar")).toBeNull();
+    expect(pause(container)?.getAttribute("aria-label")).toBe("Resume Forest Ambience");
+    await fireEvent.click(pause(container)!);
+    expect(audioEngine.togglePauseScene).toHaveBeenCalled();
   });
 });

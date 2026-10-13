@@ -245,6 +245,42 @@ describe("crossfade state machine", () => {
     expect(engine.slotStates.size).toBe(0);
   });
 
+  it("stopAll() mid-fade stops the incoming scene's players, not just the outgoing", async () => {
+    // The incoming players sound from the moment they start. Stop used to leave them
+    // playing with nothing committed, so no surface had a Stop that could reach them.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.crossfadeTo(2);
+    await macrotask();
+    expect(playersForScene(2).length).toBe(2);
+
+    engine.stopAll();
+    await settle();
+
+    for (const p of playersForScene(2)) expect(p.stops).toBeGreaterThan(0);
+    for (const p of playersForScene(1)) expect(p.stops).toBeGreaterThan(0);
+  });
+
+  it("a crossfade stopped and then replaced by a new one does not commit", async () => {
+    // Stop, then Play straight away: the stopped crossfade must not wake up and commit
+    // its scene over the new one, nor clear the new one's loading state.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.crossfadeTo(2);
+    await macrotask();
+
+    engine.stopAll();
+    engine.crossfadeTo(3);
+    expect(engine.loadingSceneId).toBe(3);
+    await settle();
+
+    expect(engine.activeSceneId).toBe(3);
+    expect([...engine.slotStates.keys()]).toEqual([31]);
+    for (const p of playersForScene(2)) expect(p.stops).toBeGreaterThan(0);
+  });
+
   it("a scene with zero slots resolves to no active scene", async () => {
     const engine = makeEngine();
     engine.crossfadeTo(9);
@@ -286,6 +322,182 @@ describe("scene verbs over the fake adapter", () => {
     for (const p of playersForScene(1)) {
       expect(p.resumes).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("resumeScene brings back what pauseScene silenced", () => {
+  it("a track paused by hand before the scene pause stays paused on resume", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    await engine.pauseSlot(11);
+
+    await engine.pauseScene();
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(12)).toBe(true);
+    expect(engine.isSlotPlaying(11)).toBe(false);
+  });
+
+  it("a preview resumes as a preview", async () => {
+    const engine = makeEngine();
+    engine.previewSlot(1, 12);
+    await settle();
+
+    await engine.pauseScene();
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(12)).toBe(true);
+    expect(engine.isSlotPlaying(11)).toBe(false);
+  });
+
+  it("with every track paused by hand, Resume brings them all back", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    await engine.pauseSlot(11);
+    await engine.pauseSlot(12);
+    expect(engine.isScenePaused).toBe(true);
+
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(11)).toBe(true);
+    expect(engine.isSlotPlaying(12)).toBe(true);
+  });
+});
+
+describe("sceneState — one answer per scene", () => {
+  it("reads idle, loading, playing and paused for the scene asked about", async () => {
+    const engine = makeEngine();
+    expect(engine.sceneState(1)).toBe("idle");
+    expect(engine.sceneState(null)).toBe("idle");
+
+    engine.crossfadeTo(1);
+    expect(engine.sceneState(1)).toBe("loading");
+    await settle();
+    expect(engine.sceneState(1)).toBe("playing");
+    expect(engine.sceneState(2)).toBe("idle");
+    expect(engine.isSounding).toBe(true);
+
+    await engine.pauseScene();
+    // The engine's playing flag stays up through a pause; the scene's state does not.
+    expect(engine.isPlaying).toBe(true);
+    expect(engine.sceneState(1)).toBe("paused");
+    expect(engine.isSounding).toBe(false);
+  });
+
+  it("the scene a crossfade is leaving reads idle, the one it is bringing in loading", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.crossfadeTo(2);
+    await macrotask();
+
+    expect(engine.sceneState(1)).toBe("idle");
+    expect(engine.sceneState(2)).toBe("loading");
+    await settle();
+    expect(engine.sceneState(2)).toBe("playing");
+  });
+});
+
+describe("togglePauseScene — every surface's play/pause", () => {
+  it("pauses a playing scene and resumes a paused one", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+
+    await engine.togglePauseScene();
+    expect(engine.sceneState(1)).toBe("paused");
+    await engine.togglePauseScene();
+    expect(engine.sceneState(1)).toBe("playing");
+  });
+
+  it("leaves a scene that is still starting to start", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    expect(engine.sceneState(1)).toBe("loading");
+
+    await engine.togglePauseScene();
+    await settle();
+
+    expect(engine.sceneState(1)).toBe("playing");
+  });
+
+  it("does nothing with nothing playing", async () => {
+    const engine = makeEngine();
+    await engine.togglePauseScene();
+    expect(engine.activeSceneId).toBe(null);
+    expect(created).toHaveLength(0);
+  });
+});
+
+describe("track mute — the engine's, for every surface", () => {
+  it("mutes a playing track without losing its level", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    const player = playersForScene(1)[0];
+    const setVolume = vi.spyOn(player, "setVolume");
+
+    engine.toggleSlotMute(11);
+    expect(engine.isSlotMuted(11)).toBe(true);
+    expect(setVolume).toHaveBeenLastCalledWith(0);
+    expect(engine.slotVolume(11)).toBe(0.8);
+
+    engine.toggleSlotMute(11);
+    expect(engine.isSlotMuted(11)).toBe(false);
+    expect(setVolume).toHaveBeenLastCalledWith(0.8);
+  });
+
+  it("moving a muted track's level unmutes it", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.toggleSlotMute(11);
+
+    engine.setSlotVolume(11, 0.4);
+
+    expect(engine.isSlotMuted(11)).toBe(false);
+    expect(engine.slotVolume(11)).toBe(0.4);
+  });
+
+  it("a track muted before its scene starts starts silent", async () => {
+    const engine = makeEngine();
+    engine.toggleSlotMute(12);
+    engine.crossfadeTo(1);
+    await settle();
+
+    const [first, second] = playersForScene(1);
+    expect(first.fades.map((f) => f.target)).toEqual([0.8]);
+    expect(second.fades.map((f) => f.target)).toEqual([0]);
+    expect(engine.isSlotMuted(12)).toBe(true);
+  });
+});
+
+describe("resumeSlot on a track the engine never started", () => {
+  it("starts it and brings it into the playing scene", async () => {
+    // A track added while its scene plays: its play button used to do nothing.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    sceneSlots.set(1, [slot(11, 1), slot(12, 1), slot(13, 1, { volume: 0.5 })]);
+
+    await engine.resumeSlot(13);
+
+    expect(engine.isSlotPlaying(13)).toBe(true);
+    const joined = created.find((p) => p.slot.id === 13)!;
+    expect(joined.starts).toEqual([0]);
+    expect(joined.fades.map((f) => f.target)).toEqual([0.5]);
+  });
+
+  it("does nothing for a track of another scene", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+
+    await engine.resumeSlot(21);
+
+    expect(engine.slotStates.has(21)).toBe(false);
   });
 });
 

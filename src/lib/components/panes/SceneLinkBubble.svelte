@@ -29,7 +29,8 @@
     onRemove: () => void;
   } = $props();
 
-  const isPlaying = $derived(audioEngine.isScenePlaying(scene.id));
+  const sceneState = $derived(audioEngine.sceneState(scene.id));
+  const isPlaying = $derived(sceneState === "playing");
   const isEmpty = $derived(scene.slot_count === 0);
   // The chip pairs with the underline on the page: the same hue, as a wash behind the
   // icon and in the icon itself.
@@ -40,6 +41,7 @@
 
   function togglePlay() {
     if (isPlaying) audioEngine.stopAll();
+    else if (sceneState === "paused") void audioEngine.resumeScene();
     else if (!isEmpty) void audioEngine.playScene(scene.id);
   }
 

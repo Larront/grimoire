@@ -18,6 +18,11 @@
     Network,
     NotebookPen,
     BookOpen,
+    Pause,
+    Play,
+    Square,
+    Volume2,
+    VolumeOff,
   } from "@lucide/svelte";
   import * as Command from "$lib/components/ui/command";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -28,6 +33,7 @@
   import type { TemplateEntry } from "$lib/types/ledger";
   import { maps } from "$lib/stores/maps.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
+  import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
@@ -402,6 +408,44 @@
     },
   ];
 
+  // While a scene is the active one, the audio commands come first: mid-session, cutting
+  // or pausing the music is what a GM opens the palette for, and these are the only way
+  // to it without reaching for the sidebar. Named for the scene, so "pause" finds it.
+  const audioCommands = $derived.by(() => {
+    const id = audioEngine.loadingSceneId ?? audioEngine.activeSceneId;
+    if (id === null) return [];
+    const name = scenes.scenes.find((s) => s.id === id)?.name ?? "scene";
+    const paused = audioEngine.sceneState(id) === "paused";
+    const muted = audioEngine.isMasterMuted;
+    const close = (act: () => unknown) => () => {
+      searchPalette.open = false;
+      void act();
+    };
+    return [
+      {
+        label: paused ? `Resume ${name}` : `Pause ${name}`,
+        testid: "cmd-pause-scene",
+        noteOnly: false,
+        icon: paused ? Play : Pause,
+        action: close(() => audioEngine.togglePauseScene()),
+      },
+      {
+        label: "Stop audio",
+        testid: "cmd-stop-audio",
+        noteOnly: false,
+        icon: Square,
+        action: close(() => audioEngine.stopAll()),
+      },
+      {
+        label: muted ? "Unmute all audio" : "Mute all audio",
+        testid: "cmd-mute-all",
+        noteOnly: false,
+        icon: muted ? Volume2 : VolumeOff,
+        action: close(() => audioEngine.toggleMasterMute()),
+      },
+    ];
+  });
+
   const visibleRecent = $derived(searchQuery.length === 0 ? recentEntities.slice(0, 5) : []);
 
   function iconForKind(kind: string) {
@@ -428,7 +472,9 @@
 
   const allMatchedCommands = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
-    const eligible = ALL_COMMANDS.filter((c) => !c.noteOnly || activeTabIsNote);
+    const eligible = [...audioCommands, ...ALL_COMMANDS].filter(
+      (c) => !c.noteOnly || activeTabIsNote,
+    );
     return q ? eligible.filter((c) => c.label.toLowerCase().includes(q)) : eligible;
   });
 

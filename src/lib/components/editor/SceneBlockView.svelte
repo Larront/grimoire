@@ -5,15 +5,9 @@
   import {
     Play,
     Square,
-    Volume2,
-    VolumeOff,
     ChevronDown,
     ChevronUp,
     Pause,
-    Repeat,
-    Shuffle,
-    SkipBack,
-    SkipForward,
     LoaderCircle,
     ArrowLeftRight,
     Columns2,
@@ -22,18 +16,16 @@
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
   import ScenePicker from "$lib/components/panes/ScenePicker.svelte";
-  import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
-  import { api } from "$lib/api";
+  import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { SceneSlot } from "$lib/types/ledger";
-  import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { tick } from "svelte";
   import {
     DEFAULT_SCENE_ICON,
     sceneIcon,
     sceneThumbColors,
   } from "$lib/components/panes/thumbnail-presets";
-  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
+  import SceneTrackRow from "$lib/components/SceneTrackRow.svelte";
   import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
 
   // The reference's record, taken as one prop bag: the connector mounts a block with its
@@ -117,16 +109,15 @@
       return;
     }
     if (id !== lastLoadedSceneId) slotsLoading = true;
-    const fetched = await scenes.getSlots(id);
-    activeSlots = fetched;
-    for (const slot of fetched) {
-      slotDisplayVols.set(slot.id, slot.volume);
-    }
+    activeSlots = await scenes.getSlots(id);
     slotsLoading = false;
     lastLoadedSceneId = id;
   }
 
+  // Again whenever any surface changes a scene's tracks (`slotsRevision`), so a loop or a
+  // level changed in the mini player or the editor shows here too.
   $effect(() => {
+    void scenes.slotsRevision;
     reloadSlots(ref.sceneId);
   });
 
@@ -134,17 +125,14 @@
   const isThisSceneActive = $derived(
     ref.sceneId !== null && audioEngine.isSceneActive(ref.sceneId),
   );
-  const isThisSceneLoading = $derived(audioEngine.loadingSceneId === ref.sceneId);
-  // Every state here is THIS scene's. `isScenePlaying` stays true through a pause — the
-  // engine's playing flag only drops on stop — so the block used to read a paused scene
-  // as playing: its button kept saying Pause, kept pausing, and the scene could not be
-  // resumed from the note. And the button's label read the engine's global paused flag,
-  // so with another scene paused this one announced "Resume". Scoped as the scene
-  // editor scopes them.
-  const isThisScenePaused = $derived(isThisSceneActive && audioEngine.isScenePaused);
-  const isThisScenePlaying = $derived(
-    ref.sceneId !== null && audioEngine.isScenePlaying(ref.sceneId) && !isThisScenePaused,
-  );
+  // Every state here is THIS scene's, from the engine's one answer for it (`sceneState`),
+  // as the scene editor's are. The block used to read a paused scene as playing — the
+  // engine's playing flag stays up through a pause — so its button kept saying Pause and
+  // the scene could not be resumed from the note.
+  const sceneState = $derived(audioEngine.sceneState(ref.sceneId));
+  const isThisSceneLoading = $derived(sceneState === "loading");
+  const isThisScenePaused = $derived(sceneState === "paused");
+  const isThisScenePlaying = $derived(sceneState === "playing");
   const showBars = $derived(isThisScenePlaying);
   const sceneLabel = $derived(thisScene?.name ?? "scene");
   // A scene with no tracks has nothing to play; starting it would silently stop whatever
@@ -201,120 +189,6 @@
 
   function toggleExpanded() {
     expanded = !expanded;
-  }
-
-  // ── Per-slot controls ─────────────────────────────────────────────────────
-
-  // slot.id → volume saved before muting
-  let slotMutedVolumes = new SvelteMap<number, number>();
-  // slot.id → volume shown in the fill bar (updated immediately on drag)
-  let slotDisplayVols = new SvelteMap<number, number>();
-  // slot.ids with in-flight play/pause toggle
-  let busySlots = new SvelteSet<number>();
-
-  function getSlotDisplayVolume(slot: SceneSlot): number {
-    if (slotMutedVolumes.has(slot.id)) return 0;
-    return slotDisplayVols.get(slot.id) ?? slot.volume;
-  }
-
-  function toggleSlotMute(slot: SceneSlot) {
-    if (slotMutedVolumes.has(slot.id)) {
-      const savedVol = slotMutedVolumes.get(slot.id)!;
-      slotDisplayVols.set(slot.id, savedVol);
-      audioEngine.setSlotVolume(slot.id, savedVol);
-      slotMutedVolumes.delete(slot.id);
-    } else {
-      const liveVol = slotDisplayVols.get(slot.id) ?? slot.volume;
-      slotMutedVolumes.set(slot.id, liveVol);
-      slotDisplayVols.set(slot.id, 0);
-      audioEngine.setSlotVolume(slot.id, 0);
-    }
-  }
-
-  function handleSlotVolumeInput(value: number, slot: SceneSlot) {
-    slotDisplayVols.set(slot.id, value);
-    audioEngine.setSlotVolume(slot.id, value);
-    slotMutedVolumes.delete(slot.id);
-  }
-
-  async function handleSlotVolumeChange(value: number, slot: SceneSlot) {
-    try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        value,
-        slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
-    } catch (err) {
-      console.error("Failed to save slot volume:", err);
-    }
-  }
-
-  // A track's play button plays that track on its own while the scene is stopped, as in
-  // the scene editor; while the scene is active it brings the track in or out. It used to
-  // call resume on a track that had never started, which does nothing.
-  async function toggleSlotPlayback(slot: SceneSlot) {
-    if (busySlots.has(slot.id) || ref.sceneId === null) return;
-    busySlots.add(slot.id);
-    try {
-      if (!isThisSceneActive) {
-        await audioEngine.previewSlot(ref.sceneId, slot.id);
-      } else if (audioEngine.isSlotPlaying(slot.id)) {
-        await audioEngine.pauseSlot(slot.id);
-      } else {
-        await audioEngine.resumeSlot(slot.id);
-      }
-    } finally {
-      busySlots.delete(slot.id);
-    }
-  }
-
-  // A track muted while the scene was stopped stays muted when it starts. The engine has
-  // no state for a stopped scene's tracks, so the mute was only drawn — the track then
-  // played at full volume under a slider showing 0.
-  $effect(() => {
-    if (!isThisSceneActive) return;
-    for (const id of slotMutedVolumes.keys()) audioEngine.setSlotVolume(id, 0);
-  });
-
-  async function toggleLoop(slot: SceneSlot) {
-    try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        audioEngine.slotVolume(slot.id) ?? slot.volume,
-        !slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
-      if (ref.sceneId !== null) {
-        scenes.invalidateSlots(ref.sceneId);
-        await reloadSlots(ref.sceneId);
-      }
-    } catch (e) {
-      console.error("Failed to toggle loop:", e);
-    }
-  }
-
-  async function toggleShuffle(slot: SceneSlot) {
-    try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        audioEngine.slotVolume(slot.id) ?? slot.volume,
-        slot.loop,
-        slot.slot_order,
-        !slot.shuffle,
-      );
-      if (ref.sceneId !== null) {
-        scenes.invalidateSlots(ref.sceneId);
-        await reloadSlots(ref.sceneId);
-      }
-    } catch (e) {
-      console.error("Failed to toggle shuffle:", e);
-    }
   }
 </script>
 
@@ -510,110 +384,8 @@
               </p>
             {:else}
               {#each activeSlots as slot (slot.id)}
-                {@const isPlaying = isThisSceneActive && audioEngine.isSlotPlaying(slot.id)}
-                {@const displayVol = getSlotDisplayVolume(slot)}
-                {@const isMuted = slotMutedVolumes.has(slot.id)}
-                {@const isPlaylist = isPlaylistSlot(slot)}
-
-                <!-- One row per track, as in the scene editor. -->
-                <div class="flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50">
-                  <button
-                    onclick={() => toggleSlotPlayback(slot)}
-                    aria-disabled={busySlots.has(slot.id)}
-                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                    aria-label={isPlaying
-                      ? `Pause ${slot.label}`
-                      : isThisSceneActive
-                        ? `Play ${slot.label}`
-                        : `Play ${slot.label} on its own`}
-                  >
-                    {#if isPlaying}
-                      <Pause class="size-3.5 text-foreground" />
-                    {:else}
-                      <Play class="size-3.5 text-muted-foreground" />
-                    {/if}
-                  </button>
-
-                  <!-- Skip, for a playlist that is sounding: they act on the playing queue,
-                       so they appear with it, in the row rather than as a row of their own. -->
-                  {#if isPlaylist && isPlaying}
-                    <button
-                      onclick={() => audioEngine.skipPrev()}
-                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                      aria-label="Previous track in {slot.label}"
-                    >
-                      <SkipBack class="size-3.5 text-muted-foreground" />
-                    </button>
-                    <button
-                      onclick={() => audioEngine.skipNext()}
-                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                      aria-label="Next track in {slot.label}"
-                    >
-                      <SkipForward class="size-3.5 text-muted-foreground" />
-                    </button>
-                  {/if}
-
-                  <span class="min-w-0 flex-1 truncate px-1 text-sm text-foreground">{slot.label}</span>
-                  <span
-                    class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] leading-none font-medium text-muted-foreground @max-md:hidden"
-                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span
-                  >
-
-                  <button
-                    onclick={() => toggleSlotMute(slot)}
-                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                    aria-label="Mute {slot.label}"
-                    aria-pressed={isMuted}
-                  >
-                    {#if isMuted}
-                      <VolumeOff class="size-3.5 text-muted-foreground" />
-                    {:else}
-                      <Volume2 class="size-3.5 text-muted-foreground" />
-                    {/if}
-                  </button>
-
-                  <VolumeSlider
-                    class="w-24 @max-sm:w-14"
-                    value={displayVol}
-                    label="{slot.label} volume"
-                    active={isPlaying}
-                    oninput={(v) => handleSlotVolumeInput(v, slot)}
-                    onchange={(v) => handleSlotVolumeChange(v, slot)}
-                  />
-
-                  <!-- Loop and shuffle: named once and pressed or not, rather than a label
-                       that changed underneath an aria-pressed saying the same thing. Off is
-                       Ember Muted, the app's resting colour for a live control; 30% read as
-                       disabled. Shuffle only for a Spotify playlist. -->
-                  <button
-                    onclick={() => toggleLoop(slot)}
-                    class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                    aria-label="Loop {slot.label}"
-                    aria-pressed={slot.loop}
-                    title="Loop"
-                  >
-                    <Repeat class="size-3.5 {slot.loop ? 'text-primary' : 'text-muted-foreground'}" />
-                  </button>
-                  {#if isPlaylist}
-                    <button
-                      onclick={() => toggleShuffle(slot)}
-                      class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
-                             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                      aria-label="Shuffle {slot.label}"
-                      aria-pressed={!!slot.shuffle}
-                      title="Shuffle"
-                    >
-                      <Shuffle
-                        class="size-3.5 {slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
-                      />
-                    </button>
-                  {/if}
-                </div>
+                <!-- One row per track, shared with the mini player's track list. -->
+                <SceneTrackRow {slot} />
               {/each}
             {/if}
           </div>

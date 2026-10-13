@@ -36,12 +36,8 @@
           .slice(0, RECENT_FALLBACK),
   );
 
-  // A scene that is loading shows as the active one, so the mark does not wait
-  // for audio to actually start.
-  const activeSceneDisplayId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
-
-  // The dashboard card's toggle, for the same reason: press the playing scene to pause
-  // it, a paused one to resume, any other to switch to it.
+  // The dashboard card's toggle: press the playing scene to pause it, a paused one to
+  // resume, any other to switch to it.
   function togglePlay(scene: SceneWithCount) {
     if (scene.id === audioEngine.activeSceneId) {
       if (audioEngine.isScenePaused) void audioEngine.resumeScene();
@@ -72,8 +68,12 @@
               <Sidebar.GroupContent>
                 <Sidebar.Menu>
                   {#each listedScenes as scene (scene.id)}
-                    {@const isPlaying = scene.id === activeSceneDisplayId}
-                    {@const showPause = isPlaying && !audioEngine.isScenePaused}
+                    <!-- Crimson while it sounds, and while it is starting, so the mark does
+                         not wait for the audio. A paused scene keeps its speaker, quiet: it is
+                         still the one the mini player holds, but nothing is playing. -->
+                    {@const sceneState = audioEngine.sceneState(scene.id)}
+                    {@const isPlaying = sceneState === "playing" || sceneState === "loading"}
+                    {@const showPause = isPlaying}
                     <Sidebar.MenuItem>
                       <!-- No `isActive`: that background means "the page you are on", and
                            a playing scene is not where the GM is. Playing is said by
@@ -94,6 +94,8 @@
                           >
                             {#if isPlaying}
                               <Volume2 class="size-4 text-primary" />
+                            {:else if sceneState === "paused"}
+                              <Volume2 class="size-4 text-muted-foreground" />
                             {:else}
                               <Music2 class="size-4 text-muted-foreground" />
                             {/if}
