@@ -13,6 +13,7 @@
     ChevronDown,
     X,
     Link2,
+    ListMusic,
   } from "@lucide/svelte";
   import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
   import type { PDFDocumentProxy, PDFDocumentLoadingTask } from "pdfjs-dist";
@@ -20,6 +21,8 @@
   import { buildPageIndex, findMatches, rangesForMatch, type ItemRange } from "$lib/pdf/pdf-find";
   import PdfPage from "./PdfPage.svelte";
   import ScenePicker from "./ScenePicker.svelte";
+  import PdfSceneLinkList from "./PdfSceneLinkList.svelte";
+  import * as Popover from "$lib/components/ui/popover";
   import type { SceneLinkSelection } from "$lib/pdf/scene-link-anchor";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -415,6 +418,26 @@
     }
   }
 
+  // ── Scenes in this PDF ──────────────────────────────────────────────────────
+  let linkListOpen = $state(false);
+
+  // Go to a link's passage and put focus on its marker, which opens its bubble. Pages
+  // render lazily, so the marker exists only once its page is near the viewport: scroll
+  // there first, then wait a few frames for it.
+  async function jumpToLink(link: PdfSceneLink) {
+    linkListOpen = false;
+    scrollToPage(link.page);
+    for (let i = 0; i < 90; i++) {
+      const marker = scrollEl?.querySelector<HTMLElement>(`[data-link-id="${link.id}"]`);
+      if (marker) {
+        marker.scrollIntoView({ block: "center" });
+        marker.focus();
+        return;
+      }
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  }
+
   // An undo toast, not an instant delete: Remove sits beside the volume slider, and a
   // GM adjusting the level mid-session can hit it. The underline leaves at once; the
   // link is deleted when the window closes, so Undo is a cancelled timer.
@@ -531,6 +554,28 @@
       {/if}
 
       <div class="flex-1"></div>
+
+      <!-- Scenes in this PDF -->
+      <Popover.Root bind:open={linkListOpen}>
+        <Popover.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="ghost"
+              size="sm"
+              class="gap-1.5 text-muted-foreground"
+              title="Scenes in this PDF"
+            >
+              <ListMusic class="size-3.5" />
+              <span class="@max-md:sr-only">Scenes</span>
+              <span class="tabular-nums">{visibleLinks.length}</span>
+            </Button>
+          {/snippet}
+        </Popover.Trigger>
+        <Popover.Content align="end" class="p-2">
+          <PdfSceneLinkList links={visibleLinks} {scenesById} onJump={jumpToLink} />
+        </Popover.Content>
+      </Popover.Root>
 
       <!-- Link Scene (discoverable path): opens the picker when text is selected,
            teaches the gesture otherwise. -->

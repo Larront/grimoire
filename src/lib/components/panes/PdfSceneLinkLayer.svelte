@@ -246,6 +246,7 @@
       <button
         type="button"
         data-scene-link-marker
+        data-link-id={box.link.id}
         class="pointer-events-auto absolute flex size-[18px] items-center justify-center rounded-[4px]
                focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         style="left: 4px; top: {first.top + first.height / 2 - 9}px;
