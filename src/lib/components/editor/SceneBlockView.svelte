@@ -23,7 +23,6 @@
   import * as Popover from "$lib/components/ui/popover";
   import ScenePicker from "$lib/components/panes/ScenePicker.svelte";
   import { audioEngine, isPlaylistSlot } from "$lib/stores/audio-engine.svelte";
-  import { api } from "$lib/api";
   import type { SceneRef } from "$lib/editor/scene-block.svelte";
   import type { SceneSlot } from "$lib/types/ledger";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
@@ -126,7 +125,10 @@
     lastLoadedSceneId = id;
   }
 
+  // Again whenever any surface changes a scene's tracks (`slotsRevision`), so a loop or a
+  // level changed in the mini player or the editor shows here too.
   $effect(() => {
+    void scenes.slotsRevision;
     reloadSlots(ref.sceneId);
   });
 
@@ -221,14 +223,7 @@
 
   async function handleSlotVolumeChange(value: number, slot: SceneSlot) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        value,
-        slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
+      await scenes.patchSlot(slot, { volume: value });
     } catch (err) {
       console.error("Failed to save slot volume:", err);
     }
@@ -253,20 +248,11 @@
     }
   }
 
+  // Saved through the scenes store, which every surface reads, so the change shows
+  // wherever the track does — this block reloads with them.
   async function toggleLoop(slot: SceneSlot) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        audioEngine.slotVolume(slot.id) ?? slot.volume,
-        !slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
-      if (ref.sceneId !== null) {
-        scenes.invalidateSlots(ref.sceneId);
-        await reloadSlots(ref.sceneId);
-      }
+      await scenes.patchSlot(slot, { loop: !slot.loop });
     } catch (e) {
       console.error("Failed to toggle loop:", e);
     }
@@ -274,18 +260,7 @@
 
   async function toggleShuffle(slot: SceneSlot) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        audioEngine.slotVolume(slot.id) ?? slot.volume,
-        slot.loop,
-        slot.slot_order,
-        !slot.shuffle,
-      );
-      if (ref.sceneId !== null) {
-        scenes.invalidateSlots(ref.sceneId);
-        await reloadSlots(ref.sceneId);
-      }
+      await scenes.patchSlot(slot, { shuffle: !slot.shuffle });
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
     }

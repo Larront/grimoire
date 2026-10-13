@@ -25,26 +25,51 @@ function createScenesStore() {
   // Cleared entirely on ledger close (via onClose). Invalidated per-scene on mutations.
   const slotCache = new Map<number, SceneSlot[]>();
 
+  // Bumped whenever a scene's tracks change. The cache is what every surface reads, and
+  // each one used to hold its own copy of it with nothing to say when another surface
+  // changed it: loop turned off in the mini player still showed on there, so the next
+  // press saved "off" again and loop could never be turned back on. A surface that shows
+  // tracks reads this where it loads them, and loads again when it moves.
+  let slotsRevision = $state(0);
+
   const base = createLedgerCollection<SceneWithCount>({
     fetch: () => api.getScenesWithSlotCounts(),
     onClose: () => slotCache.clear(),
   });
 
+  // One fetch per scene at a time: after a change every surface showing that scene
+  // reloads at once, and they share the one request.
+  const inflight = new Map<number, Promise<SceneSlot[]>>();
+
   async function getSlots(sceneId: number): Promise<SceneSlot[]> {
     if (slotCache.has(sceneId)) {
       return slotCache.get(sceneId)!;
     }
-    const raw = await api.getSceneSlots(sceneId);
-    // Cast is_loop integer (0/1) to boolean. `as SceneSlot[]` narrows the
-    // generated `volume: number | null` (specta's NaN-guard on floats) to the
-    // ledger type's `number` — volumes are never null.
-    const slots = raw.map((s) => ({ ...s, loop: !!s.loop })) as SceneSlot[];
-    slotCache.set(sceneId, slots);
-    return slots;
+    const pending = inflight.get(sceneId);
+    if (pending) return pending;
+    const request = api
+      .getSceneSlots(sceneId)
+      .then((raw) => {
+        // Cast is_loop integer (0/1) to boolean. `as SceneSlot[]` narrows the
+        // generated `volume: number | null` (specta's NaN-guard on floats) to the
+        // ledger type's `number` — volumes are never null.
+        const slots = raw.map((s) => ({ ...s, loop: !!s.loop })) as SceneSlot[];
+        // Not if the scene changed again while this was in flight: that change's own
+        // reload has the newer list.
+        if (inflight.get(sceneId) === request) slotCache.set(sceneId, slots);
+        return slots;
+      })
+      .finally(() => {
+        if (inflight.get(sceneId) === request) inflight.delete(sceneId);
+      });
+    inflight.set(sceneId, request);
+    return request;
   }
 
   function invalidateSlots(sceneId: number) {
     slotCache.delete(sceneId);
+    inflight.delete(sceneId);
+    slotsRevision++;
   }
 
   // --- Scene mutations ---
@@ -149,6 +174,21 @@ function createScenesStore() {
     return getSlots(sceneId);
   }
 
+  /** Save some of a track's settings, the rest as they are on `slot`. */
+  function patchSlot(
+    slot: SceneSlot,
+    patch: Partial<Pick<SceneSlot, "label" | "volume" | "loop" | "shuffle" | "slot_order">>,
+  ): Promise<SceneSlot[]> {
+    const next = { ...slot, ...patch };
+    return updateSlot(slot.scene_id, slot.id, {
+      label: next.label,
+      volume: next.volume,
+      loop: next.loop,
+      slotOrder: next.slot_order,
+      shuffle: !!next.shuffle,
+    });
+  }
+
   return {
     get scenes() {
       return base.items;
@@ -162,6 +202,9 @@ function createScenesStore() {
     get error() {
       return base.error;
     },
+    get slotsRevision() {
+      return slotsRevision;
+    },
     load: base.load,
     getSlots,
     invalidateSlots,
@@ -172,6 +215,7 @@ function createScenesStore() {
     addSlot,
     deleteSlot,
     updateSlot,
+    patchSlot,
     applyThumbnailColor,
     applyThumbnailIcon,
     setThumbnailImage,

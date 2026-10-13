@@ -443,6 +443,33 @@ describe("track mute — the engine's, for every surface", () => {
   });
 });
 
+describe("resumeSlot on a track the engine never started", () => {
+  it("starts it and brings it into the playing scene", async () => {
+    // A track added while its scene plays: its play button used to do nothing.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    sceneSlots.set(1, [slot(11, 1), slot(12, 1), slot(13, 1, { volume: 0.5 })]);
+
+    await engine.resumeSlot(13);
+
+    expect(engine.isSlotPlaying(13)).toBe(true);
+    const joined = created.find((p) => p.slot.id === 13)!;
+    expect(joined.starts).toEqual([0]);
+    expect(joined.fades.map((f) => f.target)).toEqual([0.5]);
+  });
+
+  it("does nothing for a track of another scene", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+
+    await engine.resumeSlot(21);
+
+    expect(engine.slotStates.has(21)).toBe(false);
+  });
+});
+
 describe("previewSlot — one track of a stopped scene", () => {
   it("starts the scene with only that slot sounding and the rest parked", async () => {
     const engine = makeEngine();

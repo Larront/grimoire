@@ -198,6 +198,17 @@
     }
   });
 
+  // Another surface changed a scene's tracks (`slotsRevision`): show this scene's as
+  // they now are — a loop turned off in the mini player is off here too.
+  $effect(() => {
+    void scenes.slotsRevision;
+    const id = untrack(() => lastLoadedSceneId);
+    if (id === null) return;
+    scenes.getSlots(id).then((s) => {
+      if (lastLoadedSceneId === id) slots = s;
+    });
+  });
+
   // ---- Playback derived state ----
   // Every one of these asks about THIS scene, through the engine's one answer for it
   // (`sceneState`). The paused check used to be the engine's global one, so with Boss
@@ -244,14 +255,7 @@
 
   async function handleSlotVolumeChange(slot: SceneSlot, value: number) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        value,
-        slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
+      slots = await scenes.patchSlot(slot, { volume: value });
     } catch (err) {
       console.error("Failed to save volume:", err);
     }

@@ -17,7 +17,7 @@
 
   $effect(() => {
     const sceneId = audioEngine.activeSceneId;
-    scenes.scenes; // reactive dependency for freshness
+    void scenes.slotsRevision; // again when any surface changes a scene's tracks
     let cancelled = false;
     if (sceneId) {
       scenes

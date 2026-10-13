@@ -163,3 +163,38 @@ describe("LocalSlotPlayer pause", () => {
   });
 });
 
+describe("LocalSlotPlayer loop changed while playing", () => {
+  // Loop is saved on the slot, which the player used to read only when it started: a
+  // loop turned off mid-scene kept looping until the scene was played again.
+  it("reaches the sound already playing", async () => {
+    const local = fakeLocalCtx();
+    const sources: Array<{ loop: boolean }> = [];
+    const make = local.ctx.createBufferSource;
+    local.ctx.createBufferSource = () => {
+      const src = make();
+      sources.push(src);
+      return src;
+    };
+    const player = new LocalSlotPlayer(local as never);
+    await player.start(slot, 0.6);
+    expect(sources[0].loop).toBe(true);
+
+    player.setLoop(false);
+
+    expect(sources[0].loop).toBe(false);
+  });
+
+  it("turned off part-way through a later pass, pauses and resumes inside that pass", async () => {
+    const local = fakeLocalCtx();
+    const player = new LocalSlotPlayer(local as never);
+    await player.start(slot, 0.6);
+    // Third pass of a two-minute loop, 10s in.
+    local.ctx.currentTime = 2 * DURATION + 10;
+    player.setLoop(false);
+    local.ctx.currentTime = 2 * DURATION + 15;
+    await player.stop();
+    await player.resume();
+
+    expect(startOffsets).toEqual([0, 15]);
+  });
+});

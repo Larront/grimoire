@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { api } from "$lib/api";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import type { SceneSlot } from "$lib/types/ledger";
@@ -53,14 +52,7 @@
 
   async function handleVolumeChange(value: number) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        value,
-        slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
+      await scenes.patchSlot(slot, { volume: value });
     } catch (err) {
       console.error("Failed to save volume:", err);
     }
@@ -68,17 +60,7 @@
 
   async function toggleLoop() {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        currentVolume,
-        !slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
-      if (audioEngine.activeSceneId) {
-        scenes.invalidateSlots(audioEngine.activeSceneId);
-      }
+      await scenes.patchSlot(slot, { loop: !slot.loop });
     } catch (e) {
       console.error("Failed to toggle loop:", e);
     }
@@ -86,17 +68,7 @@
 
   async function toggleShuffle() {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        currentVolume,
-        slot.loop,
-        slot.slot_order,
-        !slot.shuffle,
-      );
-      if (audioEngine.activeSceneId) {
-        scenes.invalidateSlots(audioEngine.activeSceneId);
-      }
+      await scenes.patchSlot(slot, { shuffle: !slot.shuffle });
     } catch (e) {
       console.error("Failed to toggle shuffle:", e);
     }

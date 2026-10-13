@@ -12,8 +12,8 @@
 // (#185), and the fence that replaced the tag is pinned at the bottom of this file.
 import { render, waitFor, fireEvent, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
 import { audioEngine } from "../lib/stores/audio-engine.svelte";
+import { scenes } from "../lib/stores/scenes.svelte";
 import SceneBlockView from "../lib/components/editor/SceneBlockView.svelte";
 import { SceneBlock, parseSceneBody, serializeSceneRef } from "../lib/editor/scene-block.svelte";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
@@ -34,6 +34,7 @@ vi.mock("../lib/stores/scenes.svelte", () => ({
     },
     getSlots: vi.fn(() => Promise.resolve(mockSlots)),
     invalidateSlots: vi.fn(),
+    patchSlot: vi.fn(() => Promise.resolve(mockSlots)),
     createScene: vi.fn(),
   },
 }));
@@ -247,7 +248,9 @@ describe("scene reference resolution", () => {
 // ─── Slot volume persistence ──────────────────────────────────────────────────
 
 describe("slot volume", () => {
-  it("adjusting a slot's volume persists to the database", async () => {
+  it("adjusting a slot's volume saves it through the scenes store", async () => {
+    // Through the store, not straight to the database, so every surface showing the
+    // track hears of the new level.
     mockScenes = [makeScene({ id: 1 })];
     mockSlots = [
       makeSlot({
@@ -264,16 +267,9 @@ describe("slot volume", () => {
     await fireEvent.change(slider, { target: { value: "0.35" } });
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith(
-        "update_scene_slot",
-        expect.objectContaining({
-          id: 11,
-          label: "Wind",
-          volume: 0.35,
-          loop: true,
-          slotOrder: 2,
-          shuffle: false,
-        }),
+      expect(scenes.patchSlot).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 11, label: "Wind" }),
+        { volume: 0.35 },
       );
     });
   });
@@ -293,7 +289,7 @@ describe("slot volume", () => {
     const fill = container.querySelector('[style*="width: 60%"]');
     expect(fill).toBeTruthy();
 
-    expect(invoke).not.toHaveBeenCalledWith("update_scene_slot", expect.anything());
+    expect(scenes.patchSlot).not.toHaveBeenCalled();
   });
 });
 

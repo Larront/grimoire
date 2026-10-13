@@ -1,3 +1,4 @@
+import { untrack } from "svelte";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "$lib/api";
 import { ledger } from "./ledger.svelte";
@@ -36,6 +37,9 @@ interface SlotPlayer {
   fadeTo(targetVolume: number, durationSec: number): Promise<void>;
   setVolume(volume: number): void;
   setMasterVolume(volume: number): void;
+  /** Loop on or off for the sound already playing. Optional: a Spotify track takes its
+   *  repeat setting when it is next played. */
+  setLoop?(loop: boolean): void;
 }
 
 interface PlaylistSlotPlayer extends SlotPlayer {
@@ -153,6 +157,19 @@ class LocalSlotPlayer implements SlotPlayer {
   async resume(): Promise<void> {
     if (this.buffer) this.play(this.currentVolume);
     else if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
+  }
+
+  // Loop changed while the track plays. Where it has reached is first counted from the
+  // loop it is in, so turning loop off mid-way plays out this pass rather than reading
+  // as already past the end.
+  setLoop(loop: boolean): void {
+    if (!this.currentSlot || this.currentSlot.loop === loop) return;
+    if (this.source) {
+      this.offset = this.positionNow();
+      this.startedAt = this.localCtx.ctx.currentTime;
+      this.source.loop = loop;
+    }
+    this.currentSlot = { ...this.currentSlot, loop };
   }
 
   // A fade is where the slot's volume is decided, so it is also what a resume must
@@ -581,10 +598,43 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 
   async function resumeSlot(slotId: number): Promise<void> {
     const state = slotStates.get(slotId);
-    if (!state) return;
+    if (!state) {
+      await joinSlot(slotId);
+      return;
+    }
     await slotPlayers.get(slotId)?.resume();
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, playing: true });
+    slotStates = updated;
+  }
+
+  // Play on a track of the playing scene that the engine never started: one added while
+  // the scene played, or one whose file failed to load. Its play button used to do
+  // nothing at all. It starts now and joins the scene, or says why it cannot.
+  async function joinSlot(slotId: number): Promise<void> {
+    const sceneId = activeSceneId;
+    if (sceneId === null) return;
+    const slot = (await scenes.getSlots(sceneId)).find((s) => s.id === slotId);
+    if (!slot || activeSceneId !== sceneId || slotStates.has(slotId)) return;
+    const generation = stopGeneration;
+    const player = slotPlayerFactory(slot);
+    try {
+      await player.start(slot, 0);
+    } catch (e) {
+      logError(`[audio-engine] failed to start slot ${slot.id}:`, e);
+      toastError(`Couldn't play ${slotDisplayName(slot)}`);
+      return;
+    }
+    if (generation !== stopGeneration || activeSceneId !== sceneId) {
+      void player.stop();
+      return;
+    }
+    player.setMasterVolume(masterVolume);
+    void player.fadeTo(mutedSlotIds.has(slot.id) ? 0 : slot.volume, FADE_SEC_COLD);
+    slotPlayers.set(slot.id, player);
+    if (isPlaylistSlot(slot)) activePlaylistPlayer = player as PlaylistSlotPlayer;
+    const updated = new Map(slotStates);
+    updated.set(slot.id, { slot, volume: slot.volume, playing: true });
     slotStates = updated;
   }
 
@@ -777,6 +827,27 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   // something else had already begun.
   let boundLedgerPath: string | null | undefined;
   $effect.root(() => {
+    // A track of the playing scene changed on some surface: take its new settings. A
+    // loop turned on or off reaches a local track that is already playing.
+    $effect(() => {
+      void scenes.slotsRevision;
+      const sceneId = untrack(() => activeSceneId);
+      if (sceneId === null) return;
+      void scenes.getSlots(sceneId).then((fresh) => {
+        if (activeSceneId !== sceneId) return;
+        const updated = new Map(slotStates);
+        let changed = false;
+        for (const slot of fresh) {
+          const state = updated.get(slot.id);
+          if (!state || state.slot === slot) continue;
+          if (state.slot.loop !== slot.loop) slotPlayers.get(slot.id)?.setLoop?.(slot.loop);
+          updated.set(slot.id, { ...state, slot });
+          changed = true;
+        }
+        if (changed) slotStates = updated;
+      });
+    });
+
     $effect(() => {
       const path = ledger.isOpen ? ledger.path : null;
       if (path === boundLedgerPath) return;
