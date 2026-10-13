@@ -4,7 +4,7 @@ import {
   hexToHsv,
   hsvToHex,
   wash,
-  sceneColorHex,
+  storedColorHex,
 } from "../lib/color";
 
 describe("normalizeHex", () => {
@@ -33,16 +33,21 @@ describe("hex ⇄ hsv", () => {
   });
 });
 
-describe("sceneColorHex", () => {
+describe("storedColorHex", () => {
+  it("reads rgb() and short hex as stored by older pins", () => {
+    expect(storedColorHex("rgb(184, 154, 94)")).toBe("#b89a5e");
+    expect(storedColorHex("#abc")).toBe("#aabbcc");
+  });
+
   it("reads a freely picked colour as stored", () => {
-    expect(sceneColorHex("#3a7fa8")).toBe("#3a7fa8");
+    expect(storedColorHex("#3a7fa8")).toBe("#3a7fa8");
   });
 
   it("reads an old preset wash back as the hue it washes", () => {
-    expect(sceneColorHex(wash("#c2483d", 0.18))).toBe("#c2483d");
+    expect(storedColorHex(wash("#c2483d", 0.18))).toBe("#c2483d");
   });
 
   it("is null when nothing was chosen", () => {
-    expect(sceneColorHex(null)).toBeNull();
+    expect(storedColorHex(null)).toBeNull();
   });
 });

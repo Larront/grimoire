@@ -28,7 +28,7 @@
     sceneThumbColors,
   } from "./thumbnail-presets";
   import ColorPicker from "$lib/components/ColorPicker.svelte";
-  import { sceneColorHex } from "$lib/color";
+  import { storedColorHex } from "$lib/color";
   import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
   const cardBg = (scene: SceneWithCount) => sceneThumbColors(scene).bg;
@@ -369,7 +369,7 @@
     </Dialog.Header>
     {#if colorPickerScene}
       <ColorPicker
-        value={sceneColorHex(
+        value={storedColorHex(
           scenes.scenes.find((s) => s.id === colorPickerScene?.id)?.thumbnail_color ?? null,
         )}
         onchange={(hex) => applyColor(colorPickerScene, hex)}

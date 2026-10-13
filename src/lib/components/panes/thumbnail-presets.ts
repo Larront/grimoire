@@ -12,7 +12,7 @@ import {
   BookOpen,
 } from "@lucide/svelte";
 import { ACCENT_PRESETS } from "$lib/entity-colors";
-import { sceneColorHex, wash } from "$lib/color";
+import { storedColorHex, wash } from "$lib/color";
 
 /** The strength of a scene colour's fill behind its icon — the presets' own 18%. */
 const SCENE_WASH_ALPHA = 0.18;
@@ -82,7 +82,7 @@ export function sceneThumbColors(scene: { thumbnail_color: string | null }): {
   bg: string;
   fg: string;
 } {
-  const hex = sceneColorHex(scene.thumbnail_color);
+  const hex = storedColorHex(scene.thumbnail_color);
   if (!hex) {
     return { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" };
   }

@@ -45,7 +45,7 @@
     sceneThumbColors,
   } from "./thumbnail-presets";
   import ColorPicker from "$lib/components/ColorPicker.svelte";
-  import { sceneColorHex } from "$lib/color";
+  import { storedColorHex } from "$lib/color";
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
@@ -720,7 +720,7 @@
             <section class="flex flex-col gap-1.5">
               <h3 class="text-xs font-semibold text-muted-foreground">Color</h3>
               <ColorPicker
-                value={sceneColorHex(scene.thumbnail_color)}
+                value={storedColorHex(scene.thumbnail_color)}
                 oninput={(hex) => (draftColor = hex)}
                 onchange={applyColor}
               />

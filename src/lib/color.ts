@@ -99,12 +99,12 @@ export function wash(hex: string, alpha: number): string {
 }
 
 /*
-  The colour a scene has chosen, as hex, whatever form it was stored in. A colour picked
-  freely is stored as `#rrggbb`. One picked from the old preset row was stored as that
-  preset's 18% wash (`rgba(194,72,61,0.18)`), and is read back as the hue it washes —
-  nothing in a ledger is rewritten to tidy this up.
+  A stored colour as hex, whatever form it was stored in. The picker stores `#rrggbb`. A
+  scene coloured from the old preset row holds that preset's 18% wash
+  (`rgba(194,72,61,0.18)`), read back as the hue it washes; a pin or annotation may hold
+  `rgb(...)` or `#rgb` from before. Nothing in a ledger is rewritten to tidy this up.
 */
-export function sceneColorHex(stored: string | null): string | null {
+export function storedColorHex(stored: string | null): string | null {
   if (!stored) return null;
   const hex = normalizeHex(stored);
   if (hex) return hex;

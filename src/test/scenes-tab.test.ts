@@ -491,7 +491,7 @@ describe("ScenesDashboard — color picker", () => {
   });
 
   it("Default clears thumbnail_color", async () => {
-    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_color: "#3a7fa8" }];
     const { container } = render(ScenesDashboard);
     await openCustomiseSubmenu(container);
     const item = await clickMenuItem("Change color");

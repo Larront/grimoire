@@ -8,11 +8,10 @@
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
-  import { DEFAULT_PIN_COLOR, ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
+  import { CURATED_ICON_COMPONENTS, resolvedAppearance } from "./pinAppearance";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
-  import ColorSwatches from "$lib/components/ColorSwatches.svelte";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
 
   // Controlled body (ADR-0006): all data arrives as props from the pane's
   // pin Details Source; edits leave through onUpdate / onTagsChange.
@@ -124,7 +123,11 @@
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
 
-  const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
+  // What the map draws: the pin's own colour, else its category's, else brass. This used
+  // to skip the category, so a categorised pin's swatches and picker showed brass while
+  // the map showed the category's colour.
+  const pinCategory = $derived(categories.find((c) => c.id === pin.category_id));
+  const resolvedColor = $derived(resolvedAppearance(pin, pinCategory).color);
 </script>
 
 <!-- Title row -->
@@ -328,9 +331,13 @@
           <span class="text-xs font-semibold text-foreground-muted"
             >Color</span
           >
-          <ColorSwatches
+          <!-- The same picker as a scene's. Default clears the pin's own colour, so it
+               wears what it would without one — its category's, if it has one. -->
+          <ColorPicker
             value={pin.color}
-            presets={ENTITY_COLOR_PRESETS}
+            fallback={resolvedColor}
+            noneSwatch={resolvedColor}
+            defaultLabel={pinCategory ? "Category" : "Default"}
             onchange={(color) => save({ color })}
           />
         </div>

@@ -12,30 +12,42 @@
     the GM changes accent or mode (see `entity-colors.ts`).
   */
   import { untrack } from "svelte";
-  import { hexToHsv, hsvToHex, normalizeHex, type Hsv } from "$lib/color";
+  import { hexToHsv, hsvToHex, normalizeHex, storedColorHex, type Hsv } from "$lib/color";
   import { DEFAULT_PIN_COLOR } from "$lib/entity-colors";
 
   interface Props {
-    /** The chosen colour as `#rrggbb`, or null when none is chosen. */
+    /** The stored colour (hex, or an older `rgb()`), or null when none is chosen. */
     value: string | null;
-    /** Where the square and strip sit while nothing is chosen. */
+    /** What the Default button chooses: null to clear (a scene, a pin that inherits its
+        category's colour), or a colour for things that always have one (annotations). */
+    defaultValue?: string | null;
+    /** Where the square and strip sit while nothing is chosen — what null looks like. */
     fallback?: string;
-    /** What "nothing chosen" is called, and that it can be chosen. */
+    /** The swatch shown while nothing is chosen. Neutral iron unless null means a
+        colour (a pin with no colour of its own wears its fallback). */
+    noneSwatch?: string;
     defaultLabel?: string;
     oninput?: (hex: string) => void;
     onchange: (hex: string | null) => void;
   }
 
   let {
-    value,
+    value: stored,
+    defaultValue = null,
     fallback = DEFAULT_PIN_COLOR,
+    noneSwatch = "var(--background-elevated)",
     defaultLabel = "Default",
     oninput,
     onchange,
   }: Props = $props();
 
+  const value = $derived(storedColorHex(stored));
+  const isDefault = $derived(
+    defaultValue === null ? value === null : value === storedColorHex(defaultValue),
+  );
+
   // Seeded once; the effect below keeps it following `value` from then on.
-  let hsv = $state<Hsv>(hexToHsv(untrack(() => value ?? fallback)));
+  let hsv = $state<Hsv>(hexToHsv(untrack(() => value ?? normalizeHex(fallback) ?? DEFAULT_PIN_COLOR)));
   let dragging = $state(false);
   const hex = $derived(hsvToHex(hsv));
 
@@ -151,7 +163,7 @@
     aria-valuemax={100}
     aria-valuenow={Math.round(hsv.s * 100)}
     aria-valuetext="Saturation {Math.round(hsv.s * 100)}%, brightness {Math.round(hsv.v * 100)}%"
-    class="relative h-32 w-full cursor-crosshair touch-none rounded-md
+    class="relative h-28 w-full cursor-crosshair touch-none rounded-md
            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     style="background:
       linear-gradient(to top, #000, rgb(0 0 0 / 0)),
@@ -187,7 +199,7 @@
   <div class="flex items-center gap-2">
     <span
       class="size-7 shrink-0 rounded-md border border-border"
-      style="background: {value === null ? 'var(--background-elevated)' : hex}"
+      style="background: {value === null ? noneSwatch : hex}"
       aria-hidden="true"
     ></span>
     <input
@@ -216,13 +228,15 @@
     <button
       type="button"
       data-color-default
-      aria-pressed={value === null}
+      aria-pressed={isDefault}
       class="ml-auto inline-flex h-8 items-center rounded-md px-2.5 text-xs font-medium transition-colors
              focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
-             {value === null
+             {isDefault
         ? 'bg-primary/12 text-foreground ring-1 ring-primary'
         : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-      onclick={() => onchange(null)}
+      onclick={() => {
+        if (!isDefault) onchange(defaultValue === null ? null : storedColorHex(defaultValue));
+      }}
     >
       {defaultLabel}
     </button>

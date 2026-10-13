@@ -13,8 +13,8 @@
   import type { MapAnnotation } from "$lib/types/ledger";
   import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
-  import ColorSwatches from "$lib/components/ColorSwatches.svelte";
-  import { ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
+  import { DEFAULT_ANNOTATION_COLOR, DEFAULT_ANNOTATION_STROKE } from "$lib/entity-colors";
 
   interface Props {
     annotation: MapAnnotation;
@@ -129,20 +129,24 @@
 
   <!-- Stroke color (shapes only) -->
   <DetailSection label="Stroke" sectionKey="stroke">
-    <ColorSwatches
+    <!-- An annotation always has a colour, so Default puts back the one it was drawn
+         with rather than clearing it. -->
+    <ColorPicker
       value={annotation.stroke_color}
-      presets={ENTITY_COLOR_PRESETS}
-      onchange={(color) => save({ stroke_color: color })}
+      defaultValue={DEFAULT_ANNOTATION_STROKE}
+      fallback={DEFAULT_ANNOTATION_STROKE}
+      onchange={(color) => color && save({ stroke_color: color })}
     />
   </DetailSection>
 {/if}
 
 <!-- Fill / text color -->
 <DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
-  <ColorSwatches
+  <ColorPicker
     value={annotation.color}
-    presets={ENTITY_COLOR_PRESETS}
-    onchange={(color) => save({ color })}
+    defaultValue={DEFAULT_ANNOTATION_COLOR}
+    fallback={DEFAULT_ANNOTATION_COLOR}
+    onchange={(color) => color && save({ color })}
   />
 </DetailSection>
 

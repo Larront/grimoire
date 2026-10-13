@@ -27,12 +27,19 @@ describe("ColorPicker", () => {
     expect(onchange).not.toHaveBeenCalled();
   });
 
-  it("Default chooses nothing, and is marked when nothing is chosen", async () => {
+  it("Default is marked when nothing is chosen, and pressing it again writes nothing", async () => {
     const onchange = vi.fn();
     const { container } = render(ColorPicker, { props: { value: null, onchange } });
     const btn = container.querySelector("[data-color-default]") as HTMLElement;
     expect(btn.getAttribute("aria-pressed")).toBe("true");
     await fireEvent.click(btn);
+    expect(onchange).not.toHaveBeenCalled();
+  });
+
+  it("Default clears a chosen colour", async () => {
+    const onchange = vi.fn();
+    const { container } = render(ColorPicker, { props: { value: "#3a7fa8", onchange } });
+    await fireEvent.click(container.querySelector("[data-color-default]") as HTMLElement);
     expect(onchange).toHaveBeenCalledWith(null);
   });
 
@@ -50,5 +57,29 @@ describe("ColorPicker", () => {
     expect(onchange).not.toHaveBeenCalled();
     vi.advanceTimersByTime(400);
     expect(onchange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ColorPicker — a default that is a colour", () => {
+  // An annotation always has a colour; Default puts back the one it was born with.
+  it("Default chooses the default colour, and is marked when it is the value", async () => {
+    const onchange = vi.fn();
+    const { container, rerender } = render(ColorPicker, {
+      props: { value: "#3a7fa8", defaultValue: "#f0ece8", onchange },
+    });
+    const btn = () => container.querySelector("[data-color-default]") as HTMLElement;
+    expect(btn().getAttribute("aria-pressed")).toBe("false");
+    await fireEvent.click(btn());
+    expect(onchange).toHaveBeenCalledWith("#f0ece8");
+
+    await rerender({ value: "#F0ECE8", defaultValue: "#f0ece8", onchange });
+    expect(btn().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("reads an older rgb() value", () => {
+    const { getByLabelText } = render(ColorPicker, {
+      props: { value: "rgb(184, 154, 94)", onchange: vi.fn() },
+    });
+    expect((getByLabelText("Hex colour") as HTMLInputElement).value).toBe("#b89a5e");
   });
 });
