@@ -300,7 +300,13 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 
 ### Scene Player (Signature Component)
 
-Collapsed header: `--row-h` tall, Nunito label, Metamorphous scene name (12px), and the crimson now-playing bars (`NowPlayingBars`) while it plays. Expanded body: one row per track, each with its own volume slider. _The in-note player has not had its own design review yet; this entry describes what ships rather than a settled design._
+A scene embedded in a note (`/scene`), played from the note the GM is reading at the table. In the page: the shared note-block frame, with a crimson border while its scene plays.
+
+- **Strip:** Play/Pause/Resume, Stop while active, then the scene — its chip and its Metamorphous name (14px) — which plays and pauses it for the pointer, as a card's picture and a PDF passage do; the button beside it is the keyboard's. The crimson now-playing bars follow the name while it sounds. Then Open beside the note, Change scene, and Expand. No master volume: that is global and lives in the mini player.
+- **States are this scene's own.** Paused, playing and loading are asked of this scene, never the engine at large, so one block's controls never answer for another's.
+- **Mixer:** one row per track, as in the scene editor — play (a preview while the scene is stopped), the label, a source pill that drops when narrow, mute, volume, loop, and shuffle for a Spotify playlist. Collapsed, it is `inert`.
+- **Change scene:** the shared `ScenePicker` in a dropdown, marking the current scene and keeping it until another is chosen. With no scene chosen, the same picker sits inside the block's frame.
+- **Empty and missing:** a scene with no tracks can't be started and the strip offers to add some; a deleted scene shows "This scene no longer exists" and Choose a scene, not a player.
 
 ### Scene Editor
 
