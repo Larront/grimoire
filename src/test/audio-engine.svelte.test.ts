@@ -245,6 +245,42 @@ describe("crossfade state machine", () => {
     expect(engine.slotStates.size).toBe(0);
   });
 
+  it("stopAll() mid-fade stops the incoming scene's players, not just the outgoing", async () => {
+    // The incoming players sound from the moment they start. Stop used to leave them
+    // playing with nothing committed, so no surface had a Stop that could reach them.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.crossfadeTo(2);
+    await macrotask();
+    expect(playersForScene(2).length).toBe(2);
+
+    engine.stopAll();
+    await settle();
+
+    for (const p of playersForScene(2)) expect(p.stops).toBeGreaterThan(0);
+    for (const p of playersForScene(1)) expect(p.stops).toBeGreaterThan(0);
+  });
+
+  it("a crossfade stopped and then replaced by a new one does not commit", async () => {
+    // Stop, then Play straight away: the stopped crossfade must not wake up and commit
+    // its scene over the new one, nor clear the new one's loading state.
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    engine.crossfadeTo(2);
+    await macrotask();
+
+    engine.stopAll();
+    engine.crossfadeTo(3);
+    expect(engine.loadingSceneId).toBe(3);
+    await settle();
+
+    expect(engine.activeSceneId).toBe(3);
+    expect([...engine.slotStates.keys()]).toEqual([31]);
+    for (const p of playersForScene(2)) expect(p.stops).toBeGreaterThan(0);
+  });
+
   it("a scene with zero slots resolves to no active scene", async () => {
     const engine = makeEngine();
     engine.crossfadeTo(9);
@@ -286,6 +322,47 @@ describe("scene verbs over the fake adapter", () => {
     for (const p of playersForScene(1)) {
       expect(p.resumes).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("resumeScene brings back what pauseScene silenced", () => {
+  it("a track paused by hand before the scene pause stays paused on resume", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    await engine.pauseSlot(11);
+
+    await engine.pauseScene();
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(12)).toBe(true);
+    expect(engine.isSlotPlaying(11)).toBe(false);
+  });
+
+  it("a preview resumes as a preview", async () => {
+    const engine = makeEngine();
+    engine.previewSlot(1, 12);
+    await settle();
+
+    await engine.pauseScene();
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(12)).toBe(true);
+    expect(engine.isSlotPlaying(11)).toBe(false);
+  });
+
+  it("with every track paused by hand, Resume brings them all back", async () => {
+    const engine = makeEngine();
+    engine.crossfadeTo(1);
+    await settle();
+    await engine.pauseSlot(11);
+    await engine.pauseSlot(12);
+    expect(engine.isScenePaused).toBe(true);
+
+    await engine.resumeScene();
+
+    expect(engine.isSlotPlaying(11)).toBe(true);
+    expect(engine.isSlotPlaying(12)).toBe(true);
   });
 });
 

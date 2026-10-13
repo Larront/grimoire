@@ -432,8 +432,18 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   let localCtx: LocalAudioContext | null = null;
   let spotifyCtx: SpotifyContext | null = null;
   const slotPlayers = new Map<number, SlotPlayer>();
+  // The players a crossfade is bringing in, before it commits them. They sound from the
+  // moment they start, so a Stop mid-crossfade has to reach them as well as the
+  // committed ones — otherwise the incoming scene plays on with nothing left to stop it.
+  const incomingPlayers = new Set<SlotPlayer>();
   let activePlaylistPlayer: PlaylistSlotPlayer | null = null;
-  let crossfadeAborted = false;
+  // Bumped by every stopAll. A crossfade remembers the value it started under and treats
+  // any change as "stopped while I was working": a boolean reset by the next crossfade let
+  // a stopped one carry on and commit when the GM pressed Play again straight after Stop.
+  let stopGeneration = 0;
+  // The tracks a scene Pause silenced, so Resume brings back those and not the ones the
+  // GM had already paused by hand (or a preview had parked).
+  let pausedBySceneIds = new Set<number>();
 
   function getOrCreateLocalCtx(): LocalAudioContext {
     if (!localCtx) localCtx = new LocalAudioContext();
@@ -465,14 +475,19 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   }
 
   function stopAll(): void {
-    crossfadeAborted = true;
+    stopGeneration++;
     pendingSceneId = null;
     pendingSoloSlotId = null;
     loadingSceneId = null;
     for (const player of slotPlayers.values()) {
       void player.stop();
     }
+    for (const player of incomingPlayers) {
+      void player.stop();
+    }
     slotPlayers.clear();
+    incomingPlayers.clear();
+    pausedBySceneIds = new Set();
     slotStates = new Map<number, SlotPlaybackState>();
     isPlaying = false;
     isCrossfading = false;
@@ -533,14 +548,22 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   }
 
   async function pauseScene(): Promise<void> {
+    const silenced = new Set<number>();
     for (const [slotId, state] of slotStates) {
-      if (state.playing) await pauseSlot(slotId);
+      if (state.playing) {
+        silenced.add(slotId);
+        await pauseSlot(slotId);
+      }
     }
+    pausedBySceneIds = silenced;
   }
 
   async function resumeScene(): Promise<void> {
+    // Nothing recorded (every track was paused by hand): Resume means all of them.
+    const bringBack = pausedBySceneIds.size > 0 ? pausedBySceneIds : new Set(slotStates.keys());
+    pausedBySceneIds = new Set();
     for (const [slotId, state] of slotStates) {
-      if (!state.playing) await resumeSlot(slotId);
+      if (!state.playing && bringBack.has(slotId)) await resumeSlot(slotId);
     }
   }
 
@@ -576,12 +599,14 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       return;
     }
 
-    crossfadeAborted = false;
+    const generation = stopGeneration;
+    const stopped = () => generation !== stopGeneration;
     isCrossfading = true;
     loadingSceneId = newSceneId;
 
     try {
       const newSlots = await scenes.getSlots(newSceneId);
+      if (stopped()) return;
 
       if (newSlots.filter((s) => s.source === "spotify").length > 1) {
         console.warn("[audio-engine] scene has multiple Spotify slots; only first will play");
@@ -603,7 +628,15 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       for (const slot of newSlots) {
         try {
           const player = slotPlayerFactory(slot);
+          incomingPlayers.add(player);
           await player.start(slot, 0);
+          // Stopped while this one was loading. stopAll reached it (it was registered
+          // above), but before it had begun to sound, so stop it again now that it has;
+          // and start none of the rest.
+          if (stopped()) {
+            void player.stop();
+            return;
+          }
           // setMasterVolume must be called before fadeTo so streaming players
           // scale to the correct final volume
           player.setMasterVolume(masterVolume);
@@ -639,7 +672,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       await Promise.all(fadeOuts);
 
       // stopAll() may have fired during the await — bail without committing state
-      if (crossfadeAborted) return;
+      if (stopped()) return;
 
       // Stop outgoing players now that their fades have completed
       for (const player of outgoing) {
@@ -648,6 +681,8 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 
       // Commit new state
       slotPlayers.clear();
+      incomingPlayers.clear();
+      pausedBySceneIds = new Set();
       for (const [id, player] of newPlayers) slotPlayers.set(id, player);
       slotStates = newStates;
       activePlaylistPlayer = newPlaylistPlayer;
@@ -656,10 +691,14 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     } catch (e) {
       console.error("[audio-engine] crossfadeTo failed:", e);
     } finally {
-      isCrossfading = false;
-      loadingSceneId = null;
+      // A stopped crossfade's state belongs to whatever started since; leave it alone.
+      if (!stopped()) {
+        isCrossfading = false;
+        loadingSceneId = null;
+      }
     }
 
+    if (stopped()) return;
     if (pendingSceneId !== null && pendingSceneId !== activeSceneId) {
       const next = pendingSceneId;
       const solo = pendingSoloSlotId ?? undefined;
