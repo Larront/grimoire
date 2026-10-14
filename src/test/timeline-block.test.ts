@@ -389,7 +389,6 @@ describe("round-trip", () => {
   it("byte-for-byte over the whole battery: parse(serialize(x)) === x", () => {
     const battery: TimelineEvent[][] = [
       [],
-      [{ date: "", title: "", description: "" }],
       [{ date: "", title: "Alpha", description: "" }],
       [{ date: "Year 1", title: "Alpha", description: "" }],
       [{ date: "", title: "Alpha", description: "One line." }],
@@ -445,13 +444,16 @@ describe("round-trip", () => {
     expect(roundTrip([])).toEqual([]);
   });
 
-  it("add event: appending to array round-trips with N+1 events", () => {
+  it("add event: a blank event is not written until it holds something", () => {
+    // A blank event is an insert the GM walked away from, or one not typed into yet. The
+    // file used to get a bare `# ` from it, which Obsidian draws as an empty heading.
     const before: TimelineEvent[] = [{ date: "Day 1", title: "Alpha", description: "" }];
     const after = [...before, createBlankEvent()];
-    const result = roundTrip(after);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual(before[0]);
-    expect(result[1]).toEqual(createBlankEvent());
+    expect(serializeTimelineEvents(after).split("\n")).not.toContain("# ");
+    expect(roundTrip(after)).toEqual(before);
+
+    const typed = [...before, { date: "Day 2", title: "", description: "" }];
+    expect(roundTrip(typed)).toHaveLength(2);
   });
 
   it("delete event: removing from array round-trips with N-1 events", () => {
