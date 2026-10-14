@@ -167,7 +167,7 @@
     <div class="timeline-spine relative" aria-hidden="true">
       {#if i < timeline.events.length - 1}
         <div
-          class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[9px] w-px bg-muted-foreground/30"
+          class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[11px] w-px bg-muted-foreground/30"
         ></div>
       {/if}
       <div
@@ -176,7 +176,7 @@
       ></div>
     </div>
 
-    <div class="timeline-body min-w-0 {i < timeline.events.length - 1 ? 'pb-3' : 'pb-1'}">
+    <div class="timeline-body min-w-0 {i < timeline.events.length - 1 ? 'pb-4' : 'pb-1'}">
       <div class="flex items-start gap-1">
         <!-- Title: Metamorphous (world voice) -->
         <LinkedTextField

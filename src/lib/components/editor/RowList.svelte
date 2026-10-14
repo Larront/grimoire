@@ -188,7 +188,7 @@
      keyboard inserts with Alt+Enter from the row above, and the list ends with Add. -->
 {#snippet gap(index: number)}
   <div class="row-list-gap relative h-0">
-    <div class="group/gap absolute inset-x-0 -top-3 z-10 h-3">
+    <div class="group/gap absolute inset-x-0 -top-4 z-10 h-4">
       <span
         class="pointer-events-none absolute right-0 top-1/2 border-t border-dashed border-primary/70
                opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-hover/gap:opacity-100"
@@ -197,15 +197,15 @@
       <button
         type="button"
         tabindex="-1"
-        class="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full
+        class="absolute top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full
                bg-popover text-primary opacity-0 shadow-float ring-1 ring-primary/50 transition-opacity duration-150
                motion-reduce:transition-none group-hover/gap:opacity-100 cursor-pointer"
-        style="left: calc(var(--row-insert-x, 0px) - 0.625rem)"
+        style="left: calc(var(--row-insert-x, 0px) - 0.5rem)"
         onclick={() => insert(index)}
         aria-label={`Insert ${noun} here`}
         title={`Insert ${noun} here`}
       >
-        <Plus size={12} strokeWidth={2.5} />
+        <Plus size={10} strokeWidth={2.5} />
       </button>
     </div>
   </div>
