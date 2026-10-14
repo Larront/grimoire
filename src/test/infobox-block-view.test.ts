@@ -259,9 +259,9 @@ describe("an Infobox's thumbnail", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelector("[data-infobox-image-replace]")).toBeTruthy();
+      expect(container.querySelector("[data-infobox-image-missing] [data-replace-btn]")).toBeTruthy();
     });
-    await fireEvent.click(container.querySelector("[data-infobox-image-replace]")!);
+    await fireEvent.click(container.querySelector("[data-infobox-image-missing] [data-replace-btn]")!);
 
     await waitFor(() => expect(onCommit).toHaveBeenCalled());
     expect(committed(onCommit).image).toBe(".grimoire/images/portrait.png");

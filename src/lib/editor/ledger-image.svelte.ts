@@ -14,7 +14,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "$lib/api";
 
 /** The image file types Grimoire copies into the ledger. */
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
+export const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
 
 /**
  * A ledger-relative path as a URL the webview can load.
@@ -23,7 +23,10 @@ const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
  * Grimoire — which callers turn into a not-found state rather than an error.
  */
 export async function resolveLedgerImage(relativePath: string): Promise<string> {
-  return convertFileSrc(await api.getImageAbsolutePath(relativePath));
+  // Silent: a missing file is an expected state the block draws, not an error. The loud
+  // call toasted "Something went wrong — please try again" every time a note with a
+  // moved image opened, which no retry could fix.
+  return convertFileSrc(await api.silent.getImageAbsolutePath(relativePath));
 }
 
 /** A path's resolution as a block draws it: a URL, or nothing yet, or nothing ever. */

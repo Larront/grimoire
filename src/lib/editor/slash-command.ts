@@ -6,6 +6,7 @@ import type { BlockIconName } from "$lib/components/editor/block-icons";
 import { nameAndIcon } from "./block-vocabulary";
 import { CALLOUT_TYPES } from "./callout-block";
 import { insertImageFromFile } from "./image-block";
+import { IMAGE_EXTENSIONS } from "./ledger-image.svelte";
 import { blankInfobox } from "./infobox-block";
 import { blankSceneRef } from "./scene-block.svelte";
 import { statblockFromPreset } from "./statblock-presets";
@@ -204,7 +205,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         filters: [
           {
             name: "Images",
-            extensions: ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+            // The one list the ledger accepts: SVG was offered here and then refused.
+            extensions: IMAGE_EXTENSIONS,
           },
         ],
       });
