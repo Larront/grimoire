@@ -6,7 +6,7 @@
 // The Row List's own seams are tested in row-list.test.ts; here the block is the
 // subject, because a consumer noticing nothing is the whole claim of the
 // extraction.
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
+import { render, fireEvent, waitFor, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
 
@@ -76,7 +76,7 @@ describe("Timeline rows", () => {
         onCommit,
       },
     });
-    await fireEvent.click(getByLabelText("Insert event after position 1"));
+    await fireEvent.click(getAllByLabelText("Insert event below")[0]);
     expect(getAllByLabelText("Delete event")).toHaveLength(3);
     // A blank event is not worth writing to the note until the GM types in it.
     expect(onCommit).not.toHaveBeenCalled();
@@ -85,20 +85,48 @@ describe("Timeline rows", () => {
     expect(getByLabelText("Event 2 title").tagName).toBe("INPUT");
   });
 
-  it("the insertion points between events stay hidden until an event is hovered", async () => {
-    const { getByLabelText, getAllByRole } = render(TimelineBlockView, {
+  it("names each event's group by its title", () => {
+    // "Event 2" told a screen reader nothing about which event it had entered.
+    const { getAllByRole } = render(TimelineBlockView, {
+      props: {
+        events: [
+          { date: "", title: "Alpha", description: "" },
+          { date: "", title: "[[Beta]] rises", description: "" },
+        ],
+        onCommit: vi.fn(),
+      },
+    });
+    expect(getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual([
+      "Event 1: Alpha",
+      "Event 2: Beta rises",
+    ]);
+  });
+
+  it("drops an inserted event the GM leaves without typing, and never writes it", async () => {
+    // A stray click used to leave an "Untitled event" behind, and the next edit wrote it
+    // into the note as a bare `# `.
+    const onCommit = vi.fn();
+    const { getAllByLabelText, getByLabelText } = render(TimelineBlockView, {
       props: {
         events: [
           { date: "", title: "Alpha", description: "" },
           { date: "", title: "Beta", description: "" },
         ],
-        onCommit: vi.fn(),
+        onCommit,
       },
     });
-    const gap = getByLabelText("Insert event after position 1");
-    expect(gap.classList.contains("opacity-0")).toBe(true);
-    await fireEvent.mouseEnter(getAllByRole("group", { name: /^Event \d+$/ })[1]);
-    expect(gap.classList.contains("opacity-0")).toBe(false);
+    await fireEvent.click(getAllByLabelText("Insert event below")[0]);
+    expect(getAllByLabelText("Delete event")).toHaveLength(3);
+    const input = getByLabelText("Event 2 title");
+    // Focus leaving the row for somewhere else on the page.
+    const elsewhere = document.createElement("button");
+    document.body.appendChild(elsewhere);
+    input.focus();
+    elsewhere.focus();
+
+    await waitFor(() => expect(getAllByLabelText("Delete event")).toHaveLength(2));
+    expect(onCommit).not.toHaveBeenCalled();
+    elsewhere.remove();
   });
 
   it("an expanded description travels with the event that moved", async () => {
@@ -122,7 +150,7 @@ describe("Timeline rows", () => {
     const { getByLabelText, getByText } = render(TimelineBlockView, {
       props: { events: [], onCommit: vi.fn() },
     });
-    expect(getByText("No events yet")).toBeTruthy();
+    expect(getByText(/No events yet/)).toBeTruthy();
     expect(getByLabelText("Add event")).toBeTruthy();
   });
 });
