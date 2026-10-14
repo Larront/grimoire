@@ -7,7 +7,7 @@ A rough history of the Ashfen Vale, pieced together from Thornhaven's records an
 # The Order Takes the Keep
 Date: Year 0
 
-The [[The Order of Embers]] finishes construction of [[Locations/The Ember Keep.md]] and establishes its arcane library in the lower halls. The Order's roads are laid across the marsh.
+[[The Order of Embers]] finishes construction of [[Locations/The Ember Keep.md]] and establishes its arcane library in the lower halls. The Order's roads are laid across the marsh.
 
 # [[Lore/The War of Embers.md]] Begins
 Date: Year 7

@@ -340,6 +340,21 @@ A Scene-link makes a passage of an adventure PDF play its scene. It is built for
 - **Scenes in this PDF:** a toolbar list of every link in page order, to jump to or play.
 - **Drifted:** a link whose text no longer matches is drawn dashed in Ember Error, with a warning marker and a line in the bubble.
 
+### Timeline
+
+Dated events on a vertical spine, read at the table to answer "when?".
+
+- **Date in the margin:** a 7rem column left of the spine, right-aligned against it, Nunito medium in the text colour; in a narrow pane (under 28rem) it moves above the title. The title is Metamorphous 16px beside a hollow node, which turns crimson while the GM is in one of the event's fields.
+- **Descriptions:** a closed event with a description shows its first line in Ember Muted and a chevron that opens the rest at 14px on a reading line height; an event without one shows nothing at rest and offers "Add description" on hover or focus.
+- **Frame and rows:** the shared note-block frame; rows are the Row List's. A blank event is never written to the file, and one left without typing is dropped.
+
+### Row List
+
+The rows of a timeline, an infobox and a statblock's edit mode.
+
+- **Controls:** one floating bar per row, sitting on its top edge so it never covers the row's own controls — Insert below, Move up (Alt+↑), Move down (Alt+↓), Delete — 28px each with tooltips. Revealed on hover or focus. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty.
+- **Focus and speech:** focus follows the row through a move and goes into the next row after a delete; moves and deletes are announced, and rows are named by their content.
+
 ### Statblock
 
 A creature to play on mid-fight, and a reference card the rest of the time. One mode, scoped to structure (ADR-0016 §6).
