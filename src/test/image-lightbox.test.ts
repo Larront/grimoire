@@ -83,16 +83,23 @@ describe("Image lightbox overlay", () => {
     });
   });
 
-  it("renders the image inside the overlay at natural size (no max-width clamp)", async () => {
+  it("fits the image to the screen, and toggles actual size when the image is clicked", async () => {
+    // It opened at the file's own size: a small handout sat tiny mid-window, and a large
+    // map ran off the bottom with its scale bar. It is shown to the table, so it fits.
     const { container } = render(ImageBlockView, { props: makeProps() });
     await flushImageLoad();
     await fireEvent.click(container.querySelector("[data-lightbox-btn]") as HTMLElement);
 
-    await waitFor(() => {
-      const img = document.body.querySelector("[data-lightbox-img]") as HTMLImageElement;
-      expect(img).toBeTruthy();
-      expect(img.className).toMatch(/max-w-none/);
+    const img = await waitFor(() => {
+      const el = document.body.querySelector("[data-lightbox-img]") as HTMLImageElement;
+      expect(el).toBeTruthy();
+      return el;
     });
+    expect(img.className).toMatch(/h-full w-full/);
+    expect(img.className).toMatch(/object-contain/);
+
+    await fireEvent.click(img);
+    expect(img.className).toMatch(/max-w-none/);
   });
 
   it("is portaled to document.body, not nested in the editor component tree", async () => {
@@ -190,5 +197,49 @@ describe("Image lightbox overlay", () => {
     });
     expect(onUpdate).not.toHaveBeenCalled();
     expect(onCaptionUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("showing an image to the table", () => {
+  it("opens on a double-click of the image itself", async () => {
+    const { container } = render(ImageBlockView, { props: makeProps({ selected: false }) });
+    await flushImageLoad();
+    await fireEvent.dblClick(container.querySelector("img") as HTMLElement);
+    await waitFor(() => expect(document.body.querySelector("[data-image-lightbox]")).toBeTruthy());
+  });
+
+  it("is named by what the image shows, and draws no caption", async () => {
+    // The caption is the GM's note about the image, and may say what the players
+    // should not yet know.
+    const { container } = render(ImageBlockView, { props: makeProps() });
+    await flushImageLoad();
+    await fireEvent.click(container.querySelector("[data-lightbox-btn]") as HTMLElement);
+    const viewer = await waitFor(() => {
+      const el = document.body.querySelector("[data-image-lightbox]") as HTMLElement;
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(viewer).toHaveAttribute("aria-label", "A portrait");
+    expect(viewer.textContent).not.toContain("A portrait");
+  });
+
+  it("opens from the image block's own event, which Enter and Space on a selection send", async () => {
+    // Space used to delete a selected image — the key a GM presses to show it.
+    // Mounted as the connector mounts it: inside the node view's own element.
+    const host = document.createElement("div");
+    host.setAttribute("data-image-block", "");
+    document.body.appendChild(host);
+    render(ImageBlockView, { props: makeProps(), target: host });
+    await flushImageLoad();
+    host.dispatchEvent(new CustomEvent("image-block:open-viewer"));
+    await waitFor(() => expect(document.body.querySelector("[data-image-lightbox]")).toBeTruthy());
+  });
+});
+
+describe("the image block's toolbar", () => {
+  it("offers Replace for any image, not only a missing one", async () => {
+    const { getByLabelText } = render(ImageBlockView, { props: makeProps() });
+    await flushImageLoad();
+    expect(getByLabelText("Replace image")).toHaveAttribute("title", "Replace image");
   });
 });

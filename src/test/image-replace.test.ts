@@ -55,6 +55,24 @@ describe("Image replace action on broken state", () => {
     });
   });
 
+  it("says the image was moved or deleted and names its file, without a raw path or an error toast", async () => {
+    // It printed the ledger path at under 3:1, and the app toasted "Something went
+    // wrong — please try again", which no retry could fix.
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "get_image_absolute_path") throw new Error("not found");
+      return null;
+    });
+    const { container } = render(ImageBlockView, { props: makeProps() });
+    const notice = await waitFor(() => {
+      const el = container.querySelector("[data-image-missing]") as HTMLElement;
+      expect(el).toBeTruthy();
+      return el;
+    });
+    expect(notice).toHaveTextContent("This image was moved or deleted");
+    expect(notice).toHaveTextContent("missing.png");
+    expect(notice).not.toHaveTextContent("images/missing.png");
+  });
+
   it("clicking Replace calls onSrcReplace with new src; does NOT change caption/align/width", async () => {
     const onUpdate = vi.fn();
     const onCaptionUpdate = vi.fn();
