@@ -11,9 +11,10 @@
   // array back through `onChange` and the consumer writes it. Whether a change
   // becomes a document write is not this list's call — it is `settleRowChange`'s
   // rule, and each block spells the focus half of it its own way.
-  import type { Snippet } from "svelte";
-  import { ChevronDown, ChevronUp, X, Plus } from "@lucide/svelte";
+  import { tick, type Snippet } from "svelte";
+  import { ArrowDown, ArrowUp, Plus, Trash2 } from "@lucide/svelte";
   import type { RowChange } from "$lib/editor/row-list";
+  import { isTypingIn } from "$lib/utils/keyboard";
 
   let {
     rows,
@@ -21,13 +22,14 @@
     createRow,
     onChange,
     noun = "row",
-    insertionPointClass = "",
+    rowName,
+    addClass = "",
   }: {
     /** The rows, in order. The consumer owns them; this never mutates them. */
     rows: T[];
     /** Draws one row's content, given the row and its index. */
     row: Snippet<[T, number]>;
-    /** Builds the row an insert-between control adds. */
+    /** Builds the row an insert control adds. */
     createRow: () => T;
     /**
      * The reordered rows plus what changed. The change descriptor is what lets a
@@ -41,10 +43,14 @@
      */
     noun?: string;
     /**
-     * Classes for the insertion-point strips, so a block can align them with its
-     * own content column — Timeline indents them past its spine.
+     * What a row is called, in words — "The Library Is Sealed". The consumer's to say,
+     * because only it can see inside a row. It names the row's group, so a screen reader
+     * entering a row hears which one it is rather than "Event 3", and the announcement
+     * after a move or a delete says what moved.
      */
-    insertionPointClass?: string;
+    rowName?: (row: T, index: number) => string;
+    /** Classes for the trailing Add control, so a block can align it with its content. */
+    addClass?: string;
   } = $props();
 
   // There was an `onRowFocusOut` here, reporting focus leaving a row so a consumer could
@@ -53,39 +59,47 @@
   // commits its own edit on blur. A row-level hook for the same thing is a second answer
   // to a question one already has.
 
-  let hoveredIndex = $state<number | null>(null);
-  /**
-   * The gap the pointer is over, tracked separately from the rows.
-   *
-   * Without it a gap vanishes as the pointer arrives: leaving the row that
-   * revealed it fires `mouseleave` before the gap's own `mouseenter`, so the
-   * control the GM was reaching for is gone by the time they get there.
-   */
-  let hoveredGap = $state<number | null>(null);
-  /** Whether the pointer is anywhere in the list, which is what reveals `Add …`. */
-  let hoveredList = $state(false);
-
   const groupNoun = $derived(noun.charAt(0).toUpperCase() + noun.slice(1));
 
-  /** A gap is revealed by hovering either of the rows it sits between, or itself. */
-  function gapVisible(gap: number): boolean {
-    return hoveredGap === gap || hoveredIndex === gap - 1 || hoveredIndex === gap;
+  let list = $state<HTMLElement | null>(null);
+  /** What the last move or delete did, said once, politely. */
+  let announcement = $state("");
+
+  function nameOf(index: number): string {
+    const name = rowName?.(rows[index], index)?.trim();
+    return name ? `“${name}”` : `${groupNoun} ${index + 1}`;
   }
 
-  /**
-   * The trailing gap is the one that adds a row rather than splicing one in, so it
-   * is revealed by hovering the *list* rather than a neighbouring boundary — and an
-   * empty list keeps it drawn, because there is no row left to hover for it.
-   *
-   * It used to be permanent, which put a dashed line and a plus under every panel a
-   * GM was only reading (#175 review).
-   */
-  const trailingVisible = $derived(
-    rows.length === 0 ||
-      hoveredList ||
-      hoveredGap === rows.length ||
-      hoveredIndex === rows.length - 1,
-  );
+  function rowElement(index: number): HTMLElement | null {
+    return list?.querySelector<HTMLElement>(`[data-row-index="${index}"]`) ?? null;
+  }
+
+  // Focus follows the row, not the position. Rows are drawn by index, so after a move the
+  // control the GM pressed belongs to a different row: a second Enter on Move up swapped
+  // the pair straight back, and after a delete focus sat on the next row's Delete, one
+  // key from losing that one too.
+  async function focusControl(index: number, action: string) {
+    await tick();
+    const el = rowElement(index);
+    const control = el?.querySelector<HTMLButtonElement>(`[data-row-action="${action}"]`);
+    if (control && !control.disabled) {
+      control.focus();
+      return;
+    }
+    // At an end the move it repeated is disabled; the other one is the way back.
+    const other = action === "up" ? "down" : "up";
+    el?.querySelector<HTMLButtonElement>(`[data-row-action="${other}"]`)?.focus();
+  }
+
+  async function focusRowContent(index: number) {
+    await tick();
+    const el = rowElement(index);
+    const field = el?.querySelector<HTMLElement>(
+      "[data-row-content] button, [data-row-content] input, [data-row-content] textarea",
+    );
+    if (field) field.focus();
+    else list?.querySelector<HTMLElement>("[data-row-add]")?.focus();
+  }
 
   // The three splices, and nothing between them and the array. They lived behind a
   // module seam and had one caller each — this one — which bought a seam and no
@@ -93,27 +107,34 @@
   // reference equality across it (#218). The rows are the consumer's, so each builds a
   // new array rather than touching theirs.
 
-  function move(from: number, to: number) {
+  function move(from: number, to: number, refocus?: string) {
     // Nothing moved, so nothing to report. Both ends of the range and the standing-still
     // case, because `onChange` is a document write: an index off the end splices a hole
     // into the consumer's rows, and a move to where the row already is commits a fence
     // identical to the one on disk and spends an undo step on it. The two controls are
     // disabled at the ends, so this is the guard behind them rather than one a GM meets —
-    // and it is what the next caller (a drag reorder, a shortcut) will arrive at.
+    // and it is what a shortcut arrives at.
     if (from < 0 || from >= rows.length) return;
     if (to < 0 || to >= rows.length) return;
     if (from === to) return;
+    const name = nameOf(from);
     const next = [...rows];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     onChange(next, { kind: "move", from, to });
+    announcement = `Moved ${name} to position ${to + 1} of ${rows.length}`;
+    if (refocus) void focusControl(to, refocus);
   }
 
   function remove(index: number) {
+    const name = nameOf(index);
+    const remaining = rows.length - 1;
     onChange(
       rows.filter((_, i) => i !== index),
       { kind: "delete", index },
     );
+    announcement = `Deleted ${name}. Ctrl+Z to undo`;
+    void focusRowContent(Math.min(index, remaining - 1));
   }
 
   function insert(index: number) {
@@ -121,110 +142,152 @@
     next.splice(index, 0, createRow());
     onChange(next, { kind: "insert", index });
   }
+
+  // Alt+↑ / Alt+↓ move the row the focus is in, from anywhere in it but a field being
+  // typed into — the keyboard's way to carry a row several places without a press per
+  // step on a control that, before focus followed the row, moved a different one.
+  function handleRowKeydown(e: KeyboardEvent, index: number) {
+    if (!e.altKey || e.ctrlKey || e.metaKey || isTypingIn(e.target)) return;
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    const to = e.key === "ArrowUp" ? index - 1 : index + 1;
+    // Focus goes to the same control or field in the moved row — the date the GM was on
+    // stays the date they are on.
+    const focusables = [...(rowElement(index)?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+    const ordinal = focusables.indexOf(e.target as HTMLElement);
+    move(index, to);
+    if (ordinal !== -1) void focusNth(to, ordinal);
+  }
+
+  const FOCUSABLE = "button:not([disabled]), input, textarea";
+
+  async function focusNth(index: number, ordinal: number) {
+    await tick();
+    const focusables = rowElement(index)?.querySelectorAll<HTMLElement>(FOCUSABLE);
+    focusables?.[Math.min(ordinal, focusables.length - 1)]?.focus();
+  }
+
+  const control =
+    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
+    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground " +
+    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 </script>
 
-<!-- A boundary between two rows: a hit target the height of the gap it sits in, so
-     nothing is reserved for a control that is usually invisible.
-
-     `h-2` rather than the `h-5` this shipped with. At `h-5` every boundary spent 20px
-     on emptiness, which read as a loosely-spaced list rather than as rows with room to
-     grow between them — five rows carried 100px of gap they never used (#175 review).
-     The plus is drawn over the gap's own centre line, which is what keeps a target
-     that small findable. -->
-{#snippet insertionPoint(index: number, label: string, visible: boolean)}
-  <button
-    type="button"
-    class="insertion-point w-full flex items-center gap-1 h-2 rounded transition-opacity duration-150 motion-reduce:transition-none
-           focus-visible:opacity-100 focus-visible:pointer-events-auto
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-    class:opacity-0={!visible}
-    class:pointer-events-none={!visible}
-    onclick={() => insert(index)}
-    onmouseenter={() => (hoveredGap = index)}
-    onmouseleave={() => (hoveredGap = null)}
-    aria-label={label}
-  >
-    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-    <Plus size={10} class="text-muted-foreground/60 shrink-0" aria-hidden="true" />
-    <span class="flex-1 border-t border-dashed border-muted-foreground/30"></span>
-  </button>
-{/snippet}
-
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-  class="row-list"
-  onmouseenter={() => (hoveredList = true)}
-  onmouseleave={() => (hoveredList = false)}
->
+<!-- The rows, each with its controls in a small floating bar sitting on its top edge —
+     above the row, so it never covers the row's own controls (a timeline event's
+     chevron, an entry's fields), and touching it, so the pointer can reach it without
+     leaving the row — at the right,
+     revealed while the pointer is over the row or focus is in it. They used to be a
+     column of 17px icons beside an 8px insert strip between every pair of rows: too
+     small to aim at, and the strips went live under the pointer, so a click between two
+     rows planted a blank one. One bar, 28px controls with tooltips, the same chrome every
+     note block's own controls use — and inserting is "Insert below", where the row the
+     GM is looking at is. A row at the top is an insert below the first, moved up. -->
+<div class="row-list" bind:this={list}>
   {#each rows as item, i (i)}
-    <!-- Gap before row i (hover-revealed, focus-visible) -->
-    <div class={insertionPointClass}>
-      {@render insertionPoint(
-        i,
-        i === 0 ? `Insert ${noun} at top` : `Insert ${noun} after position ${i}`,
-        gapVisible(i),
-      )}
-    </div>
-
+    <!-- The keydown is Alt+↑/↓ bubbling up from the row's own controls and fields; the
+         group is not itself a target. -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="row-list-row group relative flex items-start gap-2"
       role="group"
-      aria-label={`${groupNoun} ${i + 1}`}
-      onmouseenter={() => (hoveredIndex = i)}
-      onmouseleave={() => (hoveredIndex = null)}
+      data-row-index={i}
+      aria-label={rowName?.(item, i)?.trim()
+        ? `${groupNoun} ${i + 1}: ${rowName(item, i).trim()}`
+        : `${groupNoun} ${i + 1}`}
+      onkeydown={(e) => handleRowKeydown(e, i)}
     >
       <!-- The controls come first in the DOM and are positioned over the row, so
-         tabbing into a row reaches move / delete before the row's own fields —
-         the order Timeline had when they lived inside its content column. -->
-
-      <!-- Up / down nudge controls — revealed on hover / keyboard focus -->
+           tabbing into a row reaches them before the row's own fields. -->
       <div
-        class="absolute top-0 right-6 flex flex-col opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-             group-hover:opacity-100 group-focus-within:opacity-100"
+        class="absolute bottom-full right-1 z-10 flex items-center gap-px rounded-md bg-popover p-0.5
+               opacity-0 shadow-float ring-1 ring-foreground/10 transition-opacity duration-150
+               motion-reduce:transition-none pointer-events-none
+               group-hover:pointer-events-auto group-hover:opacity-100
+               group-focus-within:pointer-events-auto group-focus-within:opacity-100"
       >
         <button
           type="button"
-          class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
-               disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
-               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          disabled={i === 0}
-          onclick={() => move(i, i - 1)}
-          aria-label={`Move ${noun} up`}
+          class={control}
+          data-row-action="insert"
+          onclick={() => insert(i + 1)}
+          aria-label={`Insert ${noun} below`}
+          title={`Insert ${noun} below`}
         >
-          <ChevronUp size={13} />
+          <Plus size={14} />
         </button>
         <button
           type="button"
-          class="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer
-               disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted-foreground
-               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          disabled={i === rows.length - 1}
-          onclick={() => move(i, i + 1)}
-          aria-label={`Move ${noun} down`}
+          class={control}
+          data-row-action="up"
+          disabled={i === 0}
+          onclick={() => move(i, i - 1, "up")}
+          aria-label={`Move ${noun} up`}
+          title="Move up (Alt+↑)"
         >
-          <ChevronDown size={13} />
+          <ArrowUp size={14} />
+        </button>
+        <button
+          type="button"
+          class={control}
+          data-row-action="down"
+          disabled={i === rows.length - 1}
+          onclick={() => move(i, i + 1, "down")}
+          aria-label={`Move ${noun} down`}
+          title="Move down (Alt+↓)"
+        >
+          <ArrowDown size={14} />
+        </button>
+        <button
+          type="button"
+          class="{control} hover:text-destructive"
+          data-row-action="delete"
+          onclick={() => remove(i)}
+          aria-label={`Delete ${noun}`}
+          title={`Delete ${noun}`}
+        >
+          <Trash2 size={14} />
         </button>
       </div>
 
-      <!-- Delete button — revealed on hover / keyboard focus -->
-      <button
-        type="button"
-        class="absolute top-0 right-0 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
-             opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-             group-hover:opacity-100 group-focus-within:opacity-100
-             focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-        onclick={() => remove(i)}
-        aria-label={`Delete ${noun}`}
-      >
-        <X size={13} />
-      </button>
-
-      {@render row(item, i)}
+      <div class="contents" data-row-content>
+        {@render row(item, i)}
+      </div>
     </div>
   {/each}
 
-  <!-- Trailing gap: revealed with the list, and permanent while the list is empty -->
-  <div class={insertionPointClass}>
-    {@render insertionPoint(rows.length, `Add ${noun}`, trailingVisible)}
+  <!-- Adding at the end: a labelled button rather than a dashed line with a plus. Quiet
+       until the list is hovered or focused, and always shown while the list is empty —
+       there is no row to hover for it then. -->
+  <div class={addClass}>
+    <button
+      type="button"
+      data-row-add
+      class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground
+             transition-[opacity,color] duration-150 motion-reduce:transition-none
+             hover:bg-muted hover:text-foreground focus-visible:opacity-100
+             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
+             {rows.length === 0 ? '' : 'row-list-add-quiet'}"
+      onclick={() => insert(rows.length)}
+      aria-label={`Add ${noun}`}
+    >
+      <Plus size={13} aria-hidden="true" />
+      Add {noun}
+    </button>
   </div>
+
+  <p class="sr-only" aria-live="polite">{announcement}</p>
 </div>
+
+<style>
+  /* Quiet while the GM is only reading; there when the list is hovered or worked in. */
+  .row-list-add-quiet {
+    opacity: 0;
+  }
+
+  .row-list:hover .row-list-add-quiet,
+  .row-list:focus-within .row-list-add-quiet {
+    opacity: 1;
+  }
+</style>
