@@ -115,15 +115,15 @@
 
 <!-- One row: its label and its value, both Linked Text Fields, because a `[[…]]` in
      either is already a real link whether the field draws it or not. The Row List
-     draws the move / delete controls over this and the insert-between gaps around it;
-     `pr-14` reserves the gutter they sit in.
+     draws the move / delete controls beside this, in a gutter of their own, and the
+     insert points between rows.
 
      Deliberately tight — a summary panel is read as a table, and a label sitting a
      third of a column away from the value it names has to be traced across (#175
      review). The label column is a minimum plus a percentage rather than a fixed
      width, so `Population` and `Ruler` still line up. -->
 {#snippet infoboxRow(row: LabelledRow, i: number)}
-  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2">
+  <div class="flex-1 min-w-0 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2">
     <LinkedTextField
       value={row.label}
       onCommit={(label) => setRow(i, { label })}

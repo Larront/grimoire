@@ -11,7 +11,7 @@
 // The three array helpers that used to be tested here on their own are gone (#218). They
 // had one caller each and no decision in them, and every claim those eighty lines made is
 // made again below through the control that performs it — which is the seam a GM reaches.
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
+import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { remapRowIndices, settleRowChange } from "$lib/editor/row-list";
 import RowListFixture from "./fixtures/RowListFixture.svelte";
@@ -151,80 +151,104 @@ describe("RowList controls", () => {
     expect(component.changes()).toEqual([{ kind: "delete", index: 1 }]);
   });
 
-  it("inserting between two rows puts the consumer's new row at that position", async () => {
-    const { getByLabelText, component } = render(RowListFixture, {
+  it("inserts at the point between two rows that the GM picked", async () => {
+    // The insert point shows where the row will land: a line in the gap, and a plus on it.
+    const { getAllByLabelText, component } = render(RowListFixture, {
       rows: ["alpha", "beta"],
     });
-    await fireEvent.click(getByLabelText("Insert thing after position 1"));
+    await fireEvent.click(getAllByLabelText("Insert thing here")[1]);
     expect(component.rowsNow()).toEqual(["alpha", "fresh", "beta"]);
     expect(component.changes()).toEqual([{ kind: "insert", index: 1 }]);
+
+    await fireEvent.click(getAllByLabelText("Insert thing here")[0]);
+    expect(component.rowsNow()[0]).toBe("fresh");
   });
 
-  it("inserting at the top and appending at the end both reach the ends", async () => {
-    const { getByLabelText, component } = render(RowListFixture, {
-      rows: ["alpha"],
+  it("keeps the insert points out of the Tab order, and inserts below with Alt+Enter", async () => {
+    // A Tab stop per gap was most of a timeline's 104 stops.
+    const { getAllByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
     });
-    await fireEvent.click(getByLabelText("Insert thing at top"));
-    expect(component.rowsNow()).toEqual(["fresh", "alpha"]);
+    for (const point of getAllByLabelText("Insert thing here")) {
+      expect(point).toHaveAttribute("tabindex", "-1");
+    }
+    await fireEvent.keyDown(getAllByLabelText("Delete thing")[0], { key: "Enter", altKey: true });
+    expect(component.rowsNow()).toEqual(["alpha", "fresh", "beta"]);
+  });
+
+  it("appends at the end with Add", async () => {
+    const { getByLabelText, component } = render(RowListFixture, { rows: ["alpha"] });
     await fireEvent.click(getByLabelText("Add thing"));
-    expect(component.rowsNow()).toEqual(["fresh", "alpha", "fresh"]);
+    expect(component.rowsNow()).toEqual(["alpha", "fresh"]);
   });
 
-  it("the insertion points between rows are hidden until the row is hovered", async () => {
-    const { getAllByRole, getByLabelText } = render(RowListFixture, {
-      rows: ["alpha", "beta"],
-    });
-    const gap = getByLabelText("Insert thing after position 1");
-    expect(gap.classList.contains("opacity-0")).toBe(true);
-    expect(gap.classList.contains("pointer-events-none")).toBe(true);
-
-    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
-    await fireEvent.mouseEnter(rows[0]);
-    expect(gap.classList.contains("opacity-0")).toBe(false);
-    expect(gap.classList.contains("pointer-events-none")).toBe(false);
-
-    await fireEvent.mouseLeave(rows[0]);
-    expect(gap.classList.contains("opacity-0")).toBe(true);
+  it("makes only the plus an insert target, not the whole gap", () => {
+    // A full-width strip between every pair of rows went live under the pointer, so a
+    // stray click in the gap planted a blank row.
+    const { getAllByLabelText } = render(RowListFixture, { rows: ["alpha", "beta"] });
+    const point = getAllByLabelText("Insert thing here")[1];
+    expect(point.tagName).toBe("BUTTON");
+    expect(point.parentElement?.tagName).toBe("DIV");
+    expect(point.parentElement?.getAttribute("role")).toBeNull();
   });
 
-  it("the trailing insertion point is revealed with the list, not permanent", async () => {
-    // It used to be always drawn, which put a dashed line and a plus under every panel
-    // a GM was only reading (#175 review). Hovering the last row reveals it, as
-    // hovering a row reveals the gaps beside it.
-    const { getAllByRole, getByLabelText } = render(RowListFixture, {
-      rows: ["alpha", "beta"],
-    });
-    const add = getByLabelText("Add thing");
-    expect(add.classList.contains("opacity-0")).toBe(true);
+  it("keeps Add quiet while a full list is only being read, and drawn while it is empty", () => {
+    const full = render(RowListFixture, { rows: ["alpha"] });
+    expect(full.getByLabelText("Add thing").classList.contains("row-list-add-quiet")).toBe(true);
+    full.unmount();
 
-    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
-    await fireEvent.mouseEnter(rows[1]);
-    expect(add.classList.contains("opacity-0")).toBe(false);
-  });
-
-  it("the trailing insertion point stays drawn while the list is empty", () => {
-    // Nothing to hover for it: an empty list whose only control were hover-revealed
-    // would be a list with no way to gain a first row.
     const { getByLabelText } = render(RowListFixture, { rows: [] });
-    expect(getByLabelText("Add thing").classList.contains("opacity-0")).toBe(false);
+    expect(getByLabelText("Add thing").classList.contains("row-list-add-quiet")).toBe(false);
   });
 
-  it("a gap stays revealed once the pointer is on it", async () => {
-    // Leaving the row that revealed a gap fires `mouseleave` before the gap's own
-    // `mouseenter`, so without the gap tracking its own hover the control vanishes as
-    // the GM arrives at it.
-    const { getAllByRole, getByLabelText } = render(RowListFixture, {
+  it("names each control and gives it a tooltip", () => {
+    const { getAllByLabelText } = render(RowListFixture, { rows: ["alpha", "beta"] });
+    expect(getAllByLabelText("Move thing up")[1]).toHaveAttribute("title", "Move up (Alt+↑)");
+    expect(getAllByLabelText("Delete thing")[0]).toHaveAttribute("title", "Delete thing");
+  });
+
+  it("keeps focus on the row that moved, so a second press moves it again", async () => {
+    // Rows are drawn by position, so the control pressed used to belong to a different
+    // row afterwards: a second Enter on Move down swapped the pair straight back.
+    const { getAllByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha", "beta", "gamma"],
+    });
+    await fireEvent.click(getAllByLabelText("Move thing down")[0]);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(getAllByLabelText("Move thing down")[1]),
+    );
+    await fireEvent.click(document.activeElement as HTMLElement);
+    expect(component.rowsNow()).toEqual(["beta", "gamma", "alpha"]);
+  });
+
+  it("after a delete, puts focus in the next row rather than on its Delete", async () => {
+    const { getAllByLabelText, getByText } = render(RowListFixture, {
+      rows: ["alpha", "beta", "gamma"],
+    });
+    await fireEvent.click(getAllByLabelText("Delete thing")[0]);
+    await waitFor(() => expect(document.activeElement).toBe(getByText("beta")));
+  });
+
+  it("moves a row with Alt+↑ and Alt+↓ from its controls", async () => {
+    const { getAllByLabelText, component } = render(RowListFixture, {
       rows: ["alpha", "beta"],
     });
-    const gap = getByLabelText("Insert thing after position 1");
-    const rows = getAllByRole("group", { name: /^Thing \d+$/ });
+    await fireEvent.keyDown(getAllByLabelText("Delete thing")[1], {
+      key: "ArrowUp",
+      altKey: true,
+    });
+    expect(component.rowsNow()).toEqual(["beta", "alpha"]);
+  });
 
-    await fireEvent.mouseEnter(rows[0]);
-    await fireEvent.mouseEnter(gap);
-    await fireEvent.mouseLeave(rows[0]);
-
-    expect(gap.classList.contains("opacity-0")).toBe(false);
-    expect(gap.classList.contains("pointer-events-none")).toBe(false);
+  it("says what a move and a delete did", async () => {
+    const { getAllByLabelText, container } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+    });
+    const live = container.querySelector('[aria-live="polite"]') as HTMLElement;
+    await fireEvent.click(getAllByLabelText("Move thing down")[0]);
+    expect(live).toHaveTextContent("Moved Thing 1 to position 2 of 2");
+    await fireEvent.click(getAllByLabelText("Delete thing")[0]);
+    expect(live).toHaveTextContent("Deleted Thing 1. Ctrl+Z to undo");
   });
 
   it("an empty list still offers a way to add the first row", () => {

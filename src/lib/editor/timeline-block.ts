@@ -158,7 +158,10 @@ function escapeHeadingLines(description: string): string {
  * the header by a blank line, and records by a blank line from each other.
  */
 export function serializeTimelineEvents(events: TimelineEvent[]): string {
-  const records = events.map((evt) => {
+  // A blank event is the GM's insert they walked away from, and it is not written: the
+  // view keeps it for as long as it is being typed into, but the file never gets a bare
+  // `# ` from it — which, before this, any later edit to the timeline wrote.
+  const records = events.filter((evt) => !isBlankEvent(evt)).map((evt) => {
     const lines: string[] = [`# ${evt.title}`];
     if (evt.date) lines.push(`Date: ${evt.date}`);
     if (evt.description) lines.push("", escapeHeadingLines(evt.description));

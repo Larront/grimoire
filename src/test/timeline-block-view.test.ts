@@ -11,7 +11,7 @@
 // typed, and the old path had an escaper standing between those characters and the
 // document; the field has no markup to escape, so the guarantee is structural rather than
 // remembered.
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
+import { render, fireEvent, waitFor, cleanup } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import TimelineBlockView from "$lib/components/editor/TimelineBlockView.svelte";
 import type { Timeline, TimelineEvent } from "$lib/editor/timeline-block";
@@ -57,7 +57,30 @@ describe("a Timeline draws its events", () => {
 
     expect(getByLabelText("Event 1 date")).toHaveTextContent("Date");
     expect(getByLabelText("Event 1 title")).toHaveTextContent("Untitled event");
-    expect(getByLabelText("Event 1 description")).toHaveTextContent("Description (optional)");
+    expect(getByLabelText("Event 1 description")).toHaveTextContent("Description");
+  });
+
+  it("shows the first line of a description while the event is closed", () => {
+    // Every event used to draw the same chevron, so nothing said which held more to read.
+    const { getByLabelText } = timeline([
+      {
+        date: "",
+        title: "The Keep Falls",
+        description: "Fire took the east wall.\nThe rest held.",
+      },
+    ]);
+    expect(getByLabelText("Show the description of event 1")).toHaveTextContent(
+      "Fire took the east wall.",
+    );
+    expect(getByLabelText("Expand event 1")).toBeInTheDocument();
+  });
+
+  it("offers no chevron to an event with no description, but a way to add one", () => {
+    const { queryByLabelText, getByText } = timeline([
+      { date: "", title: "The Shattering", description: "" },
+    ]);
+    expect(queryByLabelText("Expand event 1")).toBeNull();
+    expect(getByText("Add description")).toBeInTheDocument();
   });
 
   it("draws a wikilink in any of the three as a live link", () => {
@@ -176,16 +199,18 @@ describe("editing an event's values", () => {
     expect(panel.inert).toBe(false);
   });
 
-  it("reaches an empty description through the chevron rather than a mode", async () => {
-    // The collapse is drawn on every event now, because it is how a description that
-    // does not exist yet is added.
-    const { getByLabelText, onCommit } = timeline([
+  it("reaches an empty description through Add description rather than a mode", async () => {
+    // It opens the panel and its field for typing in one press.
+    const { getByLabelText, getByText, onCommit } = timeline([
       { date: "", title: "The Shattering", description: "" },
     ]);
 
-    await fireEvent.click(getByLabelText("Expand event 1"));
-    await openField(getByLabelText("Event 1 description"));
-    const input = getByLabelText("Event 1 description");
+    await fireEvent.click(getByText("Add description"));
+    const input = await waitFor(() => {
+      const el = getByLabelText("Event 1 description");
+      if (el.tagName !== "TEXTAREA") throw new Error("not open yet");
+      return el;
+    });
     await fireEvent.input(input, { target: { value: "The tower fell." } });
     await fireEvent.blur(input);
 
