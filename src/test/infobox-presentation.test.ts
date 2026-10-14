@@ -108,7 +108,8 @@ describe("what the float does to the prose around it", () => {
       // excluded: its own `clear: right` inside the query is what stops two panels
       // pairing up.
       expect(clearingRule()).toMatch(/:not\(\[data-infobox-block\]\)/);
-      expect(clearingRule()).toMatch(/clear:\s*right/);
+      // Both sides: a note image aligned left floats on the left.
+      expect(clearingRule()).toMatch(/clear:\s*both/);
     });
 
     it("keeps the code block clear of it too", () => {
@@ -150,6 +151,7 @@ describe("what the float does to the prose around it", () => {
     // The rejected second layout for one block: same content, two arrangements, and
     // every future row feature having to work in both.
     expect(floatBlock()).not.toMatch(/columns|grid-template-columns|column-count/);
-    expect(css.match(FLOAT_QUERY)).toHaveLength(1);
+    // The panel's query, and the note image's, which floats at the same threshold.
+    expect(css.match(FLOAT_QUERY)).toHaveLength(2);
   });
 });

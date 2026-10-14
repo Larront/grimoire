@@ -1090,7 +1090,37 @@
    draws a box belongs in this selector. */
 .tiptap [data-note-block]:not([data-infobox-block]),
 .tiptap pre {
-  clear: right;
+  /* Both sides: a note image aligned left floats too (below). */
+  clear: both;
+}
+
+/* ── Note images ──────────────────────────────────────────────────
+   An image aligned left or right floats beside the prose that follows it, as the
+   Infobox does and at the same threshold: only where the column is wide enough for
+   readable prose beside it (640px — see the Infobox's derivation above). Below that it
+   stands in its row at its side, as it always did. "Align right" used to do only that,
+   at every width, and left a hole beside the image the text never filled.
+
+   The node view's own element floats and takes the image's width; the image inside
+   fills it (`--image-frame-width`). Centred images never float. */
+@container note-column (min-width: 640px) {
+  .tiptap [data-image-block][data-align="left"],
+  .tiptap [data-image-block][data-align="right"] {
+    width: var(--image-width);
+    --image-frame-width: 100%;
+  }
+
+  .tiptap [data-image-block][data-align="right"] {
+    float: right;
+    clear: right;
+    margin-left: 1.5rem;
+  }
+
+  .tiptap [data-image-block][data-align="left"] {
+    float: left;
+    clear: left;
+    margin-right: 1.5rem;
+  }
 }
 
 .tiptap hr {

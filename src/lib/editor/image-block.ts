@@ -3,6 +3,7 @@ import { api } from "$lib/api";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
 import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
+import { NodeSelection } from "@tiptap/pm/state";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,23 @@ export const ImageBlock = Image.extend({
     attrs: { src: string; alt: string | null; align: string; width: string };
   }) {
     return serializeImageNode(node);
+  },
+
+  // Enter or Space on a selected image shows it full screen. Space used to replace the
+  // selection like any typed character, deleting the image — the key a GM presses to
+  // "show" something, mid-session.
+  addKeyboardShortcuts() {
+    const show = () => {
+      const { selection } = this.editor.state;
+      if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) {
+        return false;
+      }
+      this.editor.view
+        .nodeDOM(selection.from)
+        ?.dispatchEvent(new CustomEvent("image-block:open-viewer"));
+      return true;
+    };
+    return { Enter: show, Space: show };
   },
 
   addNodeView() {

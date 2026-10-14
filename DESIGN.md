@@ -340,6 +340,18 @@ A Scene-link makes a passage of an adventure PDF play its scene. It is built for
 - **Scenes in this PDF:** a toolbar list of every link in page order, to jump to or play.
 - **Drifted:** a link whose text no longer matches is drawn dashed in Ember Error, with a warning marker and a line in the bubble.
 
+### Image
+
+An image in a note: a map, a handout, a portrait.
+
+- **Placement:** left and right float the image beside the prose that follows (at the Infobox's 640px threshold; below it, the image stands at its side); centre never floats. Width is a percentage of the column.
+- **Selected:** a crimson outline on the image, a floating toolbar above it (never over it) — align left, centre, right, View full size, Replace — 28px with tooltips, and a resize handle with a grip on the side the image grows toward, showing the width while it moves. The caption is a Linked Text Field.
+- **Missing:** the shared notice — "This image was moved or deleted", the file name, Replace — with no error toast.
+
+### Image Viewer
+
+The image shown to the table, from the Image block (double-click, Enter or Space when selected, or View full size) and the Infobox's portrait. The image fits the window; a click toggles actual size. The backdrop is solid Iron Deep — the one surface that hides the note rather than dimming it, because the note is the GM's prep. No caption is drawn. Close is a 36px floating button; Escape closes, and focus returns to where it was.
+
 ### Timeline
 
 Dated events on a vertical spine, read at the table to answer "when?".

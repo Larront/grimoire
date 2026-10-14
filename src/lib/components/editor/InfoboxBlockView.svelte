@@ -16,7 +16,9 @@
   // once. What is *not* here is the float: nothing in this component knows whether the
   // panel is beside the prose or stacked above it, because that is a container query on
   // the block's own column in `app.css` and never an attribute (#148).
-  import { ImagePlus, RefreshCw, X } from "@lucide/svelte";
+  import { ImagePlus, Maximize2, RefreshCw, X } from "@lucide/svelte";
+  import ImageViewer from "$lib/components/editor/ImageViewer.svelte";
+  import MissingImage from "$lib/components/editor/MissingImage.svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
@@ -59,6 +61,9 @@
   // deleted outside Grimoire leaves the panel drawing everything else: a missing
   // portrait costs the portrait and nothing else.
   const thumbnailImage = ledgerImage(() => panel.image);
+
+  // The portrait can be shown to the table, as a note image can — the same viewer.
+  let viewerOpen = $state(false);
 
   async function chooseImage() {
     const path = await pickLedgerImage();
@@ -155,27 +160,14 @@
         data-infobox-image
         src={thumbnailImage.url}
         alt={panel.imageAlt}
-        class="block w-full rounded"
+        class="block w-full cursor-pointer rounded"
         draggable="false"
         onerror={thumbnailImage.markMissing}
+        ondblclick={() => (viewerOpen = true)}
       />
     {:else if thumbnailImage.missing}
-      <div
-        data-infobox-image-missing
-        class="flex flex-col items-center justify-center gap-1.5 w-full min-h-16 rounded px-2 py-2
-               border border-dashed border-border/60 bg-card font-sans text-xs text-muted-foreground/60"
-      >
-        <span class="text-center break-all">Image not found: {panel.image}</span>
-        <button
-          type="button"
-          data-infobox-image-replace
-          class="rounded border border-border/60 bg-background px-2 py-0.5 text-xs text-foreground
-                 cursor-pointer hover:bg-muted focus-visible:outline-none focus-visible:ring-2
-                 focus-visible:ring-primary focus-visible:ring-offset-2"
-          onclick={chooseImage}
-        >
-          Replace…
-        </button>
+      <div data-infobox-image-missing>
+        <MissingImage path={panel.image} onReplace={chooseImage} compact />
       </div>
     {:else}
       <div class="w-full h-16 rounded bg-card animate-pulse"></div>
@@ -189,6 +181,18 @@
              motion-reduce:transition-none group-hover/thumb:opacity-100
              group-focus-within/thumb:opacity-100"
     >
+      {#if thumbnailImage.url}
+        <button
+          type="button"
+          class="p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground
+                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          aria-label="View full size"
+          title="Show full screen (or double-click)"
+          onclick={() => (viewerOpen = true)}
+        >
+          <Maximize2 size={13} />
+        </button>
+      {/if}
       <button
         type="button"
         class="p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground
@@ -223,6 +227,13 @@
       />
     </figcaption>
   </figure>
+  {#if viewerOpen && thumbnailImage.url}
+    <ImageViewer
+      src={thumbnailImage.url}
+      alt={panel.imageAlt}
+      onClose={() => (viewerOpen = false)}
+    />
+  {/if}
 {/snippet}
 
 <div
