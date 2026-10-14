@@ -352,7 +352,8 @@ Dated events on a vertical spine, read at the table to answer "when?".
 
 The rows of a timeline, an infobox and a statblock's edit mode.
 
-- **Controls:** one floating bar per row, sitting on its top edge so it never covers the row's own controls — Insert below, Move up (Alt+↑), Move down (Alt+↓), Delete — 28px each with tooltips. Revealed on hover or focus. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty.
+- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty.
+- **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus.
 - **Focus and speech:** focus follows the row through a move and goes into the next row after a delete; moves and deletes are announced, and rows are named by their content.
 
 ### Statblock
