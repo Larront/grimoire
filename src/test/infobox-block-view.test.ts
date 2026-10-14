@@ -375,7 +375,8 @@ describe("Infobox rows", () => {
 
   it("inserts a row between two others", async () => {
     const { getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getAllByLabelText("Insert row below")[0]);
+    // The insert point between rows 1 and 2.
+    await fireEvent.click(getAllByLabelText("Insert row here")[1]);
 
     const label = getAllByLabelText("Row 2 label")[0];
     await fireEvent.input(label, { target: { value: "Founded" } });
@@ -524,7 +525,7 @@ describe("an Infobox has nothing that plays", () => {
         "Add row",
         "Delete row",
         "Infobox title",
-        "Insert row below",
+        "Insert row here",
         "Move row down",
         "Move row up",
         "Row 1 label",

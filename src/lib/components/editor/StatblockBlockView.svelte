@@ -583,10 +583,10 @@
 
 <!-- ─── Authoring ─────────────────────────────────────────────────────────────
      One header row behind the pencil: its label and its whole value, the second of
-     which is where the maximum becomes reachable at all. `pr-14` reserves the gutter
-     the Row List's controls sit in. -->
+     which is where the maximum becomes reachable at all. The Row List's controls sit
+     beside it, in a gutter of their own. -->
 {#snippet headerRow(row: LabelledRow, i: number)}
-  <div class="flex-1 min-w-0 pr-14 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px">
+  <div class="flex-1 min-w-0 grid grid-cols-[minmax(5rem,30%)_1fr] items-start gap-x-3 py-px">
     {@render rowLabel(row, i, true)}
     <LinkedTextField
       value={row.value}
@@ -606,12 +606,12 @@
      which is what a Row List nested inside a Row List needs. -->
 {#snippet statblockSection(section: StatblockSection, s: number)}
   {#snippet sectionEntry(entry: StatblockEntry, i: number)}
-    <div class="flex-1 min-w-0 pr-14 py-0.5">
+    <div class="flex-1 min-w-0 py-0.5">
       {@render entryFields(entry, s, i, true)}
     </div>
   {/snippet}
 
-  <div class="flex-1 min-w-0 pr-14 pt-2">
+  <div class="flex-1 min-w-0 pt-2">
     {@render sectionHeading(section, s, true)}
     <RowList
       rows={section.entries}

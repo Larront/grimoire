@@ -148,6 +148,13 @@
   // step on a control that, before focus followed the row, moved a different one.
   function handleRowKeydown(e: KeyboardEvent, index: number) {
     if (!e.altKey || e.ctrlKey || e.metaKey || isTypingIn(e.target)) return;
+    // Alt+Enter: a new row below this one — the keyboard's way to the insert the pointer
+    // gets from the gap.
+    if (e.key === "Enter") {
+      e.preventDefault();
+      insert(index + 1);
+      return;
+    }
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     e.preventDefault();
     const to = e.key === "ArrowUp" ? index - 1 : index + 1;
@@ -168,26 +175,51 @@
   }
 
   const control =
-    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
+    "flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors " +
     "hover:bg-muted hover:text-foreground cursor-pointer " +
     "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground " +
     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 </script>
 
-<!-- The rows, each with its controls in a small floating bar sitting on its top edge —
-     above the row, so it never covers the row's own controls (a timeline event's
-     chevron, an entry's fields), and touching it, so the pointer can reach it without
-     leaving the row — at the right,
-     revealed while the pointer is over the row or focus is in it. They used to be a
-     column of 17px icons beside an 8px insert strip between every pair of rows: too
-     small to aim at, and the strips went live under the pointer, so a click between two
-     rows planted a blank one. One bar, 28px controls with tooltips, the same chrome every
-     note block's own controls use — and inserting is "Insert below", where the row the
-     GM is looking at is. A row at the top is an insert below the first, moved up. -->
+<!-- An insert point between two rows: hovering the gap draws a line exactly where the
+     new row will go, with a plus at the block's chosen spot on it (a timeline puts it on
+     its spine). Only the plus inserts — the gap itself is not a target, which is what
+     kept the old full-width strips planting rows on a stray click. Not a Tab stop: the
+     keyboard inserts with Alt+Enter from the row above, and the list ends with Add. -->
+{#snippet gap(index: number)}
+  <div class="row-list-gap relative h-0">
+    <div class="group/gap absolute inset-x-0 -top-3 z-10 h-3">
+      <span
+        class="pointer-events-none absolute right-0 top-1/2 border-t border-dashed border-primary/70
+               opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-hover/gap:opacity-100"
+        style="left: var(--row-insert-x, 0px)"
+      ></span>
+      <button
+        type="button"
+        tabindex="-1"
+        class="absolute top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full
+               bg-popover text-primary opacity-0 shadow-float ring-1 ring-primary/50 transition-opacity duration-150
+               motion-reduce:transition-none group-hover/gap:opacity-100 cursor-pointer"
+        style="left: calc(var(--row-insert-x, 0px) - 0.625rem)"
+        onclick={() => insert(index)}
+        aria-label={`Insert ${noun} here`}
+        title={`Insert ${noun} here`}
+      >
+        <Plus size={12} strokeWidth={2.5} />
+      </button>
+    </div>
+  </div>
+{/snippet}
+
+<!-- The rows. Each row's own controls — Move up, Move down, Delete — sit in a gutter at
+     its right, in the flow, so they never cover what the row says; revealed on hover or
+     focus. -->
 <div class="row-list" bind:this={list}>
   {#each rows as item, i (i)}
-    <!-- The keydown is Alt+↑/↓ bubbling up from the row's own controls and fields; the
-         group is not itself a target. -->
+    {@render gap(i)}
+
+    <!-- The keydown is Alt+arrows and Alt+Enter bubbling up from the row's own controls
+         and fields; the group is not itself a target. -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="row-list-row group relative flex items-start gap-2"
@@ -198,25 +230,14 @@
         : `${groupNoun} ${i + 1}`}
       onkeydown={(e) => handleRowKeydown(e, i)}
     >
-      <!-- The controls come first in the DOM and are positioned over the row, so
-           tabbing into a row reaches them before the row's own fields. -->
+      <div class="contents" data-row-content>
+        {@render row(item, i)}
+      </div>
+
       <div
-        class="absolute bottom-full right-1 z-10 flex items-center gap-px rounded-md bg-popover p-0.5
-               opacity-0 shadow-float ring-1 ring-foreground/10 transition-opacity duration-150
-               motion-reduce:transition-none pointer-events-none
-               group-hover:pointer-events-auto group-hover:opacity-100
-               group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+        class="flex shrink-0 items-center opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+               group-hover:opacity-100 group-focus-within:opacity-100"
       >
-        <button
-          type="button"
-          class={control}
-          data-row-action="insert"
-          onclick={() => insert(i + 1)}
-          aria-label={`Insert ${noun} below`}
-          title={`Insert ${noun} below`}
-        >
-          <Plus size={14} />
-        </button>
         <button
           type="button"
           class={control}
@@ -226,7 +247,7 @@
           aria-label={`Move ${noun} up`}
           title="Move up (Alt+↑)"
         >
-          <ArrowUp size={14} />
+          <ArrowUp size={13} />
         </button>
         <button
           type="button"
@@ -237,7 +258,7 @@
           aria-label={`Move ${noun} down`}
           title="Move down (Alt+↓)"
         >
-          <ArrowDown size={14} />
+          <ArrowDown size={13} />
         </button>
         <button
           type="button"
@@ -247,12 +268,8 @@
           aria-label={`Delete ${noun}`}
           title={`Delete ${noun}`}
         >
-          <Trash2 size={14} />
+          <Trash2 size={13} />
         </button>
-      </div>
-
-      <div class="contents" data-row-content>
-        {@render row(item, i)}
       </div>
     </div>
   {/each}

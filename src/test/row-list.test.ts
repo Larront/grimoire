@@ -151,13 +151,29 @@ describe("RowList controls", () => {
     expect(component.changes()).toEqual([{ kind: "delete", index: 1 }]);
   });
 
-  it("inserting below a row puts the consumer's new row after it", async () => {
+  it("inserts at the point between two rows that the GM picked", async () => {
+    // The insert point shows where the row will land: a line in the gap, and a plus on it.
     const { getAllByLabelText, component } = render(RowListFixture, {
       rows: ["alpha", "beta"],
     });
-    await fireEvent.click(getAllByLabelText("Insert thing below")[0]);
+    await fireEvent.click(getAllByLabelText("Insert thing here")[1]);
     expect(component.rowsNow()).toEqual(["alpha", "fresh", "beta"]);
     expect(component.changes()).toEqual([{ kind: "insert", index: 1 }]);
+
+    await fireEvent.click(getAllByLabelText("Insert thing here")[0]);
+    expect(component.rowsNow()[0]).toBe("fresh");
+  });
+
+  it("keeps the insert points out of the Tab order, and inserts below with Alt+Enter", async () => {
+    // A Tab stop per gap was most of a timeline's 104 stops.
+    const { getAllByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+    });
+    for (const point of getAllByLabelText("Insert thing here")) {
+      expect(point).toHaveAttribute("tabindex", "-1");
+    }
+    await fireEvent.keyDown(getAllByLabelText("Delete thing")[0], { key: "Enter", altKey: true });
+    expect(component.rowsNow()).toEqual(["alpha", "fresh", "beta"]);
   });
 
   it("appends at the end with Add", async () => {
@@ -166,11 +182,14 @@ describe("RowList controls", () => {
     expect(component.rowsNow()).toEqual(["alpha", "fresh"]);
   });
 
-  it("draws no insert strips between rows", () => {
-    // An 8px strip between every pair of rows went live under the pointer, so a click in
-    // the gap planted a blank row. Inserting is the row's own "Insert below" now.
-    const { queryByLabelText } = render(RowListFixture, { rows: ["alpha", "beta"] });
-    expect(queryByLabelText(/Insert thing (at top|after position)/)).toBeNull();
+  it("makes only the plus an insert target, not the whole gap", () => {
+    // A full-width strip between every pair of rows went live under the pointer, so a
+    // stray click in the gap planted a blank row.
+    const { getAllByLabelText } = render(RowListFixture, { rows: ["alpha", "beta"] });
+    const point = getAllByLabelText("Insert thing here")[1];
+    expect(point.tagName).toBe("BUTTON");
+    expect(point.parentElement?.tagName).toBe("DIV");
+    expect(point.parentElement?.getAttribute("role")).toBeNull();
   });
 
   it("keeps Add quiet while a full list is only being read, and drawn while it is empty", () => {

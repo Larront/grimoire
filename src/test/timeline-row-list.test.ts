@@ -76,7 +76,7 @@ describe("Timeline rows", () => {
         onCommit,
       },
     });
-    await fireEvent.click(getAllByLabelText("Insert event below")[0]);
+    await fireEvent.click(getAllByLabelText("Insert event here")[1]);
     expect(getAllByLabelText("Delete event")).toHaveLength(3);
     // A blank event is not worth writing to the note until the GM types in it.
     expect(onCommit).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe("Timeline rows", () => {
         onCommit,
       },
     });
-    await fireEvent.click(getAllByLabelText("Insert event below")[0]);
+    await fireEvent.click(getAllByLabelText("Insert event here")[1]);
     expect(getAllByLabelText("Delete event")).toHaveLength(3);
     const input = getByLabelText("Event 2 title");
     // Focus leaving the row for somewhere else on the page.

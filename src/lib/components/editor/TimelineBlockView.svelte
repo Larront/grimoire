@@ -300,6 +300,12 @@
   /* An event: the date in a 7rem margin, the spine, then the title and description. One
      date field, placed by the grid — in a narrow pane (28rem, where the margin starts to
      cost the title more than the date gains) it moves above the title. */
+  /* The insert point's plus sits on the spine: past the 7rem date margin and the gap,
+     at the middle of the 1rem spine column. */
+  .timeline-block {
+    --row-insert-x: 8.125rem;
+  }
+
   .timeline-event {
     display: grid;
     flex: 1;
@@ -334,6 +340,10 @@
   }
 
   @container timeline (max-width: 28rem) {
+    .timeline-block {
+      --row-insert-x: 0.5rem;
+    }
+
     .timeline-event {
       grid-template-columns: 1rem minmax(0, 1fr);
       grid-template-areas:
