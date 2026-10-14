@@ -297,3 +297,14 @@ describe("a Linked Text Field left from the keyboard keeps the GM's place", () =
     expect(document.activeElement).toBe(shown);
   });
 });
+
+describe("a Linked Text Field says what it holds to a screen reader", () => {
+  it("describes its button by the value it draws", () => {
+    // Named by its field, the button's text was replaced for assistive tech: a timeline
+    // read as "Event 1 date, Event 1 title" with not a word of either.
+    const { getByLabelText } = field({ value: "The Keep Falls" });
+    const button = getByLabelText("Value");
+    const described = document.getElementById(button.getAttribute("aria-describedby")!);
+    expect(described).toHaveTextContent("The Keep Falls");
+  });
+});

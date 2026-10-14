@@ -101,6 +101,10 @@
   let draft = $state("");
   let input = $state<HTMLInputElement | HTMLTextAreaElement>();
   let display = $state<HTMLButtonElement>();
+  // The drawn value, as the button's description. The button is named by its field
+  // ("Event 3 title") and that name replaces its text for a screen reader, which heard
+  // every field and never a word of what was in it.
+  const valueId = $props.id();
   // Set by Enter and Escape, the two ways out from the keyboard. The input leaves the
   // page as it closes, and focus used to go with it to the document body: a keyboard GM
   // lost their place after every edit, and in a block with a mode a second Escape no
@@ -297,7 +301,7 @@
     {placeholder}
     aria-label={ariaLabel}
     rows={Math.max(2, draft.split("\n").length)}
-    class="w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
+    class="linked-textarea w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
       void offerSuggestions(e.currentTarget);
@@ -324,12 +328,13 @@
     bind:this={display}
     type="button"
     aria-label={ariaLabel}
+    aria-describedby={valueId}
     class="w-full text-left rounded border-b border-transparent whitespace-pre-wrap break-words
            focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
            {className}"
     onclick={handleClick}
   >
-    {@render drawn()}
+    <span id={valueId}>{@render drawn()}</span>
   </button>
 {/if}
 
@@ -354,3 +359,13 @@
     />
   </div>
 {/if}
+
+<style>
+  /* A description opens at the height of what it holds. Its row count used to be its
+     line breaks, which ignores wrapping: three wrapped lines opened as a 57px box scrolled
+     to the end, the opening hidden. `rows` stays the floor where this is not supported. */
+  .linked-textarea {
+    field-sizing: content;
+    min-height: 3lh;
+  }
+</style>
