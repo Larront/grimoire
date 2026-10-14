@@ -10,22 +10,22 @@ Innkeeper: Osric Thrane, who remembers every face
 Road east: Three hours to [[Locations/The Ember Keep.md]] on foot
 ```
 
-A small market settlement on the northern edge of the [[Lore/The Ashfen Marshes.md]]. It survives where other villages failed because it trades in marsh herbs, dried provisions, and information.
+A small market village on the northern edge of [[Lore/The Ashfen Marshes.md]]. Every other village on the marsh has failed. Thornhaven survived by trading in marsh herbs, dried provisions and whatever travellers let slip.
 
 ## Description
 
-Fifty buildings around a market square, with a temple that stopped being used a century ago. The inn is the Muddy Boot; the innkeeper is Osric Thrane, who remembers every face.
+Fifty buildings crowd around a muddy market square. The temple stopped holding services a century ago. Everyone who passes through ends up at the Muddy Boot, where Osric Thrane waters the ale and never forgets a face.
 
 ## Notable Features
 
-- **The Market Square** — where [[Mira]] occasionally sells her remedies and rumours at prices that suggest she knows your situation.
-- **The Temple of the Silent Hour** — abandoned; the villagers use it for grain storage. The carved panels inside match the script on [[Locations/The Ember Keep.md]] outer walls.
-- **The Eastern Road** — three hours to the [[Locations/The Ember Keep.md]] on foot, along the Order's raised stone causeway.
+- **The Market Square** — where [[Mira]] sometimes sells remedies and rumours, at prices that suggest she already knows how badly you need them.
+- **The Temple of the Silent Hour** — abandoned, and used now to store grain. The carved panels inside are in the same script as the warnings on the walls of [[Locations/The Ember Keep.md]].
+- **The Eastern Road** — the Order's raised stone causeway, and the only dry way to [[Locations/The Ember Keep.md]].
 
 ## NPCs
 
-[[Characters/Aldric Vane.md]] lives at the edge of town, in a house with its shutters always closed.
+[[Characters/Aldric Vane.md]] lives at the edge of the village, in a house whose shutters are never open.
 
 ## Notes
 
-The village knows the keep is dangerous. It does not know exactly why, but the folk memory is reliable enough that no one needs to explain.
+Everyone here knows the keep is dangerous. Few could tell you why, but the village's memory has been right for three hundred years, and nobody feels the need to test it.

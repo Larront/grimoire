@@ -1,18 +1,19 @@
 ---
 tags: [location, lore]
 ---
-The bogland surrounding the eastern half of the valley. Fog-prone, difficult to navigate without local knowledge, and home to plants that grow nowhere else in the region.
+The bogland that fills the eastern half of the vale: fog-bound, hard going without a guide, and home to plants that grow nowhere else.
 
 ## Description
 
-Black water between stands of pale reed. Raised stone paths — [[The Order of Embers]]' original roads — still cross it in places, though several sections have sunk. The fog comes before dawn and does not lift until midmorning. Sounds carry strangely in it.
+Black water between stands of pale reed. The raised stone roads of [[The Order of Embers]] still cross it in places, though whole stretches have sunk. Fog rises before dawn and lingers until midmorning, and sound carries strangely in it. A voice that seems close at hand can come from half a mile away.
 
 ## Notable Features
 
-- **The Order's Roads** — raised stone causeways built by [[The Order of Embers]], connecting the [[Locations/The Ember Keep.md]] to the old coalition routes. The main one reaches [[Locations/Thornhaven Village.md]] in three hours.
-- **The Pale Reeds** — harvested by [[Mira]] for her remedies. She says they grow thicker and faster nearer the keep, which she considers a data point worth noting.
-- **The Deep Channels** — unmarked, ten feet at low water, invisible in fog. Local knowledge passed down verbally; not on any map.
+- **The Order's Roads** — raised stone causeways that once linked [[Locations/The Ember Keep.md]] to the coalition's trade routes. The main one still runs to [[Locations/Thornhaven Village.md]], three hours away on foot.
+- **The Pale Reeds** — [[Mira]] harvests them for her remedies. They grow thicker and faster the closer they are to the keep, and she would very much like to know why.
+- **The Deep Channels** — unmarked, ten feet deep at low water and invisible in fog. They are on no map. What the locals know of them, they pass on by word of mouth.
+- **The Marsh Fires** — cold lights that drift over the water on still nights. Thornhaven calls them embers, and nobody follows them.
 
 ## Notes
 
-[[Characters/Mira Ashvale.md]] navigates the marsh in any weather. She is the only person in [[Locations/Thornhaven Village.md]] who will guide people through it, and she charges accordingly.
+[[Characters/Mira Ashvale.md]] crosses the marsh in any weather. Nobody else from [[Locations/Thornhaven Village.md]] will guide strangers through it, and she charges accordingly.
