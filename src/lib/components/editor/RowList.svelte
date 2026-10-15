@@ -194,7 +194,7 @@
 
   const control =
     "flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors " +
-    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "hover:bg-surface-hover hover:text-foreground cursor-pointer " +
     "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground " +
     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 </script>
@@ -355,7 +355,7 @@
         data-row-add
         class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground
              transition-[opacity,color] duration-150 motion-reduce:transition-none
-             hover:bg-muted hover:text-foreground focus-visible:opacity-100
+             hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100
              focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
              {rows.length === 0 ? '' : 'row-list-add-quiet'}"
         onclick={() => insert(rows.length)}

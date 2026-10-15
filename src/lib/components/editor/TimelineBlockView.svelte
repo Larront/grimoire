@@ -193,7 +193,7 @@
           <button
             type="button"
             class="flex size-7 shrink-0 -my-1 items-center justify-center rounded-md text-muted-foreground
-                 transition-colors motion-reduce:transition-none hover:bg-muted hover:text-foreground
+                 transition-colors motion-reduce:transition-none hover:bg-surface-hover hover:text-foreground
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             onclick={() => toggleExpand(i)}
             aria-label={expanded ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
@@ -227,7 +227,7 @@
         <button
           type="button"
           class="timeline-add-description mt-0.5 inline-flex h-6 items-center gap-1 rounded-md px-1 -mx-1 text-xs
-               text-muted-foreground hover:bg-muted hover:text-foreground
+               text-muted-foreground hover:bg-surface-hover hover:text-foreground
                focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           onclick={() => addDescription(i)}
         >

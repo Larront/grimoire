@@ -233,7 +233,7 @@
              focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
              {isDefault
         ? 'bg-primary/12 text-foreground ring-1 ring-primary'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+        : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
       onclick={() => {
         if (!isDefault) onchange(defaultValue === null ? null : storedColorHex(defaultValue));
       }}

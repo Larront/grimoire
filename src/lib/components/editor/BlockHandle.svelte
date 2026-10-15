@@ -210,7 +210,7 @@
   style="left: {left}px; top: {top}px; visibility: {placed ? 'visible' : 'hidden'}"
   class="fixed z-40 flex items-center justify-center rounded
          text-muted-foreground/70 transition-colors
-         hover:bg-muted hover:text-foreground
+         hover:bg-surface-hover hover:text-foreground
          cursor-grab active:cursor-grabbing"
   onmouseenter={() => handle.hover(true)}
   onmouseleave={() => handle.hover(false)}
