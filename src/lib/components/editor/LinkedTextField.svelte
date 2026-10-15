@@ -50,6 +50,7 @@
     focused = false,
     restrict,
     multiline = false,
+    wrap = false,
     readonly = false,
   }: {
     /** The value as the document holds it. The field never mutates it. */
@@ -95,6 +96,13 @@
      * value stay live, because a link is navigation and never an edit.
      */
     readonly?: boolean;
+    /**
+     * A one-line value that wraps where it is drawn, edited as it is drawn. A one-line
+     * input collapsed a three-line Infobox title to a single line scrolled to its end —
+     * the start out of sight and the panel jumping by two lines. The field is a textarea
+     * that sizes to its text; Enter still commits, and a newline can still not be typed.
+     */
+    wrap?: boolean;
   } = $props();
 
   let editing = $state(false);
@@ -266,6 +274,19 @@
     });
   }
 
+  // Ctrl/Cmd+Enter follows the value's first link, the keyboard's way to what the pointer
+  // gets by clicking it: Enter opens the field for editing, so a link in a value — "Born:
+  // [[Thornhaven Village]]" — could not be followed from the keyboard at all. The click
+  // goes to the link itself, so the host's own navigation handles it.
+  function followLinkByKey(e: KeyboardEvent) {
+    if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+    const link = display?.querySelector<HTMLElement>("[data-wiki-link]");
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    link.click();
+  }
+
   // A click that landed on a link is the link's: it bubbles to the host surface's
   // delegated navigation handler instead of opening this field for editing.
   function handleClick(e: MouseEvent) {
@@ -294,14 +315,14 @@
 
 {#if readonly}
   <span class="block w-full whitespace-pre-wrap break-words {className}">{@render drawn()}</span>
-{:else if editing && multiline}
+{:else if editing && (multiline || wrap)}
   <textarea
     bind:this={input}
     value={draft}
     {placeholder}
     aria-label={ariaLabel}
-    rows={Math.max(2, draft.split("\n").length)}
-    class="linked-textarea w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
+    rows={multiline ? Math.max(2, draft.split("\n").length) : 1}
+    class="linked-textarea {multiline ? '' : 'linked-textarea-wrap'} w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
       void offerSuggestions(e.currentTarget);
@@ -333,6 +354,7 @@
            focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
            {className}"
     onclick={handleClick}
+    onkeydown={followLinkByKey}
   >
     <span id={valueId}>{@render drawn()}</span>
   </button>
@@ -367,5 +389,10 @@
   .linked-textarea {
     field-sizing: content;
     min-height: 3lh;
+  }
+
+  .linked-textarea-wrap {
+    min-height: 1lh;
+    resize: none;
   }
 </style>
