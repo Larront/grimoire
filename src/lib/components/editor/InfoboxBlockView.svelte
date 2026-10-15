@@ -16,7 +16,9 @@
   // once. What is *not* here is the float: nothing in this component knows whether the
   // panel is beside the prose or stacked above it, because that is a container query on
   // the block's own column in `app.css` and never an attribute (#148).
-  import { ImagePlus, Maximize2, RefreshCw, X } from "@lucide/svelte";
+  import { tick } from "svelte";
+  import { Heading, ImagePlus, Maximize2, Plus, RefreshCw, X } from "@lucide/svelte";
+  import { linkedPlainText } from "$lib/editor/linked-text";
   import ImageViewer from "$lib/components/editor/ImageViewer.svelte";
   import MissingImage from "$lib/components/editor/MissingImage.svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
@@ -50,7 +52,30 @@
     onCommit($state.snapshot(panel) as Infobox);
   }
 
+  // The title row is drawn when there is a title, or while one is being added. An empty
+  // one used to keep a line at the top of every untitled panel, and the quiet "Add row"
+  // another at the bottom — 71 of Thornhaven's 270px was space for things not shown.
+  // "Add a title", "Add image" and "Add row" now float above the panel on hover or focus.
+  let addingTitle = $state(false);
+  let addImageButton = $state<HTMLButtonElement | null>(null);
+  let announcement = $state("");
+
+  function startTitle() {
+    addingTitle = true;
+  }
+
+  // A title opened and left empty, or abandoned with Escape, commits nothing — so the line
+  // goes once focus has left it, as it would have had the GM never asked. A task later,
+  // so the field's own blur has committed whatever was typed first.
+  function closeEmptyTitle(e: FocusEvent) {
+    const row = e.currentTarget as HTMLElement;
+    setTimeout(() => {
+      if (!row.contains(document.activeElement)) addingTitle = false;
+    }, 0);
+  }
+
   function setTitle(next: string) {
+    addingTitle = false;
     panel.title = next;
     commit();
   }
@@ -76,11 +101,40 @@
    * The caption is the alt text, so removing the image takes it with it — a caption
    * with no image is a record the fence has nowhere to write.
    */
-  function removeImage() {
+  async function removeImage() {
     panel.image = "";
     panel.imageAlt = "";
     commit();
+    // The control pressed has gone with the image; focus goes to the way to add one back
+    // rather than to the page, and the change is said, since nothing on screen asks.
+    announcement = "Image removed. Ctrl+Z to undo";
+    await tick();
+    addImageButton?.focus();
   }
+
+  function addRow() {
+    handleRowChange([...panel.rows, blankLabelledRow()], {
+      kind: "insert",
+      index: panel.rows.length,
+    });
+  }
+
+  // The panel's controls, sized and focused as every note block's are.
+  const control =
+    "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
+    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
+
+  // ── The label column ────────────────────────────────────────────────────────
+  // One column for the whole panel, as wide as its longest label up to a cap, as a wiki
+  // infobox lays out — so values start at one edge and take the rest. It was 30% of each
+  // row: wide where labels are short, and a `Born` beside a three-line value.
+  let measurer = $state<HTMLElement | null>(null);
+  let labelWidth = $state(0);
+  $effect(() => {
+    void panel.rows.map((r) => r.label);
+    void tick().then(() => (labelWidth = measurer?.offsetWidth ?? 0));
+  });
 
   function setImageAlt(next: string) {
     panel.imageAlt = next;
@@ -125,10 +179,11 @@
 
      Deliberately tight — a summary panel is read as a table, and a label sitting a
      third of a column away from the value it names has to be traced across (#175
-     review). The label column is a minimum plus a percentage rather than a fixed
-     width, so `Population` and `Ruler` still line up. -->
+     review). The label column is the panel's, sized to its longest label (capped), so
+     `Population` and `Ruler` line up and values take the rest. Both fields keep their
+     wrapping while edited, and a long unbroken value wraps rather than running out. -->
 {#snippet infoboxRow(row: LabelledRow, i: number)}
-  <div class="flex-1 min-w-0 grid grid-cols-[minmax(3.5rem,30%)_1fr] items-start gap-x-2">
+  <div class="infobox-row flex-1 min-w-0 grid items-start gap-x-2">
     <LinkedTextField
       value={row.label}
       onCommit={(label) => setRow(i, { label })}
@@ -136,6 +191,7 @@
       focused={focusedRow === i}
       ariaLabel={`Row ${i + 1} label`}
       placeholder="Label"
+      wrap
       class="font-sans text-xs leading-snug text-muted-foreground"
     />
     <LinkedTextField
@@ -144,7 +200,8 @@
       restrict={oneLine}
       ariaLabel={`Row ${i + 1} value`}
       placeholder="Value"
-      class="font-sans text-xs leading-snug text-foreground"
+      wrap
+      class="font-sans text-xs leading-snug text-foreground [overflow-wrap:anywhere]"
     />
   </div>
 {/snippet}
@@ -173,43 +230,43 @@
       <div class="w-full h-16 rounded bg-card animate-pulse"></div>
     {/if}
 
-    <!-- Hover-revealed, like the Row List's own controls: a summary panel the GM is
-         reading should not carry buttons they are not reaching for. -->
+    <!-- Hover-revealed: a summary panel the GM is reading should not carry buttons they
+         are not reaching for. Controls over the GM's imagery take the floating level
+         (DESIGN.md §4), at the 28px every block's controls use. -->
     <div
-      class="absolute top-1 right-1 flex items-center gap-0.5 rounded border border-border
-             bg-card/90 px-0.5 py-0.5 opacity-0 transition-opacity duration-150
+      class="absolute top-1 right-1 flex items-center gap-px rounded-md bg-popover p-0.5 shadow-float
+             ring-1 ring-foreground/10 opacity-0 transition-opacity duration-150
              motion-reduce:transition-none group-hover/thumb:opacity-100
              group-focus-within/thumb:opacity-100"
     >
       {#if thumbnailImage.url}
         <button
           type="button"
-          class="p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground
-                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          class={control}
           aria-label="View full size"
           title="Show full screen (or double-click)"
           onclick={() => (viewerOpen = true)}
         >
-          <Maximize2 size={13} />
+          <Maximize2 size={14} />
+        </button>
+        <button
+          type="button"
+          class={control}
+          aria-label="Replace image"
+          title="Replace image"
+          onclick={chooseImage}
+        >
+          <RefreshCw size={14} />
         </button>
       {/if}
       <button
         type="button"
-        class="p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground
-               focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-        aria-label="Replace image"
-        onclick={chooseImage}
-      >
-        <RefreshCw size={13} />
-      </button>
-      <button
-        type="button"
-        class="p-0.5 rounded cursor-pointer text-muted-foreground hover:text-destructive
-               focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+        class="{control} hover:text-destructive"
         aria-label="Remove image"
+        title="Remove image (and its caption)"
         onclick={removeImage}
       >
-        <X size={13} />
+        <X size={14} />
       </button>
     </div>
 
@@ -237,69 +294,120 @@
 {/snippet}
 
 <div
-  class="infobox-block group/panel my-2 select-none rounded-lg border border-border bg-card/40 px-3 py-2"
+  class="infobox-block group/panel relative my-2 select-none rounded-lg border border-border bg-card/40 px-3 py-2"
   contenteditable="false"
+  role="group"
+  aria-label={linkedPlainText(panel.title).trim() || "Infobox"}
+  style="--infobox-label-w: {labelWidth ? `${labelWidth + 2}px` : '30%'}"
 >
+  <!-- The panel's own offers — a title, an image, a row — float above it on hover or
+       focus, rather than keeping lines inside it for buttons that are hidden. -->
+  <div
+    class="absolute right-1 bottom-full z-10 mb-1 flex items-center gap-px rounded-md bg-popover p-0.5
+           shadow-float ring-1 ring-foreground/10 opacity-0 transition-opacity duration-150
+           motion-reduce:transition-none pointer-events-none group-hover/panel:pointer-events-auto
+           group-hover/panel:opacity-100 group-focus-within/panel:pointer-events-auto
+           group-focus-within/panel:opacity-100"
+  >
+    {#if !panel.title && !addingTitle}
+      <button
+        type="button"
+        class={control}
+        aria-label="Add a title"
+        title="Add a title"
+        onclick={startTitle}
+      >
+        <Heading size={14} />
+      </button>
+    {/if}
+    {#if !panel.image}
+      <button
+        bind:this={addImageButton}
+        type="button"
+        class={control}
+        aria-label="Add image"
+        title="Add image"
+        onclick={chooseImage}
+      >
+        <ImagePlus size={14} />
+      </button>
+    {/if}
+    <button
+      type="button"
+      class={control}
+      aria-label="Add row"
+      title="Add row (or Alt+Enter on a row)"
+      onclick={addRow}
+    >
+      <Plus size={14} />
+    </button>
+  </div>
+
   {#if panel.image}
     {@render thumbnail()}
   {/if}
 
-  <!-- The title row, and the panel's own "Add image" offer beside it.
-       The title is the GM's name for the panel, so it carries the world's voice
+  <!-- The title is the GM's name for the panel, so it carries the world's voice
        (DESIGN.md's two-voice rule); the rows around it are structure and stay in the
        tool's. Empty by default — a panel sitting under a note's own heading should not
-       have to say the same thing twice.
-
-       The control sits *in* this row rather than above the title, which is where the
-       "Add image" offer used to be: a full-width dashed button reserved a strip of
-       vertical space in every panel that had no image, so the emptiest panels looked
-       the most cluttered (#175 review). Here it costs part of a line that was going
-       to be drawn anyway, and nothing when it is not being reached for.
-
-       It used to have a trash can for company — the panel's only way out, because a
-       sealed block holds every click and Backspace had no node to take. The gutter
-       handle's menu deletes anything now (#194), so the panel no longer draws its own. -->
-  <div class="mb-1 flex items-start gap-1">
-    <LinkedTextField
-      value={panel.title}
-      onCommit={setTitle}
-      restrict={oneLine}
-      ariaLabel="Infobox title"
-      placeholder="Add a title"
-      class="min-w-0 flex-1 font-heading text-sm leading-snug text-foreground
-             [&_[data-placeholder]]:opacity-0 [&_[data-placeholder]]:transition-opacity
-             group-hover/panel:[&_[data-placeholder]]:opacity-100
-             group-focus-within/panel:[&_[data-placeholder]]:opacity-100"
-    />
-    <div
-      class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150
-             motion-reduce:transition-none group-hover/panel:opacity-100
-             group-focus-within/panel:opacity-100"
-    >
-      {#if !panel.image}
-        <button
-          type="button"
-          class="rounded p-0.5 cursor-pointer text-muted-foreground hover:text-foreground
-                 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1
-                 focus-visible:ring-primary"
-          aria-label="Add image"
-          onclick={chooseImage}
-        >
-          <ImagePlus size={13} aria-hidden="true" />
-        </button>
-      {/if}
+       have to say the same thing twice — and then not drawn at all. -->
+  {#if panel.title || addingTitle}
+    <div class="mb-1" onfocusout={closeEmptyTitle}>
+      <LinkedTextField
+        value={panel.title}
+        onCommit={setTitle}
+        restrict={oneLine}
+        focused={addingTitle}
+        ariaLabel="Infobox title"
+        placeholder="Title"
+        wrap
+        class="font-heading text-sm leading-snug text-foreground"
+      />
     </div>
-  </div>
-
-  {#if panel.rows.length === 0}
-    <div class="font-sans text-xs italic text-muted-foreground mb-1">No rows yet</div>
   {/if}
 
+  {#if panel.rows.length === 0}
+    <div class="font-sans text-xs text-muted-foreground mb-1">No rows yet</div>
+  {/if}
+
+  <!-- Rows offer their moves and delete through one menu each: the panel is ~300px when
+       it floats, and a strip of three controls on every row took 80px of it. -->
   <RowList
     rows={panel.rows}
     row={infoboxRow}
     noun="row"
+    controls="menu"
+    showAdd={false}
+    rowName={(row) => linkedPlainText(row.label)}
     createRow={blankLabelledRow}
     onChange={handleRowChange}
   />
+
+  <!-- Measures the labels for the shared label column: every label, laid out at its own
+       width, out of sight. -->
+  <div
+    bind:this={measurer}
+    class="pointer-events-none invisible absolute top-0 left-0 grid w-max font-sans text-xs leading-snug"
+    aria-hidden="true"
+  >
+    {#each panel.rows as row, i (i)}
+      <span>{linkedPlainText(row.label) || "Label"}</span>
+    {/each}
+  </div>
+
+  <p class="sr-only" aria-live="polite">{announcement}</p>
 </div>
+
+<style>
+  .infobox-block {
+    /* Rows sit a little apart, so a label that wraps reads as one label and not as the
+       next row's; the Row List puts its insert point in this space and nowhere else. */
+    --row-gap: 0.25rem;
+    /* The insert plus sits in the panel's left padding, clear of the labels. */
+    --row-insert-x: -0.375rem;
+  }
+
+  .infobox-block :global(.infobox-row) {
+    grid-template-columns: minmax(3rem, min(var(--infobox-label-w, 30%), 45%)) minmax(0, 1fr);
+  }
+</style>
