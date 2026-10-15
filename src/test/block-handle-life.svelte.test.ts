@@ -308,3 +308,26 @@ describe("the life-cycle's teardown", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("a grip held by the keyboard", () => {
+  it("is not carried off by the pointer while it has the focus", () => {
+    // A stray nudge of the mouse used to move the focused grip to another block, and the
+    // GM's next Enter opened a menu on a block they had not chosen.
+    const life = handle();
+    life.grab(paragraph);
+    life.focus(true);
+    life.point(statblock);
+
+    expect(life.target).toBe(paragraph);
+  });
+
+  it("follows the pointer again once the focus has gone", () => {
+    const life = handle();
+    life.point(paragraph);
+    life.focus(true);
+    life.focus(false);
+    life.point(statblock);
+
+    expect(life.target).toBe(statblock);
+  });
+});

@@ -32,10 +32,13 @@
 // module's, and they are asserted through it.
 import type { Editor } from "@tiptap/core";
 import type { Transaction } from "@tiptap/pm/state";
+import type { Slice } from "@tiptap/pm/model";
 import {
   blockLabel,
+  blockName,
   blockStillThere,
   blockTargetAt,
+  deletionRange,
   endBlockDrag,
   moveBlock,
   releaseBlock,
@@ -48,7 +51,37 @@ import {
   type BlockHandleCommand,
   type BlockHandleMenuSection,
 } from "$lib/editor/block-handle-menu";
-import { toastError } from "$lib/toast";
+import { toastError, toastSuccess, toastUndo } from "$lib/toast";
+
+/**
+ * "Deleted Kobold A · Undo", for the length of the toast.
+ *
+ * Delete was the one action in the menu with nothing on screen to say it had happened:
+ * the block simply went, and the way back was a Ctrl+Z the GM had to trust. DESIGN.md asks
+ * for an undo toast on a low-stakes delete, and this is one.
+ *
+ * Undo is Ctrl+Z when nothing has happened since. If the GM has typed in the meantime,
+ * Ctrl+Z would take their typing back first — so what was removed is put back where it
+ * was instead, its position carried through every change since.
+ */
+function offerUndo(editor: Editor, name: string, removed: { from: number; slice: Slice }) {
+  const after = editor.state.doc;
+  let at = removed.from;
+  const follow = ({ transaction }: { transaction: Transaction }) => {
+    at = transaction.mapping.map(at, -1);
+  };
+  editor.on("transaction", follow);
+  const stop = () => editor.off("transaction", follow);
+  toastUndo(`Deleted ${name}`, stop, () => {
+    stop();
+    if (editor.isDestroyed) return;
+    if (editor.state.doc === after) {
+      editor.commands.undo();
+      return;
+    }
+    editor.view.dispatch(editor.state.tr.insert(at, removed.slice.content));
+  });
+}
 
 /**
  * Long enough for a `mouseleave` on the prose to be followed by a `mouseenter` on the
@@ -288,7 +321,11 @@ export function createBlockHandleLife(
       // The menu owns the target while it is open, and the pointer under it is noise: the
       // menu names one block and every item acts on that block, so a pointer wandering
       // back over the prose underneath must not quietly change which one that is.
-      if (menu) return;
+      //
+      // So does the keyboard, while the grip has its focus: a stray nudge of the mouse used
+      // to carry the focused grip to another block, and the GM's next Enter opened a menu
+      // on a block they had not chosen.
+      if (menu || focused) return;
       if (next) {
         clearTimeout(timer);
         // Only when it is a different block. `blockTargetAt` builds a fresh object for
@@ -385,7 +422,15 @@ export function createBlockHandleLife(
       const acting = menu?.target ?? null;
       closeMenu();
       try {
-        if (editor && acting) await runBlockHandleAction(editor, acting, command);
+        if (editor && acting) {
+          // Taken before the write, so an Undo can put back exactly what went.
+          const range = command === "delete" ? deletionRange(editor.state.doc, acting) : null;
+          const removed = range && { from: range.from, slice: editor.state.doc.slice(range.from, range.to) };
+          const done = await runBlockHandleAction(editor, acting, command);
+          // The two results nothing on screen shows: a block gone, and a clipboard filled.
+          if (done && removed) offerUndo(editor, blockName(acting.node), removed);
+          if (done && command === "copy") toastSuccess(`Copied ${blockName(acting.node)} as Markdown`);
+        }
       } catch {
         toastError(actionFailureMessage(command, acting ? blockLabel(acting.node) : "block"));
       } finally {

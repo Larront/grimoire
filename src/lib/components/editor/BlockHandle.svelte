@@ -23,7 +23,7 @@
   import type { Editor } from "@tiptap/core";
   import {
     blockElementAt,
-    blockLabel,
+    blockName,
     placeHandle,
     selectBlock,
     startBlockDrag,
@@ -56,7 +56,28 @@
   // flash it in the window's corner on the first hover of every note.
   let placed = $state(false);
 
-  const label = $derived(blockLabel(target.node));
+  const label = $derived(blockName(target.node));
+
+  /** Said to a screen reader after a keyboard move: the block went somewhere, or could not. */
+  let announcement = $state("");
+
+  /**
+   * Whether the menu was opened from the keyboard. Escape hands a keyboard user back to the
+   * grip they came from, and a pointer user back to the prose: a mouse-opened menu used to
+   * leave the grip focused, and a focused grip under a moving mouse is one the next Enter
+   * fires on a block the GM never chose.
+   */
+  let openedByKeyboard = false;
+
+  // ── Which block this is ─────────────────────────────────────────────────────
+  //
+  // While the GM is on the grip or its menu is open, the block it holds is outlined. One
+  // grip serves a whole note from out in the margin, and in an encounter two creatures tile
+  // side by side at the same height — the outline is what says which one Delete will take.
+  let onGrip = $state(false);
+  let keyboardFocus = $state(false);
+  const showTarget = $derived(onGrip || keyboardFocus || !!handle.menu);
+  let targetBox = $state<{ left: number; top: number; width: number; height: number } | null>(null);
 
   /** The grip's own box, which is what the menu is anchored off. */
   function anchor() {
@@ -65,8 +86,10 @@
     return { x: box.left, y: box.bottom + 4, anchorTop: box.top - 4 };
   }
 
-  function openMenu() {
+  function openMenu(event?: MouseEvent) {
     if (!el) return;
+    // A click raised by Enter or Space has no pointer behind it.
+    openedByKeyboard = !event || event.detail === 0;
     handle.openMenu(anchor());
   }
 
@@ -85,11 +108,29 @@
   // Focus, once, when the handle was raised by keyboard. A hovered grip must NOT do this:
   // taking focus out of the prose because a pointer crossed a paragraph would move the
   // GM's caret out of the sentence they are typing.
+  //
+  // Not until the grip has been placed *and drawn*. It is `visibility: hidden` until then,
+  // and a hidden button refuses focus — so a grip raised where none was showing appeared
+  // and left the focus in the prose, and the GM had to press the shortcut a second time.
+  // `placed` turns true inside this same update, a tick before the style that shows it.
   $effect(() => {
-    if (handle.grabbed && el) {
-      el.focus();
-      handle.grabHandled();
+    if (!(handle.grabbed && el && placed)) return;
+    void tick().then(() => {
+      el?.focus();
+      if (document.activeElement === el) handle.grabHandled();
+    });
+  });
+
+  // The outline's box, measured when it is shown and whenever the block moves.
+  $effect(() => {
+    target;
+    top;
+    if (!showTarget) {
+      targetBox = null;
+      return;
     }
+    const box = blockElementAt(editor.view, target.pos)?.getBoundingClientRect();
+    targetBox = box ? { left: box.left, top: box.top, width: box.width, height: box.height } : null;
   });
 
   function place() {
@@ -120,10 +161,17 @@
    * not take it away.
    */
   async function move(direction: -1 | 1) {
-    if (!handle.move(direction)) return;
+    if (!handle.move(direction)) {
+      announcement = direction === -1 ? `${label} is already first` : `${label} is already last`;
+      return;
+    }
+    announcement = direction === -1 ? `Moved ${label} up` : `Moved ${label} down`;
     await tick();
     place();
   }
+
+  /** Set by a press on the grip, so the focus that press brings is known to be a click's. */
+  let pressed = false;
 
   // ── Coming and going ────────────────────────────────────────────────────────
   //
@@ -192,6 +240,18 @@
         event.preventDefault();
         handle.release();
         break;
+      default:
+        // Undo and redo reach the note from the grip as they do from the text. They did
+        // nothing here, so a GM who moved a block and wanted it back had to Escape first.
+        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+          const key = event.key.toLowerCase();
+          const redo = key === "y" || (key === "z" && event.shiftKey);
+          if (key === "z" || key === "y") {
+            event.preventDefault();
+            if (redo) editor.commands.redo();
+            else editor.commands.undo();
+          }
+        }
     }
   }
 </script>
@@ -206,21 +266,40 @@
   aria-expanded={!!handle.menu}
   aria-controls={handle.menu ? "block-handle-menu" : undefined}
   aria-describedby="block-handle-hint"
-  title="Click for actions · drag to move · ↑ ↓ to reorder"
+  aria-keyshortcuts="Control+Shift+H"
+  title="Click for actions · drag to move · ↑ ↓ to reorder · Ctrl+Shift+H from the text"
   style="left: {left}px; top: {top}px; visibility: {placed ? 'visible' : 'hidden'}"
-  class="fixed z-40 flex items-center justify-center rounded
-         text-muted-foreground/70 transition-colors
+  class="fixed z-40 flex items-center justify-center rounded-md
+         text-muted-foreground transition-colors
          hover:bg-surface-hover hover:text-foreground
          cursor-grab active:cursor-grabbing"
-  onmouseenter={() => handle.hover(true)}
-  onmouseleave={() => handle.hover(false)}
-  onfocus={() => handle.focus(true)}
-  onblur={() => handle.focus(false)}
-  onmousedown={() => selectBlock(editor, target)}
+  onmouseenter={() => {
+    onGrip = true;
+    handle.hover(true);
+  }}
+  onmouseleave={() => {
+    onGrip = false;
+    handle.hover(false);
+  }}
+  onfocus={() => {
+    // Only the keyboard's focus holds the grip to its block: a click focuses the button
+    // too, and a grip that ignored the pointer after every click would stop following it.
+    keyboardFocus = !pressed;
+    pressed = false;
+    handle.focus(keyboardFocus);
+  }}
+  onblur={() => {
+    keyboardFocus = false;
+    handle.focus(false);
+  }}
+  onmousedown={() => {
+    pressed = true;
+    selectBlock(editor, target);
+  }}
   ondragstart={handleDragStart}
   ondragend={() => handle.endDrag()}
   onkeydown={handleKeydown}
-  onclick={() => (handle.menu ? dismissMenu() : openMenu())}
+  onclick={(event) => (handle.menu ? dismissMenu() : openMenu(event))}
   in:grip|global
   out:grip|global
 >
@@ -236,6 +315,19 @@
 <span id="block-handle-hint" class="sr-only">
   Arrow up and down move this block among its siblings.
 </span>
+<span class="sr-only" aria-live="polite">{announcement}</span>
+
+<!-- The block the grip holds, outlined while the GM is on the grip or in its menu. A
+     neutral rule, not crimson: crimson is the block *selected*, which this is not yet. -->
+{#if targetBox}
+  <div
+    class="pointer-events-none fixed z-30 rounded-md ring-1 ring-foreground/25"
+    style="left: {targetBox.left - 4}px; top: {targetBox.top - 4}px;
+           width: {targetBox.width + 8}px; height: {targetBox.height + 8}px"
+    aria-hidden="true"
+    data-block-handle-target
+  ></div>
+{/if}
 
 <!-- Click and not pointerdown is what keeps this out of the drag's way: a completed drag
      raises no click at all, so the two gestures share one button without a timer or a
@@ -247,7 +339,11 @@
     anchor={handle.menu.anchor}
     trigger={el}
     onSelect={(command) => void handle.choose(command)}
-    onClose={(returnFocus) => (returnFocus ? dismissMenu() : handle.closeMenu())}
+    onClose={(returnFocus) => {
+      if (!returnFocus) handle.closeMenu();
+      else if (openedByKeyboard) dismissMenu();
+      else handle.release();
+    }}
   />
 {/if}
 

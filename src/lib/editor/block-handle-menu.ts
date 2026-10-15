@@ -23,11 +23,12 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { BlockIconName } from "$lib/components/editor/block-icons";
 import { nameAndIcon } from "./block-vocabulary";
 import {
-  blockLabel,
   blockMarkdown,
+  blockName,
   canTurnInto,
   deleteBlock,
   duplicateBlock,
+  textOf,
   turnInto,
   turnIntoKindOf,
   type BlockTarget,
@@ -115,11 +116,13 @@ export function blockHandleMenuSections(
   doc: ProseMirrorNode,
   target: BlockTarget,
 ): BlockHandleMenuSection[] {
-  const what = blockLabel(target.node);
+  const what = blockName(target.node);
   const sections: BlockHandleMenuSection[] = [];
 
-  if (canTurnInto(target.node)) {
-    const current = turnIntoKindOf(doc, target);
+  // A bullet is held as its list item; what it can turn into is its line of text's.
+  const text = textOf(target);
+  if (canTurnInto(text.node)) {
+    const current = turnIntoKindOf(doc, text);
     sections.push({
       title: "Turn into",
       items: TURN_INTO.map((into) => ({
@@ -199,8 +202,9 @@ export async function runBlockHandleAction(
     // Already this kind: nothing to do, and emphatically not the toggle the underlying
     // command would perform — `toggleBulletList` on a bullet list lifts it back out, so
     // choosing the item that names what the block already is would un-list it.
-    if (turnIntoKindOf(editor.state.doc, target) === command.turnInto) return false;
-    return turnInto(editor, target, command.turnInto);
+    const text = textOf(target);
+    if (turnIntoKindOf(editor.state.doc, text) === command.turnInto) return false;
+    return turnInto(editor, text, command.turnInto);
   }
 
   switch (command) {
