@@ -299,6 +299,17 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 
 560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
 
+### Slash Menu
+
+What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at the caret — below it, or above when it would not fit — and it follows the caret when the note scrolls.
+
+- **A bare `/`:** Grimoire's own blocks first (Statblock, Scene, Infobox, Timeline, Image, Callout), then Text, then List, under 12px sentence-case headings in Ember Muted. The ten callout types fold into one Callout row; typing a type's name reaches it.
+- **Typing:** one ranked list without headings — the label being typed first, then a word of it, then a keyword. A row whose label alone is ambiguous says what it is at its right ("Callout").
+- **Statblock rows:** each says what Enter stamps — the vault's default shape or "Blank". Four letters of "statblock" lists the presets beneath it. After a name (`/statblock Goblin`) the first row is a statblock titled with it; presets the name starts sit below, never in Enter's place.
+- **Selection:** the row Enter runs is Crimson Tint; the pointer moving onto a row selects it, so one row is lit. No match says "No blocks match …", and Enter then breaks the line.
+- **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
+- **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
+
 ### Scene Player (Signature Component)
 
 A scene embedded in a note (`/scene`), played from the note the GM is reading at the table. In the page: the shared note-block frame, with a crimson border while its scene plays.
@@ -416,6 +427,7 @@ One component (`VolumeSlider`) for every level in the app: the scene editor, the
 
 - **Don't** use leather textures, chrome bevels, glowing rune borders, or Diablo-style ornamentation. The game lives in the GM's content, not in the interface chrome.
 - **Don't** use parchment backgrounds, ambient fog overlays, or calligraphy fonts as structural UI elements. Atmosphere belongs to the content layer.
+- **Don't** hover or select with `bg-muted`. It is the same Iron Raised as a card, a popover and a menu, so on any of them it draws nothing. Hover takes the Hover Overlay (`bg-surface-hover`) on any surface; the active row of a list or menu takes Crimson Tint (`bg-surface-selected`).
 - **Don't** invent a shadow. If a surface floats it takes `shadow-float`; if it is in the page it takes none. No `backdrop-blur` anywhere.
 - **Don't** introduce a second accent color. The five presets are a single `--primary` family; they are not a multi-color palette.
 - **Don't** use color to categorize files, tags, or folders. Shape and text only.

@@ -623,6 +623,19 @@
   display: block;
 }
 
+/* A selected block — a statblock, an infobox, a divider — is what the next keystroke
+   replaces, so it has to look selected. Nothing drew it: ProseMirror's own stylesheet is
+   not loaded, and a statblock just stamped from the slash menu sat selected and unmarked
+   until the GM typed over it. The focus ring's crimson, which is the Signal Rule's
+   "selected". A block that draws its own selection (the image) never gets the class.
+   Only while the editor has focus — only then can a keystroke replace it, and a note
+   whose first block is an Infobox opens with that block selected. */
+.tiptap.ProseMirror-focused .ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-lg);
+}
+
 /* Pane scroll container — scrollbar sits at the pane edge, fades in on hover. Notes
    first; the scene editor wears the same one rather than the platform's light bar. */
 [data-note-scroll],
