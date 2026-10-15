@@ -75,7 +75,7 @@
         onclick={togglePlay}
         disabled={isEmpty && !isPlaying}
         title={isEmpty && !isPlaying ? "No tracks yet — open the scene to add some" : undefined}
-        class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+        class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                disabled:cursor-not-allowed disabled:opacity-40
                focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         aria-label={isPlaying ? `Stop ${scene.name}` : `Play ${scene.name}`}
@@ -110,7 +110,7 @@
       <button
         type="button"
         onclick={() => (changeOpen = !changeOpen)}
-        class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+        class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         aria-label="Change Scene"
         aria-expanded={changeOpen}
@@ -135,7 +135,7 @@
       <button
         type="button"
         onclick={onRemove}
-        class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+        class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         aria-label="Remove Scene-link"
         title="Remove link"

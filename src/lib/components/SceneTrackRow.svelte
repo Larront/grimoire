@@ -88,13 +88,13 @@
   }
 
   const button =
-    "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted " +
+    "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover " +
     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 </script>
 
 <div
   class={cn(
-    "flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-muted/50",
+    "flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-surface-hover",
     className,
   )}
 >

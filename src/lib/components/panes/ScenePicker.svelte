@@ -146,7 +146,7 @@
           onclick={() => pick(i)}
           onmousemove={() => (active = i)}
           class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors
-                 {active === i ? 'bg-muted text-foreground' : 'text-muted-foreground'}"
+                 {active === i ? 'bg-surface-selected text-foreground' : 'text-muted-foreground'}"
         >
           <span
             class="flex size-6 shrink-0 items-center justify-center rounded-sm"
@@ -176,7 +176,7 @@
       onclick={() => pick(filtered.length)}
       onmousemove={() => (active = filtered.length)}
       class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors
-             {active === filtered.length ? 'bg-muted text-foreground' : 'text-muted-foreground'}"
+             {active === filtered.length ? 'bg-surface-selected text-foreground' : 'text-muted-foreground'}"
     >
       <span
         class="flex size-6 shrink-0 items-center justify-center rounded-sm border border-dashed border-border"

@@ -234,7 +234,7 @@
   // app's outline ring), with a tooltip each: they are icons only.
   const control =
     "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
-    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "hover:bg-surface-hover hover:text-foreground cursor-pointer " +
     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 
   /** The arithmetic input exists only while it is open, so its arrival is its cue. */

@@ -673,7 +673,7 @@
           <Popover.Trigger
             data-appearance-btn
             class="mb-1 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-popover px-2.5 text-[0.8125rem] font-medium text-foreground
-                   shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-muted
+                   shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-surface-hover
                    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <Palette class="size-3.5 text-muted-foreground" />
@@ -731,7 +731,7 @@
                   class="flex size-9 items-center justify-center rounded-md transition-colors
                          {!scene.thumbnail_icon
                     ? 'bg-primary/12 text-foreground ring-1 ring-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+                    : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
                   onclick={() => applyIcon(null)}
                 >
                   <DEFAULT_SCENE_ICON class="size-4" />
@@ -747,7 +747,7 @@
                     class="flex size-9 items-center justify-center rounded-md transition-colors
                            {chosen
                       ? 'bg-primary/12 text-foreground ring-1 ring-primary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+                      : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
                     onclick={() => applyIcon(name)}
                   >
                     <Icon class="size-4" />
@@ -823,7 +823,7 @@
           <span class="text-xs font-semibold text-muted-foreground @max-md:sr-only">Master</span>
           <button
             type="button"
-            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             onclick={() => audioEngine.toggleMasterMute()}
             aria-label={audioEngine.isMasterMuted ? "Unmute all" : "Mute all"}
@@ -1022,7 +1022,7 @@
                     <DropdownMenu.Trigger
                       data-slot-menu={slot.id}
                       class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors
-                             hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                             hover:bg-surface-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       aria-label="More for {slot.label}"
                       onkeydown={(e: KeyboardEvent) => {
                         if (e.key === "F2") {
@@ -1129,7 +1129,7 @@
               class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors
                      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring {isAudioDropTarget
                 ? 'border-foreground/40 bg-muted/60'
-                : 'border-border hover:border-foreground/30 hover:bg-muted/40'}"
+                : 'border-border hover:border-foreground/30 hover:bg-surface-hover'}"
             >
               <Music2
                 class="mx-auto mb-2 size-6 text-muted-foreground transition-colors group-hover:text-foreground"

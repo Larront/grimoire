@@ -122,7 +122,7 @@
   // The panel's controls, sized and focused as every note block's are.
   const control =
     "flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors " +
-    "hover:bg-muted hover:text-foreground cursor-pointer " +
+    "hover:bg-surface-hover hover:text-foreground cursor-pointer " +
     "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring";
 
   // ── The label column ────────────────────────────────────────────────────────

@@ -233,7 +233,7 @@
           onclick={handlePlayPause}
           aria-disabled={isThisSceneLoading || (isEmpty && !isThisSceneActive)}
           title={isEmpty && !isThisSceneActive ? "No tracks yet" : undefined}
-          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                  aria-disabled:cursor-default aria-disabled:opacity-50
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           aria-label={isThisScenePlaying
@@ -254,7 +254,7 @@
         {#if isThisSceneActive}
           <button
             onclick={handleStopScene}
-            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                    focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             aria-label="Stop {sceneLabel}"
           >
@@ -268,7 +268,7 @@
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div
           class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 transition-colors
-                 {isEmpty && !isThisSceneActive ? '' : 'cursor-pointer hover:bg-muted/60'}"
+                 {isEmpty && !isThisSceneActive ? '' : 'cursor-pointer hover:bg-surface-hover'}"
           onclick={handlePlayPause}
         >
           <span
@@ -299,7 +299,7 @@
 
         <button
           onclick={openBeside}
-          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           aria-label="Open {sceneLabel} beside this note"
           title="Open beside this note"
@@ -317,7 +317,7 @@
             {#snippet child({ props })}
               <button
                 {...props}
-                class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+                class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                        focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
                 aria-label="Change scene"
                 title="Change scene"
@@ -346,7 +346,7 @@
 
         <button
           onclick={toggleExpanded}
-          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted
+          class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
           aria-expanded={expanded}

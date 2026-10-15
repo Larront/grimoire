@@ -183,7 +183,7 @@
                  font-sans text-[0.8125rem]
                  {item.command === 'delete'
             ? 'text-destructive/90 hover:bg-destructive/10 focus:bg-destructive/10 hover:text-destructive focus:text-destructive'
-            : 'text-muted-foreground hover:bg-muted/60 focus:bg-muted/60 hover:text-foreground focus:text-foreground'}
+            : 'text-muted-foreground hover:bg-surface-hover focus:bg-surface-selected hover:text-foreground focus:text-foreground'}
                  {item.current ? 'text-foreground' : ''}
                  outline-none"
           onclick={() => onSelect(item.command)}

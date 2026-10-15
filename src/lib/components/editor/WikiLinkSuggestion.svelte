@@ -49,8 +49,8 @@
         bind:this={itemRefs[i]}
         class="flex items-start gap-2.5 w-full px-3 py-2 text-left transition-colors
                {i === selectedIndex
-          ? 'bg-muted text-foreground'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
+          ? 'bg-surface-selected text-foreground'
+          : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
         role="option"
         aria-selected={i === selectedIndex}
         onclick={() => onSelect(item)}

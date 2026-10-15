@@ -41,7 +41,7 @@
     type="button"
     data-replace-btn
     class="mt-0.5 inline-flex h-7 items-center rounded-md border border-border bg-background px-2.5 text-xs
-           text-foreground transition-colors hover:bg-muted cursor-pointer
+           text-foreground transition-colors hover:bg-surface-hover cursor-pointer
            focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
     onmousedown={(e) => e.preventDefault()}
     onclick={onReplace}

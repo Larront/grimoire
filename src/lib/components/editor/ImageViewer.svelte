@@ -96,7 +96,7 @@
   <button
     type="button"
     class="fixed top-4 right-4 z-10 flex size-9 items-center justify-center rounded-md bg-popover
-           text-foreground shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-muted
+           text-foreground shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-surface-hover
            focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
     aria-label="Close"
     title="Close (Esc)"
