@@ -50,6 +50,7 @@ import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { BLOCK_WORDS } from "$lib/editor/block-vocabulary";
+import { linkedPlainText } from "$lib/editor/linked-text";
 
 /** A block the handle can act on, and where it starts. */
 export interface BlockTarget {
@@ -117,8 +118,13 @@ export function targetFromCoords(
 export interface HoverZone {
   /** The prose's box — where the words are, and what the pointer's x is clamped into. */
   prose: Box;
-  /** The gutter's outer edge: the padded column's own left. */
-  columnLeft: number;
+  /**
+   * The gutter's outer edge: the pane's own left, which a pointer may not pass and still
+   * be hovering the note. Not the padded column's: a callout holding two creatures breaks
+   * out past the column (app.css), and a floor at the column's edge put the grip inside the
+   * callout, on the creature's name, and made the callout's overhang a dead zone.
+   */
+  gutterLeft: number;
 }
 
 /**
@@ -155,9 +161,9 @@ export function hoverProbeAt(
   coords: { left: number; top: number },
   zone: HoverZone,
 ): HoverProbe | null {
-  const { prose, columnLeft } = zone;
+  const { prose, gutterLeft } = zone;
   if (coords.top < prose.top || coords.top > prose.top + prose.height) return null;
-  if (coords.left < columnLeft || coords.left > prose.left + prose.width) return null;
+  if (coords.left < gutterLeft || coords.left > prose.left + prose.width) return null;
   const inside = prose.left + PROBE_INSET;
   return coords.left < inside
     ? { left: inside, top: coords.top, fromGutter: true }
@@ -168,6 +174,16 @@ export function hoverProbeAt(
 export function noteColumn(view: EditorView): HTMLElement {
   const dom = view.dom as HTMLElement;
   return dom.closest<HTMLElement>("[data-note-column]") ?? dom;
+}
+
+/**
+ * The left edge nothing of the handle's may cross: the pane the note scrolls in, or the
+ * column where there is no such pane. Wider than the column on purpose — see `gutterLeft`.
+ */
+function gutterLeftOf(view: EditorView): number {
+  const column = noteColumn(view);
+  const pane = column.closest<HTMLElement>("[data-note-scroll], [data-pane-scroll]") ?? column;
+  return pane.getBoundingClientRect().left;
 }
 
 /** Every block child of `parent`, with the box each one is drawn as. */
@@ -289,6 +305,62 @@ function outOfList(view: EditorView, target: BlockTarget, top: number): BlockTar
 }
 
 /**
+ * A bullet's line held as the **list item**, not the paragraph inside it.
+ *
+ * The handle used to stop at the paragraph, so every action but Turn into reached the
+ * wrong thing: Delete emptied the text and left the bullet, Duplicate put a second,
+ * unbulleted paragraph inside the same bullet, and ↑/↓ did nothing at all — a bullet's
+ * paragraph has no siblings to trade places with. The item is what a GM means by "this
+ * bullet". Only its first line lifts: a second paragraph inside one item is a block of its
+ * own, and a nested list's items are items of their own.
+ *
+ * Turn into still reaches the text through `textOf`.
+ */
+export function asListItem(doc: ProseMirrorNode, target: BlockTarget): BlockTarget {
+  if (!target.node.isTextblock) return target;
+  const $pos = doc.resolve(target.pos);
+  if ($pos.depth < 1 || $pos.parent.type.name !== "listItem" || $pos.index() !== 0) {
+    return target;
+  }
+  return { pos: $pos.before(), node: $pos.parent };
+}
+
+/** The text a block's Turn into acts on: a list item's first line, or the block itself. */
+export function textOf(target: BlockTarget): BlockTarget {
+  if (target.node.type.name !== "listItem") return target;
+  const first = target.node.firstChild;
+  return first?.isTextblock ? { pos: target.pos + 1, node: first } : target;
+}
+
+/**
+ * A floated block level with the pointer, when the pointer is in the strip just left of
+ * it — where its grip is drawn.
+ *
+ * A floated panel's grip sits beside the panel rather than out in the note's gutter, and
+ * the strip between the panel and the text is, to `posAtCoords`, the paragraph the panel
+ * floats beside. A GM reaching left from the panel for its grip would hand the grip to that
+ * paragraph mid-reach, so the strip is the panel's.
+ */
+function floatedBlockAt(
+  view: EditorView,
+  coords: { left: number; top: number },
+  reach: number,
+): BlockTarget | null {
+  const prose = view.dom as HTMLElement;
+  for (const el of prose.querySelectorAll<HTMLElement>("[data-note-block]")) {
+    if (getComputedStyle(el).float !== "right") continue;
+    const box = el.getBoundingClientRect();
+    if (coords.top < box.top || coords.top > box.bottom) continue;
+    if (coords.left < box.left - reach || coords.left >= box.left) continue;
+    return targetFromCoords(view, { left: box.left + box.width / 2, top: box.top + 1 });
+  }
+  return null;
+}
+
+/** How far left of a floated block its grip reaches: the gap and the grip, from app.css. */
+const FLOATED_GRIP_REACH = 24;
+
+/**
  * The block a pointer anywhere in the column is hovering — the gutter included.
  *
  * The measuring half of `hoverProbeAt`, kept beside `placeHandle` and for the same reason:
@@ -307,15 +379,19 @@ export function targetFromPointer(
       width: prose.width,
       height: prose.height,
     },
-    columnLeft: noteColumn(view).getBoundingClientRect().left,
+    gutterLeft: gutterLeftOf(view),
   });
   if (!probe) return null;
 
+  const floated = floatedBlockAt(view, coords, FLOATED_GRIP_REACH);
+  if (floated) return floated;
+
   const target = targetFromCoords(view, probe);
   if (!target) return null;
-  // The gutter answer needs the descent; both answers need to be out of a list.
+  // The gutter answer needs the descent; both answers need to be out of a list, and a
+  // bullet's line is its item.
   const inside = probe.fromGutter ? innermostAtHeight(view, target, probe.top) : target;
-  return outOfList(view, inside, probe.top);
+  return asListItem(view.state.doc, outOfList(view, inside, probe.top));
 }
 
 // ─── Acting on one ────────────────────────────────────────────────────────────
@@ -420,13 +496,26 @@ export function releaseBlock(editor: Editor): void {
   editor.commands.focus();
 }
 
+/**
+ * What deleting a block removes. Its own range, except that a list's only item goes with
+ * its list: a list cannot be empty, and deleting the item alone would leave the schema to
+ * put an empty bullet back in its place.
+ */
+export function deletionRange(doc: ProseMirrorNode, target: BlockTarget): { from: number; to: number } {
+  const $pos = doc.resolve(target.pos);
+  return target.node.type.name === "listItem" && $pos.parent.childCount === 1 && $pos.depth >= 1
+    ? { from: $pos.before(), to: $pos.after() }
+    : { from: target.pos, to: target.pos + target.node.nodeSize };
+}
+
 export function deleteBlock(editor: Editor, target: BlockTarget): boolean {
   if (!blockStillThere(editor.state.doc, target)) return false;
+  const whole = deletionRange(editor.state.doc, target);
   return editor
     .chain()
     .command(({ tr }) => {
       closeHistory(tr);
-      tr.delete(target.pos, target.pos + target.node.nodeSize);
+      tr.delete(whole.from, whole.to);
       return true;
     })
     .focus()
@@ -458,7 +547,14 @@ export function duplicateBlock(editor: Editor, target: BlockTarget): boolean {
 export function blockMarkdown(editor: Editor, target: BlockTarget): string | null {
   const manager = editor.markdown;
   if (!manager || !blockStillThere(editor.state.doc, target)) return null;
-  return manager.serialize({ type: "doc", content: [target.node.toJSON()] }).trimEnd();
+  // A list item is written as a one-item list of its own kind — a bare item has no
+  // markdown, and "- " or "1. " is what the GM would have typed.
+  const node = target.node.toJSON();
+  const content =
+    target.node.type.name === "listItem"
+      ? { type: editor.state.doc.resolve(target.pos).parent.type.name, content: [node] }
+      : node;
+  return manager.serialize({ type: "doc", content: [content] }).trimEnd();
 }
 
 /**
@@ -760,6 +856,27 @@ export function blockLabel(node: ProseMirrorNode): string {
   return BLOCK_WORDS[node.type.name] ?? "block";
 }
 
+/**
+ * What the grip and its menu call the block: its own name where it has one — a creature's,
+ * a callout's title, an infobox's — and otherwise what kind of block it is.
+ *
+ * "Delete statblock" said nothing about *which*: an encounter of four kobolds has four
+ * grips all reading the same, and when two cards tile side by side the GM's only check
+ * that the grip is the one they meant is the name it says.
+ */
+export function blockName(node: ProseMirrorNode): string {
+  const own =
+    node.type.name === "statblockBlock"
+      ? (node.attrs.name as string | null)
+      : node.type.name === "infoboxBlock"
+        ? (node.attrs.title as string | null)
+        : node.type.name === "blockquote"
+          ? (node.attrs.calloutTitle as string | null)
+          : null;
+  const plain = own ? linkedPlainText(own).trim() : "";
+  return plain || blockLabel(node);
+}
+
 // ─── Where it goes ────────────────────────────────────────────────────────────
 
 export interface Box {
@@ -783,8 +900,8 @@ export interface HandleGeometry {
   handle: { width: number; height: number };
   /** The space between the handle and the block, from `--block-handle-gap`. */
   gap: number;
-  /** The left edge the handle may not cross: the padded column's own. */
-  columnLeft: number;
+  /** The left edge the handle may not cross: the pane's own (see `gutterLeft`). */
+  gutterLeft: number;
 }
 
 export interface HandlePlacement {
@@ -810,15 +927,18 @@ export interface HandlePlacement {
  *     its text — a callout's header, a statblock's card — where it drifts up out of the
  *     block by however much padding is in the way.
  *
- * `columnLeft` is the floor. The gutter is sized in CSS (`--block-gutter`) so this never
- * binds in the app, but a pane can be dragged narrower than any number a stylesheet
- * commits to, and a handle half off the pane is worse than one a little close to the
- * prose.
+ * `gutterLeft` is the floor, and it is the *pane's* edge. It was the padded column's, and
+ * a callout holding two creatures breaks out past the column — so the floor pulled the
+ * grip back inside the callout, onto the first creature's name, and for a card tiled in
+ * the second column onto the *other* creature's. The encounter breakout always leaves the
+ * pane a gutter's width either side, so the floor binds only for a pane dragged narrower
+ * than a stylesheet can plan for, where a handle half off the pane is worse than one a
+ * little close to the prose.
  */
 export function handlePlacement(geometry: HandleGeometry): HandlePlacement {
-  const { blockLeft, firstLine, handle, gap, columnLeft } = geometry;
+  const { blockLeft, firstLine, handle, gap, gutterLeft } = geometry;
   return {
-    left: Math.max(columnLeft, blockLeft - gap - handle.width),
+    left: Math.max(gutterLeft, blockLeft - gap - handle.width),
     top: firstLine.top + (firstLine.height - handle.height) / 2,
   };
 }
@@ -852,6 +972,20 @@ function contentRects(el: HTMLElement): DOMRect[] {
 const FIRST_LINE_DEPTH = 6;
 
 /**
+ * The first child that is drawn in the block rather than over it. A floating toolbar is
+ * absolutely positioned and comes first in the markup — an Infobox's add bar floats above
+ * the panel — and descending into it put the grip beside the toolbar, above the frame.
+ */
+function firstInFlowChild(el: HTMLElement): HTMLElement | null {
+  for (let child = el.firstElementChild; child; child = child.nextElementSibling) {
+    if (!(child instanceof HTMLElement)) continue;
+    const position = getComputedStyle(child).position;
+    if (position !== "absolute" && position !== "fixed") return child;
+  }
+  return null;
+}
+
+/**
  * The block's first line box: where the top of it is, and how tall.
  *
  * A range over an element's contents fragments into one rect per line, which is what makes
@@ -877,8 +1011,8 @@ function firstLineBox(dom: HTMLElement, handleHeight: number): { top: number; he
     if (first && first.height <= lineHeightOf(el) + 1) {
       return { top: first.top, height: first.height };
     }
-    const child = el.firstElementChild;
-    if (!(child instanceof HTMLElement)) break;
+    const child = firstInFlowChild(el);
+    if (!child) break;
     el = child;
   }
   // Nothing in there reads as a line — an empty block, chrome built out of rows taller than
@@ -955,16 +1089,17 @@ export function placeHandle(
   const block = dom.getBoundingClientRect();
   const handle = handleEl.getBoundingClientRect();
   const gap = parseFloat(getComputedStyle(handleEl).getPropertyValue("--block-handle-gap"));
-  // The padded column, not the prose: its left edge is the pane's, and the gutter is
-  // precisely the space between the two.
-  const column = noteColumn(view);
+  // A floated block — an Infobox or an image beside the text — takes its grip at its own
+  // edge, the one exception to the single column: out in the gutter the grip sat level
+  // with the paragraph the panel floats beside, and read as that paragraph's.
+  const floated = getComputedStyle(dom).float === "right";
 
   return handlePlacement({
-    blockLeft: leadingEdgeOf(view, dom, block.left),
+    blockLeft: floated ? block.left : leadingEdgeOf(view, dom, block.left),
     firstLine: firstLineBox(dom, handle.height),
     handle: { width: handle.width, height: handle.height },
     gap: Number.isFinite(gap) ? gap : 0,
-    columnLeft: column.getBoundingClientRect().left,
+    gutterLeft: gutterLeftOf(view),
   });
 }
 
@@ -1012,7 +1147,7 @@ export const BlockHandle = Extension.create<BlockHandleOptions>({
         const { view } = editor;
         const target = blockTargetAt(view.state.doc, view.state.selection.from);
         if (!target) return false;
-        onGrab(target, view);
+        onGrab(asListItem(view.state.doc, target), view);
         return true;
       },
     };
