@@ -12,7 +12,8 @@
   // becomes a document write is not this list's call — it is `settleRowChange`'s
   // rule, and each block spells the focus half of it its own way.
   import { tick, type Snippet } from "svelte";
-  import { ArrowDown, ArrowUp, Plus, Trash2 } from "@lucide/svelte";
+  import { ArrowDown, ArrowUp, Ellipsis, Plus, Trash2 } from "@lucide/svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import type { RowChange } from "$lib/editor/row-list";
   import { isTypingIn } from "$lib/utils/keyboard";
 
@@ -24,6 +25,8 @@
     noun = "row",
     rowName,
     addClass = "",
+    controls = "gutter",
+    showAdd = true,
   }: {
     /** The rows, in order. The consumer owns them; this never mutates them. */
     rows: T[];
@@ -51,6 +54,19 @@
     rowName?: (row: T, index: number) => string;
     /** Classes for the trailing Add control, so a block can align it with its content. */
     addClass?: string;
+    /**
+     * How a row offers Move up, Move down and Delete. `gutter`: three buttons in a strip
+     * at the row's right. `menu`: one "⋯" button opening them, for a block too narrow to
+     * give every row ~80px of controls it shows 95% of the time — an Infobox floated at
+     * 300px lost 29% of its width to the gutter, and its values wrapped to match.
+     */
+    controls?: "gutter" | "menu";
+    /**
+     * Whether the list ends with its own "Add …". A block with an Add of its own
+     * elsewhere turns it off, rather than reserve a line for a button it hides; an empty
+     * list always shows it.
+     */
+    showAdd?: boolean;
   } = $props();
 
   // There was an `onRowFocusOut` here, reporting focus leaving a row so a consumer could
@@ -81,7 +97,9 @@
   async function focusControl(index: number, action: string) {
     await tick();
     const el = rowElement(index);
-    const control = el?.querySelector<HTMLButtonElement>(`[data-row-action="${action}"]`);
+    const control =
+      el?.querySelector<HTMLButtonElement>(`[data-row-action="${action}"]`) ??
+      el?.querySelector<HTMLButtonElement>('[data-row-action="menu"]');
     if (control && !control.disabled) {
       control.focus();
       return;
@@ -184,11 +202,24 @@
 <!-- An insert point between two rows: hovering the gap draws a line exactly where the
      new row will go, with a plus at the block's chosen spot on it (a timeline puts it on
      its spine). Only the plus inserts — the gap itself is not a target, which is what
-     kept the old full-width strips planting rows on a stray click. Not a Tab stop: the
-     keyboard inserts with Alt+Enter from the row above, and the list ends with Add. -->
+     kept the old full-width strips planting rows on a stray click. Not a Tab stop, and
+     hidden from assistive tech: the keyboard inserts with Alt+Enter from the row above,
+     and the list ends with Add.
+
+     The gap is real space between rows (`--row-gap`, a block's to set), and the hover
+     zone is that space and nothing more. It used to be a 16px band laid over the bottom
+     of the row above; where rows touch, as an Infobox's did, it sat on the row's text and
+     took the clicks meant for it — the lower half of a link did nothing. The first gap
+     has no space of its own, so its zone sits in the block's padding above the first row. -->
 {#snippet gap(index: number)}
-  <div class="row-list-gap relative h-0">
-    <div class="group/gap absolute inset-x-0 -top-4 z-10 h-4">
+  <div
+    class="row-list-gap relative"
+    style="height: {index === 0 ? '0px' : 'var(--row-gap, 0.5rem)'}"
+  >
+    <div
+      class="group/gap absolute inset-x-0 z-10 {index === 0 ? '-top-2 h-2' : 'inset-y-0'}"
+      aria-hidden="true"
+    >
       <span
         class="pointer-events-none absolute right-0 top-1/2 border-t border-dashed border-primary/70
                opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-hover/gap:opacity-100"
@@ -211,9 +242,8 @@
   </div>
 {/snippet}
 
-<!-- The rows. Each row's own controls — Move up, Move down, Delete — sit in a gutter at
-     its right, in the flow, so they never cover what the row says; revealed on hover or
-     focus. -->
+<!-- The rows. Each row's own controls — Move up, Move down, Delete — sit at its right,
+     in the flow, so they never cover what the row says; revealed on hover or focus. -->
 <div class="row-list" bind:this={list}>
   {#each rows as item, i (i)}
     {@render gap(i)}
@@ -234,65 +264,108 @@
         {@render row(item, i)}
       </div>
 
-      <div
-        class="flex shrink-0 items-center opacity-0 transition-opacity duration-150 motion-reduce:transition-none
-               group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        <button
-          type="button"
-          class={control}
-          data-row-action="up"
-          disabled={i === 0}
-          onclick={() => move(i, i - 1, "up")}
-          aria-label={`Move ${noun} up`}
-          title="Move up (Alt+↑)"
+      {#if controls === "menu"}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <button
+                {...props}
+                type="button"
+                class="{control} size-6 shrink-0 opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+                       group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100
+                       data-[state=open]:opacity-100"
+                data-row-action="menu"
+                aria-label={rowName?.(item, i)?.trim()
+                  ? `${groupNoun} actions: ${rowName(item, i).trim()}`
+                  : `${groupNoun} ${i + 1} actions`}
+                title="Move or delete (Alt+↑ / Alt+↓ to move)"
+              >
+                <Ellipsis size={14} />
+              </button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" class="min-w-40">
+            <DropdownMenu.Item disabled={i === 0} onclick={() => move(i, i - 1, "menu")}>
+              <ArrowUp size={14} /> Move up
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              disabled={i === rows.length - 1}
+              onclick={() => move(i, i + 1, "menu")}
+            >
+              <ArrowDown size={14} /> Move down
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onclick={() => insert(i + 1)}>
+              <Plus size={14} /> Insert {noun} below
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item variant="destructive" onclick={() => remove(i)}>
+              <Trash2 size={14} /> Delete {noun}
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {:else}
+        <div
+          class="flex shrink-0 items-center opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+                 group-hover:opacity-100 group-focus-within:opacity-100"
         >
-          <ArrowUp size={13} />
-        </button>
-        <button
-          type="button"
-          class={control}
-          data-row-action="down"
-          disabled={i === rows.length - 1}
-          onclick={() => move(i, i + 1, "down")}
-          aria-label={`Move ${noun} down`}
-          title="Move down (Alt+↓)"
-        >
-          <ArrowDown size={13} />
-        </button>
-        <button
-          type="button"
-          class="{control} hover:text-destructive"
-          data-row-action="delete"
-          onclick={() => remove(i)}
-          aria-label={`Delete ${noun}`}
-          title={`Delete ${noun}`}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
+          <button
+            type="button"
+            class={control}
+            data-row-action="up"
+            disabled={i === 0}
+            onclick={() => move(i, i - 1, "up")}
+            aria-label={`Move ${noun} up`}
+            title="Move up (Alt+↑)"
+          >
+            <ArrowUp size={13} />
+          </button>
+          <button
+            type="button"
+            class={control}
+            data-row-action="down"
+            disabled={i === rows.length - 1}
+            onclick={() => move(i, i + 1, "down")}
+            aria-label={`Move ${noun} down`}
+            title="Move down (Alt+↓)"
+          >
+            <ArrowDown size={13} />
+          </button>
+          <button
+            type="button"
+            class="{control} hover:text-destructive"
+            data-row-action="delete"
+            onclick={() => remove(i)}
+            aria-label={`Delete ${noun}`}
+            title={`Delete ${noun}`}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      {/if}
     </div>
   {/each}
 
   <!-- Adding at the end: a labelled button rather than a dashed line with a plus. Quiet
        until the list is hovered or focused, and always shown while the list is empty —
        there is no row to hover for it then. -->
-  <div class={addClass}>
-    <button
-      type="button"
-      data-row-add
-      class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground
+  {#if showAdd || rows.length === 0}
+    <div class={addClass}>
+      <button
+        type="button"
+        data-row-add
+        class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground
              transition-[opacity,color] duration-150 motion-reduce:transition-none
              hover:bg-muted hover:text-foreground focus-visible:opacity-100
              focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
              {rows.length === 0 ? '' : 'row-list-add-quiet'}"
-      onclick={() => insert(rows.length)}
-      aria-label={`Add ${noun}`}
-    >
-      <Plus size={13} aria-hidden="true" />
-      Add {noun}
-    </button>
-  </div>
+        onclick={() => insert(rows.length)}
+        aria-label={`Add ${noun}`}
+      >
+        <Plus size={13} aria-hidden="true" />
+        Add {noun}
+      </button>
+    </div>
+  {/if}
 
   <p class="sr-only" aria-live="polite">{announcement}</p>
 </div>

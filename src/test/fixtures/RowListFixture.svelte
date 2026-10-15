@@ -6,7 +6,11 @@
   import RowList from "$lib/components/editor/RowList.svelte";
   import { remapRowIndices, type RowChange } from "$lib/editor/row-list";
 
-  let { rows = [] }: { rows?: string[] } = $props();
+  let {
+    rows = [],
+    controls = "gutter",
+    showAdd = true,
+  }: { rows?: string[]; controls?: "gutter" | "menu"; showAdd?: boolean } = $props();
 
   // svelte-ignore state_referenced_locally
   let _rows = $state<string[]>([...rows]);
@@ -23,6 +27,8 @@
 <RowList
   rows={_rows}
   noun="thing"
+  {controls}
+  {showAdd}
   createRow={() => "fresh"}
   onChange={(next, change) => {
     _rows = next;

@@ -285,6 +285,7 @@ Components respond with precision and without hurry. State transitions are 150ms
 - **Focus:** 2px solid Crimson outline, 2px offset, `:focus-visible` only
 - **Disabled:** 35% opacity, `cursor: default`
 - **Height:** Tracks `--row-h`
+- **Linked Text Field** (every free-text value in a note block): drawn as text with live links; a click or Enter opens it in place, and Ctrl/Cmd+Enter follows its first link. A one-line value that wraps where it is drawn is edited wrapped, not collapsed to one scrolled line.
 
 ### Navigation — Icon Rail
 
@@ -360,12 +361,22 @@ Dated events on a vertical spine, read at the table to answer "when?".
 - **Descriptions:** a closed event with a description shows its first line in Ember Muted and a chevron that opens the rest at 14px on a reading line height; an event without one shows nothing at rest and offers "Add description" on hover or focus.
 - **Frame and rows:** the shared note-block frame; rows are the Row List's. A blank event is never written to the file, and one left without typing is dropped.
 
+### Infobox
+
+A compact panel of facts about the note's subject — a wiki infobox — floated beside the prose when the column is wide enough, stacked above it when not.
+
+- **Rows:** one label column for the whole panel, as wide as its longest label (up to 45%), labels in Ember Muted and values in the text colour, both Nunito 12px; values take the rest and wrap. Rows sit 4px apart, so a label that wraps reads as one label. Fields stay wrapped while edited.
+- **Title:** optional, Metamorphous. An untitled panel draws no title line.
+- **Adding:** "Add a title", Add image and Add row float above the panel's top-right corner on hover or focus, at the floating level — nothing inside the panel is kept for controls it is not showing.
+- **Row controls:** each row's moves and delete sit behind one "⋯" (the Row List's menu form); a gutter of three took 29% of a floated panel.
+- **Portrait:** View full size, Replace and Remove float on the thumbnail on hover or focus. After Remove, focus goes to Add image and "Image removed. Ctrl+Z to undo" is announced.
+
 ### Row List
 
 The rows of a timeline, an infobox and a statblock's edit mode.
 
-- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty.
-- **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus.
+- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. The gap is real space (`--row-gap`, the block's to set) and the hover zone is that space alone, never over a row's words or links. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty; a block with its own Add may leave it out.
+- **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus. A narrow block takes them as one "⋯" menu per row instead, which also offers Insert below.
 - **Focus and speech:** focus follows the row through a move and goes into the next row after a delete; moves and deletes are announced, and rows are named by their content.
 
 ### Statblock

@@ -308,3 +308,55 @@ describe("a Linked Text Field says what it holds to a screen reader", () => {
     expect(described).toHaveTextContent("The Keep Falls");
   });
 });
+
+describe("a wrapping Linked Text Field", () => {
+  // A one-line value that wraps where it is drawn — an Infobox title or row in a panel
+  // ~300px wide — is edited as it is drawn, rather than collapsed to one line scrolled
+  // to its end.
+  it("opens as a field that wraps, and still commits on Enter", async () => {
+    const { getByLabelText, onCommit } = field({ value: "Mira Ashvale", wrap: true });
+    await fireEvent.click(getByLabelText("Value"));
+    const input = getByLabelText("Value");
+    expect(input.tagName).toBe("TEXTAREA");
+
+    await fireEvent.input(input, { target: { value: "Mira Ashvale the Elder" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onCommit).toHaveBeenCalledWith("Mira Ashvale the Elder");
+  });
+
+  it("keeps a newline out as it is typed, as a one-line field does", async () => {
+    const { getByLabelText } = field({
+      value: "",
+      wrap: true,
+      restrict: (s: string) => s.replace(/\n/g, " "),
+    });
+    await fireEvent.click(getByLabelText("Value"));
+    await fireEvent.input(getByLabelText("Value"), { target: { value: "two\nlines" } });
+
+    expect(getByLabelText("Value")).toHaveValue("two lines");
+  });
+});
+
+describe("a link in a Linked Text Field from the keyboard", () => {
+  it("follows the value's link on Ctrl+Enter, where Enter alone opens the field", async () => {
+    // "Born: [[Thornhaven Village]]" — Enter edits, so the link had no keyboard route.
+    const { getByLabelText, container } = field({ value: "Born in [[Thornhaven Village]]" });
+    const followed = vi.fn();
+    container.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("[data-wiki-link]");
+      if (link) followed(link.getAttribute("data-path"));
+    });
+
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter", ctrlKey: true });
+
+    expect(followed).toHaveBeenCalledWith("Thornhaven Village");
+    expect(getByLabelText("Value").tagName).toBe("BUTTON");
+  });
+
+  it("does nothing on Ctrl+Enter when the value has no link", async () => {
+    const { getByLabelText } = field({ value: "4,200" });
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter", ctrlKey: true });
+    expect(getByLabelText("Value").tagName).toBe("BUTTON");
+  });
+});

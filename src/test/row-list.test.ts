@@ -289,3 +289,107 @@ describe("RowList controls", () => {
 
   // The case for `onRowFocusOut` went with the prop itself (#214) — see `RowList.svelte`.
 });
+
+// ─── The gaps ─────────────────────────────────────────────────────────────────
+
+describe("RowList gaps", () => {
+  it("puts the insert point in real space between rows, never over a row", () => {
+    // The hover zone used to be a band laid over the bottom of the row above. Where rows
+    // touch, as an Infobox's did, it sat on the row's text and took the clicks meant for
+    // it — the lower half of a link in a value did nothing.
+    const { container } = render(RowListFixture, { rows: ["alpha", "beta"] });
+    const gaps = [...container.querySelectorAll<HTMLElement>(".row-list-gap")];
+
+    expect(gaps).toHaveLength(2);
+    expect(gaps[1].style.height).toBe("var(--row-gap, 0.5rem)");
+    // The zone is the gap's own height, inside it, rather than a band reaching up.
+    expect(gaps[1].firstElementChild?.className).toContain("inset-y-0");
+  });
+
+  it("hides the insert points from assistive tech, which inserts with Alt+Enter", () => {
+    const { container } = render(RowListFixture, { rows: ["alpha", "beta"] });
+    for (const gap of container.querySelectorAll(".row-list-gap > div")) {
+      expect(gap).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+});
+
+// ─── Menu controls ────────────────────────────────────────────────────────────
+//
+// For a block too narrow to give every row a strip of three buttons — an Infobox floated
+// at ~300px lost 29% of its width to them.
+
+describe("RowList with its controls in a menu", () => {
+  async function pick(trigger: HTMLElement, verb: string) {
+    await fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+      el.textContent?.trim().startsWith(verb),
+    );
+    expect(item, `a "${verb}" item`).toBeTruthy();
+    return item!;
+  }
+
+  it("gives each row one button in place of three", () => {
+    const { getAllByLabelText, queryByLabelText } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+      controls: "menu",
+    });
+
+    expect(getAllByLabelText(/^Thing \d actions$/)).toHaveLength(2);
+    expect(queryByLabelText("Move thing up")).toBeNull();
+    expect(queryByLabelText("Delete thing")).toBeNull();
+  });
+
+  it("moves, inserts and deletes from the menu", async () => {
+    const { getByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+      controls: "menu",
+    });
+
+    await fireEvent.click(await pick(getByLabelText("Thing 2 actions"), "Move up"));
+    expect(component.rowsNow()).toEqual(["beta", "alpha"]);
+
+    await fireEvent.click(await pick(getByLabelText("Thing 1 actions"), "Insert thing below"));
+    expect(component.rowsNow()).toEqual(["beta", "fresh", "alpha"]);
+
+    await fireEvent.click(await pick(getByLabelText("Thing 3 actions"), "Delete thing"));
+    expect(component.rowsNow()).toEqual(["beta", "fresh"]);
+    expect(component.changes().map((c) => c.kind)).toEqual(["move", "insert", "delete"]);
+  });
+
+  it("offers no move the row cannot make", async () => {
+    const { getByLabelText } = render(RowListFixture, {
+      rows: ["alpha", "beta"],
+      controls: "menu",
+    });
+
+    expect(await pick(getByLabelText("Thing 1 actions"), "Move up")).toHaveAttribute(
+      "data-disabled",
+    );
+  });
+
+  it("keeps focus on the moved row's menu button after Alt+↓, so it can move again", async () => {
+    const { getByLabelText, component } = render(RowListFixture, {
+      rows: ["alpha", "beta", "gamma"],
+      controls: "menu",
+    });
+    await fireEvent.keyDown(getByLabelText("Thing 1 actions"), { key: "ArrowDown", altKey: true });
+
+    expect(component.rowsNow()).toEqual(["beta", "alpha", "gamma"]);
+    await waitFor(() => expect(document.activeElement).toBe(getByLabelText("Thing 2 actions")));
+  });
+});
+
+// ─── Without an Add of its own ────────────────────────────────────────────────
+
+describe("RowList without its own Add", () => {
+  it("draws no Add when the block has one elsewhere", () => {
+    const { queryByLabelText } = render(RowListFixture, { rows: ["alpha"], showAdd: false });
+    expect(queryByLabelText("Add thing")).toBeNull();
+  });
+
+  it("still draws Add while the list is empty, the one way to a first row", () => {
+    const { getByLabelText } = render(RowListFixture, { rows: [], showAdd: false });
+    expect(getByLabelText("Add thing")).toBeTruthy();
+  });
+});
