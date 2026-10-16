@@ -14,14 +14,20 @@
   // that agrees with it, and a menu opened low in a long note has to flip above its anchor
   // rather than off the bottom of the window.
   //
-  // Sections, since #192: "Turn into" above the three that apply to every block. The
-  // section is *absent* on a statblock rather than drawn dim, so this component never
-  // decides which — it draws the sections it is handed, and `blockHandleMenuSections`
-  // holds the judgement.
-  import { Check } from "@lucide/svelte";
+  // "Turn into" is one row opening a submenu beside this one (2026-10 design review). Its
+  // seven types were seven of a text block's ten rows, while every other block's menu was
+  // three — so the same grip opened a long menu or a short one depending on what it held.
+  // Every menu is now the same short list, with Turn into first where a block has one. The
+  // section is still *absent* on a statblock rather than drawn dim; `blockHandleMenuSections`
+  // holds that judgement and this draws what it is handed.
+  import { ArrowLeftRight, Check, ChevronRight } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import { placeMenu } from "$lib/utils/anchored-menu";
-  import type { BlockHandleCommand, BlockHandleMenuSection } from "$lib/editor/block-handle-menu";
+  import type {
+    BlockHandleCommand,
+    BlockHandleMenuItem,
+    BlockHandleMenuSection,
+  } from "$lib/editor/block-handle-menu";
 
   interface Props {
     sections: BlockHandleMenuSection[];
@@ -48,8 +54,17 @@
 
   let { sections, label, anchor, trigger, onSelect, onClose }: Props = $props();
 
-  /** Every item in reading order — what the arrow keys walk, ignoring the sections. */
-  const flat = $derived(sections.flatMap((section) => section.items));
+  /** The seven a text block can become, if it can become anything. */
+  const turnInto = $derived(sections.find((section) => section.title === "Turn into"));
+  /** The rest: the three that apply to every block. */
+  const actions = $derived(
+    sections.filter((section) => section !== turnInto).flatMap((section) => section.items),
+  );
+  /** What the block is now, said on the Turn into row. */
+  const currentKind = $derived(turnInto?.items.find((item) => item.current));
+
+  /** The rows the arrow keys walk: Turn into (where there is one), then the actions. */
+  const rowCount = $derived(actions.length + (turnInto ? 1 : 0));
 
   /** One item's identity, for the keyed `each` and for a test to name it by. */
   function commandKey(command: BlockHandleCommand): string {
@@ -57,26 +72,40 @@
   }
 
   let menuEl = $state<HTMLDivElement>();
-  let itemEls: (HTMLButtonElement | null)[] = [];
+  let subEl = $state<HTMLDivElement>();
+  let rowEls: (HTMLButtonElement | null)[] = [];
+  let subEls: (HTMLButtonElement | null)[] = [];
   // Roving focus: exactly one item is tabbable at a time, which is what a `menu` is
-  // supposed to be — arrow keys walk it, Tab leaves it altogether.
+  // supposed to be — arrow keys walk it, Tab leaves it altogether. The first row, which is
+  // never Delete: Delete is last, and the walk does not wrap round to it.
   let active = $state(0);
+  let subOpen = $state(false);
+  let subActive = $state(0);
 
   // Placed after the items are drawn, so the height that decides the flip is the real one.
-  // It matters more since #192 than it did before it: a paragraph's menu is ten items and
-  // a statblock's is three, so the same grip halfway down a note flips for one and not the
-  // other.
   $effect(() => {
     sections;
     anchor;
     if (menuEl) placeMenu(menuEl, { x: anchor.x, y: anchor.y, anchorTop: anchor.anchorTop });
   });
 
+  // Beside the menu, level with its row; on the left where the right has no room.
+  $effect(() => {
+    if (!subOpen || !subEl || !menuEl) return;
+    const menu = menuEl.getBoundingClientRect();
+    const first = rowEls[0]?.getBoundingClientRect() ?? menu;
+    const width = subEl.offsetWidth;
+    const right = menu.right + 4;
+    const x = right + width + 8 <= window.innerWidth ? right : menu.left - width - 4;
+    placeMenu(subEl, { x, y: first.top - 4, anchorTop: first.bottom + 4 });
+  });
+
   // Focus moves into the menu as it opens. A menu opened from the keyboard is unusable
   // otherwise, and one opened by mouse still needs it so that Escape has somewhere to
   // return *from* — and so the note's prose does not keep taking the keystrokes.
   $effect(() => {
-    itemEls[active]?.focus();
+    if (subOpen) subEls[subActive]?.focus();
+    else rowEls[active]?.focus();
   });
 
   // Anywhere else — the prose, another pane, the window chrome. `pointerdown` rather than
@@ -86,48 +115,94 @@
     function onPointerDown(event: PointerEvent) {
       const target = event.target as globalThis.Node | null;
       if (!target) return;
-      if (menuEl?.contains(target) || trigger?.contains(target)) return;
+      if (menuEl?.contains(target) || subEl?.contains(target) || trigger?.contains(target)) {
+        return;
+      }
       onClose(false);
     }
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   });
 
-  function step(by: number) {
-    // Wrapping, because a short menu is faster to walk round than to walk back — and it
-    // walks straight through the section headings, which are not stops.
-    active = (active + by + flat.length) % flat.length;
+  /** Opens the types with the one the block already is under the cursor. */
+  function openSub() {
+    if (!turnInto) return;
+    subActive = Math.max(
+      0,
+      turnInto.items.findIndex((item) => item.current),
+    );
+    subOpen = true;
   }
 
+  function closeSub() {
+    subOpen = false;
+    active = 0;
+  }
+
+  /** Up and down stop at the ends: a walk that wrapped from the first row landed on Delete. */
+  const clamp = (i: number, count: number) => Math.max(0, Math.min(count - 1, i));
+
   function handleKeydown(event: KeyboardEvent) {
+    const inSub = subOpen;
+    const count = inSub ? (turnInto?.items.length ?? 0) : rowCount;
+    const at = inSub ? subActive : active;
+    const move = (to: number) => {
+      event.preventDefault();
+      if (inSub) subActive = clamp(to, count);
+      else active = clamp(to, count);
+    };
     switch (event.key) {
       case "ArrowDown":
-        event.preventDefault();
-        step(1);
+        move(at + 1);
         break;
       case "ArrowUp":
-        event.preventDefault();
-        step(-1);
+        move(at - 1);
         break;
       case "Home":
-        event.preventDefault();
-        active = 0;
+        move(0);
         break;
       case "End":
-        event.preventDefault();
-        active = flat.length - 1;
+        move(count - 1);
+        break;
+      case "ArrowRight":
+        if (!inSub && turnInto && active === 0) {
+          event.preventDefault();
+          openSub();
+        }
+        break;
+      case "ArrowLeft":
+        if (inSub) {
+          event.preventDefault();
+          closeSub();
+        }
         break;
       case "Escape":
+        event.preventDefault();
+        // Out one level: the types back to the menu, the menu back to the grip.
+        if (inSub) closeSub();
+        else onClose(true);
+        break;
       case "Tab":
         // Tab closes rather than moving through the items: the menu is chrome floating
         // beside the prose, so tabbing *out* of it would land somewhere unrelated to
-        // where the GM was working. Both hand the grip its focus back.
+        // where the GM was working. It hands the grip its focus back.
         event.preventDefault();
         onClose(true);
         break;
     }
   }
+
+  // The slash menu's rows, so the two menus a GM meets in a note are one design.
+  const row =
+    "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left font-sans text-[0.8125rem] outline-none";
 </script>
+
+{#snippet itemIcon(item: BlockHandleMenuItem)}
+  {@const Icon = BLOCK_ICONS[item.icon]}
+  <!-- Unguarded, like the slash menu's: an item's icon name is typed as one that exists
+       (#220), so a typo is a build error rather than a missing glyph. -->
+  <Icon size={14} class="shrink-0 opacity-70 group-focus:opacity-100" />
+{/snippet}
 
 <!-- `tabindex` is never used: the items carry the roving one and one of them holds focus
      for as long as the menu is open. It is on the container because a `menu` must be
@@ -136,70 +211,105 @@
 
      A fixed `id`, which the grip points `aria-controls` at: one handle exists at a time and
      it is the only thing that opens this, so there is never a second one to collide with. -->
-
 <div
   bind:this={menuEl}
   id="block-handle-menu"
   data-block-handle-menu
-  class="fixed z-50 min-w-[190px] rounded-lg border border-border bg-popover py-1
-         shadow-float"
+  class="fixed z-50 w-60 rounded-lg border border-border bg-popover p-1 shadow-float"
   role="menu"
   aria-label="Actions for {label}"
   tabindex={-1}
   onkeydown={handleKeydown}
 >
-  {#each sections as section, s (section.title ?? "actions")}
-    {@const offset = sections.slice(0, s).reduce((n, earlier) => n + earlier.items.length, 0)}
-    <!-- The heading is `aria-hidden` and names the group instead: read as a stray line of
-         text between menu items it would be noise, and read as the group's name it is the
-         verb the seven items below it are missing. -->
-    {#if section.title}
-      <div
-        class="px-3 pt-2.5 pb-0.5 text-[11px] font-medium uppercase tracking-wider
-               text-muted-foreground/60 select-none pointer-events-none"
-        aria-hidden="true"
-      >
-        {section.title}
-      </div>
-    {/if}
-    <div
-      role="group"
-      aria-label={section.title ?? undefined}
-      class={s > 0 ? "mt-1 pt-1 border-t border-border/60" : ""}
+  {#if turnInto}
+    <button
+      bind:this={rowEls[0]}
+      type="button"
+      role="menuitem"
+      aria-haspopup="menu"
+      aria-expanded={subOpen}
+      aria-controls={subOpen ? "block-handle-submenu" : undefined}
+      tabindex={active === 0 ? 0 : -1}
+      data-command="turn-into"
+      class="{row} text-muted-foreground focus:bg-surface-selected focus:text-foreground
+             {subOpen ? 'bg-surface-selected text-foreground' : ''}"
+      onclick={() => (subOpen ? closeSub() : openSub())}
+      onmousemove={() => {
+        active = 0;
+        if (!subOpen) openSub();
+      }}
     >
-      {#each section.items as item, i (commandKey(item.command))}
-        {@const index = offset + i}
-        {@const Icon = BLOCK_ICONS[item.icon]}
-        {@const turnInto = typeof item.command !== "string"}
-        <button
-          bind:this={itemEls[index]}
-          type="button"
-          role={turnInto ? "menuitemradio" : "menuitem"}
-          aria-checked={turnInto ? item.current === true : undefined}
-          tabindex={index === active ? 0 : -1}
-          data-command={commandKey(item.command)}
-          aria-label={item.label}
-          class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left transition-colors
-                 font-sans text-[0.8125rem]
-                 {item.command === 'delete'
-            ? 'text-destructive/90 hover:bg-destructive/10 focus:bg-destructive/10 hover:text-destructive focus:text-destructive'
-            : 'text-muted-foreground hover:bg-surface-hover focus:bg-surface-selected hover:text-foreground focus:text-foreground'}
-                 {item.current ? 'text-foreground' : ''}
-                 outline-none"
-          onclick={() => onSelect(item.command)}
-          onmouseenter={() => (active = index)}
-        >
-          <!-- Unguarded, like the slash menu's: an item's icon name is typed as one that
-               exists (#220), so a typo is a build error rather than a missing glyph. -->
-          <Icon size={14} class="shrink-0 opacity-70" />
-          <span class="flex-1">{item.label}</span>
-          <!-- What the block already is, said twice on purpose: `aria-checked` for a
-               screen reader, and a tick for everyone reading the menu with their eyes. -->
-          {#if item.current}
-            <Check size={13} class="shrink-0 opacity-70" />
-          {/if}
-        </button>
-      {/each}
-    </div>
-  {/each}
+      <ArrowLeftRight size={14} class="shrink-0 opacity-70 group-focus:opacity-100" />
+      <span class="flex-1">Turn into</span>
+      {#if currentKind}
+        <span class="shrink-0 text-xs text-muted-foreground">{currentKind.label}</span>
+      {/if}
+      <ChevronRight size={14} class="shrink-0 opacity-70" />
+    </button>
+    <div class="my-1 border-t border-border" role="separator"></div>
+  {/if}
+
+  <div role="group" aria-label="Actions">
+    {#each actions as item, i (commandKey(item.command))}
+      {@const index = i + (turnInto ? 1 : 0)}
+      {@const destructive = item.command === "delete"}
+      <button
+        bind:this={rowEls[index]}
+        type="button"
+        role="menuitem"
+        tabindex={index === active ? 0 : -1}
+        data-command={commandKey(item.command)}
+        aria-label={item.label}
+        class="{row}
+               {destructive
+          ? 'text-destructive focus:bg-destructive/10'
+          : 'text-muted-foreground focus:bg-surface-selected focus:text-foreground'}"
+        onclick={() => onSelect(item.command)}
+        onmousemove={() => {
+          if (subOpen) subOpen = false;
+          active = index;
+        }}
+      >
+        {@render itemIcon(item)}
+        <span class="min-w-0 flex-1 truncate">{item.label}</span>
+      </button>
+    {/each}
+  </div>
 </div>
+
+{#if turnInto && subOpen}
+  <div
+    bind:this={subEl}
+    id="block-handle-submenu"
+    data-block-handle-submenu
+    class="fixed z-50 w-48 rounded-lg border border-border bg-popover p-1 shadow-float"
+    role="menu"
+    aria-label="Turn into"
+    tabindex={-1}
+    onkeydown={handleKeydown}
+  >
+    {#each turnInto.items as item, i (commandKey(item.command))}
+      <button
+        bind:this={subEls[i]}
+        type="button"
+        role="menuitemradio"
+        aria-checked={item.current === true}
+        tabindex={i === subActive ? 0 : -1}
+        data-command={commandKey(item.command)}
+        aria-label={item.label}
+        class="{row} focus:bg-surface-selected focus:text-foreground
+               {item.current ? 'text-foreground' : 'text-muted-foreground'}"
+        onclick={() => onSelect(item.command)}
+        onmousemove={() => (subActive = i)}
+      >
+        {@render itemIcon(item)}
+        <span class="flex-1">{item.label}</span>
+        <!-- What the block already is, said twice on purpose: `aria-checked` for a
+             screen reader, and a tick for everyone reading the menu with their eyes. -->
+        {#if item.current}
+          <Check size={13} class="shrink-0" />
+        {/if}
+      </button>
+    {/each}
+  </div>
+{/if}

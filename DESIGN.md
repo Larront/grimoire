@@ -310,6 +310,15 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 - **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
 - **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
 
+### Block Handle
+
+One grip for the whole note, beside whichever block the pointer or caret is on: 18px, 6px radius, Ember Muted, fading in on hover. Ctrl/Cmd+Shift+H raises it from the text; ↑/↓ on it move the block; drag moves it; a click opens its menu.
+
+- **Where:** in one column out in the gutter, level with the block's first line, never over a word. The floor is the pane's edge, not the column's, so a block that breaks out past the column — an encounter of tiled creatures — still gets its grip outside it. A block floated beside the text (an Infobox, an image) takes its grip at its own left edge instead.
+- **Which block:** while the GM is on the grip or in its menu, the block is outlined with a neutral rule — crimson stays for *selected*. A bullet's grip holds the whole list item. The grip and its menu name the block by its own name where it has one (a creature, a callout's title, an infobox's), so "Delete Kobold B", not "Delete statblock".
+- **Menu:** the slash menu's rows, 240px — Turn into (text blocks only; its types open in a submenu beside the row, focused on the kind the block already is), then Duplicate, Copy as Markdown, Delete in full-strength destructive. Focus opens on the first row and arrows stop at the ends rather than wrapping onto Delete.
+- **Feedback:** Delete shows "Deleted … · Undo"; Copy confirms. Keyboard moves are announced. Undo works from the grip. Escape from a menu opened by mouse returns to the text; from one opened by keyboard, to the grip.
+
 ### Scene Player (Signature Component)
 
 A scene embedded in a note (`/scene`), played from the note the GM is reading at the table. In the page: the shared note-block frame, with a crimson border while its scene plays.

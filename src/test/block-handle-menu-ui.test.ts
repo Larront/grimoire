@@ -13,12 +13,13 @@
 // in — lived entirely in the gap, which is where the frozen grip lived too. The pair is
 // the subject here; a mounted menu on its own would prove only that a callback fired.
 import { fireEvent, render } from "@testing-library/svelte";
+import { flushSync } from "svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { Editor } from "@tiptap/core";
 
-vi.mock("$lib/toast", () => ({ toastError: vi.fn() }));
+vi.mock("$lib/toast", () => ({ toastError: vi.fn(), toastSuccess: vi.fn(), toastUndo: vi.fn() }));
 
-import { toastError } from "$lib/toast";
+import { toastError, toastSuccess, toastUndo } from "$lib/toast";
 import BlockHandle from "$lib/components/editor/BlockHandle.svelte";
 import { blockStillThere, deleteBlock, type BlockTarget } from "$lib/editor/block-handle";
 import { createBlockHandleLife, type BlockHandleLife } from "$lib/editor/block-handle-life.svelte";
@@ -46,6 +47,8 @@ function stubClipboard() {
 afterEach(() => {
   if ("clipboard" in navigator) delete (navigator as { clipboard?: unknown }).clipboard;
   vi.mocked(toastError).mockClear();
+  vi.mocked(toastSuccess).mockClear();
+  vi.mocked(toastUndo).mockClear();
 });
 
 /**
@@ -104,18 +107,37 @@ const menu = () => document.querySelector<HTMLElement>("[data-block-handle-menu]
 const items = () =>
   Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]'));
 
-/** The menu item whose label starts with a word — how a GM picks one out. */
+/** The Turn into row, which opens the seven types in a submenu beside the menu. */
+const turnIntoRow = () => document.querySelector<HTMLElement>('[data-command="turn-into"]');
+
+/** Opens the types, as a GM does by pointing at — or pressing → on — Turn into. */
+function openTurnInto() {
+  const row = turnIntoRow();
+  expect(row, "a Turn into row").toBeTruthy();
+  if (row!.getAttribute("aria-expanded") !== "true") {
+    row!.click();
+    flushSync();
+  }
+}
+
+/**
+ * The menu item whose label starts with a word — how a GM picks one out. A type a block
+ * can turn into is behind Turn into, so asking for one opens it first.
+ */
 function item(verb: string): HTMLElement {
-  const found = items().find((el) => el.textContent?.trim().startsWith(verb));
+  const find = () => items().find((el) => el.textContent?.trim().startsWith(verb));
+  if (!find() && turnIntoRow()) openTurnInto();
+  const found = find();
   expect(found, `a "${verb}" item`).toBeTruthy();
   return found!;
 }
 
-/** The section headings a GM reads down the menu. */
-const sectionTitles = () =>
-  Array.from(menu()?.querySelectorAll<HTMLElement>('[role="group"]') ?? []).map((el) =>
-    el.getAttribute("aria-label"),
-  );
+/**
+ * What the menu offers, by section: "Turn into" where the block has it, and the unnamed
+ * actions at the foot (null). Turn into is a row opening a submenu since the 2026-10
+ * review, so it is read off that row rather than a group heading.
+ */
+const sectionTitles = () => [...(turnIntoRow() ? ["Turn into"] : []), null];
 
 // ─── What is holding the grip up ──────────────────────────────────────────────
 
@@ -157,29 +179,34 @@ describe("clicking the grip", () => {
 
     expect(menu()).not.toBeNull();
     expect(items().map((i) => i.getAttribute("aria-label"))).toEqual([
-      "Duplicate statblock",
-      "Copy statblock as Markdown",
-      "Delete statblock",
+      "Duplicate Kobold A",
+      "Copy Kobold A as Markdown",
+      "Delete Kobold A",
     ]);
   });
 
-  it("puts Turn into above them on a paragraph, and Delete last of all", async () => {
+  it("puts Turn into above them on a paragraph as one row, and Delete last of all", async () => {
+    // The seven types were seven of a paragraph's ten rows, where a statblock's menu was
+    // three. They open beside the menu now, so every block's menu is the same short list.
     const editor = note("A sentence.");
     const { el } = grip(editor);
     await fireEvent.click(el);
 
-    expect(items().map((i) => i.getAttribute("aria-label"))).toEqual([
-      "Paragraph",
-      "Heading 1",
-      "Heading 2",
-      "Heading 3",
-      "Bullet List",
-      "Numbered List",
-      "Quote",
-      "Duplicate paragraph",
-      "Copy paragraph as Markdown",
-      "Delete paragraph",
+    expect(items().map((i) => i.dataset.command)).toEqual([
+      "turn-into",
+      "duplicate",
+      "copy",
+      "delete",
     ]);
+    expect(turnIntoRow()).toHaveAttribute("aria-haspopup", "menu");
+  });
+
+  it("says on the Turn into row what the block is now", async () => {
+    const editor = note("## The Lower Halls");
+    const { el } = grip(editor, "heading");
+    await fireEvent.click(el);
+
+    expect(turnIntoRow()).toHaveTextContent("Heading 2");
   });
 
   it("names the block, so the menu is not three verbs with no subject", async () => {
@@ -187,7 +214,7 @@ describe("clicking the grip", () => {
     const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
 
-    expect(menu()?.getAttribute("aria-label")).toBe("Actions for statblock");
+    expect(menu()?.getAttribute("aria-label")).toBe("Actions for Kobold A");
   });
 
   it("holds the grip up for as long as the menu is open", async () => {
@@ -234,6 +261,19 @@ describe("dismissing the menu without choosing anything", () => {
     expect(menu()).toBeNull();
     expect(handle.menu).toBeNull();
     expect(document.activeElement).toBe(el);
+  });
+
+  it("hands a mouse-opened menu's Escape back to the prose, not to a grip left focused", async () => {
+    // A focused grip under a moving mouse followed it to other blocks, and the next Enter
+    // opened a menu on a block the GM had not chosen.
+    const editor = note("A sentence.");
+    const { el, handle } = grip(editor);
+    await fireEvent.click(el, { detail: 1 });
+    await fireEvent.keyDown(items()[0], { key: "Escape" });
+
+    expect(menu()).toBeNull();
+    expect(handle.target).toBeNull();
+    expect(document.activeElement).not.toBe(el);
   });
 
   it("closes when the GM presses somewhere else entirely", async () => {
@@ -289,40 +329,74 @@ describe("dismissing the menu without choosing anything", () => {
 // ─── Walking it ───────────────────────────────────────────────────────────────
 
 describe("the menu from the keyboard", () => {
-  it("moves focus down the items and wraps round the end", async () => {
+  it("moves focus down the items and stops at the end", async () => {
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
     const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
 
-    for (const expected of [1, 2, 0]) {
+    for (const expected of [1, 2, 2]) {
       await fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
       expect(document.activeElement).toBe(items()[expected]);
     }
   });
 
-  it("moves back up, wrapping the other way", async () => {
+  it("does not wrap from the first item round to Delete", async () => {
+    // ↑ straight after opening used to land on Delete, the one item to keep away from a
+    // reflexive keypress.
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
     const { el } = grip(editor, "statblockBlock");
     await fireEvent.click(el);
     await fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
 
-    expect(document.activeElement).toBe(items()[2]);
+    expect(document.activeElement).toBe(items()[0]);
   });
 
-  it("walks straight through the section heading into the actions below it", async () => {
-    // The heading is not a stop: a GM holding ↓ must not have to press past a word they
-    // cannot choose, and the transformations and the three actions are one list to walk.
+  it("opens with focus on the first row, never on Delete", async () => {
+    const editor = note("## The Lower Halls");
+    const { el } = grip(editor, "heading");
+    await fireEvent.click(el);
+
+    expect(document.activeElement).toBe(turnIntoRow());
+  });
+
+  it("opens the types with → and puts focus on the kind the block already is", async () => {
+    // Enter, Enter used to turn a heading into a paragraph: focus opened on the first
+    // type, whatever the block was.
+    const editor = note("## The Lower Halls");
+    const { el } = grip(editor, "heading");
+    await fireEvent.click(el);
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+
+    expect(document.activeElement).toHaveAttribute("aria-label", "Heading 2");
+    expect(document.activeElement).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("closes the types with ← or Escape, back onto Turn into", async () => {
     const editor = note("A sentence.");
     const { el } = grip(editor);
     await fireEvent.click(el);
-    for (let i = 0; i < 7; i++) {
-      await fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
-    }
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+
+    expect(document.activeElement).toBe(turnIntoRow());
+    expect(document.querySelector("[data-block-handle-submenu]")).toBeNull();
+
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    await fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(document.activeElement).toBe(turnIntoRow());
+    expect(menu()).not.toBeNull();
+  });
+
+  it("walks from Turn into straight down to the actions", async () => {
+    const editor = note("A sentence.");
+    const { el } = grip(editor);
+    await fireEvent.click(el);
+    await fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
 
     expect(document.activeElement).toBe(item("Duplicate"));
   });
 
-  it("jumps to the last item with End, ten items down", async () => {
+  it("jumps to the last item with End", async () => {
     const editor = note("A sentence.");
     const { el } = grip(editor);
     await fireEvent.click(el);
@@ -351,6 +425,86 @@ describe("the menu from the keyboard", () => {
 });
 
 // ─── Choosing something ───────────────────────────────────────────────────────
+
+describe("saying what an action did", () => {
+  it("offers Undo after a delete, naming what went", async () => {
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```\n\nAfter.");
+    const { el } = grip(editor, "statblockBlock");
+    await fireEvent.click(el);
+    await fireEvent.click(item("Delete"));
+
+    expect(toastUndo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toastUndo).mock.calls[0][0]).toBe("Deleted Kobold A");
+  });
+
+  it("puts the block back from that Undo", async () => {
+    const editor = note("Alpha.\n\nBravo.");
+    const { el } = grip(editor, "paragraph", 0);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Delete"));
+    expect(saved(editor)).toBe("Bravo.");
+
+    const undo = vi.mocked(toastUndo).mock.calls[0][2]!;
+    undo();
+    expect(saved(editor)).toBe("Alpha.\n\nBravo.");
+  });
+
+  it("puts it back where it was even after the GM has typed elsewhere", async () => {
+    // Ctrl+Z would take the typing back first, so the block is reinserted instead.
+    const editor = note("Alpha.\n\nBravo.");
+    const { el } = grip(editor, "paragraph", 0);
+    await fireEvent.click(el);
+    await fireEvent.click(item("Delete"));
+    editor.commands.insertContentAt(editor.state.doc.content.size - 1, " Charlie.");
+
+    vi.mocked(toastUndo).mock.calls[0][2]!();
+    expect(saved(editor)).toBe("Alpha.\n\nBravo. Charlie.");
+  });
+
+  it("says a copy happened, since nothing on screen does", async () => {
+    stubClipboard();
+    const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
+    const { el } = grip(editor, "statblockBlock");
+    await fireEvent.click(el);
+    await fireEvent.click(item("Copy"));
+
+    expect(toastSuccess).toHaveBeenCalledWith("Copied Kobold A as Markdown");
+  });
+});
+
+describe("the grip from the keyboard", () => {
+  it("undoes from the grip, as from the text", async () => {
+    const editor = note("Alpha.\n\nBravo.");
+    const { el } = grip(editor, "paragraph", 1);
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(saved(editor)).toBe("Bravo.\n\nAlpha.");
+
+    await fireEvent.keyDown(el, { key: "z", ctrlKey: true });
+    expect(saved(editor)).toBe("Alpha.\n\nBravo.");
+  });
+
+  it("says where a keyboard move went, and when there was nowhere to go", async () => {
+    const editor = note("Alpha.\n\nBravo.");
+    const { el } = grip(editor, "paragraph", 0);
+    const live = () => document.querySelector('[aria-live="polite"]')?.textContent;
+
+    await fireEvent.keyDown(el, { key: "ArrowUp" });
+    expect(live()).toBe("paragraph is already first");
+    await fireEvent.keyDown(el, { key: "ArrowDown" });
+    expect(live()).toBe("Moved paragraph down");
+  });
+
+  it("outlines the block it holds while the GM is on it", async () => {
+    // One grip serves the note from the margin; in an encounter two creatures tile at one
+    // height, and the outline is what says which one Delete will take.
+    const editor = note("Alpha.");
+    const { el } = grip(editor);
+    expect(document.querySelector("[data-block-handle-target]")).toBeNull();
+
+    await fireEvent.mouseEnter(el);
+    expect(document.querySelector("[data-block-handle-target]")).not.toBeNull();
+  });
+});
 
 describe("choosing an item acts on the block the grip was on", () => {
   it("duplicates that block and no other", async () => {
@@ -591,6 +745,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     const editor = note("## The Lower Halls");
     const { el } = grip(editor, "heading");
     await fireEvent.click(el);
+    openTurnInto();
     const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
 
     expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Heading 2"]);
@@ -600,6 +755,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     const editor = note("1. first light");
     const { el } = grip(editor);
     await fireEvent.click(el);
+    openTurnInto();
     const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
 
     expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Numbered List"]);
@@ -609,6 +765,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     const editor = note("A sentence.");
     const { el } = grip(editor);
     await fireEvent.click(el);
+    openTurnInto();
 
     expect(
       items()

@@ -342,7 +342,8 @@ describe("the grip beside a block", () => {
     const el = document.querySelector("[data-block-handle]") as HTMLElement;
     // Named for what pressing it does — Enter and Space open the menu — with the reorder
     // gesture the arrows carry described alongside rather than folded into the name.
-    expect(el.getAttribute("aria-label")).toBe("Actions for statblock");
+    // The creature's own name: "statblock" said nothing about which of four kobolds.
+    expect(el.getAttribute("aria-label")).toBe("Actions for Kobold A");
     expect(el.getAttribute("aria-describedby")).toBe("block-handle-hint");
     expect(document.getElementById("block-handle-hint")?.textContent?.trim()).toContain(
       "Arrow up and down",
@@ -496,9 +497,11 @@ describe("reaching for the grip", () => {
         const target = last();
         expect(target, `a block at (${left}, ${top})`).not.toBeNull();
         seen.add(target!.node.type.name);
-        expect(["bulletList", "listItem"]).not.toContain(target!.node.type.name);
+        // Never the whole list. A bullet's line is held as its item since the 2026-10
+        // review — the item is what Delete, Duplicate and ↑/↓ have to act on.
+        expect(target!.node.type.name).not.toBe("bulletList");
       }
-      expect(seen).toEqual(new Set(["paragraph"]));
+      expect(seen).toEqual(new Set(["listItem"]));
     }
 
     // And each of the three is still reachable, one per item, which is what the list gave up
@@ -568,5 +571,65 @@ describe("the gutter", () => {
     expect(gap).toBeCloseTo(parseFloat(styles.getPropertyValue("--block-handle-gap")), 1);
     expect(rect.width).toBeCloseTo(parseFloat(styles.getPropertyValue("--block-handle-size")), 1);
     expect(gutter).toBeGreaterThanOrEqual(rect.width + gap);
+  });
+});
+
+describe("the grip beside a block that leaves the column", () => {
+  it("stays outside an encounter that breaks out past the column, off every creature's name", async () => {
+    // The grip used to be floored at the column's edge. A callout holding two creatures is
+    // wider than the column, so the floor pulled the grip inside it — onto "Ko|bold A", and
+    // for a card tiled in the second column onto the *other* creature's name.
+    const md = [
+      "> [!encounter] The Ambush",
+      "> ```statblock",
+      "> # Kobold A",
+      "> HP: 5/5",
+      "> ```",
+      ">",
+      "> ```statblock",
+      "> # Kobold B",
+      "> HP: 5/5",
+      "> ```",
+    ].join("\n");
+    const { editor, pane, column } = openNote(md, WIDE_PANE);
+    // As NotePane draws it: a capped column, centred in a scrolling pane.
+    pane.setAttribute("data-note-scroll", "");
+    column.style.maxWidth = "46rem";
+    column.style.marginInline = "auto";
+    await tick();
+
+    const callout = editor.view.dom
+      .querySelector('[data-note-block="callout"]')!
+      .getBoundingClientRect();
+    expect(callout.left, "the encounter breaks out").toBeLessThan(column.getBoundingClientRect().left);
+
+    for (const card of editor.view.dom.querySelectorAll('[data-note-block="statblock"]')) {
+      const target = pointerAt(editor, inside(card, 40, 12));
+      const rect = await grip(editor, target);
+      expect(rect.right).toBeLessThanOrEqual(callout.left);
+      expect(rect.left).toBeGreaterThanOrEqual(pane.getBoundingClientRect().left);
+      dropGrip();
+    }
+  });
+
+  it("puts a floated infobox's grip at the panel's own edge, beside its first row", async () => {
+    const { editor } = openNote(
+      ["Prose beside the panel, long enough to wrap around it.", "", "```infobox", "Ruler: Mira", "```"].join(
+        "\n",
+      ),
+      WIDE_PANE,
+    );
+    await tick();
+    const panel = editor.view.dom.querySelector<HTMLElement>("[data-infobox-block]")!;
+    expect(getComputedStyle(panel).float, "the panel floats here").toBe("right");
+
+    const box = panel.getBoundingClientRect();
+    const target = pointerAt(editor, inside(panel, 20, 20));
+    const rect = await grip(editor, target);
+
+    expect(rect.right).toBeLessThanOrEqual(box.left);
+    expect(rect.left).toBeGreaterThan(box.left - 40);
+    // Level with the panel, not floating above its frame beside the hover toolbar.
+    expect(rect.top).toBeGreaterThanOrEqual(box.top - 1);
   });
 });
