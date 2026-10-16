@@ -234,6 +234,7 @@ export const commands = {
 	saveStatblockPresetDefault: (preset: string | null) => __TAURI_INVOKE<void>("save_statblock_preset_default", { preset }),
 	searchAll: (query: string) => __TAURI_INVOKE<SearchAllResult>("search_all", { query }),
 	searchNotes: (query: string) => __TAURI_INVOKE<NoteSearchResult[]>("search_notes", { query }),
+	searchLinkTargets: (query: string, excludePath: string | null) => __TAURI_INVOKE<LinkTarget[]>("search_link_targets", { query, excludePath }),
 	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
 	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
 	setTagGraphStyle: (tag: string, color: string | null, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_style", { tag, color, hidden }),
@@ -367,6 +368,18 @@ export type GraphNodeData_Serialize = {
 	 *  Always 0 for map and stub nodes.
 	 */
 	backlink_count: number,
+};
+
+/**  One note the menu can link to. */
+export type LinkTarget = {
+	id: number,
+	title: string,
+	/**  Ledger-relative, as the link is written. */
+	path: string,
+	/**  The folder it lives in, for telling two notes of one name apart. None at the root. */
+	folder: string | null,
+	/**  The alias the query matched, when it was an alias and not the title that answered. */
+	alias: string | null,
 };
 
 export type Map = {

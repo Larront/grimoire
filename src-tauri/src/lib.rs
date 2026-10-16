@@ -15,6 +15,7 @@ use commands::app_prefs::*;
 use commands::graph::*;
 use commands::graph_styles::*;
 use commands::ledger::*;
+use commands::link_targets::*;
 use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
@@ -154,6 +155,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_statblock_preset_default,
             search_all,
             search_notes,
+            search_link_targets,
             set_note_aliases,
             set_pin_tags,
             set_tag_graph_style,
@@ -282,6 +284,7 @@ pub fn run() {
             write_note_content,
             delete_note,
             search_notes,
+            search_link_targets,
             search_all,
             rebuild_search_index,
             get_note_by_path,
