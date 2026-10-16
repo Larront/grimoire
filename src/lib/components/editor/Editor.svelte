@@ -20,14 +20,17 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
   import { parseFrontmatter } from "$lib/utils";
+  import { toastUndo } from "$lib/toast";
 
   interface Props {
     initialContent: string;
     onSave: (markdown: string) => Promise<void>;
     highlightQuery?: string;
+    /** The note being edited — a link menu never offers a note a link to itself. */
+    notePath?: string | null;
   }
 
-  let { initialContent, onSave, highlightQuery = "" }: Props = $props();
+  let { initialContent, onSave, highlightQuery = "", notePath = null }: Props = $props();
 
   let element = $state<HTMLDivElement>();
   let editor = $state<Editor | null>(null);
@@ -114,6 +117,7 @@
         onWikiSuggestion: (state) => {
           wikiState = state;
         },
+        notePath: () => notePath,
         onBlockTarget: blockHandle.point,
         onBlockGrab: blockHandle.grab,
       }),
@@ -284,11 +288,27 @@
 
   // ── Wiki-link interaction ────────────────────────────────────────────────────
 
+  /**
+   * A dotted link clicked: its note is written and opened. One click still does it — the
+   * GM asked to see the note — but it used to happen with nothing said and no way back, so
+   * a misclick mid-session left an empty file in the ledger and the GM in another note.
+   * Undo takes them back and removes the note, which nothing has been written into yet.
+   */
   async function createNoteFromStub(path: string) {
     const { title } = parseWikiTarget(path);
+    const pane = tabs.focusedPane;
     const newNote = await api.createNote(title, path, null);
     await notes.load();
     tabs.navigate({ type: "note", id: newNote.id, title: newNote.title });
+    toastUndo(
+      `Created ${newNote.title}`,
+      () => {},
+      async () => {
+        tabs.navigateBack(pane);
+        await api.deleteNote(newNote.id);
+        await notes.load();
+      },
+    );
   }
 
   async function handleClick(e: MouseEvent) {
@@ -374,6 +394,8 @@
     y={wikiState.y}
     anchorTop={wikiState.anchorTop}
     onSelect={wikiState.command}
+    onHover={wikiState.select}
+    onReposition={wikiState.reposition}
   />
 {/if}
 

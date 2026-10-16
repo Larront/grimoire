@@ -31,14 +31,7 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { portal } from "$lib/utils/portal";
-  import {
-    findWikiTrigger,
-    readWikiSuggestKey,
-    searchWikiTargets,
-    wikiMenuAnchor,
-    type NoteSearchResult,
-    type WikiMenuAnchor,
-  } from "$lib/editor/wiki-suggest";
+  import { createFieldWikiSuggest } from "$lib/editor/wiki-field-suggest.svelte";
   import WikiLinkSuggestion from "$lib/components/editor/WikiLinkSuggestion.svelte";
 
   let {
@@ -154,7 +147,7 @@
   });
 
   function commit() {
-    suggestion = null;
+    wiki.close();
     editing = false;
     // The restriction is applied again here because a multi-line field cannot apply
     // it per keystroke: the newline the GM just pressed Enter for is, for the one
@@ -167,7 +160,7 @@
   }
 
   function cancel() {
-    suggestion = null;
+    wiki.close();
     draft = value;
     editing = false;
   }
@@ -182,7 +175,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (suggestion && handleSuggestionKeydown(e)) return;
+    if (wiki.keydown(e)) return;
     // In a multi-line field Enter is a line break the value is allowed to hold, so
     // the only ways out are leaving the field and Escape.
     if (e.key === "Enter" && !multiline) {
@@ -212,67 +205,11 @@
   // drift into two answers about Enter; the dropdown is `WikiLinkSuggestion`, the same
   // component the wikilink node's own suggestion plugin draws.
 
-  interface FieldSuggestion extends WikiMenuAnchor {
-    items: NoteSearchResult[];
-    selectedIndex: number;
-    /** Where the `[[` sits in the draft, so accepting replaces from there. */
-    triggerStart: number;
-  }
-
-  let suggestion = $state<FieldSuggestion | null>(null);
-
-  async function offerSuggestions(el: HTMLInputElement | HTMLTextAreaElement) {
-    // No open `[[`, or the GM already closed it: there is nothing to complete.
-    const trigger = findWikiTrigger(el.value, el.selectionStart ?? el.value.length);
-    if (!trigger) {
-      suggestion = null;
-      return;
-    }
-
-    const items = await searchWikiTargets(trigger.query);
-    suggestion = {
-      items,
-      selectedIndex: 0,
-      ...wikiMenuAnchor(el.getBoundingClientRect()),
-      triggerStart: trigger.start,
-    };
-  }
-
-  /** Whether the key belonged to the dropdown. */
-  function handleSuggestionKeydown(e: KeyboardEvent): boolean {
-    if (!suggestion) return false;
-    const verdict = readWikiSuggestKey(e.key, {
-      itemCount: suggestion.items.length,
-      selectedIndex: suggestion.selectedIndex,
-    });
-    if (!verdict) return false;
-
-    e.preventDefault();
-    if (verdict.kind === "move") {
-      suggestion.selectedIndex = verdict.selectedIndex;
-    } else if (verdict.kind === "dismiss") {
-      // Escape closes the dropdown and keeps the edit — one Escape, one dismissal.
-      suggestion = null;
-    } else {
-      accept(suggestion.items[verdict.selectedIndex]);
-    }
-    return true;
-  }
-
-  function accept(item: NoteSearchResult) {
-    if (!suggestion) return;
-    const { triggerStart } = suggestion;
-    const caret = input?.selectionStart ?? draft.length;
-    const inserted = `[[${item.path}]]`;
-    draft = draft.slice(0, triggerStart) + inserted + draft.slice(caret);
-    suggestion = null;
-
-    const next = triggerStart + inserted.length;
-    tick().then(() => {
-      input?.focus();
-      input?.setSelectionRange(next, next);
-    });
-  }
+  const wiki = createFieldWikiSuggest({
+    input: () => input,
+    value: () => draft,
+    setValue: (next) => (draft = next),
+  });
 
   // Ctrl/Cmd+Enter follows the value's first link, the keyboard's way to what the pointer
   // gets by clicking it: Enter opens the field for editing, so a link in a value — "Born:
@@ -305,7 +242,9 @@
           data-wiki-link
           data-path={segment.path}
           data-title={segment.title}
-          data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
+          data-broken={broken(segment.path) ? "" : undefined}
+          title={broken(segment.path) ? "Not written yet — click to create" : undefined}
+          >{segment.title}</span
         >{/if}
     {/each}
   {:else}
@@ -325,7 +264,7 @@
     class="linked-textarea {multiline ? '' : 'linked-textarea-wrap'} w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
-      void offerSuggestions(e.currentTarget);
+      void wiki.offer(e.currentTarget);
     }}
     onblur={commit}
     onkeydown={handleKeydown}></textarea>
@@ -339,7 +278,7 @@
     class="w-full bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
-      void offerSuggestions(e.currentTarget);
+      void wiki.offer(e.currentTarget);
     }}
     onblur={commit}
     onkeydown={handleKeydown}
@@ -360,7 +299,7 @@
   </button>
 {/if}
 
-{#if suggestion}
+{#if wiki.current}
   <!-- `mousedown` is swallowed so choosing a note with the pointer does not blur the
        input first — a blur would commit the edit and unmount the dropdown under the
        click. The dropdown itself is `position: fixed`, so this wrapper adds no box.
@@ -372,12 +311,14 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div use:portal onmousedown={(e) => e.preventDefault()}>
     <WikiLinkSuggestion
-      items={suggestion.items}
-      selectedIndex={suggestion.selectedIndex}
-      x={suggestion.x}
-      y={suggestion.y}
-      anchorTop={suggestion.anchorTop}
-      onSelect={accept}
+      items={wiki.current.items}
+      selectedIndex={wiki.current.selectedIndex}
+      x={wiki.current.x}
+      y={wiki.current.y}
+      anchorTop={wiki.current.anchorTop}
+      onSelect={wiki.accept}
+      onHover={wiki.hover}
+      onReposition={wiki.reposition}
     />
   </div>
 {/if}

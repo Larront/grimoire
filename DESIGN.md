@@ -310,6 +310,17 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 - **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
 - **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
 
+### Link Menu
+
+What `[[` offers — in prose, in a block's field, and in the Quick Notes box. The slash menu's frame, rows and keys, 288px wide; in a field it opens under the `[[`, not at the field's corner.
+
+- **Bare `[[`:** the notes opened most recently, then the most recently written, leaving out the note being written in.
+- **Typing:** names, not body text — the title being typed first, then a word of it, then an alias, then a typo's distance. Spaces are part of a name. `Folder/name` narrows to a folder.
+- **Rows:** one line each, the title with its folder on the right (or the alias that matched). Last, unless a note already has the name: "New note “…”", which links the name without writing a file.
+- **What is written:** the note's path, with whatever the GM typed after the name — `#heading`, `|display` — kept.
+- **Dotted links:** a note not written yet. Clicking one creates and opens it, with "Created … · Undo".
+- **Closing:** Escape, and it stays closed for that `[[`; a sentence typed after a stray `[[` closes it too.
+
 ### Block Handle
 
 One grip for the whole note, beside whichever block the pointer or caret is on: 18px, 6px radius, Ember Muted, fading in on hover. Ctrl/Cmd+Shift+H raises it from the text; ↑/↓ on it move the block; drag moves it; a click opens its menu.

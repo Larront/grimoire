@@ -226,7 +226,7 @@ _Avoid_: "wikilink input," "rich text field" (it is deliberately not rich), "blo
 
 ### Stub Note
 
-A note that is referenced by a wikilink but does not yet exist on disk. Stub notes appear in the Graph Pane as dimmer, smaller nodes. Clicking a stub node in the graph creates the note with the link text as its title and opens it in the active pane.
+A note that is referenced by a wikilink but does not yet exist on disk. Stub notes appear in the Graph Pane as dimmer, smaller nodes. Clicking a stub node in the graph creates the note with the link text as its title and opens it in the active pane. In a note, a link to one is drawn dotted ("Not written yet — click to create"); clicking it creates and opens the note too, and says "Created … · Undo". The `[[` menu makes one on purpose: a name no note has is offered as "New note “…”", which links it without writing a file (2026-10 design review).
 _Avoid_: "ghost note," "missing note," "placeholder note."
 
 ### Orphan Note
@@ -236,7 +236,7 @@ _Avoid_: "unlinked note," "isolated note."
 
 ### Note Alias
 
-An alternative name for a note, usable in wikilink resolution. Stored in frontmatter (`aliases: [...]`), indexed in the SQLite `note_aliases(note_id, alias TEXT)` table. When typing `[[alias text]]`, the wikilink suggestion dropdown shows the note whose alias matches. Wikilink-resolution-only — aliases do not affect how the note title displays anywhere in the app.
+An alternative name for a note, usable in wikilink resolution. Stored in frontmatter (`aliases: [...]`), indexed in the SQLite `note_aliases(note_id, alias TEXT)` table. When typing `[[alias text]]`, the wikilink suggestion dropdown shows the note whose alias matches — any word of the alias, not only its start — and names the alias that answered. Wikilink-resolution-only — aliases do not affect how the note title displays anywhere in the app.
 _Avoid_: "note nickname," "alternate title."
 
 ### Quick Note

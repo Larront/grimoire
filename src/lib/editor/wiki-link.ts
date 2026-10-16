@@ -4,11 +4,15 @@ import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { parseWikiTarget, wikiStem } from "./wiki-target";
 import {
+  describeWikiMenu,
+  looksLikeProse,
+  parseWikiQuery,
   readWikiSuggestKey,
   searchWikiTargets,
+  wikiLinkTarget,
   wikiMenuAnchor,
-  type NoteSearchResult,
   type WikiMenuAnchor,
+  type WikiSuggestion,
 } from "./wiki-suggest";
 
 interface WikiBrokenState {
@@ -27,12 +31,16 @@ export const wikiBrokenLinkKey = new PluginKey<WikiBrokenState>("wikiBrokenLink"
 // Linked Text Field can share it); both re-exported here because this is where callers
 // look for them.
 export { stripWikiFragment, wikiStem, parseWikiTarget } from "./wiki-target";
-export type { NoteSearchResult } from "./wiki-suggest";
+export type { WikiSuggestion } from "./wiki-suggest";
 
 export interface WikiLinkSuggestionState extends WikiMenuAnchor {
-  items: NoteSearchResult[];
-  command: (item: NoteSearchResult) => void;
+  items: WikiSuggestion[];
+  command: (item: WikiSuggestion) => void;
   selectedIndex: number; // managed by the suggestion plugin's onKeyDown, not the component
+  /** The pointer moved onto a row: it becomes the one Enter takes. */
+  select: (index: number) => void;
+  /** Read the caret's position again — the note scrolled under the open menu. */
+  reposition: () => void;
 }
 
 // `[[target]]`, anchored: a tokenizer is offered the rest of the line, and a
@@ -56,6 +64,11 @@ interface WikiLinkOptions {
   // Called by the suggestion system to push state updates to the editor component.
   // Editor.svelte passes a setter here so it can render the dropdown in its template.
   onSuggestion: (state: WikiLinkSuggestionState | null) => void;
+  /**
+   * The note being written in, which a bare `[[` leaves out of its recent notes: a note
+   * linking to itself is never what the GM was reaching for.
+   */
+  notePath: () => string | null;
 }
 
 export const WikiLink = Node.create<WikiLinkOptions>({
@@ -67,6 +80,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   addOptions() {
     return {
       onSuggestion: () => {},
+      notePath: () => null,
     };
   },
 
@@ -181,6 +195,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
 
   addProseMirrorPlugins() {
     const onSuggestion = this.options.onSuggestion;
+    const notePath = this.options.notePath;
 
     // Decorates wikiLink nodes whose path is in the broken set (fed via meta) with
     // data-broken. Rebuilds when a new set arrives or the doc changes; otherwise the
@@ -201,6 +216,8 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               decos.push(
                 Decoration.node(pos, pos + node.nodeSize, {
                   "data-broken": "",
+                  // A dotted link is a note not written yet, and clicking writes it.
+                  title: "Not written yet — click to create",
                 }),
               );
             }
@@ -221,9 +238,19 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         editor: this.editor,
         char: "[[",
         startOfLine: false,
+        // A name has spaces in it — "The Ember Keep" — and the first one used to end the
+        // search, so most of a world's names could not be typed into it. `looksLikeProse`
+        // closes the menu for a stray `[[` the GM has written a sentence after instead.
+        allowSpaces: true,
+        // Any character may come before the brackets, as in a field: `([[Mira` and
+        // `"[[Mira` never opened the menu, because the default wants a space in front.
+        allowedPrefixes: null,
 
-        items: ({ query }: { query: string }) => searchWikiTargets(query),
+        items: ({ query }: { query: string }) =>
+          looksLikeProse(query) ? [] : searchWikiTargets(query, notePath()),
 
+        // Whatever the GM typed after the name — `#heading`, `|display` — is written with
+        // the note they chose. It used to be dropped: `[[keep|the Keep` wrote a bare link.
         command: ({
           editor,
           range,
@@ -231,15 +258,16 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         }: {
           editor: unknown;
           range: { from: number; to: number };
-          props: NoteSearchResult;
+          props: WikiSuggestion;
         }) => {
           const ed = editor as import("@tiptap/core").Editor;
+          const typed = ed.state.doc.textBetween(range.from, range.to).replace(/^\[\[/, "");
           ed.chain()
             .focus()
             .deleteRange(range)
             .insertContent({
               type: "wikiLink",
-              attrs: { path: props.path, title: props.title },
+              attrs: parseWikiTarget(wikiLinkTarget(props, parseWikiQuery(typed))),
             })
             .run();
         },
@@ -250,42 +278,65 @@ export const WikiLink = Node.create<WikiLinkOptions>({
           // global svelte:window listeners that would conflict with other key handlers.
           let selectedIndex = 0;
           let currentState: WikiLinkSuggestionState | null = null;
+          let lastProps: RenderProps | null = null;
 
-          function buildState(
-            props: {
-              clientRect?: (() => DOMRect | null) | null;
-              items: NoteSearchResult[];
-              command: (p: NoteSearchResult) => void;
-            },
-            si: number,
-          ): WikiLinkSuggestionState {
+          type RenderProps = {
+            editor: import("@tiptap/core").Editor;
+            query: string;
+            clientRect?: (() => DOMRect | null) | null;
+            items: WikiSuggestion[];
+            command: (p: WikiSuggestion) => void;
+          };
+
+          function buildState(props: RenderProps, si: number): WikiLinkSuggestionState {
             return {
               items: props.items,
               command: props.command,
               selectedIndex: si,
+              select,
+              reposition,
               ...wikiMenuAnchor(props.clientRect?.()),
             };
           }
 
+          // The editor names the menu it opened and the row Enter will take, so a screen
+          // reader follows the selection while focus stays in the text.
+          function push(state: WikiLinkSuggestionState | null) {
+            currentState = state;
+            describeWikiMenu(
+              lastProps?.editor.view.dom,
+              state && { itemCount: state.items.length, selectedIndex: state.selectedIndex },
+            );
+            onSuggestion(state);
+          }
+
+          function select(index: number) {
+            if (!currentState || index === selectedIndex) return;
+            selectedIndex = index;
+            push({ ...currentState, selectedIndex });
+          }
+
+          function reposition() {
+            if (!currentState || !lastProps) return;
+            push(buildState(lastProps, selectedIndex));
+          }
+
           return {
-            onStart(props: {
-              clientRect?: (() => DOMRect | null) | null;
-              items: NoteSearchResult[];
-              command: (p: NoteSearchResult) => void;
-            }) {
+            onStart(props: RenderProps) {
+              lastProps = props;
               selectedIndex = 0;
-              currentState = buildState(props, selectedIndex);
-              onSuggestion(currentState);
+              push(buildState(props, selectedIndex));
             },
 
-            onUpdate(props: {
-              clientRect?: (() => DOMRect | null) | null;
-              items: NoteSearchResult[];
-              command: (p: NoteSearchResult) => void;
-            }) {
+            onUpdate(props: RenderProps) {
+              lastProps = props;
               selectedIndex = 0;
-              currentState = buildState(props, selectedIndex);
-              onSuggestion(currentState);
+              // A stray `[[` followed by a sentence: close, and leave the text alone.
+              if (looksLikeProse(props.query)) {
+                push(null);
+                return;
+              }
+              push(buildState(props, selectedIndex));
             },
 
             // What each key means is `readWikiSuggestKey`'s, shared with the Linked
@@ -296,15 +347,15 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               const verdict = readWikiSuggestKey(event.key, {
                 itemCount: currentState.items.length,
                 selectedIndex,
+                shiftKey: event.shiftKey,
               });
               if (!verdict) return false;
 
               if (verdict.kind === "move") {
                 selectedIndex = verdict.selectedIndex;
-                currentState = { ...currentState, selectedIndex };
-                onSuggestion(currentState);
+                push({ ...currentState, selectedIndex });
               } else if (verdict.kind === "dismiss") {
-                onSuggestion(null);
+                push(null);
               } else {
                 currentState.command(currentState.items[verdict.selectedIndex]);
               }
@@ -312,9 +363,9 @@ export const WikiLink = Node.create<WikiLinkOptions>({
             },
 
             onExit() {
-              currentState = null;
+              push(null);
               selectedIndex = 0;
-              onSuggestion(null);
+              lastProps = null;
             },
           };
         },

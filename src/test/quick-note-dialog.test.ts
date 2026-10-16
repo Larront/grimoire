@@ -30,7 +30,7 @@ vi.mock("svelte-sonner", () => ({
 // claim about the store actually being shut rather than about a stub saying so.
 const LEDGER_PATH = "/worlds/marsh";
 
-const SEARCH_RESULTS = [{ id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md" }];
+const SEARCH_RESULTS = [{ id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md", folder: "People", alias: null }];
 
 let rows: QuickNote[] = [];
 
@@ -61,7 +61,7 @@ beforeEach(() => {
     // Two shapes the blanket `[]` below is wrong for: a tree, and a name.
     if (cmd === "get_statblock_preset_default") return Promise.resolve(null);
     if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
-    if (cmd === "search_notes") return Promise.resolve(SEARCH_RESULTS);
+    if (cmd === "search_link_targets") return Promise.resolve(SEARCH_RESULTS);
     if (cmd === "create_quick_note") {
       const created: QuickNote = {
         id: rows.length + 1,
