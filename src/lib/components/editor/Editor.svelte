@@ -1,11 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { api } from "$lib/api";
 
   import { noteExtensions } from "$lib/editor/note-extensions";
   import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
-  import { wikiBrokenLinkKey, parseWikiTarget, stripWikiFragment } from "$lib/editor/wiki-link";
+  import { wikiBrokenLinkKey, stripWikiFragment } from "$lib/editor/wiki-link";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -19,8 +18,8 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
-  import { parseFrontmatter } from "$lib/utils";
-  import { toastUndo } from "$lib/toast";
+  import { createLinkPreview } from "$lib/editor/link-preview.svelte";
+  import { createNoteFromStub } from "$lib/editor/stub-note";
 
   interface Props {
     initialContent: string;
@@ -51,14 +50,6 @@
   // ── Overlay state ────────────────────────────────────────────────────────────
   let slashState = $state<SlashCommandSuggestionState | null>(null);
   let wikiState = $state<WikiLinkSuggestionState | null>(null);
-  let wikiPreview = $state<{
-    path: string;
-    title: string;
-    content: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  let previewTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ── The block handle ─────────────────────────────────────────────────────────
   // Which block the grip belongs to, whether it is on screen at all, and what its menu is
@@ -156,7 +147,6 @@
 
   onDestroy(() => {
     unregisterFlush?.();
-    clearTimeout(previewTimer);
     blockHandle.destroy();
     // flush() captures the markdown synchronously (before its first await),
     // so the pending edit is safe to hand off before destroying the editor.
@@ -260,6 +250,7 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    if (previewLinkAtCaret(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
       clearTimeout(saveTimer);
@@ -288,29 +279,6 @@
 
   // ── Wiki-link interaction ────────────────────────────────────────────────────
 
-  /**
-   * A dotted link clicked: its note is written and opened. One click still does it — the
-   * GM asked to see the note — but it used to happen with nothing said and no way back, so
-   * a misclick mid-session left an empty file in the ledger and the GM in another note.
-   * Undo takes them back and removes the note, which nothing has been written into yet.
-   */
-  async function createNoteFromStub(path: string) {
-    const { title } = parseWikiTarget(path);
-    const pane = tabs.focusedPane;
-    const newNote = await api.createNote(title, path, null);
-    await notes.load();
-    tabs.navigate({ type: "note", id: newNote.id, title: newNote.title });
-    toastUndo(
-      `Created ${newNote.title}`,
-      () => {},
-      async () => {
-        tabs.navigateBack(pane);
-        await api.deleteNote(newNote.id);
-        await notes.load();
-      },
-    );
-  }
-
   async function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
@@ -330,38 +298,38 @@
     }
   }
 
-  function handleMouseover(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
-    if (!link?.dataset.path) return;
-    const path = link.dataset.path;
-    const target = stripWikiFragment(path);
-    const title = link.dataset.title ?? "";
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(async () => {
-      // A hover preview owns its own (absent) error UI, so this lookup is silent.
-      const note = await linkResolver.resolve(target, { silent: true }).catch(() => null);
-      if (!note) return;
-      try {
-        const raw = await api.readNoteContent(note.path);
-        const { body } = parseFrontmatter(raw);
-        const r = link.getBoundingClientRect();
-        wikiPreview = {
-          path,
-          title: title || note.title,
-          content: body,
-          x: r.left,
-          y: r.bottom + 6,
-        };
-      } catch {
-        /* unreadable — skip preview */
-      }
-    }, 400);
-  }
+  // ── The link preview ─────────────────────────────────────────────────────────
+  // Its life is the shared controller's, used by every surface that draws links; what is
+  // left here is this surface's pointer and the keyboard's way in.
+  const preview = createLinkPreview();
+  onDestroy(() => preview.destroy());
 
-  function handleMouseout(e: MouseEvent) {
-    if (!(e.target as HTMLElement).closest("[data-wiki-link]")) return;
-    clearTimeout(previewTimer);
-    wikiPreview = null;
+  /**
+   * Ctrl/Cmd+Shift+P: the preview of the link at the caret, or in the block field that has
+   * focus. Keyboard users had no preview at all — a link in prose cannot take focus.
+   */
+  function previewLinkAtCaret(e: KeyboardEvent): boolean {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== "p") return false;
+    // A block field's value is a button holding its links; the note's own text is the
+    // editor, which holds every link in the note, so it is asked by caret instead.
+    const focused = document.activeElement as HTMLElement | null;
+    let link =
+      focused?.tagName === "BUTTON" ? focused.querySelector<HTMLElement>("[data-wiki-link]") : null;
+    if (!link && editor) {
+      const caret = editor.state.selection.$from;
+      const at =
+        caret.nodeAfter?.type.name === "wikiLink"
+          ? caret.pos
+          : caret.nodeBefore?.type.name === "wikiLink"
+            ? caret.pos - caret.nodeBefore.nodeSize
+            : null;
+      const dom = at === null ? null : editor.view.nodeDOM(at);
+      link = dom instanceof HTMLElement ? dom : null;
+    }
+    if (!link) return false;
+    e.preventDefault();
+    preview.openFor(link);
+    return true;
   }
 </script>
 
@@ -374,8 +342,8 @@
   ondragover={(e) => e.preventDefault()}
   ondrop={handleDrop}
   onclick={handleClick}
-  onmouseover={handleMouseover}
-  onmouseout={handleMouseout}
+  onmouseover={preview.pointerOver}
+  onmouseout={preview.pointerOut}
 ></div>
 
 {#if slashState}
@@ -399,6 +367,19 @@
   />
 {/if}
 
-{#if wikiPreview}
-  <WikiLinkPreview {...wikiPreview} />
+{#if preview.card}
+  <WikiLinkPreview
+    card={preview.card}
+    allowCreate
+    onPointer={preview.cardPointer}
+    onOpen={(note) => {
+      preview.close();
+      tabs.navigate({ type: "note", id: note.id, title: note.title });
+    }}
+    onCreate={(path) => {
+      preview.close();
+      void createNoteFromStub(stripWikiFragment(path));
+    }}
+    onClose={preview.close}
+  />
 {/if}

@@ -216,8 +216,6 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               decos.push(
                 Decoration.node(pos, pos + node.nodeSize, {
                   "data-broken": "",
-                  // A dotted link is a note not written yet, and clicking writes it.
-                  title: "Not written yet — click to create",
                 }),
               );
             }

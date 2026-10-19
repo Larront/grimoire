@@ -226,7 +226,7 @@ _Avoid_: "wikilink input," "rich text field" (it is deliberately not rich), "blo
 
 ### Stub Note
 
-A note that is referenced by a wikilink but does not yet exist on disk. Stub notes appear in the Graph Pane as dimmer, smaller nodes. Clicking a stub node in the graph creates the note with the link text as its title and opens it in the active pane. In a note, a link to one is drawn dotted ("Not written yet — click to create"); clicking it creates and opens the note too, and says "Created … · Undo". The `[[` menu makes one on purpose: a name no note has is offered as "New note “…”", which links it without writing a file (2026-10 design review).
+A note that is referenced by a wikilink but does not yet exist on disk. Stub notes appear in the Graph Pane as dimmer, smaller nodes. Clicking a stub node in the graph creates the note with the link text as its title and opens it in the active pane. In a note, a link to one is drawn dotted, and its preview card says "Not written yet" with Create; clicking the link creates and opens the note too, and says "Created … · Undo". The `[[` menu makes one on purpose: a name no note has is offered as "New note “…”", which links it without writing a file (2026-10 design review).
 _Avoid_: "ghost note," "missing note," "placeholder note."
 
 ### Orphan Note

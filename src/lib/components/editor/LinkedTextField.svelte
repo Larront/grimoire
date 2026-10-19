@@ -242,9 +242,7 @@
           data-wiki-link
           data-path={segment.path}
           data-title={segment.title}
-          data-broken={broken(segment.path) ? "" : undefined}
-          title={broken(segment.path) ? "Not written yet — click to create" : undefined}
-          >{segment.title}</span
+          data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
         >{/if}
     {/each}
   {:else}
