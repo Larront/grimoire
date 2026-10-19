@@ -377,11 +377,11 @@ describe("pin Details Source — teardown (#210)", () => {
 });
 
 describe("pinNotePreview", () => {
-  it("reads as prose: no frontmatter, no title echo, wikilinks in their brackets", () => {
+  it("reads as prose: no frontmatter, no title echo, wikilinks as their names", () => {
     const raw =
       "---\ntags: location\n---\n# The Ember Keep\n\nA crumbling fortress on the edge of [[The Ashfen Marshes]], held by **the Order**.";
     expect(pinNotePreview(raw, "The Ember Keep")).toBe(
-      "A crumbling fortress on the edge of [[The Ashfen Marshes]], held by the Order.",
+      "A crumbling fortress on the edge of The Ashfen Marshes, held by the Order.",
     );
   });
 
