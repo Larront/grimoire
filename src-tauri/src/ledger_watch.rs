@@ -20,6 +20,13 @@
 //!   row is a create — insert the row, reconcile, and emit `ledger:tree-changed`.
 //!   A path that is gone is a **remove**: drop the `notes` row and its derived
 //!   indexes and emit `note:removed` `{path}`.
+//! - A gone path that is not a note is a **folder removal** (usually — see
+//!   [`Change::FolderRemoved`]). Windows reports a folder deleted with its
+//!   contents, or sent to the Recycle Bin, as that one path and nothing for the
+//!   notes inside, so their rows are dropped on the folder's word (emit
+//!   `note:removed` for each) and the Files tree is told to refetch (emit
+//!   `ledger:tree-changed`) even when the folder held nothing — the tree walks
+//!   the disk, so without that event an empty folder's row outlives the folder.
 //! - A rename/move is correlated into a single [`Change::Moved`]: a native
 //!   `notify` rename (both endpoints in one event) directly, or a delete+create
 //!   pair whose created content matches bytes the app recently wrote to the
@@ -336,6 +343,12 @@ enum Change {
         to_rel: String,
         content: String,
     },
+    /// A path that is gone and is not a note: almost always a folder, removed
+    /// with whatever it held. Any notes rows under it go, and the tree refetches
+    /// regardless. A gone file that simply is not a note (a PDF, a map image, a
+    /// `.txt`) lands here too, which costs one tree refetch and finds no rows —
+    /// and is what lets a PDF deleted on disk leave the tree as well.
+    FolderRemoved { rel_path: String },
 }
 
 /// What the frontend must be told after a change is applied.
@@ -355,6 +368,10 @@ enum Notify {
         to: String,
         stale_backlinks: usize,
     },
+    /// A folder left the ledger, taking these notes with it (possibly none). Each
+    /// gets its own `note:removed`, so a pane holding one raises the deleted
+    /// banner; then one `ledger:tree-changed`, so the folder's own row goes.
+    FolderRemoved { notes: Vec<String> },
     /// Nothing observable happened (echo already handled, or a no-op remove).
     Nothing,
 }
@@ -385,11 +402,17 @@ fn classify(canonical_root: &Path, event_path: &Path) -> Option<Change> {
                 content: String::from_utf8_lossy(&bytes).into_owned(),
             })
         }
-        // The file is gone — delete or the `from` half of a move. Its own path
-        // can't be canonicalized, so resolve it via the (still-present) parent.
-        Err(_) => Some(Change::Remove {
-            rel_path: missing_relative_md(canonical_root, event_path)?,
-        }),
+        // The path is gone — a deleted note, the `from` half of a move, or a
+        // whole folder. It can't be canonicalized itself, so it is resolved via
+        // the nearest ancestor that is still there.
+        Err(_) => {
+            let rel_path = missing_relative(canonical_root, event_path)?;
+            if rel_path.ends_with(".md") {
+                Some(Change::Remove { rel_path })
+            } else {
+                Some(Change::FolderRemoved { rel_path })
+            }
+        }
     }
 }
 
@@ -462,7 +485,7 @@ fn correlate_moves(
 }
 
 /// Apply a classified [`Change`] under the ledger lock, then emit the matching
-/// frontend event. The lock is released before emitting so a frontend listener
+/// frontend events. The lock is released before emitting so a frontend listener
 /// that turns around and calls a command can't contend with this handler.
 fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
     let ledger = app.state::<AppLedger>();
@@ -484,93 +507,121 @@ fn apply(app: &AppHandle, canonical_root: &Path, change: Change) {
         let Ok(crate::ledger::OpenLedger { conn, index, .. }) = guard.open() else {
             return;
         };
-        match change {
-            Change::Upsert { rel_path, content } => {
-                match upsert_external_note(conn, index, &rel_path, &content) {
-                    Ok(Upserted::Modified) => Notify::ContentChanged(rel_path),
-                    Ok(Upserted::Created) => Notify::TreeChanged,
-                    Err(e) => {
-                        log::warn!("[ledger_watch] upsert failed for {rel_path}: {e}");
-                        Notify::Nothing
-                    }
-                }
-            }
-            Change::Remove { rel_path } => {
-                match remove_external_note(conn, index, &rel_path) {
-                    Ok(true) => Notify::Removed(rel_path),
-                    Ok(false) => Notify::Nothing,
-                    Err(e) => {
-                        log::warn!("[ledger_watch] remove failed for {rel_path}: {e}");
-                        Notify::Nothing
-                    }
-                }
-            }
-            Change::Moved { from_rel, to_rel, content } => {
-                match move_external_note(conn, index, &ledger_path, &from_rel, &to_rel, &content) {
-                    // Re-keyed an existing row: the note keeps its id, so an open
-                    // pane follows the move seamlessly. `stale_backlinks` rides
-                    // along so the emit step can offer to heal them.
-                    Ok(Moved::Rekeyed { stale_backlinks }) => Notify::Moved {
-                        from: from_rel,
-                        to: to_rel,
-                        stale_backlinks,
-                    },
-                    // No row for the old path — nothing to follow; the new file is
-                    // just a create. Insert it and let the tree pick it up.
-                    Ok(Moved::NoRow) => match upsert_external_note(conn, index, &to_rel, &content) {
-                        Ok(_) => Notify::TreeChanged,
-                        Err(e) => {
-                            log::warn!("[ledger_watch] move-create failed for {to_rel}: {e}");
-                            Notify::Nothing
-                        }
-                    },
-                    Err(e) => {
-                        log::warn!("[ledger_watch] move failed {from_rel} -> {to_rel}: {e}");
-                        Notify::Nothing
-                    }
-                }
-            }
-        }
+        reconcile_change(conn, index, &ledger_path, change)
     };
     drop(guard);
 
-    match notify {
-        Notify::ContentChanged(path) => {
-            if let Err(e) = app.emit("note:content-changed", NoteContentChanged { path }) {
-                log::warn!("[ledger_watch] failed to emit note:content-changed: {e}");
-            }
+    for (name, payload) in emissions(notify) {
+        if let Err(e) = app.emit(name, payload) {
+            log::warn!("[ledger_watch] failed to emit {name}: {e}");
         }
-        Notify::TreeChanged => {
-            if let Err(e) = app.emit("ledger:tree-changed", ()) {
-                log::warn!("[ledger_watch] failed to emit ledger:tree-changed: {e}");
-            }
-        }
-        Notify::Removed(path) => {
-            if let Err(e) = app.emit("note:removed", NoteRemoved { path }) {
-                log::warn!("[ledger_watch] failed to emit note:removed: {e}");
-            }
-        }
-        Notify::Moved { from, to, stale_backlinks } => {
-            // The existing move event — the open pane follows the file. Untouched
-            // by the heal prompt so its refetch listener keeps working as before.
-            if let Err(e) = app.emit(
-                "note:moved",
-                NoteMoved { from: from.clone(), to: to.clone() },
-            ) {
-                log::warn!("[ledger_watch] failed to emit note:moved: {e}");
-            }
-            // Only when other notes still link to the old path do we offer to heal
-            // them — the prompt subscriber fires only when there's something to do.
-            if stale_backlinks > 0 {
-                if let Err(e) = app.emit(
-                    "note:external-move-links-stale",
-                    NoteExternalMoveLinksStale { from, to, count: stale_backlinks as u32 },
-                ) {
-                    log::warn!("[ledger_watch] failed to emit note:external-move-links-stale: {e}");
+    }
+}
+
+/// Bring the `notes` table and the [[Derived Index]] into agreement with one
+/// classified [`Change`], and say what the frontend must be told. All of
+/// [`apply`] but the lock and the emit, so a test can drive it on a bare
+/// connection.
+fn reconcile_change(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    change: Change,
+) -> Notify {
+    match change {
+        Change::Upsert { rel_path, content } => {
+            match upsert_external_note(conn, index, &rel_path, &content) {
+                Ok(Upserted::Modified) => Notify::ContentChanged(rel_path),
+                Ok(Upserted::Created) => Notify::TreeChanged,
+                Err(e) => {
+                    log::warn!("[ledger_watch] upsert failed for {rel_path}: {e}");
+                    Notify::Nothing
                 }
             }
         }
-        Notify::Nothing => {}
+        Change::Remove { rel_path } => match remove_external_note(conn, index, &rel_path) {
+            Ok(true) => Notify::Removed(rel_path),
+            Ok(false) => Notify::Nothing,
+            Err(e) => {
+                log::warn!("[ledger_watch] remove failed for {rel_path}: {e}");
+                Notify::Nothing
+            }
+        },
+        Change::Moved { from_rel, to_rel, content } => {
+            match move_external_note(conn, index, ledger_path, &from_rel, &to_rel, &content) {
+                // Re-keyed an existing row: the note keeps its id, so an open
+                // pane follows the move seamlessly. `stale_backlinks` rides
+                // along so the emit step can offer to heal them.
+                Ok(Moved::Rekeyed { stale_backlinks }) => Notify::Moved {
+                    from: from_rel,
+                    to: to_rel,
+                    stale_backlinks,
+                },
+                // No row for the old path — nothing to follow; the new file is
+                // just a create. Insert it and let the tree pick it up.
+                Ok(Moved::NoRow) => match upsert_external_note(conn, index, &to_rel, &content) {
+                    Ok(_) => Notify::TreeChanged,
+                    Err(e) => {
+                        log::warn!("[ledger_watch] move-create failed for {to_rel}: {e}");
+                        Notify::Nothing
+                    }
+                },
+                Err(e) => {
+                    log::warn!("[ledger_watch] move failed {from_rel} -> {to_rel}: {e}");
+                    Notify::Nothing
+                }
+            }
+        }
+        Change::FolderRemoved { rel_path } => {
+            // The folder is gone whatever happened to its rows, so the tree is
+            // told either way: a failure here must not leave its row standing.
+            let notes = remove_external_folder(conn, index, &rel_path).unwrap_or_else(|e| {
+                log::warn!("[ledger_watch] folder remove failed for {rel_path}: {e}");
+                Vec::new()
+            });
+            Notify::FolderRemoved { notes }
+        }
+    }
+}
+
+/// The frontend events a [`Notify`] stands for, in the order they are emitted —
+/// the watcher's half of the contract `src/lib/ledger/events.ts` spells out.
+fn emissions(notify: Notify) -> Vec<(&'static str, serde_json::Value)> {
+    // Every payload is a plain derive(Serialize) struct; this cannot fail.
+    fn json(payload: impl serde::Serialize) -> serde_json::Value {
+        serde_json::to_value(payload).unwrap_or_default()
+    }
+    let tree_changed = ("ledger:tree-changed", serde_json::Value::Null);
+
+    match notify {
+        Notify::ContentChanged(path) => {
+            vec![("note:content-changed", json(NoteContentChanged { path }))]
+        }
+        Notify::TreeChanged => vec![tree_changed],
+        Notify::Removed(path) => vec![("note:removed", json(NoteRemoved { path }))],
+        Notify::Moved { from, to, stale_backlinks } => {
+            // The existing move event — the open pane follows the file. Untouched
+            // by the heal prompt so its refetch listener keeps working as before.
+            let mut out = vec![(
+                "note:moved",
+                json(NoteMoved { from: from.clone(), to: to.clone() }),
+            )];
+            // Only when other notes still link to the old path do we offer to heal
+            // them — the prompt subscriber fires only when there's something to do.
+            if stale_backlinks > 0 {
+                out.push((
+                    "note:external-move-links-stale",
+                    json(NoteExternalMoveLinksStale { from, to, count: stale_backlinks as u32 }),
+                ));
+            }
+            out
+        }
+        Notify::FolderRemoved { notes } => notes
+            .into_iter()
+            .map(|path| ("note:removed", json(NoteRemoved { path })))
+            .chain(std::iter::once(tree_changed))
+            .collect(),
+        Notify::Nothing => Vec::new(),
     }
 }
 
@@ -651,9 +702,16 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
 }
 
 /// Convert a canonical absolute event path to a ledger-relative, forward-slash
-/// note path — or `None` if it escapes the ledger, lives under any dot-segment
-/// (e.g. `.grimoire/`), or isn't a `.md` file.
+/// note path — or `None` if it is out of scope (see [`relative_in_scope`]) or
+/// isn't a `.md` file.
 fn relative_md(canonical_root: &Path, canonical_path: &Path) -> Option<String> {
+    relative_in_scope(canonical_root, canonical_path).filter(|rel| rel.ends_with(".md"))
+}
+
+/// Convert a canonical absolute event path to a ledger-relative, forward-slash
+/// path of any kind — or `None` if it escapes the ledger, is the ledger root
+/// itself, or lives under any dot-segment (e.g. `.grimoire/`).
+fn relative_in_scope(canonical_root: &Path, canonical_path: &Path) -> Option<String> {
     let rel = canonical_path.strip_prefix(canonical_root).ok()?;
     for component in rel.components() {
         if let Component::Normal(name) = component {
@@ -663,22 +721,35 @@ fn relative_md(canonical_root: &Path, canonical_path: &Path) -> Option<String> {
         }
     }
     let rel_str = rel.to_string_lossy().replace('\\', "/");
-    if !rel_str.ends_with(".md") {
-        return None;
-    }
-    Some(rel_str)
+    (!rel_str.is_empty()).then_some(rel_str)
 }
 
 /// Ledger-relative `.md` path for an event path that no longer exists on disk (a
-/// delete or a move's `from` side), so `canonicalize` on the path itself fails.
-/// Canonicalizes the still-present parent directory and rejoins the file name so
-/// the same prefix-strip + filtering as [`relative_md`] applies. `None` if the
-/// parent is gone too, or the result is out of scope.
+/// delete or a move's `from` side). `None` if it is not an in-scope note.
 fn missing_relative_md(canonical_root: &Path, event_path: &Path) -> Option<String> {
-    let parent = event_path.parent()?;
-    let file_name = event_path.file_name()?;
-    let canonical_parent = std::fs::canonicalize(parent).ok()?;
-    relative_md(canonical_root, &canonical_parent.join(file_name))
+    missing_relative(canonical_root, event_path).filter(|rel| rel.ends_with(".md"))
+}
+
+/// Ledger-relative path for an event path that no longer exists on disk, so
+/// `canonicalize` on the path itself fails. Walks up to the nearest ancestor that
+/// is still there, canonicalizes that, and rejoins the vanished tail, so the same
+/// prefix-strip + filtering as [`relative_in_scope`] applies. Walking further than
+/// the parent matters when a folder goes with its notes: by the time the batch is
+/// classified the note's parent is gone too.
+fn missing_relative(canonical_root: &Path, event_path: &Path) -> Option<String> {
+    let mut vanished = Vec::new();
+    let mut ancestor = event_path;
+    let mut resolved = loop {
+        match std::fs::canonicalize(ancestor) {
+            Ok(canonical) => break canonical,
+            Err(_) => {
+                vanished.push(ancestor.file_name()?);
+                ancestor = ancestor.parent()?;
+            }
+        }
+    };
+    resolved.extend(vanished.iter().rev());
+    relative_in_scope(canonical_root, &resolved)
 }
 
 /// Whether an upsert created a new note row or reconciled an existing one.
@@ -770,6 +841,42 @@ pub(crate) fn remove_external_note(
         .execute(conn)
         .map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Apply an external removal of the folder `rel_path`: clear the derived indexes
+/// of every note under it (while the rows still exist, mirroring `delete_folder`)
+/// and delete those rows. Returns their paths, sorted — empty for a folder that
+/// held no notes, which is still a removal the tree has to hear about.
+///
+/// Maps whose image lived in the folder are left alone: a map is not a note, the
+/// watcher reconciles only notes, and dropping its row would take its pins too.
+pub(crate) fn remove_external_folder(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    rel_path: &str,
+) -> Result<Vec<String>, String> {
+    use crate::db::schema::notes::dsl as n;
+
+    // `LIKE` is only the coarse filter, as in `delete_folder`: it is
+    // case-insensitive and reads `_` as a wildcard, so the exact prefix decides.
+    let prefix = format!("{rel_path}/");
+    let doomed: Vec<(i32, String)> = n::notes
+        .filter(n::path.like(format!("{prefix}%")))
+        .select((n::id, n::path))
+        .load::<(i32, String)>(conn)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|(_, path)| path.starts_with(&prefix))
+        .collect();
+
+    crate::note_index::remove_many(conn, index, &doomed)?;
+    diesel::delete(n::notes.filter(n::id.eq_any(doomed.iter().map(|(id, _)| *id))))
+        .execute(conn)
+        .map_err(|e| e.to_string())?;
+
+    let mut paths: Vec<String> = doomed.into_iter().map(|(_, path)| path).collect();
+    paths.sort();
+    Ok(paths)
 }
 
 /// Apply an external move of `from_rel` → `to_rel` by re-keying the existing
@@ -1246,6 +1353,7 @@ mod tests {
                 Change::Upsert { rel_path, .. } => format!("upsert:{rel_path}"),
                 Change::Remove { rel_path } => format!("remove:{rel_path}"),
                 Change::Moved { from_rel, to_rel, .. } => format!("moved:{from_rel}->{to_rel}"),
+                Change::FolderRemoved { rel_path } => format!("folder-removed:{rel_path}"),
             })
             .collect()
     }
@@ -1282,6 +1390,89 @@ mod tests {
         // the oracle would match — there is nothing for it to consider.
         let out = correlate_moves(changes, |_, _| true);
         assert_eq!(rels(&out), vec!["upsert:Edited.md"]);
+    }
+
+    // ── folders removed outside the app ───────────────────────────────────────
+
+    /// What the frontend is told about a path that has just vanished from disk —
+    /// classified, reconciled and turned into events exactly as the batch handler
+    /// does, minus the debouncer and the `AppHandle`.
+    fn events_for_vanished(
+        conn: &mut SqliteConnection,
+        root: &Path,
+        vanished: &Path,
+    ) -> Vec<(&'static str, serde_json::Value)> {
+        let canonical_root = std::fs::canonicalize(root).unwrap();
+        let change = classify(&canonical_root, vanished).expect("an in-scope path");
+        emissions(reconcile_change(conn, None, root, change))
+    }
+
+    #[test]
+    fn missing_relative_md_resolves_a_note_whose_folder_is_gone_too() {
+        // Deleting a folder takes its notes with it, so by the time the batch is
+        // classified the note's parent cannot be canonicalized either.
+        let root = TempDir::new().unwrap();
+        let canonical_root = std::fs::canonicalize(root.path()).unwrap();
+        let deleted = root.path().join("zz Scratch").join("Deep").join("Note.md");
+        assert_eq!(
+            missing_relative_md(&canonical_root, &deleted),
+            Some("zz Scratch/Deep/Note.md".to_string())
+        );
+    }
+
+    /// The bug from the 2026-10 design review: an empty folder deleted on disk
+    /// stayed in the Files tree, because nothing told the tree to refetch.
+    #[test]
+    fn an_empty_folder_removed_on_disk_refetches_the_tree() {
+        let root = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        std::fs::create_dir(root.path().join("zz Scratch")).unwrap();
+        std::fs::remove_dir(root.path().join("zz Scratch")).unwrap();
+
+        let events = events_for_vanished(&mut conn, root.path(), &root.path().join("zz Scratch"));
+        assert_eq!(events, vec![("ledger:tree-changed", serde_json::Value::Null)]);
+    }
+
+    /// Windows reports a folder deleted with its contents as one removal of the
+    /// folder — nothing for the notes inside it. Their rows have to go on the
+    /// folder's word, or they linger as ghosts in search and backlinks.
+    #[test]
+    fn a_folder_removed_with_its_notes_drops_their_rows_and_says_so() {
+        let root = TempDir::new().unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "zz Scratch/Note.md");
+        insert_note(&mut conn, 2, "zz Scratch/Deep/Other.md");
+        // Siblings a `LIKE 'zz Scratch%'` would also catch, plus an unrelated note.
+        insert_note(&mut conn, 3, "zz Scratch 2/Keep.md");
+        insert_note(&mut conn, 4, "zz Scratchpad.md");
+        insert_note(&mut conn, 5, "Elsewhere.md");
+        upsert_external_note(&mut conn, None, "zz Scratch/Note.md", "---\ntags: [npc]\n---\n[[Elsewhere.md]]")
+            .unwrap();
+
+        let events = events_for_vanished(&mut conn, root.path(), &root.path().join("zz Scratch"));
+        assert_eq!(
+            events,
+            vec![
+                ("note:removed", serde_json::json!({ "path": "zz Scratch/Deep/Other.md" })),
+                ("note:removed", serde_json::json!({ "path": "zz Scratch/Note.md" })),
+                ("ledger:tree-changed", serde_json::Value::Null),
+            ]
+        );
+
+        let mut rows: Vec<String> = n::notes.select(n::path).load(&mut conn).unwrap();
+        rows.sort();
+        assert_eq!(rows, vec!["Elsewhere.md", "zz Scratch 2/Keep.md", "zz Scratchpad.md"]);
+        let tags: Vec<String> = nt::note_tags.select(nt::note_path).load(&mut conn).unwrap();
+        assert!(tags.is_empty(), "the removed notes' derived rows must go with them");
+    }
+
+    #[test]
+    fn a_vanished_path_under_a_dot_folder_is_out_of_scope() {
+        let root = TempDir::new().unwrap();
+        std::fs::create_dir(root.path().join(".grimoire")).unwrap();
+        let canonical_root = std::fs::canonicalize(root.path()).unwrap();
+        assert!(classify(&canonical_root, &root.path().join(".grimoire").join("thumbs")).is_none());
+        assert!(classify(&canonical_root, &root.path().join(".trash")).is_none());
     }
 
     // ── require_unwatched ─────────────────────────────────────────────────────
