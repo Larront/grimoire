@@ -321,6 +321,15 @@ What `[[` offers — in prose, in a block's field, and in the Quick Notes box. T
 - **Dotted links:** a note not written yet. Clicking one creates and opens it, with "Created … · Undo".
 - **Closing:** Escape, and it stays closed for that `[[`; a sentence typed after a stray `[[` closes it too.
 
+### Link Preview
+
+A peek at the note a link points to, raised by resting on the link (400ms) in a note, a block's field or Quick Notes, or by Ctrl/Cmd+Shift+P on the link at the caret. Floating level, 288px, placed as the menus are — below the line under the pointer, above it near the window's foot, kept in from the edges.
+
+- **Header:** the note's own name in Metamorphous (never the alias the link was written with), its folder and any `§ Heading` the link points into, and Open.
+- **Body:** the note's prose as text — links read as their names, an Infobox left out, notation stripped, empty sections dropped, headings set apart in Nunito semibold — scrolling to 240px. "Nothing written in this note yet." when there is nothing.
+- **Not written yet:** a small card saying so, with Create where the surface may write notes (not Quick Notes).
+- **Staying and going:** the pointer can move onto the card, which stays while it is there. It goes on leaving, Escape, a press elsewhere or a scroll; moving from one link to the next hands over at once. Raised from the keyboard, it takes focus on its action and Escape hands focus back.
+
 ### Block Handle
 
 One grip for the whole note, beside whichever block the pointer or caret is on: 18px, 6px radius, Ember Muted, fading in on hover. Ctrl/Cmd+Shift+H raises it from the text; ↑/↓ on it move the block; drag moves it; a click opens its menu.

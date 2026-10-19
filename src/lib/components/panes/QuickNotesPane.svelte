@@ -38,6 +38,9 @@
   import { stripWikiFragment } from "$lib/editor/wiki-target";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { toastUndo } from "$lib/toast";
+  import { onDestroy } from "svelte";
+  import { createLinkPreview } from "$lib/editor/link-preview.svelte";
+  import WikiLinkPreview from "$lib/components/editor/WikiLinkPreview.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import WikiCaptureBox from "$lib/components/editor/WikiCaptureBox.svelte";
   import type { QuickNote } from "$lib/bindings.gen";
@@ -136,6 +139,11 @@
     // rather than opened a second time, and the pane stays one step back.
     if (note) tabs.navigateOpen({ type: "note", id: note.id, title: note.title });
   }
+
+  // The same peek prose has: these are the same links, and they showed no card at all.
+  // A note not written yet is inert here (see `handleClick`), so its card offers no Create.
+  const preview = createLinkPreview();
+  onDestroy(() => preview.destroy());
 </script>
 
 <div data-quick-notes-pane class="flex flex-1 min-h-0 flex-col overflow-hidden">
@@ -209,7 +217,13 @@
        many Quick Notes the pen is holding. -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="flex-1 min-h-0 overflow-y-auto px-8 py-6" onclick={handleClick}>
+  <!-- svelte-ignore a11y_mouse_events_have_key_events -->
+  <div
+    class="flex-1 min-h-0 overflow-y-auto px-8 py-6"
+    onclick={handleClick}
+    onmouseover={preview.pointerOver}
+    onmouseout={preview.pointerOut}
+  >
     <div class="mx-auto w-full max-w-3xl">
       {#if days.length === 0 && filtering}
         <!-- A filter matching nothing is not an empty pen, and saying so would be
@@ -268,3 +282,15 @@
     </div>
   </div>
 </div>
+
+{#if preview.card}
+  <WikiLinkPreview
+    card={preview.card}
+    onPointer={preview.cardPointer}
+    onOpen={(note) => {
+      preview.close();
+      tabs.navigateOpen({ type: "note", id: note.id, title: note.title });
+    }}
+    onClose={preview.close}
+  />
+{/if}
