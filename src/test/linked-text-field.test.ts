@@ -24,12 +24,12 @@ vi.mock("$lib/stores/link-resolver.svelte", () => ({
 }));
 
 const SEARCH_RESULTS = [
-  { id: 1, title: "Captain Ash", path: "People/Ash.md" },
-  { id: 2, title: "Ashfall Vale", path: "Places/Ashfall Vale.md" },
+  { id: 1, title: "Captain Ash", path: "People/Ash.md", folder: "People", alias: null },
+  { id: 2, title: "Ashfall Vale", path: "Places/Ashfall Vale.md", folder: "Places", alias: null },
 ];
 
 vi.mock("$lib/api", () => ({
-  api: { searchNotes: vi.fn(async () => SEARCH_RESULTS) },
+  api: { silent: { searchLinkTargets: vi.fn(async () => SEARCH_RESULTS) } },
 }));
 
 afterEach(cleanup);
@@ -252,6 +252,42 @@ describe("typing [[ in a field offers notes to link", () => {
   it("offers nothing once the GM has closed the brackets themselves", async () => {
     const { queryByRole } = await openSuggestions("Ruled by [[Captain Ash]]");
     expect(queryByRole("listbox")).toBeNull();
+  });
+
+  it("stays dismissed after Escape while the GM keeps typing in the same brackets", async () => {
+    // The next keystroke used to reopen it, and a reflexive second Escape then cancelled
+    // the whole edit, links already accepted with it.
+    const { queryByRole, getByLabelText } = await openSuggestions("Ruled by [[Ca");
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Escape" });
+    await fireEvent.input(getByLabelText("Value"), { target: { value: "Ruled by [[Cap" } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(queryByRole("listbox")).toBeNull();
+  });
+
+  it("writes the display text the GM typed after the name", async () => {
+    const { getByLabelText } = await openSuggestions("Ruled by [[Ash|the Captain");
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter" });
+
+    expect(getByLabelText("Value")).toHaveValue("Ruled by [[People/Ash.md|the Captain]]");
+  });
+
+  it("offers a name no note has as a new note, and links it as typed", async () => {
+    const { getByText, getByLabelText } = await openSuggestions("Ruled by [[Brannoc");
+    await fireEvent.click(getByText("New note “Brannoc”"));
+
+    expect(getByLabelText("Value")).toHaveValue("Ruled by [[Brannoc]]");
+  });
+
+  it("points a screen reader at the selected row while focus stays in the field", async () => {
+    const { getByLabelText } = await openSuggestions();
+    const input = getByLabelText("Value");
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    expect(input).toHaveAttribute("aria-activedescendant", "wiki-link-menu-option-0");
+
+    await fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input).toHaveAttribute("aria-activedescendant", "wiki-link-menu-option-1");
   });
 });
 

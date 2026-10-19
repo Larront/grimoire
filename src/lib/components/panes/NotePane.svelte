@@ -561,6 +561,7 @@
                 initialContent={body}
                 onSave={handleSave}
                 {highlightQuery}
+                notePath={note?.path ?? null}
               />
             {/key}
           {/if}

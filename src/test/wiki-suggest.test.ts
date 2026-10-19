@@ -6,22 +6,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   findWikiTrigger,
+  looksLikeProse,
+  parseWikiQuery,
   readWikiSuggestKey,
   searchWikiTargets,
+  wikiLinkTarget,
   wikiMenuAnchor,
 } from "$lib/editor/wiki-suggest";
 import wikiLinkSource from "$lib/editor/wiki-link.ts?raw";
 import fieldSource from "$lib/components/editor/LinkedTextField.svelte?raw";
 
-const searchNotes = vi.fn(async (_query: string) => [
-  { id: 1, title: "Captain Ash", path: "People/Ash.md" },
-]);
+const ASH = { id: 1, title: "Captain Ash", path: "People/Ash.md", folder: "People", alias: null };
+const searchLinkTargets = vi.fn(async (_query: string, _exclude: string | null) => [ASH]);
 
 vi.mock("$lib/api", () => ({
-  api: { searchNotes: (q: string) => searchNotes(q) },
+  api: {
+    silent: {
+      searchLinkTargets: (q: string, exclude: string | null) => searchLinkTargets(q, exclude),
+    },
+  },
 }));
 
-beforeEach(() => searchNotes.mockClear());
+beforeEach(() => searchLinkTargets.mockClear());
 
 // ─── Spotting `[[` in a field ─────────────────────────────────────────────────
 
@@ -96,10 +102,29 @@ describe("readWikiSuggestKey", () => {
     expect(readWikiSuggestKey("Escape", list)).toEqual({ kind: "dismiss" });
   });
 
+  it("walks with Tab and Shift+Tab, as the slash menu does", () => {
+    // Tab used to move real focus into the list, and Enter then took the focused row
+    // rather than the lit one.
+    expect(readWikiSuggestKey("Tab", list)).toEqual({ kind: "move", selectedIndex: 1 });
+    expect(readWikiSuggestKey("Tab", { ...list, shiftKey: true })).toEqual({
+      kind: "move",
+      selectedIndex: 2,
+    });
+  });
+
+  it("pages, stopping at the ends", () => {
+    const long = { itemCount: 20, selectedIndex: 2 };
+    expect(readWikiSuggestKey("PageDown", long)).toEqual({ kind: "move", selectedIndex: 8 });
+    expect(readWikiSuggestKey("PageUp", long)).toEqual({ kind: "move", selectedIndex: 0 });
+    expect(readWikiSuggestKey("PageDown", { itemCount: 20, selectedIndex: 18 })).toEqual({
+      kind: "move",
+      selectedIndex: 19,
+    });
+  });
+
   it("claims no other key", () => {
     expect(readWikiSuggestKey("a", list)).toBeNull();
     expect(readWikiSuggestKey("ArrowLeft", list)).toBeNull();
-    expect(readWikiSuggestKey("Tab", list)).toBeNull();
   });
 
   // An empty dropdown says "No notes found" and has nothing to move through or take.
@@ -121,16 +146,84 @@ describe("readWikiSuggestKey", () => {
 // ─── The lookup ───────────────────────────────────────────────────────────────
 
 describe("searchWikiTargets", () => {
-  it("passes the query to the ledger's search", async () => {
-    await expect(searchWikiTargets("Ash")).resolves.toEqual([
-      { id: 1, title: "Captain Ash", path: "People/Ash.md" },
-    ]);
-    expect(searchNotes).toHaveBeenCalledWith("Ash");
+  it("searches the name alone, leaving out the note being written", async () => {
+    await searchWikiTargets("Ash#Early life|the Captain", "People/Me.md");
+    expect(searchLinkTargets).toHaveBeenCalledWith("Ash", "People/Me.md");
   });
 
-  it("offers an empty list when the search fails, rather than throwing at a typist", async () => {
-    searchNotes.mockRejectedValueOnce(new Error("ledger closed"));
-    await expect(searchWikiTargets("Ash")).resolves.toEqual([]);
+  it("offers the notes it finds, then the name as a new note", async () => {
+    await expect(searchWikiTargets("Capt")).resolves.toEqual([
+      { kind: "note", ...ASH },
+      { kind: "new", name: "Capt" },
+    ]);
+  });
+
+  it("counts a note's file name as its name too", async () => {
+    // People/Ash.md is already "Ash".
+    const rows = await searchWikiTargets("ash");
+    expect(rows.map((r) => r.kind)).toEqual(["note"]);
+  });
+
+  it("offers no new note once a note has that very name", async () => {
+    const rows = await searchWikiTargets("captain ash");
+    expect(rows.map((r) => r.kind)).toEqual(["note"]);
+  });
+
+  it("offers no new note for nothing typed", async () => {
+    const rows = await searchWikiTargets("");
+    expect(rows.map((r) => r.kind)).toEqual(["note"]);
+  });
+
+  it("still offers the new name when the search fails, rather than throwing at a typist", async () => {
+    searchLinkTargets.mockRejectedValueOnce(new Error("ledger closed"));
+    await expect(searchWikiTargets("Brannoc")).resolves.toEqual([
+      { kind: "new", name: "Brannoc" },
+    ]);
+  });
+});
+
+// ─── What is typed, and what is written ───────────────────────────────────────
+
+describe("parseWikiQuery", () => {
+  it("splits a name from its heading and display text", () => {
+    expect(parseWikiQuery("keep#History|the Keep")).toEqual({
+      name: "keep",
+      heading: "History",
+      display: "the Keep",
+    });
+    expect(parseWikiQuery("The Ember Keep")).toEqual({
+      name: "The Ember Keep",
+      heading: null,
+      display: null,
+    });
+  });
+});
+
+describe("wikiLinkTarget", () => {
+  const note = { kind: "note" as const, ...ASH };
+
+  it("writes the note's path with the heading and display text the GM typed", () => {
+    // `[[keep|the Keep` used to write a bare link and drop "the Keep".
+    expect(wikiLinkTarget(note, parseWikiQuery("ash#Early life|the Captain"))).toBe(
+      "People/Ash.md#Early life|the Captain",
+    );
+  });
+
+  it("writes a new note's name as typed", () => {
+    expect(wikiLinkTarget({ kind: "new", name: "Brannoc" }, parseWikiQuery("Brannoc"))).toBe(
+      "Brannoc",
+    );
+  });
+});
+
+describe("looksLikeProse", () => {
+  it("lets a name with spaces through", () => {
+    expect(looksLikeProse("The Ember Keep")).toBe(false);
+  });
+
+  it("closes for a stray [[ followed by a sentence", () => {
+    expect(looksLikeProse("and then, the party left")).toBe(true);
+    expect(looksLikeProse("one two three four five six seven eight nine")).toBe(true);
   });
 });
 
@@ -164,15 +257,17 @@ describe("neither surface keeps a second copy of the dropdown", () => {
     expect(source).not.toMatch(/Arrow(Up|Down)/);
   });
 
-  it.each([
-    ["the wikilink node's suggestion plugin", wikiLinkSource],
-    ["the Linked Text Field", fieldSource],
-  ])("%s reads the keys through the shared grammar", (_what, source) => {
-    expect(source).toMatch(/readWikiSuggestKey/);
+  it("reads the keys through the shared grammar in prose", () => {
+    expect(wikiLinkSource).toMatch(/readWikiSuggestKey/);
+  });
+
+  it("leaves the fields one helper between them, rather than a copy each", () => {
+    expect(fieldSource).toMatch(/createFieldWikiSuggest/);
+    expect(fieldSource).not.toMatch(/readWikiSuggestKey/);
   });
 
   it("leaves one lookup, so a failed search answers the same way on both surfaces", () => {
-    expect(wikiLinkSource).not.toMatch(/api\.searchNotes/);
-    expect(fieldSource).not.toMatch(/api\.searchNotes/);
+    expect(wikiLinkSource).not.toMatch(/api\.(silent\.)?search/);
+    expect(fieldSource).not.toMatch(/api\.(silent\.)?search/);
   });
 });

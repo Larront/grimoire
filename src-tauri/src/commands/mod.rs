@@ -4,6 +4,7 @@ pub mod graph;
 pub mod import;
 pub mod graph_styles;
 pub mod ledger;
+pub mod link_targets;
 pub mod links;
 pub mod maps;
 pub mod media;
