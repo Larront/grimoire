@@ -20,8 +20,10 @@ export interface LedgerEvents {
    *  the note keeps its id — open panes follow it rather than losing it. */
   "note:moved": { from: string; to: string };
   /** The set of notes on disk changed (created, removed, renamed), or a folder
-   *  was removed — even an empty one: the Files tree is stale. Carries no
-   *  payload — the tree is rebuilt wholesale. */
+   *  was removed, arrived or moved — even an empty one: the Files tree is
+   *  stale. Notes a folder move carried keep their ids, so this refetch is all
+   *  an open pane needs to follow them. Carries no payload — the tree is
+   *  rebuilt wholesale — and is sent at most once per watcher batch. */
   "ledger:tree-changed": null;
   /** A bulk external change (git checkout, cloud sync) exceeded the per-file
    *  threshold, so the backend rebuilt the whole ledger under one coarse event.

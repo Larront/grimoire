@@ -36,7 +36,7 @@ use crate::note_index::{self, ReconcileManyItem};
 use crate::note_write::write_note_file;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -309,36 +309,13 @@ pub fn relocate_folder(
         return Ok(0);
     }
 
-    let old_prefix = format!("{old_path}/");
-    let new_prefix = format!("{new_path}/");
-
-    // 1. Every descendant and where it lands. The `starts_with` is not
-    //    belt-and-braces: `LIKE` matches case-insensitively over ASCII and reads
-    //    `_` as a wildcard, so a sibling `session-notes` arrives here when
-    //    `session_notes` was asked for — and cutting a fixed prefix off a path
-    //    that never carried it corrupts the path.
-    let like_pattern = format!("{old_prefix}%");
-    let moves: Vec<(Note, String)> = nd::notes
-        .filter(nd::path.like(&like_pattern))
-        .load::<Note>(conn)
-        .map_err(|e| format!("query descendants: {e}"))?
-        .into_iter()
-        .filter(|note| note.path.starts_with(&old_prefix))
-        .map(|note| {
-            let landing = format!("{new_prefix}{}", &note.path[old_prefix.len()..]);
-            (note, landing)
-        })
-        .collect();
+    // 1. Every descendant and where it lands.
+    let moves = folder_landings(conn, old_path, new_path)?;
 
     // A path another note already holds would fail the `notes.path` unique index
     // partway through step 4, with the directory already moved.
-    let destinations: Vec<&String> = moves.iter().map(|(_, landing)| landing).collect();
-    let taken: Vec<String> = nd::notes
-        .filter(nd::path.eq_any(&destinations))
-        .select(nd::path)
-        .load(conn)
-        .map_err(|e| format!("check destinations: {e}"))?;
-    if let Some(occupied) = taken.first() {
+    let taken = taken_landings(conn, &moves)?;
+    if let Some(occupied) = taken.iter().min() {
         return Err(format!("ERR_PATH_TAKEN: A note already exists at {occupied}"));
     }
 
@@ -377,19 +354,7 @@ pub fn relocate_folder(
             None => fs::read_to_string(&full_path).unwrap_or_default(),
         };
 
-        // A descendant's parent is always a folder inside the one that moved, so
-        // it follows from the landing path — the direct children whose
-        // `parent_path` is the folder itself are not a separate case here.
-        let parent = landing.rsplit_once('/').map(|(above, _)| above.to_string());
-        let persisted: Note = diesel::update(nd::notes.find(note.id))
-            .set((
-                nd::path.eq(&landing),
-                nd::parent_path.eq(parent.as_deref()),
-            ))
-            .returning(Note::as_returning())
-            .get_result(conn)
-            .map_err(|e| format!("re-key '{landing}': {e}"))?;
-
+        let persisted = rekey_into_folder(conn, note.id, &landing)?;
         items.push(ReconcileManyItem {
             note: persisted,
             content,
@@ -410,6 +375,114 @@ pub fn relocate_folder(
     note_index::reconcile_many(conn, index, &items)?;
 
     Ok(rewritten_count)
+}
+
+/// The external form of [`relocate_folder`]: a folder was renamed or moved
+/// outside Grimoire, so the directory has already moved and there is nothing to
+/// refuse. What is left is step 4 without the wikilink rewrites — phase A of
+/// [`rename`] for every note in the set, so each keeps its id (and the pins and
+/// open panes holding it). Inbound `[[old path]]` links are left as the external
+/// tool left them, as on the Ledger Watcher's bulk path; they read as dimmed
+/// stub links until healed.
+///
+/// `content_at(landing)` is a note's current content at its new path, read by
+/// the caller before it took the ledger lock. A row whose landing has no content
+/// — the file did not arrive — or is already held by another row can't be
+/// re-keyed; those rows are dropped instead, and their paths returned, sorted.
+pub fn relocated_folder(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    old_path: &str,
+    new_path: &str,
+    content_at: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<String>, String> {
+    if old_path == new_path {
+        return Ok(Vec::new());
+    }
+    let moves = folder_landings(conn, old_path, new_path)?;
+    let taken = taken_landings(conn, &moves)?;
+
+    let mut items: Vec<ReconcileManyItem> = Vec::with_capacity(moves.len());
+    let mut dropped: Vec<(i32, String)> = Vec::new();
+    for (note, landing) in moves {
+        let content = content_at(&landing).filter(|_| !taken.contains(&landing));
+        let Some(content) = content else {
+            dropped.push((note.id, note.path));
+            continue;
+        };
+        let persisted = rekey_into_folder(conn, note.id, &landing)?;
+        items.push(ReconcileManyItem {
+            note: persisted,
+            content,
+            prev_path: Some(note.path),
+        });
+    }
+    note_index::reconcile_many(conn, index, &items)?;
+
+    note_index::remove_many(conn, index, &dropped)?;
+    diesel::delete(nd::notes.filter(nd::id.eq_any(dropped.iter().map(|(id, _)| *id))))
+        .execute(conn)
+        .map_err(|e| format!("drop unmovable rows: {e}"))?;
+
+    let mut paths: Vec<String> = dropped.into_iter().map(|(_, path)| path).collect();
+    paths.sort();
+    Ok(paths)
+}
+
+/// Every note under `old_path`, paired with the path it has under `new_path`.
+/// Each new path is computed here and nowhere else.
+///
+/// The `starts_with` is not belt-and-braces: `LIKE` matches case-insensitively
+/// over ASCII and reads `_` as a wildcard, so a sibling `session-notes` arrives
+/// here when `session_notes` was asked for — and cutting a fixed prefix off a
+/// path that never carried it corrupts the path.
+fn folder_landings(
+    conn: &mut SqliteConnection,
+    old_path: &str,
+    new_path: &str,
+) -> Result<Vec<(Note, String)>, String> {
+    let old_prefix = format!("{old_path}/");
+    let new_prefix = format!("{new_path}/");
+    let like_pattern = format!("{old_prefix}%");
+    Ok(nd::notes
+        .filter(nd::path.like(&like_pattern))
+        .load::<Note>(conn)
+        .map_err(|e| format!("query descendants: {e}"))?
+        .into_iter()
+        .filter(|note| note.path.starts_with(&old_prefix))
+        .map(|note| {
+            let landing = format!("{new_prefix}{}", &note.path[old_prefix.len()..]);
+            (note, landing)
+        })
+        .collect())
+}
+
+/// The landings in `moves` that another note's row already holds.
+fn taken_landings(
+    conn: &mut SqliteConnection,
+    moves: &[(Note, String)],
+) -> Result<HashSet<String>, String> {
+    let destinations: Vec<&String> = moves.iter().map(|(_, landing)| landing).collect();
+    Ok(nd::notes
+        .filter(nd::path.eq_any(&destinations))
+        .select(nd::path)
+        .load::<String>(conn)
+        .map_err(|e| format!("check destinations: {e}"))?
+        .into_iter()
+        .collect())
+}
+
+/// Re-key one row of a relocated folder to its landing. A descendant's parent is
+/// always a folder inside the one that moved, so it follows from the landing
+/// path — the direct children whose `parent_path` is the folder itself are not a
+/// separate case here — and its title, the file's own name, does not change.
+fn rekey_into_folder(conn: &mut SqliteConnection, note_id: i32, landing: &str) -> Result<Note, String> {
+    let parent = landing.rsplit_once('/').map(|(above, _)| above.to_string());
+    diesel::update(nd::notes.find(note_id))
+        .set((nd::path.eq(landing), nd::parent_path.eq(parent.as_deref())))
+        .returning(Note::as_returning())
+        .get_result(conn)
+        .map_err(|e| format!("re-key '{landing}': {e}"))
 }
 
 #[cfg(test)]
