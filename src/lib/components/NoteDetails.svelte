@@ -151,7 +151,7 @@
             onclick={() => onNavigateNote?.(link.id, link.title)}
             class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
           >
-            <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
+            <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
               {link.title}
             </div>
             {#if folder}
@@ -189,7 +189,7 @@
               onclick={() => onNavigateNote?.(link.resolved_id!, link.resolved_title!)}
               class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
             >
-              <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
+              <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.resolved_title}
               </div>
               {#if folder}
@@ -207,7 +207,7 @@
               onclick={() => onCreateStub?.(link.target_path)}
               class="w-full text-left rounded px-1 py-0.5 opacity-50 hover:opacity-75 transition-opacity duration-100 cursor-pointer"
             >
-              <div class="text-(--font-ui) font-medium text-foreground leading-snug truncate">
+              <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.target_path}
               </div>
               <div class="font-mono text-[11px] text-foreground-faint italic">Not yet created</div>

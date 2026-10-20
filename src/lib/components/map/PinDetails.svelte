@@ -170,7 +170,7 @@
          Unlinking is the rare, quiet one beside it. The preview is prose, not file
          internals — see `pinNotePreview`. -->
     <div class="flex flex-col gap-2">
-      <span class="min-w-0 truncate font-heading text-(--font-body) text-foreground"
+      <span class="min-w-0 truncate font-heading text-(length:--font-body) text-foreground"
         >{linkedNote.title}</span
       >
       {#if notePreview}
@@ -373,7 +373,7 @@
     type="button"
     data-testid="pin-delete"
     onclick={() => onDelete(pin.id)}
-    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(length:--font-ui)
            text-error hover:bg-error/10 transition-colors cursor-pointer"
   >
     <Trash2 class="size-3.5 shrink-0" />

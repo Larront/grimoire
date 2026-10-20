@@ -1,14 +1,21 @@
 import { api } from "$lib/api";
 
+export type DensityLevel = "cozy" | "balanced" | "dense";
+
+const DENSITIES: readonly DensityLevel[] = ["cozy", "balanced", "dense"];
+const asDensity = (value: unknown): DensityLevel | null =>
+  DENSITIES.includes(value as DensityLevel) ? (value as DensityLevel) : null;
+
 interface AppPrefsData {
   reduceMotion: boolean;
   confirmRenameLinks: boolean;
   sampleBannerDismissed: boolean;
+  density: DensityLevel | null;
 }
 
 // Pre-migration webview localStorage keys. Read once on load() to carry old
 // values into the Rust-side app-prefs file, then removed.
-const LEGACY_KEYS: Record<keyof AppPrefsData, string> = {
+const LEGACY_KEYS: Record<Exclude<keyof AppPrefsData, "density">, string> = {
   reduceMotion: "grimoire-reduce-motion",
   confirmRenameLinks: "grimoire-confirm-rename-links",
   sampleBannerDismissed: "grimoire-sample-banner-dismissed",
@@ -32,10 +39,17 @@ function createAppPrefs() {
   let reduceMotion = $state(false);
   let confirmRenameLinks = $state(false);
   let sampleBannerDismissed = $state(false);
+  /**
+   * How tight the app is drawn, everywhere. It was saved per world, so each world opened
+   * at whatever density it had been left in (2026-10 design review: density is about the
+   * GM's screen, accent about the world). Null until chosen, so the first world opened
+   * can hand over the density it already had — see `adoptDensity`.
+   */
+  let density = $state<DensityLevel | null>(null);
   let loaded = false;
 
   function snapshot(): AppPrefsData {
-    return { reduceMotion, confirmRenameLinks, sampleBannerDismissed };
+    return { reduceMotion, confirmRenameLinks, sampleBannerDismissed, density };
   }
 
   /** Persist the full prefs snapshot to the Rust-side app-prefs file (fire-and-forget). */
@@ -47,7 +61,10 @@ function createAppPrefs() {
   function migrateLegacyKeys(): boolean {
     if (typeof window === "undefined") return false;
     let migrated = false;
-    for (const [pref, key] of Object.entries(LEGACY_KEYS) as [keyof AppPrefsData, string][]) {
+    for (const [pref, key] of Object.entries(LEGACY_KEYS) as [
+      Exclude<keyof AppPrefsData, "density">,
+      string,
+    ][]) {
       const value = window.localStorage.getItem(key);
       if (value === null) continue;
       migrated = true;
@@ -83,6 +100,7 @@ function createAppPrefs() {
         reduceMotion = saved.reduceMotion ?? false;
         confirmRenameLinks = saved.confirmRenameLinks ?? false;
         sampleBannerDismissed = saved.sampleBannerDismissed ?? false;
+        density = asDensity(saved.density) ?? density;
       }
       const migrated = migrateLegacyKeys();
       // After the migration, not before it: a pre-migration localStorage value is also a
@@ -114,6 +132,22 @@ function createAppPrefs() {
     persist();
   }
 
+  function setDensity(level: DensityLevel) {
+    density = level;
+    persist();
+  }
+
+  /**
+   * A world's own density from before it was app-wide, taken the once — so a GM who had
+   * chosen Dense does not find the app suddenly Balanced. Ignored once a density is set.
+   */
+  function adoptDensity(level: unknown) {
+    const adopted = asDensity(level);
+    if (density !== null || !adopted) return;
+    density = adopted;
+    persist();
+  }
+
   return {
     get reduceMotion() {
       return reduceMotion;
@@ -127,6 +161,12 @@ function createAppPrefs() {
       return sampleBannerDismissed;
     },
     setSampleBannerDismissed,
+    /** The app's density; Balanced until one is chosen. */
+    get density(): DensityLevel {
+      return density ?? "balanced";
+    },
+    setDensity,
+    adoptDensity,
     load,
   };
 }

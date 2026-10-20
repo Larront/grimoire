@@ -8,6 +8,7 @@ import {
   toastUnlinkedPins,
 } from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
+import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
 import type { MigrationPlan } from "$lib/bindings.gen";
 
 export type AccentPreset =
@@ -17,7 +18,7 @@ export type AccentPreset =
   | "accent-ice"
   | "accent-amber";
 
-export type DensityLevel = "cozy" | "balanced" | "dense";
+export type { DensityLevel } from "./app-prefs.svelte";
 
 export interface FailedImport {
   path: string;
@@ -75,7 +76,6 @@ function createLedgerStore() {
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let accent = $state<AccentPreset>("accent-crimson");
-  let density = $state<DensityLevel>("balanced");
   let isSample = $state(false);
   let pendingStartHere = $state(false);
   // Set when open_ledger reported ERR_DB_CORRUPT with no usable snapshot —
@@ -323,9 +323,12 @@ function createLedgerStore() {
     }
   }
 
+  /**
+   * Density is app-wide now (`appPrefs.density`). This stays for the one ledger that had a
+   * density of its own before, which `checkExistingLedger` hands over once.
+   */
   function setDensity(level: DensityLevel): void {
-    density = level;
-    api.silent.saveDensityLevel(level).catch(console.error);
+    appPrefs.setDensity(level);
   }
 
   function setAccent(preset: AccentPreset): void {
@@ -354,7 +357,6 @@ function createLedgerStore() {
     isSample = false;
     pendingStartHere = false;
     accent = "accent-crimson";
-    density = "balanced";
     error = null;
   }
 
@@ -368,7 +370,7 @@ function createLedgerStore() {
       const savedAccent = await api.getAccentPreset().catch(() => null);
       if (savedAccent) accent = savedAccent as AccentPreset;
       const savedDensity = await api.getDensityLevel().catch(() => null);
-      if (savedDensity) density = savedDensity as DensityLevel;
+      if (savedDensity) appPrefs.adoptDensity(savedDensity);
     } catch {
       // No ledger open — normal on first launch
     }
@@ -391,7 +393,7 @@ function createLedgerStore() {
       return accent;
     },
     get density() {
-      return density;
+      return appPrefs.density;
     },
     get isSample() {
       return isSample;

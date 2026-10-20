@@ -27,7 +27,7 @@
   <div
     class="flex h-(--tab-bar-h) shrink-0 items-center gap-2 border-b border-background-border px-(--pad-x)"
   >
-    <span class="text-(--font-body) font-semibold text-foreground">{title}</span>
+    <span class="text-(length:--font-body) font-semibold text-foreground">{title}</span>
     {#if saveStatus === "saved"}
       <span class="flex items-center gap-1 font-mono text-[11px] text-success">
         <Check class="size-3" />Saved
@@ -45,7 +45,7 @@
       <PanelRight class="size-4" />
     </button>
   </div>
-  <div class="flex-1 overflow-y-auto p-(--pad-x) text-(--font-body) text-foreground-muted">
+  <div class="flex-1 overflow-y-auto p-(--pad-x) text-(length:--font-body) text-foreground-muted">
     {#if isEmpty && emptyState}
       {@render emptyState()}
     {:else}

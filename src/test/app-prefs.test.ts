@@ -21,6 +21,7 @@ describe("appPrefs — Rust persistence", () => {
         reduceMotion: false,
         confirmRenameLinks: false,
         sampleBannerDismissed: true,
+        density: null,
       },
     });
 

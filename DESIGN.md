@@ -223,7 +223,7 @@ _The channel this exception does not have._ A per-tag node shape was built as th
 
 **The Two Voices Rule.** If the app constructed it, Nunito. If the GM named it, Metamorphous — *where the name is the subject*: a note's title, its headings, a map or scene name on its own surface, a card's name, the name at the top of a panel. Where a name is one item in a list — backlinks, palette results, pickers, the tab bar, the file tree — it is chrome listing things, and takes Nunito: Metamorphous's display letterforms slow a scan at 13–14px, and spent on every row it stops marking the threshold it exists to mark. Dialog titles are app-constructed and always Nunito.
 
-**The Fixed Scale Rule.** Type sizes do not change across density settings. Only spacing and component height change. Dense mode is not smaller text — it is less vertical space.
+**The Density Scale Rule.** Density sets spacing, component height *and* text size, together: `--row-h` (44 / 36 / 28px), `--font-body` (15 / 14 / 13px) and `--font-ui` (13.5 / 13 / 11.5px) across Cozy, Balanced and Dense, with prose at body + 2px. Settings says so — "Spacing and text size". Revised in the 2026-10 design review: this read "type sizes do not change across density", which the stylesheet had never done, and 43 size classes were silently not applying the tokens at all (`text-(--font-ui)` is a colour in Tailwind v4; a size is `text-(length:--font-ui)`). Fixed sizes — the hierarchy above — stay fixed; only what is set in a density token moves.
 
 ## 4. Elevation
 
@@ -285,6 +285,8 @@ Components respond with precision and without hurry. State transitions are 150ms
 - **Focus:** 2px solid Crimson outline, 2px offset, `:focus-visible` only
 - **Disabled:** 35% opacity, `cursor: default`
 - **Height:** Tracks `--row-h`
+- **Switch** (`ui/switch`): an on/off setting. On is the text colour filled in, its knob the background; off is an outline with a muted knob. Never crimson — a setting being on is not selection, focus or a link.
+- **Choice group** (`ui/choice-group`): one of a few, side by side — a segmented control, or a row of swatches. A radio group: one Tab stop, the arrow keys move the choice. Selected segment: Foreground at 15% with medium weight; a selected swatch carries a tick, so the focus ring never looks like a choice.
 - **Linked Text Field** (every free-text value in a note block): drawn as text with live links; a click or Enter opens it in place, and Ctrl/Cmd+Enter follows its first link. A one-line value that wraps where it is drawn is edited wrapped, not collapsed to one scrolled line.
 
 ### Navigation — Icon Rail
@@ -320,6 +322,15 @@ What `[[` offers — in prose, in a block's field, and in the Quick Notes box. T
 - **What is written:** the note's path, with whatever the GM typed after the name — `#heading`, `|display` — kept.
 - **Dotted links:** a note not written yet. Clicking one creates and opens it, with "Created … · Undo".
 - **Closing:** Escape, and it stays closed for that `[[`; a sentence typed after a stray `[[` closes it too.
+
+### Settings
+
+A modal dialog, 672×560, a section rail beside one scrolling panel: Appearance, Content, Statblocks, Integrations, About. Ctrl/Cmd+, opens it. Changes apply at once with no Save, the app retinting behind the scrim.
+
+- **Rows:** a label (Body) and a description (`--font-ui`, Ember Muted) on the left, the control on the right at 32px.
+- **Scope said in words:** the accent is the world's; theme, density and Reduce Motion are every world's, and their descriptions end "Every world."
+- **Destructive actions are never modal:** Restore defaults asks inside its row, with a destructive Restore; deleting a preset is undone from its toast.
+- **Hand-offs come back:** Manage tags opens the Tag Manager, and closing it returns to Settings where the GM left it.
 
 ### Link Preview
 

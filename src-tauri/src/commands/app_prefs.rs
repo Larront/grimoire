@@ -14,6 +14,11 @@ pub struct AppPrefs {
     pub reduce_motion: bool,
     pub confirm_rename_links: bool,
     pub sample_banner_dismissed: bool,
+    /// How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+    /// the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+    /// each world opened at whatever density it happened to have been left in. None until
+    /// the GM chooses, when the open ledger's old value is adopted once.
+    pub density: Option<String>,
 }
 
 fn app_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -77,6 +82,7 @@ mod tests {
             reduce_motion: true,
             confirm_rename_links: false,
             sample_banner_dismissed: true,
+            density: Some("dense".into()),
         };
         write_prefs_file(&path, &prefs).unwrap();
 

@@ -394,33 +394,30 @@
 
 <!-- ── Rename confirmation dialog ──────────────────────────────────────────── -->
 <AlertDialog.Root bind:open={renameDialogOpen}>
-  <AlertDialog.Portal>
-    <AlertDialog.Overlay />
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Update linked notes?</AlertDialog.Title>
-        <AlertDialog.Description>
-          {pendingBacklinkCount}
-          {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note. Update their wikilinks
-          to the new name?
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel onclick={handleRenameCancel}>Cancel</AlertDialog.Cancel>
-        <button
-          type="button"
-          data-testid="rename-only-btn"
-          onclick={handleRenameOnly}
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Update linked notes?</AlertDialog.Title>
+      <AlertDialog.Description>
+        {pendingBacklinkCount}
+        {pendingBacklinkCount === 1 ? "note links" : "notes link"} to this note. Update their wikilinks
+        to the new name?
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel onclick={handleRenameCancel}>Cancel</AlertDialog.Cancel>
+      <button
+        type="button"
+        data-testid="rename-only-btn"
+        onclick={handleRenameOnly}
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium
                  border border-border bg-background hover:bg-accent hover:text-accent-foreground
                  h-9 px-4 py-2 transition-colors">Rename only</button
-        >
-        <AlertDialog.Action onclick={handleRenameAndUpdate} data-testid="rename-update-btn">
-          Rename + Update
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Portal>
+      >
+      <AlertDialog.Action onclick={handleRenameAndUpdate} data-testid="rename-update-btn">
+        Rename + Update
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
 </AlertDialog.Root>
 
 <div bind:this={containerEl} class="relative flex flex-1 min-h-0">

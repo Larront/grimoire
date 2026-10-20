@@ -92,6 +92,13 @@ export const commands = {
 	reduceMotion?: boolean,
 	confirmRenameLinks?: boolean,
 	sampleBannerDismissed?: boolean,
+	/**
+	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+	 *  each world opened at whatever density it happened to have been left in. None until
+	 *  the GM chooses, when the open ledger's old value is adopted once.
+	 */
+	density?: string | null,
 } | null>("get_app_prefs"),
 	getAudioAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_audio_absolute_path", { relativePath }),
 	getBacklinks: (noteId: number) => __TAURI_INVOKE<BacklinkNote[]>("get_backlinks", { noteId }),
@@ -295,6 +302,13 @@ export type AppPrefs = {
 	reduceMotion?: boolean,
 	confirmRenameLinks?: boolean,
 	sampleBannerDismissed?: boolean,
+	/**
+	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+	 *  each world opened at whatever density it happened to have been left in. None until
+	 *  the GM chooses, when the open ledger's old value is adopted once.
+	 */
+	density?: string | null,
 };
 
 export type BacklinkNote = {

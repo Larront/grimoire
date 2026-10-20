@@ -12,19 +12,19 @@
   // statblock and says so here instead, as `Goblin (not found)`. The dangling name is
   // kept rather than cleared: the presets file is shared across machines while the
   // pointer is not, so the preset may simply be somewhere else.
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Check, Pencil, Trash2, X } from "@lucide/svelte";
+  import { Check, CircleX, Pencil, Trash2, X } from "@lucide/svelte";
   import {
     SHIPPED_PRESETS,
     isShippedName,
     type StatblockPreset,
   } from "$lib/editor/statblock-presets";
   import { statblockPresets } from "$lib/stores/statblock-presets.svelte";
-  import { toastSuccess } from "$lib/toast";
+  import { toastUndo } from "$lib/toast";
 
   let { open = false }: { open?: boolean } = $props();
+  const id = $props.id();
 
   // Re-read on every open rather than trusting what is already in memory: the presets
   // file is app data, so a second Grimoire window on this machine can have changed it.
@@ -72,18 +72,24 @@
 
   // ── Delete ──────────────────────────────────────────────────────────────────
 
-  let deleting = $state<StatblockPreset | null>(null);
-
-  async function confirmDelete() {
-    const preset = deleting;
-    if (!preset) return;
+  /**
+   * Gone at once, with Undo (2026-10 design review). It asked first in a modal, which
+   * DESIGN.md §6 refuses for a delete this cheap to reverse: the preset is text, and the
+   * store still has it to save back. Statblocks already stamped from it are copies and
+   * are untouched either way. A vault whose default named it keeps the name, so Undo puts
+   * the default back as well.
+   */
+  async function remove(preset: StatblockPreset) {
     try {
       await statblockPresets.remove(preset.name);
-      toastSuccess(`Deleted the “${preset.name}” preset`);
     } catch {
-      // api.* has already toasted.
+      return; // api.* has already toasted.
     }
-    deleting = null;
+    toastUndo(
+      `Deleted the “${preset.name}” preset`,
+      () => {},
+      () => void statblockPresets.save(preset.name, preset.fence).catch(() => {}),
+    );
   }
 </script>
 
@@ -91,19 +97,25 @@
   <!-- Default preset -->
   <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
     <div class="flex flex-col gap-0.5">
-      <span class="text-(--font-body) font-medium text-foreground">Default preset</span>
-      <span class="text-(--font-ui) text-foreground-muted">
-        What <code>/statblock</code> stamps in this campaign. Presets are shared by every campaign; this
+      <span id="{id}-default" class="text-(length:--font-body) font-medium text-foreground"
+        >Default preset</span
+      >
+      <span id="{id}-default-desc" class="text-(length:--font-ui) text-foreground-muted">
+        What <code>/statblock</code> stamps in this world. Presets are shared by every world; this
         choice is not.
       </span>
     </div>
+    <!-- Settings' own controls: 32px, a 6px radius, the hover overlay, and the 2px focus
+         ring every control has — not the black well and 1px border it was. -->
     <select
       data-testid="statblock-default-select"
-      aria-label="Default statblock preset"
+      aria-labelledby="{id}-default"
+      aria-describedby="{id}-default-desc"
       value={defaultName ?? ""}
       onchange={(e) => chooseDefault((e.target as HTMLSelectElement).value)}
-      class="shrink-0 max-w-56 cursor-pointer rounded-lg border border-border bg-background-subtle
-             px-3 py-1.5 text-(--font-ui) text-foreground outline-none focus:border-primary"
+      class="h-8 max-w-56 shrink-0 cursor-pointer rounded-md border border-border bg-transparent px-2.5
+             text-(length:--font-ui) text-foreground transition-colors hover:bg-surface-hover
+             focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
     >
       <option value="">Blank</option>
       {#each statblockPresets.available as preset (preset.name)}
@@ -120,8 +132,8 @@
   <!-- Saved presets -->
   <div class="flex flex-col gap-2 py-3">
     <div class="flex flex-col gap-0.5">
-      <span class="text-(--font-body) font-medium text-foreground">Saved presets</span>
-      <span class="text-(--font-ui) text-foreground-muted">
+      <span class="text-(length:--font-body) font-medium text-foreground">Saved presets</span>
+      <span class="text-(length:--font-ui) text-foreground-muted">
         Add one with “Save shape as preset” on any statblock. To change a shape, stamp it into a
         note, edit it there, and save over the same name.
       </span>
@@ -148,44 +160,54 @@
             />
             <div class="flex shrink-0 items-center gap-1">
               {#if renameReserved}
-                <span class="text-(--font-ui) text-destructive" data-testid="rename-reserved">
-                  Built-in name
+                <!-- An error says so twice, as every error in the app does: the icon and
+                     the word, never the colour alone. -->
+                <span
+                  class="flex items-center gap-1 text-(length:--font-ui) text-destructive"
+                  data-testid="rename-reserved"
+                >
+                  <CircleX class="size-3.5" /> Built-in name
                 </span>
               {/if}
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 aria-label="Save name"
+                title="Save name"
                 disabled={renameReserved}
                 onclick={commitRename}><Check class="size-3.5" /></Button
               >
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 aria-label="Cancel rename"
+                title="Cancel"
                 onclick={() => (renaming = null)}><X class="size-3.5" /></Button
               >
             </div>
           {:else}
-            <span class="truncate text-(--font-body) text-foreground">{preset.name}</span>
+            <span class="truncate text-(length:--font-body) text-foreground">{preset.name}</span>
             <div class="flex shrink-0 items-center gap-1">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 aria-label={`Rename ${preset.name}`}
+                title="Rename"
                 onclick={() => startRename(preset)}><Pencil class="size-3.5" /></Button
               >
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon-sm"
                 aria-label={`Delete ${preset.name}`}
-                onclick={() => (deleting = preset)}><Trash2 class="size-3.5" /></Button
+                title="Delete"
+                class="hover:text-destructive"
+                onclick={() => remove(preset)}><Trash2 class="size-3.5" /></Button
               >
             </div>
           {/if}
         </div>
       {:else}
-        <span class="py-1.5 text-(--font-ui) italic text-foreground-muted">
+        <span class="py-1.5 text-(length:--font-ui) text-foreground-muted">
           You haven't saved any presets yet.
         </span>
       {/each}
@@ -195,42 +217,16 @@
   <!-- Built in -->
   <div class="flex flex-col gap-2 py-3">
     <div class="flex flex-col gap-0.5">
-      <span class="text-(--font-body) font-medium text-foreground">Built in</span>
-      <span class="text-(--font-ui) text-foreground-muted">
+      <span class="text-(length:--font-body) font-medium text-foreground">Built in</span>
+      <span class="text-(length:--font-ui) text-foreground-muted">
         These ship with Grimoire and can't be renamed, edited or deleted — their names aren't
         available for your own presets either.
       </span>
     </div>
     <div class="flex flex-col" data-testid="statblock-builtin-list">
       {#each SHIPPED_PRESETS as preset (preset.name)}
-        <span class="py-1.5 text-(--font-body) text-foreground">{preset.name}</span>
+        <span class="py-1.5 text-(length:--font-body) text-foreground">{preset.name}</span>
       {/each}
     </div>
   </div>
 </div>
-
-<AlertDialog.Root
-  open={deleting !== null}
-  onOpenChange={(v) => {
-    if (!v) deleting = null;
-  }}
->
-  <AlertDialog.Portal>
-    <AlertDialog.Overlay />
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete “{deleting?.name}”?</AlertDialog.Title>
-        <AlertDialog.Description>
-          This removes the preset from every campaign on this machine. Statblocks you have already
-          written are copies and are left exactly as they are.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action data-testid="preset-delete-confirm" onclick={confirmDelete}>
-          Delete
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Portal>
-</AlertDialog.Root>

@@ -169,7 +169,7 @@
   <button
     type="button"
     onclick={() => onDelete(annotation.id)}
-    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(length:--font-ui)
            text-error hover:bg-error/10 transition-colors cursor-pointer"
   >
     <Trash2 class="size-3.5 shrink-0" />
