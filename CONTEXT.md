@@ -169,7 +169,7 @@ _Avoid_: "event bus" (nothing is emitted from the frontend — this is subscribe
 
 ### Tag
 
-A colorless, cross-cutting semantic label applied to a note or pin. Ledger-global namespace (the same tag string means the same tag everywhere). For notes, tags live in markdown frontmatter; for pins, in SQLite. Never visually color-coded.
+A colorless, cross-cutting semantic label applied to a note or pin. Ledger-global namespace (the same tag string means the same tag everywhere). For notes, tags live in markdown frontmatter; for pins, in SQLite. Never visually color-coded — except in the graph, where a tag has a colour (its own, or a ramp step it keeps once given) and can be hidden, which hides every note carrying it. Renaming a tag carries its graph style to the new name; merging keeps the target's.
 _Avoid_: "category" (that's a pin-specific concept), "label" (overloaded with UI labels).
 
 ### Pin Category

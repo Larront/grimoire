@@ -16,6 +16,7 @@ import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
 import { logError } from "$lib/log";
 import { linksTick } from "$lib/stores/links-tick.svelte";
+import { tagsTick } from "$lib/stores/tags-tick.svelte";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -108,6 +109,19 @@ const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
   "updateScene",
 ]);
 
+// ── Tag freshness ────────────────────────────────────────────────────────────
+// Commands that change a tag for the whole ledger. Each bumps [[tagsTick]], so
+// open Details reload their tags and the Graph Pane its colours and filter.
+// Deliberately absent: `write_note_tags` and `set_pin_tags`, which change one
+// entity's tags from that entity's own Details — the writer is already showing
+// the result, and a refetch racing the GM's next keystroke would undo it.
+const TAG_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
+  "retagTag",
+  "undoRetag",
+  "setTagGraphColor",
+  "setTagGraphHidden",
+]);
+
 // ── Surface construction ─────────────────────────────────────────────────────
 type AnyFn = (...args: unknown[]) => Promise<unknown>;
 
@@ -118,10 +132,12 @@ function wrap<C extends Record<string, AnyFn>>(source: C, onError: (error: unkno
     // `name` widens to string through Object.entries; the Set stays narrowly
     // typed so the literals above are the thing being checked.
     const bumpsLinks = LINK_WRITING_COMMANDS.has(name as keyof typeof commands);
+    const bumpsTags = TAG_WRITING_COMMANDS.has(name as keyof typeof commands);
     out[name] = async (...args: unknown[]) => {
       try {
         const result = await fn(...args);
         if (bumpsLinks) linksTick.bump();
+        if (bumpsTags) tagsTick.bump();
         return result;
       } catch (error) {
         onError(error);

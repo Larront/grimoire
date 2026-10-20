@@ -16,6 +16,7 @@
 import { api } from "$lib/api";
 import { untrack } from "svelte";
 import { createSaveStatus } from "./save-status.svelte";
+import { tagsTick } from "$lib/stores/tags-tick.svelte";
 import { staleGuard } from "./stale-guard";
 import type { Note, Pin, PinCategory } from "$lib/types/ledger";
 import { noteExcerpt } from "$lib/editor/note-excerpt";
@@ -75,6 +76,10 @@ export function createPinDetailsSource(
     const targetId = p.id;
     loadedForPinId = targetId;
     saves.reset();
+    loadPinTags(targetId);
+  });
+
+  function loadPinTags(targetId: number) {
     const whenCurrent = staleGuard(targetId, () => loadedForPinId);
     api.silent
       .getPinTags(targetId)
@@ -89,6 +94,13 @@ export function createPinDetailsSource(
         }),
       );
     refreshAllTags();
+  }
+
+  // The Tag Manager renamed, merged or deleted a tag — maybe one of this pin's.
+  $effect(() => {
+    if (tagsTick.value === 0) return;
+    const p = untrack(() => getPin());
+    if (p) loadPinTags(p.id);
   });
 
   // Pin Categories — per-map, so keyed by map id.

@@ -23,8 +23,13 @@ pub struct GraphNodeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<i32>,
     /// First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+    /// The tag a node is *coloured* by.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_tag: Option<String>,
+    /// Every tag the note carries, sorted; empty for maps and stubs. A node is
+    /// *hidden* when any of these is — hiding a tag hides every note with it,
+    /// not only the notes it happens to colour.
+    pub tags: Vec<String>,
     /// Number of note_links rows whose target_path resolves to this note's path.
     /// Always 0 for map and stub nodes.
     pub backlink_count: i32,
@@ -80,11 +85,11 @@ struct PinRow {
 }
 
 #[derive(QueryableByName, Debug)]
-struct NotePrimaryTagRow {
+struct NoteTagRow {
     #[diesel(sql_type = diesel::sql_types::Text)]
     note_path: String,
     #[diesel(sql_type = diesel::sql_types::Text)]
-    primary_tag: String,
+    tag: String,
 }
 
 #[derive(QueryableByName, Debug)]
@@ -122,12 +127,11 @@ pub fn get_graph_data_on_conn(
             .load(conn)
             .map_err(|e| e.to_string())?;
 
-    // 5. Primary tag per note (MIN(tag) for deterministic ordering)
-    let primary_tags: Vec<NotePrimaryTagRow> = diesel::sql_query(
-        "SELECT note_path, MIN(tag) AS primary_tag FROM note_tags GROUP BY note_path",
-    )
-    .load(conn)
-    .map_err(|e| e.to_string())?;
+    // 5. Every tag per note, sorted — the first is the primary (MIN(tag), for determinism)
+    let note_tag_rows: Vec<NoteTagRow> =
+        diesel::sql_query("SELECT note_path, tag FROM note_tags ORDER BY note_path, tag")
+            .load(conn)
+            .map_err(|e| e.to_string())?;
 
     // 6. Aliases — used to resolve wikilinks like [[Mira]] to their note node
     let aliases: Vec<NoteAliasRow> =
@@ -155,11 +159,12 @@ pub fn get_graph_data_on_conn(
         resolver.resolve(target_path).map(|r| r.id)
     };
 
-    // Build a path→primary_tag lookup
-    let path_to_primary_tag: std::collections::HashMap<&str, &str> = primary_tags
-        .iter()
-        .map(|r| (r.note_path.as_str(), r.primary_tag.as_str()))
-        .collect();
+    // Build a path→tags lookup (each list already sorted by the query)
+    let mut path_to_tags: std::collections::HashMap<&str, Vec<String>> =
+        std::collections::HashMap::new();
+    for r in &note_tag_rows {
+        path_to_tags.entry(r.note_path.as_str()).or_default().push(r.tag.clone());
+    }
 
     // Compute backlink counts per note_id (resolving aliases)
     let mut id_to_backlink_count: std::collections::HashMap<i32, i32> =
@@ -173,15 +178,17 @@ pub fn get_graph_data_on_conn(
     // Build note nodes
     let mut nodes: Vec<GraphNodeData> = notes
         .iter()
-        .map(|note| GraphNodeData {
-            id: format!("note-{}", note.id),
-            label: note.title.clone(),
-            kind: "note".to_string(),
-            entity_id: Some(note.id),
-            primary_tag: path_to_primary_tag
-                .get(note.path.as_str())
-                .map(|s| s.to_string()),
-            backlink_count: id_to_backlink_count.get(&note.id).copied().unwrap_or(0),
+        .map(|note| {
+            let tags = path_to_tags.get(note.path.as_str()).cloned().unwrap_or_default();
+            GraphNodeData {
+                id: format!("note-{}", note.id),
+                label: note.title.clone(),
+                kind: "note".to_string(),
+                entity_id: Some(note.id),
+                primary_tag: tags.first().cloned(),
+                tags,
+                backlink_count: id_to_backlink_count.get(&note.id).copied().unwrap_or(0),
+            }
         })
         .collect();
 
@@ -193,6 +200,7 @@ pub fn get_graph_data_on_conn(
             kind: "map".to_string(),
             entity_id: Some(map.id),
             primary_tag: None,
+            tags: Vec::new(),
             backlink_count: 0,
         });
     }
@@ -214,6 +222,7 @@ pub fn get_graph_data_on_conn(
                     kind: "stub".to_string(),
                     entity_id: None,
                     primary_tag: None,
+                    tags: Vec::new(),
                     backlink_count: 0,
                 });
             }
@@ -670,6 +679,7 @@ mod tests {
         let note = data.nodes.iter().find(|n| n.id == "note-1").unwrap();
         // MIN(tag) picks the lexicographically smallest
         assert_eq!(note.primary_tag.as_deref(), Some("alpha"));
+        assert_eq!(note.tags, vec!["alpha".to_string(), "zebra".to_string()]);
     }
 
     #[test]

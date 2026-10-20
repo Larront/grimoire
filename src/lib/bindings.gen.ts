@@ -215,6 +215,12 @@ export const commands = {
 	renamePdf: (oldPath: string, newStem: string) => __TAURI_INVOKE<string>("rename_pdf", { oldPath, newStem }),
 	renameStatblockPreset: (from: string, to: string) => __TAURI_INVOKE<null>("rename_statblock_preset", { from, to }),
 	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
+	/**
+	 *  Put back what a retag changed: each note's and pin's tags, and both names'
+	 *  graph styles. A note deleted or renamed since is skipped, as is a deleted pin —
+	 *  Undo restores what is still there to restore.
+	 */
+	undoRetag: (undo: RetagUndo) => __TAURI_INVOKE<null>("undo_retag", { undo }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
 	resolveNoteTarget: (target: string) => __TAURI_INVOKE<{
@@ -244,7 +250,17 @@ export const commands = {
 	searchLinkTargets: (query: string, excludePath: string | null) => __TAURI_INVOKE<LinkTarget[]>("search_link_targets", { query, excludePath }),
 	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
 	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
-	setTagGraphStyle: (tag: string, color: string | null, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_style", { tag, color, hidden }),
+	/**
+	 *  A tag's explicit colour; `None` is Automatic (its ramp step). Touches only the
+	 *  colour — the hidden flag and the step stay as they are.
+	 */
+	setTagGraphColor: (tag: string, color: string | null) => __TAURI_INVOKE<null>("set_tag_graph_color", { tag, color }),
+	/**
+	 *  Whether a tag's notes are hidden from the graph ("" is the untagged notes).
+	 *  Touches only the flag — two surfaces write it, and neither may carry a stale
+	 *  colour along with it.
+	 */
+	setTagGraphHidden: (tag: string, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_hidden", { tag, hidden }),
 	spotifyExchangeCode: (code: string, state: string) => __TAURI_INVOKE<SpotifyAuthStatus>("spotify_exchange_code", { code, state }),
 	spotifyGetAccessToken: () => __TAURI_INVOKE<string>("spotify_get_access_token"),
 	spotifyGetAuthStatus: () => __TAURI_INVOKE<{
@@ -361,8 +377,17 @@ export type GraphNodeData_Deserialize = {
 	label: string,
 	kind: string,
 	entity_id: number | null,
-	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	/**
+	 *  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+	 *  The tag a node is *coloured* by.
+	 */
 	primary_tag: string | null,
+	/**
+	 *  Every tag the note carries, sorted; empty for maps and stubs. A node is
+	 *  *hidden* when any of these is — hiding a tag hides every note with it,
+	 *  not only the notes it happens to colour.
+	 */
+	tags: string[],
 	/**
 	 *  Number of note_links rows whose target_path resolves to this note's path.
 	 *  Always 0 for map and stub nodes.
@@ -375,8 +400,17 @@ export type GraphNodeData_Serialize = {
 	label: string,
 	kind: string,
 	entity_id?: number | null,
-	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	/**
+	 *  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+	 *  The tag a node is *coloured* by.
+	 */
 	primary_tag?: string | null,
+	/**
+	 *  Every tag the note carries, sorted; empty for maps and stubs. A node is
+	 *  *hidden* when any of these is — hiding a tag hides every note with it,
+	 *  not only the notes it happens to colour.
+	 */
+	tags: string[],
 	/**
 	 *  Number of note_links rows whose target_path resolves to this note's path.
 	 *  Always 0 for map and stub nodes.
@@ -607,6 +641,22 @@ export type ResolvedNote = {
 export type RetagResult = {
 	note_count: number,
 	pin_count: number,
+	/**  True when the target was already a tag — the toast says "Merged". */
+	merged: boolean,
+	/**  Everything the retag changed, as it was: hand it to `undo_retag`. */
+	undo: RetagUndo,
+};
+
+/**  What a retag overwrote. Opaque to the frontend, which only hands it back. */
+export type RetagUndo = {
+	from_tag: string,
+	to_tag: string | null,
+	/**  Each affected note's tag list before the retag. */
+	notes: TagsBefore<string>[],
+	/**  Each affected pin's tag list before the retag. */
+	pins: TagsBefore<number>[],
+	/**  The style rows for both names before the retag. */
+	styles: TagStyleRow[],
 };
 
 export type Scene = {
@@ -673,12 +723,27 @@ export type TagFacet = {
 export type TagGraphStyleResponse = {
 	color: string | null,
 	hidden: boolean,
+	/**  The ramp step, 0-based; `None` past the eighth tag. */
+	slot: number | null,
+};
+
+/**  One `tag_graph_styles` row, whole — what a retag's Undo puts back. */
+export type TagStyleRow = {
+	tag: string,
+	color: string | null,
+	hidden: boolean,
+	slot: number | null,
 };
 
 export type TagUsageEntry = {
 	tag: string,
 	note_count: number,
 	pin_count: number,
+};
+
+export type TagsBefore<K> = {
+	key: K,
+	tags: string[],
 };
 
 export type TemplateEntry = {
