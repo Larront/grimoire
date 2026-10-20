@@ -57,22 +57,22 @@ describe("settings dialog — open", () => {
 // ── Theme control ─────────────────────────────────────────────────
 
 describe("settings dialog — theme", () => {
-  it("shows Dark, Light, and System theme buttons", async () => {
+  it("offers Dark, Light and System as one radio group", async () => {
     const { dialog } = await openSettingsDialog();
-    expect(within(dialog).getByRole("button", { name: /^dark$/i })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: /^light$/i })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: /^system$/i })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: /^dark$/i })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: /^light$/i })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: /^system$/i })).toBeTruthy();
   });
 
   it("clicking Light updates userPrefersMode to light", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByRole("button", { name: /^light$/i }));
+    await fireEvent.click(within(dialog).getByRole("radio", { name: /^light$/i }));
     expect(userPrefersMode.current).toBe("light");
   });
 
   it("clicking Dark updates userPrefersMode to dark", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByRole("button", { name: /^dark$/i }));
+    await fireEvent.click(within(dialog).getByRole("radio", { name: /^dark$/i }));
     expect(userPrefersMode.current).toBe("dark");
   });
 });
@@ -111,18 +111,56 @@ describe("settings dialog — accent", () => {
 describe("settings dialog — density", () => {
   it("clicking Cozy updates ledger.density", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByRole("button", { name: /^cozy$/i }));
+    await fireEvent.click(within(dialog).getByRole("radio", { name: /^cozy$/i }));
     expect(ledger.density).toBe("cozy");
   });
 
-  it("clicking Dense calls invoke save_density_level", async () => {
+  it("saves Dense with the app's own preferences, for every world", async () => {
     const invokeSpy = vi.mocked(invoke);
     invokeSpy.mockClear();
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByRole("button", { name: /^dense$/i }));
-    expect(invokeSpy).toHaveBeenCalledWith("save_density_level", {
-      level: "dense",
-    });
+    await fireEvent.click(within(dialog).getByRole("radio", { name: /^dense$/i }));
+    const call = invokeSpy.mock.calls.find(([cmd]) => cmd === "save_app_prefs");
+    expect(call?.[1]).toMatchObject({ prefs: { density: "dense" } });
+  });
+
+  it("moves the choice with the arrow keys, one Tab stop for the group", async () => {
+    const { dialog } = await openSettingsDialog();
+    const group = within(dialog).getByRole("radiogroup", { name: "Density" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+
+    const checked = radios.find((r) => r.getAttribute("aria-checked") === "true")!;
+    await fireEvent.keyDown(checked, { key: "ArrowRight" });
+    const next = radios[(radios.indexOf(checked) + 1) % radios.length];
+    expect(next).toHaveAttribute("aria-checked", "true");
+  });
+});
+
+// ── Scope, names and the panels ───────────────────────────────────
+
+describe("settings dialog — what it says", () => {
+  it("says the accent is this world's and the rest are every world's", async () => {
+    const { dialog } = await openSettingsDialog();
+    expect(within(dialog).getByText(/This world's colour/)).toBeTruthy();
+    expect(within(dialog).getAllByText(/Every world\./).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names the chosen accent, and groups the swatches under Accent", async () => {
+    const { dialog } = await openSettingsDialog();
+    expect(within(dialog).getByRole("radiogroup", { name: "Accent" })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "Crimson" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("shows focus on a section's panel, which was a Tab stop that drew nothing", async () => {
+    const { dialog } = await openSettingsDialog();
+    for (const panel of within(dialog).getAllByRole("tabpanel")) {
+      expect(panel.className).toContain("focus-visible:outline-ring");
+      expect(panel.className).not.toContain("outline-none");
+    }
   });
 });
 

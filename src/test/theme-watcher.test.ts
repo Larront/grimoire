@@ -23,32 +23,45 @@ describe("ledger store — density default", () => {
   });
 });
 
-describe("ledger store — density persistence", () => {
-  it("calls invoke save_density_level when density changes", () => {
+// Density is app-wide since the 2026-10 design review: it is about the GM's screen, and a
+// world used to open at whatever density it had been left in.
+describe("density — app-wide", () => {
+  it("is saved with the app's own preferences, not the world's", () => {
     const invokeSpy = vi.mocked(invoke);
     invokeSpy.mockClear();
     ledger.setDensity("dense");
-    expect(invokeSpy).toHaveBeenCalledWith("save_density_level", {
-      level: "dense",
-    });
+    const call = invokeSpy.mock.calls.find(([cmd]) => cmd === "save_app_prefs");
+    expect(call?.[1]).toMatchObject({ prefs: { density: "dense" } });
+    expect(invokeSpy).not.toHaveBeenCalledWith("save_density_level", expect.anything());
   });
 
-  it("resets density to balanced on closeLedger", async () => {
+  it("survives closing the world", async () => {
     ledger.setDensity("cozy");
-    expect(ledger.density).toBe("cozy");
     await ledger.closeLedger();
-    expect(ledger.density).toBe("balanced");
+    expect(ledger.density).toBe("cozy");
   });
 
-  it("restores saved density level on checkExistingLedger", async () => {
+  it("keeps the GM's choice when a world opens with a density of its own", async () => {
+    ledger.setDensity("dense");
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       if (cmd === "get_ledger_path") return "/some/ledger";
       if (cmd === "get_density_level") return "cozy";
       return null;
     });
     await ledger.checkExistingLedger();
-    expect(ledger.density).toBe("cozy");
+    expect(ledger.density).toBe("dense");
     vi.mocked(invoke).mockResolvedValue(null);
+  });
+
+  it("adopts a world's old density the first time, before any is chosen", async () => {
+    // So a GM who had chosen Dense does not find the app suddenly Balanced.
+    vi.resetModules();
+    const { appPrefs } = await import("../lib/stores/app-prefs.svelte");
+    expect(appPrefs.density).toBe("balanced");
+    appPrefs.adoptDensity("cozy");
+    expect(appPrefs.density).toBe("cozy");
+    appPrefs.adoptDensity("dense");
+    expect(appPrefs.density).toBe("cozy");
   });
 });
 

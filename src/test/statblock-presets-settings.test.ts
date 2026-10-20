@@ -2,6 +2,7 @@ import { render, fireEvent, cleanup, waitFor, within } from "@testing-library/sv
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import StatblockPresetsSettings from "../lib/components/StatblockPresetsSettings.svelte";
+import * as toast from "$lib/toast";
 import type { StatblockPreset } from "$lib/editor/statblock-presets";
 
 const GOBLIN: StatblockPreset = {
@@ -167,24 +168,36 @@ describe("statblock presets — rename and delete", () => {
     await waitFor(() => expect(view.queryByTestId("preset-rename-input")).toBeNull());
   });
 
-  it("deletes a preset behind a confirmation", async () => {
+  it("deletes a preset at once, offering Undo rather than asking first", async () => {
+    // DESIGN.md §6: no modal for a delete this cheap to reverse.
+    const undo = vi.spyOn(toast, "toastUndo");
     const view = await open([GOBLIN]);
     await fireEvent.click(await view.findByLabelText("Delete Goblin"));
-
-    const confirm = await view.findByTestId("preset-delete-confirm");
-    await fireEvent.click(confirm);
 
     await waitFor(() =>
       expect(calls("delete_statblock_preset")[0][1]).toEqual({
         name: "Goblin",
       }),
     );
+    await waitFor(() => expect(undo.mock.calls[0]?.[0]).toBe("Deleted the “Goblin” preset"));
+    undo.mockRestore();
+  });
+
+  it("puts the preset back from Undo, shape and all", async () => {
+    const undo = vi.spyOn(toast, "toastUndo");
+    const view = await open([GOBLIN]);
+    await fireEvent.click(await view.findByLabelText("Delete Goblin"));
+    await waitFor(() => expect(undo).toHaveBeenCalled());
+
+    undo.mock.calls[0][2]!();
+    await waitFor(() => expect(calls("save_statblock_preset")).toHaveLength(1));
+    expect(calls("save_statblock_preset")[0][1]).toMatchObject({ name: "Goblin" });
+    undo.mockRestore();
   });
 
   it("deleting does not clear a default pointing at it — it dangles, visibly", async () => {
     const view = await open([GOBLIN], "Goblin");
     await fireEvent.click(await view.findByLabelText("Delete Goblin"));
-    await fireEvent.click(await view.findByTestId("preset-delete-confirm"));
 
     await waitFor(() => expect(calls("delete_statblock_preset")).toHaveLength(1));
     expect(calls("save_statblock_preset_default")).toHaveLength(0);

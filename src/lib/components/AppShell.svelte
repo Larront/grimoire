@@ -83,6 +83,12 @@
       void audioEngine.togglePauseScene();
       return;
     }
+    // Ctrl/Cmd+, — Settings, where every desktop app keeps it.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === ",") {
+      e.preventDefault();
+      dialogs.settingsOpen = true;
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
       tabs.closeActiveTab();

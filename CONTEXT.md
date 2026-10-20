@@ -34,6 +34,8 @@ Five named presets drive `--primary`. All are evocative, never generic — no ne
 | `ice`     | `#5b9ec9` | `#3a7fa8` |
 | `amber`   | `#c49a3c` | `#a07a20` |
 
+The accent is chosen **per world**, in its `.grimoire/prefs.json` — a world's colour is part of it. Density, theme and Reduce Motion are **app-wide**, in the app's own prefs: they are about the GM's screen. (2026-10 design review: density was per world too, and a world opened at whatever density it had been left in; the open world's old density is adopted once.)
+
 `--primary-subtle` (12% opacity) and `--primary-muted` (24% opacity) are derived from `--primary`. There is no separate `--accent` token — `--primary` is the single accent family.
 
 The preset table lives in `src/app.css` under `.accent-*`; `shared/tokens.css` additionally ships Crimson's two values as the default `--primary`, which is what a GM who has never opened Settings is looking at. One deliberate third copy: `src/lib/entity-colors.ts` holds the five dark hexes frozen as **data**, because a colour a GM picks for a pin, an annotation or a scene thumbnail is written into their ledger and must not re-resolve when they change accent or mode. Settings' accent list and the PDF scene-link layer build from it, and `src/test/entity-colors.test.ts` fails if the copies drift. What a GM picks for a scene, a pin or an annotation is not limited to it: all three use one full colour picker (`ColorPicker`) and store `#rrggbb`. Older values — a scene's preset wash, a pin's `rgb(...)` — are read back by `storedColorHex` and never rewritten.

@@ -2,19 +2,20 @@
   import { setMode, userPrefersMode } from "mode-watcher";
   import { api } from "$lib/api";
   import * as Dialog from "$lib/components/ui/dialog";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Switch } from "$lib/components/ui/switch";
+  import { ChoiceGroup } from "$lib/components/ui/choice-group";
   import { Tabs } from "bits-ui";
-  import { ledger, type AccentPreset, type DensityLevel } from "$lib/stores/ledger.svelte";
+  import { ledger, type AccentPreset } from "$lib/stores/ledger.svelte";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
-  import { appPrefs } from "$lib/stores/app-prefs.svelte";
+  import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { toastSuccess, toastError } from "$lib/toast";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import StatblockPresetsSettings from "$lib/components/StatblockPresetsSettings.svelte";
   import { getSpotifyStatus, connectSpotify, disconnectSpotify } from "$lib/utils/spotify-auth";
   import type { SpotifyAuthStatus } from "$lib/types/ledger";
-  import { LoaderCircle } from "@lucide/svelte";
+  import { Check, CircleX, LoaderCircle } from "@lucide/svelte";
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -41,9 +42,14 @@
   let authStatus = $state<SpotifyAuthStatus | null>(null);
   let isConnecting = $state(false);
   let isAuthLoading = $state(true);
-  let hasLoadedSpotify = $state(false);
+  let connectFailed = $state(false);
 
-  let restoreDialogOpen = $state(false);
+  // ── Restore built-in templates ──────────────────────────────────────────────
+  //
+  // Asked in its own row rather than a modal (2026-10 design review): DESIGN.md §6 keeps
+  // modals off destructive confirmations, and this one stacked two extra scrims over the
+  // dialog until the screen was nearly black, with a crimson button that read as safe.
+  let confirmingRestore = $state(false);
   let isRestoring = $state(false);
 
   async function handleRestoreTemplates() {
@@ -52,11 +58,9 @@
       await api.restoreBuiltinTemplates();
       await templates.load();
       toastSuccess("Default templates restored");
-      restoreDialogOpen = false;
+      confirmingRestore = false;
     } catch (e) {
-      // Surface the failure — a silent close would leave the GM believing the
-      // defaults were reset when they weren't. The confirm dialog still closes
-      // (bits-ui Action), but the toast makes the failure visible so they can retry.
+      // The row stays open on a failure, so the GM can try again from where they were.
       console.error("restore templates failed:", e);
       toastError("Couldn't restore templates. Please try again.");
     } finally {
@@ -64,30 +68,53 @@
     }
   }
 
+  // Read again every time Settings opens. It was read once a session, and the dialog is
+  // always mounted — so connecting Spotify from a scene left Settings saying "Connect".
   $effect(() => {
-    if (open && !hasLoadedSpotify) {
-      hasLoadedSpotify = true;
-      getSpotifyStatus()
-        .then((s) => {
-          authStatus = s;
-        })
-        .catch(() => {})
-        .finally(() => {
-          isAuthLoading = false;
-        });
-    }
+    if (!open) return;
+    connectFailed = false;
+    getSpotifyStatus()
+      .then((s) => {
+        authStatus = s;
+      })
+      .catch(() => {})
+      .finally(() => {
+        isAuthLoading = false;
+      });
   });
 
   async function handleConnect() {
     isConnecting = true;
+    connectFailed = false;
     try {
       authStatus = await connectSpotify();
     } catch {
-      // silent — the common case is the user closing the browser tab
+      // Said in the row rather than toasted: the common case is the GM closing the browser
+      // tab, which is not an error worth an alarm, but it was silent and left them guessing.
+      connectFailed = true;
     } finally {
       isConnecting = false;
     }
   }
+
+  // ── Tags ────────────────────────────────────────────────────────────────────
+  //
+  // "Manage" hands over to the Tag Manager, a dialog of its own; Settings comes back when it
+  // closes, on the section the GM left. It used to stay closed.
+  let returnFromTags = $state(false);
+
+  function openTagManager() {
+    returnFromTags = true;
+    open = false;
+    dialogs.tagManagerOpen = true;
+  }
+
+  $effect(() => {
+    if (returnFromTags && !dialogs.tagManagerOpen) {
+      returnFromTags = false;
+      open = true;
+    }
+  });
 
   async function handleDisconnect() {
     try {
@@ -136,19 +163,33 @@
     { value: "about", label: "About" },
   ];
 
-  const segmentedBtn = (active: boolean) =>
-    `px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
-      active
-        ? "bg-foreground/10 text-foreground font-medium"
-        : "text-foreground-muted hover:text-foreground"
+  /** One segment of a choice: the Label role's size, at the 32px every control here is. */
+  const segment = (selected: boolean) =>
+    `h-8 px-3 text-(length:--font-ui) transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring ${
+      selected
+        ? "bg-foreground/15 text-foreground font-medium"
+        : "text-foreground-muted hover:bg-surface-hover hover:text-foreground"
     }`;
+
+  /** About's links: underlined at rest, as every link in the app is, in a neutral line. */
+  const aboutLink =
+    "underline decoration-foreground-muted/50 underline-offset-2 hover:text-foreground hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm cursor-pointer";
+
+  /**
+   * A section's panel. It is a Tab stop — the tab pattern makes it one — and it was an
+   * invisible one; it shows the focus ring every control does.
+   */
+  const panel =
+    "rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring";
+
+  const accentLabel = $derived(ACCENT_OPTIONS.find((o) => o.value === ledger.accent)?.label ?? "");
 </script>
 
 <!-- A label/description pair, shared by every settings row. -->
 {#snippet field(title: string, description: string)}
   <div class="flex flex-col gap-0.5">
-    <span class="text-(--font-body) font-medium text-foreground">{title}</span>
-    <span class="text-(--font-ui) text-foreground-muted">{description}</span>
+    <span class="text-(length:--font-body) font-medium text-foreground">{title}</span>
+    <span class="text-(length:--font-ui) text-foreground-muted">{description}</span>
   </div>
 {/snippet}
 
@@ -159,20 +200,21 @@
     <Dialog.Header class="px-5 pt-5 pb-3 border-b border-border shrink-0 text-left">
       <Dialog.Title>Settings</Dialog.Title>
       <Dialog.Description class="sr-only">
-        Manage appearance, content, integrations, and application information.
+        Appearance, content, statblock presets, integrations, and about Grimoire.
       </Dialog.Description>
     </Dialog.Header>
 
     <Tabs.Root bind:value={section} orientation="vertical" class="flex flex-row flex-1 min-h-0">
       <!-- ── Section rail ─────────────────────────────────────────── -->
       <Tabs.List
+        aria-label="Settings sections"
         class="flex flex-col gap-0.5 shrink-0 w-44 border-r border-border p-3 overflow-y-auto"
       >
         {#each SECTIONS as s (s.value)}
           <Tabs.Trigger
             value={s.value}
             data-testid="settings-tab-{s.value}"
-            class="flex items-center h-(--row-h) px-3 rounded-md text-(--font-body) text-left text-foreground-muted transition-colors hover:text-foreground hover:bg-foreground/[0.04] data-[state=active]:bg-primary/[0.12] data-[state=active]:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            class="flex items-center h-(--row-h) px-3 rounded-md text-(length:--font-body) text-left text-foreground-muted transition-colors hover:bg-surface-hover data-[state=active]:bg-primary/[0.12] data-[state=active]:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           >
             {s.label}
           </Tabs.Trigger>
@@ -182,158 +224,174 @@
       <!-- ── Panel ────────────────────────────────────────────────── -->
       <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4">
         <!-- Appearance -->
-        <Tabs.Content value="appearance" class="outline-none">
+        <Tabs.Content value="appearance" class={panel}>
           <div class="flex flex-col divide-y divide-border">
+            <!-- Each description says where the setting applies: accent is this world's,
+                 the rest are everywhere (2026-10 design review). A GM who chose a colour in
+                 the Example World found Crimson in their own, with nothing saying why. -->
             <!-- Theme -->
             <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-              {@render field("Theme", "Light, Dark, or System")}
-              <div
-                role="group"
-                aria-label="Theme"
-                class="flex rounded-md border border-border divide-x divide-border overflow-hidden shrink-0"
-              >
-                {#each THEME_MODES as mode (mode.value)}
-                  <button
-                    type="button"
-                    aria-pressed={userPrefersMode.current === mode.value}
-                    class={segmentedBtn(userPrefersMode.current === mode.value)}
-                    onclick={() => setMode(mode.value)}>{mode.label}</button
-                  >
-                {/each}
-              </div>
+              {@render field("Theme", "Light, dark, or follow the system. Every world.")}
+              <ChoiceGroup
+                label="Theme"
+                options={THEME_MODES}
+                value={userPrefersMode.current ?? "system"}
+                onChange={(mode) => setMode(mode)}
+                class="flex shrink-0 overflow-hidden rounded-md border border-border divide-x divide-border"
+                optionClass={segment}
+              />
             </div>
 
             <!-- Accent -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Accent", "Choose a colour preset")}
-              <div class="flex items-center gap-2 shrink-0">
-                {#each ACCENT_OPTIONS as preset (preset.value)}
-                  <button
-                    type="button"
-                    data-testid="accent-{preset.value}"
-                    aria-label={preset.label}
-                    aria-pressed={ledger.accent === preset.value}
-                    onclick={() => ledger.setAccent(preset.value)}
-                    style="background-color: var(--primary)"
-                    class="{preset.value} size-6 rounded-full ring-offset-background transition-[opacity,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {ledger.accent ===
-                    preset.value
-                      ? 'ring-2 ring-ring ring-offset-1'
-                      : 'opacity-70 hover:opacity-100'}"
-                  ></button>
-                {/each}
+              {@render field("Accent", "This world's colour for selection, focus and links.")}
+              <div class="flex shrink-0 items-center gap-3">
+                <!-- The chosen preset's name, which the swatches alone never said. -->
+                <span class="text-(length:--font-ui) text-foreground-muted">{accentLabel}</span>
+                <ChoiceGroup
+                  label="Accent"
+                  options={ACCENT_OPTIONS}
+                  value={ledger.accent}
+                  onChange={(preset) => ledger.setAccent(preset)}
+                  class="flex items-center gap-2"
+                  optionClass={() =>
+                    "rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"}
+                >
+                  {#snippet option(preset, selected)}
+                    <!-- Each swatch wears its own preset class and paints with `--primary`,
+                         so it shows exactly what choosing it will paint. Chosen is a tick;
+                         the ring is focus alone, so the two never look alike. -->
+                    <span
+                      data-testid="accent-{preset.value}"
+                      class="{preset.value} flex size-6 items-center justify-center rounded-full text-primary-foreground"
+                      style="background-color: var(--primary)"
+                    >
+                      {#if selected}<Check class="size-3.5" strokeWidth={3} />{/if}
+                    </span>
+                  {/snippet}
+                </ChoiceGroup>
               </div>
             </div>
 
             <!-- Density -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Density", "Layout compactness")}
-              <div
-                role="group"
-                aria-label="Density"
-                class="flex rounded-md border border-border divide-x divide-border overflow-hidden shrink-0"
-              >
-                {#each DENSITY_LEVELS as level (level.value)}
-                  <button
-                    type="button"
-                    aria-pressed={ledger.density === level.value}
-                    class={segmentedBtn(ledger.density === level.value)}
-                    onclick={() => ledger.setDensity(level.value)}>{level.label}</button
-                  >
-                {/each}
-              </div>
+              {@render field("Density", "Spacing and text size. Every world.")}
+              <ChoiceGroup
+                label="Density"
+                options={DENSITY_LEVELS}
+                value={appPrefs.density}
+                onChange={(level) => appPrefs.setDensity(level)}
+                class="flex shrink-0 overflow-hidden rounded-md border border-border divide-x divide-border"
+                optionClass={segment}
+              />
             </div>
 
             <!-- Reduce Motion -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Reduce Motion", "Disable animations and transitions")}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={appPrefs.reduceMotion}
+              {@render field("Reduce Motion", "Turn off animations and transitions. Every world.")}
+              <Switch
+                checked={appPrefs.reduceMotion}
+                onCheckedChange={(v) => appPrefs.setReduceMotion(v)}
                 aria-label="Reduce Motion"
                 data-testid="reduce-motion-toggle"
-                onclick={() => appPrefs.setReduceMotion(!appPrefs.reduceMotion)}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.reduceMotion
-                  ? 'bg-primary'
-                  : 'bg-input'}"
-              >
-                <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.reduceMotion
-                    ? 'translate-x-4'
-                    : 'translate-x-0'} {appPrefs.reduceMotion ? '' : 'transition-transform'}"
-                ></span>
-              </button>
+              />
             </div>
           </div>
         </Tabs.Content>
 
         <!-- Content -->
-        <Tabs.Content value="content" class="outline-none">
+        <Tabs.Content value="content" class={panel}>
           <div class="flex flex-col divide-y divide-border">
             <!-- Confirm before updating links on rename -->
             <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
               {@render field(
                 "Confirm before updating links on rename",
-                "Ask before rewriting wikilinks when a note is renamed",
+                "Ask before changing links in other notes when a note is renamed.",
               )}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={appPrefs.confirmRenameLinks}
+              <Switch
+                checked={appPrefs.confirmRenameLinks}
+                onCheckedChange={(v) => appPrefs.setConfirmRenameLinks(v)}
                 aria-label="Confirm before updating links on rename"
                 data-testid="confirm-rename-links-toggle"
-                onclick={() => appPrefs.setConfirmRenameLinks(!appPrefs.confirmRenameLinks)}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {appPrefs.confirmRenameLinks
-                  ? 'bg-primary'
-                  : 'bg-input'}"
-              >
-                <span
-                  class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 {appPrefs.confirmRenameLinks
-                    ? 'translate-x-4'
-                    : 'translate-x-0'} {appPrefs.confirmRenameLinks ? '' : 'transition-transform'}"
-                ></span>
-              </button>
+              />
             </div>
 
             <!-- Restore built-in templates -->
-            <div class="flex items-center justify-between gap-4 py-3">
-              {@render field(
-                "Built-in templates",
-                "Reset the four built-in templates to their original content. Custom templates are left untouched.",
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                class="shrink-0"
-                data-testid="restore-templates-btn"
-                onclick={() => (restoreDialogOpen = true)}>Restore defaults</Button
-              >
+            <div class="flex flex-col gap-3 py-3">
+              <div class="flex items-center justify-between gap-4">
+                {@render field(
+                  "Built-in templates",
+                  "Reset the four built-in templates to their original content. Custom templates are left untouched.",
+                )}
+                {#if !confirmingRestore}
+                  <Button
+                    variant="outline"
+                    class="shrink-0"
+                    data-testid="restore-templates-btn"
+                    onclick={() => (confirmingRestore = true)}>Restore defaults</Button
+                  >
+                {/if}
+              </div>
+              {#if confirmingRestore}
+                <div
+                  class="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2"
+                  role="group"
+                  aria-label="Confirm restoring templates"
+                >
+                  <span class="text-(length:--font-ui) text-foreground">
+                    Overwrite NPC, Location, Session Log and Encounter with their originals?
+                  </span>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      data-testid="restore-templates-cancel"
+                      onclick={() => (confirmingRestore = false)}>Cancel</Button
+                    >
+                    <Button
+                      variant="destructive"
+                      data-testid="restore-templates-confirm"
+                      disabled={isRestoring}
+                      onclick={handleRestoreTemplates}
+                    >
+                      {#if isRestoring}
+                        <LoaderCircle class="size-3.5 animate-spin" />
+                        Restoring…
+                      {:else}
+                        Restore
+                      {/if}
+                    </Button>
+                  </div>
+                </div>
+              {/if}
             </div>
 
             <!-- Tags -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Tags", "View all tags with usage counts")}
+              {@render field(
+                "Tags",
+                "Rename, merge, recolour and hide tags, with how often each is used.",
+              )}
               <Button
                 variant="outline"
-                size="sm"
                 class="shrink-0"
                 data-testid="open-tag-manager-btn"
-                onclick={() => {
-                  open = false;
-                  dialogs.tagManagerOpen = true;
-                }}>Manage</Button
+                onclick={openTagManager}>Manage</Button
               >
             </div>
           </div>
         </Tabs.Content>
 
         <!-- Statblocks — the app-wide preset store and this vault's default (#179) -->
-        <Tabs.Content value="statblocks" class="outline-none" data-testid="statblocks-section">
+        <Tabs.Content
+          value="statblocks"
+          class={panel}
+          data-testid="statblocks-section"
+        >
           <StatblockPresetsSettings {open} />
         </Tabs.Content>
 
         <!-- Integrations -->
-        <Tabs.Content value="integrations" class="outline-none">
+        <Tabs.Content value="integrations" class={panel}>
           <div class="flex flex-col divide-y divide-border">
             {#if isAuthLoading}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
@@ -343,17 +401,33 @@
             {:else if authStatus?.is_connected}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
                 {@render field("Spotify", "Connected · Premium required for in-app playback")}
-                <Button variant="outline" size="sm" class="shrink-0" onclick={handleDisconnect}
+                <Button variant="outline" class="shrink-0" onclick={handleDisconnect}
                   >Disconnect</Button
                 >
               </div>
             {:else}
               <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-                {@render field(
-                  "Spotify",
-                  "Add tracks and playlists to your scenes. Requires Spotify Premium.",
-                )}
-                <Button size="sm" class="shrink-0" onclick={handleConnect} disabled={isConnecting}>
+                <div class="flex flex-col gap-1">
+                  {@render field(
+                    "Spotify",
+                    "Add tracks and playlists to your scenes. Requires Spotify Premium.",
+                  )}
+                  {#if connectFailed}
+                    <span
+                      class="flex items-center gap-1 text-(length:--font-ui) text-destructive"
+                      role="status"
+                    >
+                      <CircleX class="size-3.5 shrink-0" /> Didn't connect. Try again, and finish signing
+                      in on the Spotify page.
+                    </span>
+                  {/if}
+                </div>
+                <Button
+                  variant="outline"
+                  class="shrink-0"
+                  onclick={handleConnect}
+                  disabled={isConnecting}
+                >
                   {#if isConnecting}
                     <LoaderCircle class="size-3.5 animate-spin" />
                     Connecting…
@@ -367,35 +441,36 @@
         </Tabs.Content>
 
         <!-- About -->
-        <Tabs.Content value="about" class="outline-none" data-testid="about-section">
+        <Tabs.Content value="about" class={panel} data-testid="about-section">
           <div class="flex flex-col gap-2">
             <div class="flex items-center justify-between gap-4">
-              <span class="text-(--font-body) text-foreground">
+              <span class="text-(length:--font-body) text-foreground">
                 Grimoire {appVersion ? `v${appVersion}` : ""}
               </span>
               <button
                 type="button"
-                class="text-(--font-ui) text-foreground-muted underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                class="text-(length:--font-ui) text-foreground-muted {aboutLink}"
                 onclick={() => openExternal("https://github.com/Larront/grimoire/issues")}
                 >Report a bug</button
               >
             </div>
-            <span class="text-(--font-ui) text-foreground-muted">
+            <span class="text-(length:--font-ui) text-foreground-muted">
               Free software under
               <button
                 type="button"
-                class="underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                class={aboutLink}
                 onclick={() => openExternal("https://www.gnu.org/licenses/gpl-3.0.html")}
                 >GPL-3.0</button
               >
               · source on
               <button
                 type="button"
-                class="underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                class={aboutLink}
                 onclick={() => openExternal("https://github.com/Larront/grimoire")}>GitHub</button
               >
             </span>
-            <span class="text-(--font-ui) text-foreground-muted">
+            <span class="mt-3 font-sans text-xs font-semibold text-foreground-muted">Credits</span>
+            <span class="text-(length:--font-ui) text-foreground-muted">
               Sample audio by Kevin MacLeod (incompetech.com, CC-BY 4.0) and CC0 contributors.
             </span>
             <!-- SRD 5.1 attribution for the `5E SRD` statblock preset (#179). Wizards
@@ -404,14 +479,17 @@
                  it is separately required by CC-BY-4.0 §3(a)(1)(B). Placed here rather
                  than behind a link because a desktop app that needs the network to be
                  licence-compliant is a bad trade. -->
-            <span class="text-(--font-ui) text-foreground-muted" data-testid="srd-attribution">
+            <span
+              class="text-(length:--font-ui) text-foreground-muted"
+              data-testid="srd-attribution"
+            >
               This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”)
               by Wizards of the Coast LLC and available at
               https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed
               under the Creative Commons Attribution 4.0 International License available at
               https://creativecommons.org/licenses/by/4.0/legalcode.
             </span>
-            <span class="text-(--font-ui) text-foreground-muted">
+            <span class="text-(length:--font-ui) text-foreground-muted">
               The SRD 5.1 material has been modified: it was reshaped into structured field labels
               for a statblock preset.
             </span>
@@ -421,34 +499,3 @@
     </Tabs.Root>
   </Dialog.Content>
 </Dialog.Root>
-
-<!-- ── Restore default templates confirmation ───────────────────────────── -->
-<AlertDialog.Root bind:open={restoreDialogOpen}>
-  <AlertDialog.Portal>
-    <AlertDialog.Overlay />
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Restore default templates?</AlertDialog.Title>
-        <AlertDialog.Description>
-          This overwrites the four built-in templates (NPC, Location, Session Log, Encounter) with
-          their original content. Any custom templates you've created are left untouched.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action
-          data-testid="restore-templates-confirm"
-          disabled={isRestoring}
-          onclick={handleRestoreTemplates}
-        >
-          {#if isRestoring}
-            <LoaderCircle class="size-3.5 animate-spin" />
-            Restoring…
-          {:else}
-            Restore
-          {/if}
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Portal>
-</AlertDialog.Root>
