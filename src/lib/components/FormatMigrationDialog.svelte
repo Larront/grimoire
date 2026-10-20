@@ -49,79 +49,76 @@
     if (!v && !isMigrating) ledger.dismissFormatMigration();
   }}
 >
-  <AlertDialog.Portal>
-    <AlertDialog.Overlay />
-    <AlertDialog.Content data-testid="format-migration-dialog">
-      <AlertDialog.Header>
-        <AlertDialog.Title>{heading}</AlertDialog.Title>
-        <AlertDialog.Description>
-          Grimoire has changed how it writes part of your notes. Opening this ledger rewrites {count}
-          on disk, once.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
+  <AlertDialog.Content data-testid="format-migration-dialog">
+    <AlertDialog.Header>
+      <AlertDialog.Title>{heading}</AlertDialog.Title>
+      <AlertDialog.Description>
+        Grimoire has changed how it writes part of your notes. Opening this ledger rewrites {count}
+        on disk, once.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
 
-      {#if plan}
-        <div class="space-y-3 text-sm">
-          <ul class="text-muted-foreground list-disc space-y-2 pl-5">
-            {#each plan.sentences as sentence (sentence)}
-              <li>{sentence}</li>
-            {/each}
-          </ul>
+    {#if plan}
+      <div class="space-y-3 text-sm">
+        <ul class="text-muted-foreground list-disc space-y-2 pl-5">
+          {#each plan.sentences as sentence (sentence)}
+            <li>{sentence}</li>
+          {/each}
+        </ul>
 
-          {#if plan.warnings.length > 0}
-            <!-- The one part of the change that edits the GM's own prose rather
+        {#if plan.warnings.length > 0}
+          <!-- The one part of the change that edits the GM's own prose rather
                  than Grimoire's syntax, and therefore the part most deserving of
                  being asked about. Named per file, because that is what a GM can
                  act on. -->
-            <div class="border-border bg-muted/40 space-y-1.5 rounded-md border p-3">
-              <p class="font-medium">
-                {plan.warnings.length === 1
-                  ? "One line of your own writing changes:"
-                  : `${plan.warnings.length} lines of your own writing change:`}
-              </p>
-              <ul class="text-muted-foreground max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
-                {#each plan.warnings as warning (warning)}
-                  <li>{warning}</li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
+          <div class="border-border bg-muted/40 space-y-1.5 rounded-md border p-3">
+            <p class="font-medium">
+              {plan.warnings.length === 1
+                ? "One line of your own writing changes:"
+                : `${plan.warnings.length} lines of your own writing change:`}
+            </p>
+            <ul class="text-muted-foreground max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
+              {#each plan.warnings as warning (warning)}
+                <li>{warning}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
 
-          <p class="text-muted-foreground">
-            Every note it touches is copied first — plain markdown files inside this ledger's <code
-              >.grimoire</code
-            > folder, with a report of everything that changed. If you'd rather not, this ledger won't
-            be opened and nothing is written.
-          </p>
-        </div>
-      {/if}
+        <p class="text-muted-foreground">
+          Every note it touches is copied first — plain markdown files inside this ledger's <code
+            >.grimoire</code
+          > folder, with a report of everything that changed. If you'd rather not, this ledger won't be
+          opened and nothing is written.
+        </p>
+      </div>
+    {/if}
 
-      <AlertDialog.Footer>
-        <!-- Guarded rather than `disabled`: bits-ui's Cancel does not forward that
+    <AlertDialog.Footer>
+      <!-- Guarded rather than `disabled`: bits-ui's Cancel does not forward that
              attribute, and there is nothing to cancel anyway — the pass cannot be
              stopped once it is rewriting, so the honest behaviour is to refuse the
              click and say so through `aria-disabled`. -->
-        <AlertDialog.Cancel
-          data-testid="format-migration-cancel"
-          aria-disabled={isMigrating}
-          class={isMigrating ? "pointer-events-none opacity-50" : undefined}
-          onclick={() => {
-            if (!isMigrating) ledger.dismissFormatMigration();
-          }}>Don't open</AlertDialog.Cancel
-        >
-        <AlertDialog.Action
-          data-testid="format-migration-confirm"
-          disabled={isMigrating}
-          onclick={handleMigrate}
-        >
-          {#if isMigrating}
-            <LoaderCircle class="size-3.5 animate-spin" />
-            Updating…
-          {:else}
-            Update {count}
-          {/if}
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Portal>
+      <AlertDialog.Cancel
+        data-testid="format-migration-cancel"
+        aria-disabled={isMigrating}
+        class={isMigrating ? "pointer-events-none opacity-50" : undefined}
+        onclick={() => {
+          if (!isMigrating) ledger.dismissFormatMigration();
+        }}>Don't open</AlertDialog.Cancel
+      >
+      <AlertDialog.Action
+        data-testid="format-migration-confirm"
+        disabled={isMigrating}
+        onclick={handleMigrate}
+      >
+        {#if isMigrating}
+          <LoaderCircle class="size-3.5 animate-spin" />
+          Updating…
+        {:else}
+          Update {count}
+        {/if}
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
 </AlertDialog.Root>

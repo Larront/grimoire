@@ -11,7 +11,7 @@
   tabindex="0"
   aria-label="Open search"
   class="relative flex items-center justify-between gap-3 mx-3 mb-1 mt-2 h-(--row-h) px-(--pad-x)
-         bg-muted text-muted-foreground rounded-lg text-(--font-ui) font-normal
+         bg-muted text-muted-foreground rounded-lg text-(length:--font-ui) font-normal
          cursor-pointer whitespace-nowrap select-none
          hover:bg-sidebar-accent hover:text-foreground transition-colors duration-100"
   onclick={() => (searchPalette.open = true)}

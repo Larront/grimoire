@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { Switch } from "$lib/components/ui/switch";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { LoaderCircle } from "@lucide/svelte";
@@ -168,27 +169,24 @@
 <!-- Retag confirmation dialog (outside main Dialog to avoid nesting issues) -->
 {#if pendingConfirm}
   <AlertDialog.Root open={true}>
-    <AlertDialog.Portal>
-      <AlertDialog.Overlay />
-      <AlertDialog.Content data-testid="retag-confirm-dialog">
-        <AlertDialog.Header>
-          <AlertDialog.Title>{actionLabel(pendingConfirm)}</AlertDialog.Title>
-          <AlertDialog.Description>
-            This will affect {pendingConfirm.noteCount}
-            {pendingConfirm.noteCount === 1 ? "note" : "notes"}
-            {#if pendingConfirm.pinCount > 0}
-              and {pendingConfirm.pinCount} {pendingConfirm.pinCount === 1 ? "pin" : "pins"}
-            {/if}. This can't be undone.
-          </AlertDialog.Description>
-        </AlertDialog.Header>
-        <AlertDialog.Footer>
-          <AlertDialog.Cancel onclick={cancelRetag}>Cancel</AlertDialog.Cancel>
-          <AlertDialog.Action onclick={confirmRetag} data-testid="retag-confirm-btn">
-            {pendingConfirm.to === null ? "Delete" : "Rename"}
-          </AlertDialog.Action>
-        </AlertDialog.Footer>
-      </AlertDialog.Content>
-    </AlertDialog.Portal>
+    <AlertDialog.Content data-testid="retag-confirm-dialog">
+      <AlertDialog.Header>
+        <AlertDialog.Title>{actionLabel(pendingConfirm)}</AlertDialog.Title>
+        <AlertDialog.Description>
+          This will affect {pendingConfirm.noteCount}
+          {pendingConfirm.noteCount === 1 ? "note" : "notes"}
+          {#if pendingConfirm.pinCount > 0}
+            and {pendingConfirm.pinCount} {pendingConfirm.pinCount === 1 ? "pin" : "pins"}
+          {/if}. This can't be undone.
+        </AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel onclick={cancelRetag}>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action onclick={confirmRetag} data-testid="retag-confirm-btn">
+          {pendingConfirm.to === null ? "Delete" : "Rename"}
+        </AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
   </AlertDialog.Root>
 {/if}
 
@@ -207,10 +205,10 @@
           class="flex items-center gap-3 p-4 rounded-lg bg-background-elevated border border-border"
         >
           <LoaderCircle class="size-4 animate-spin text-foreground-muted" />
-          <span class="text-(--font-ui) text-foreground-muted">Loading…</span>
+          <span class="text-(length:--font-ui) text-foreground-muted">Loading…</span>
         </div>
       {:else if tags.length === 0}
-        <p class="text-(--font-ui) text-foreground-muted" data-testid="tag-manager-empty">
+        <p class="text-(length:--font-ui) text-foreground-muted" data-testid="tag-manager-empty">
           No tags in ledger yet.
         </p>
       {:else}
@@ -252,27 +250,12 @@
                   </div>
 
                   <!-- Graph visibility toggle -->
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isTagVisible(entry.tag)}
+                  <Switch
+                    checked={isTagVisible(entry.tag)}
+                    onCheckedChange={() => toggleTagVisibility(entry.tag)}
                     aria-label="Show {entry.tag} in graph"
                     data-testid="tag-visibility-{entry.tag}"
-                    onclick={() => toggleTagVisibility(entry.tag)}
-                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {isTagVisible(
-                      entry.tag,
-                    )
-                      ? 'bg-primary'
-                      : 'bg-input'}"
-                  >
-                    <span
-                      class="pointer-events-none inline-block h-4 w-4 rounded-full bg-background ring-0 transition-transform {isTagVisible(
-                        entry.tag,
-                      )
-                        ? 'translate-x-4'
-                        : 'translate-x-0'}"
-                    ></span>
-                  </button>
+                  />
 
                   <!-- ⋯ More menu -->
                   <div class="relative">

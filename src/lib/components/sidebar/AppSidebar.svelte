@@ -328,7 +328,7 @@
                 class="{buttonVariants({
                   variant: 'ghost',
                   size: 'sm',
-                })} w-full justify-start gap-2 px-2 text-(--font-ui) text-foreground-muted hover:text-foreground"
+                })} w-full justify-start gap-2 px-2 text-(length:--font-ui) text-foreground-muted hover:text-foreground"
               >
                 <Plus class="size-4" strokeWidth={1.75} />
                 New
@@ -485,8 +485,8 @@
                             <FilePlus class="size-5 text-primary" strokeWidth={1.5} />
                           </div>
                           <div class="space-y-1">
-                            <p class="text-(--font-body) font-medium">No notes yet</p>
-                            <p class="text-(--font-ui) text-muted-foreground">
+                            <p class="text-(length:--font-body) font-medium">No notes yet</p>
+                            <p class="text-(length:--font-ui) text-muted-foreground">
                               Create your first note to start building your world.
                             </p>
                           </div>

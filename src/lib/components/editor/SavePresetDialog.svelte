@@ -85,7 +85,7 @@
 
     <div class="flex flex-col gap-3">
       <label class="flex flex-col gap-1.5">
-        <span class="text-(--font-ui) text-foreground-muted">Preset name</span>
+        <span class="text-(length:--font-ui) text-foreground-muted">Preset name</span>
         <Input
           bind:value={name}
           placeholder="Goblin"
@@ -100,17 +100,17 @@
       </label>
 
       {#if reserved}
-        <p class="text-(--font-ui) text-destructive" data-testid="preset-reserved">
+        <p class="text-(length:--font-ui) text-destructive" data-testid="preset-reserved">
           “{trimmed}” is a built-in preset. Pick another name.
         </p>
       {:else if replaces}
-        <p class="text-(--font-ui) text-foreground-muted" data-testid="preset-replaces">
+        <p class="text-(length:--font-ui) text-foreground-muted" data-testid="preset-replaces">
           Saves over your existing “{replaces.name}” preset.
         </p>
       {/if}
 
       <div class="flex flex-col gap-1.5">
-        <span class="text-(--font-ui) text-foreground-muted">What gets saved</span>
+        <span class="text-(length:--font-ui) text-foreground-muted">What gets saved</span>
         <pre
           data-testid="preset-preview"
           class="max-h-56 overflow-auto rounded-md border border-border bg-muted/40 px-3 py-2
