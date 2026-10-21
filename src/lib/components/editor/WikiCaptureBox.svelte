@@ -22,9 +22,13 @@
 
   let {
     onCommit,
+    onEmptyEnter,
     ariaLabel,
+    ariaDescribedby,
     placeholder = "",
     commitOnTeardown = false,
+    variant = "boxed",
+    value: draft = $bindable(""),
     class: className = "",
   }: {
     /**
@@ -32,8 +36,16 @@
      * blank one — the box clears itself either way, so a caller never has to.
      */
     onCommit: (body: string) => void | Promise<void>;
+    /**
+     * Enter on an empty box. The [[Quick Notes Dialog]] closes on it, so parking
+     * a run of thoughts is Enter per line and one more to finish; the pane's box,
+     * which is not a way in to anything, leaves it unset and Enter does nothing.
+     */
+    onEmptyEnter?: () => void;
     /** Names the box for a screen reader. */
     ariaLabel: string;
+    /** What else a screen reader should say about the box — the dialog's key hints. */
+    ariaDescribedby?: string;
     placeholder?: string;
     /**
      * Commit whatever is in the box when it goes away.
@@ -51,11 +63,18 @@
      * catches is the way out nobody announced.
      */
     commitOnTeardown?: boolean;
+    /**
+     * `boxed` — a field among other things, as in the pane. `bare` — the box *is*
+     * the surface it sits on, as the palette's input is: no border and no fill of
+     * its own, so a dialog holding one box is not a box drawn inside a box.
+     */
+    variant?: "boxed" | "bare";
+    /** What is in the box. Bindable so an owner can say what Enter would do. */
+    value?: string;
     class?: string;
   } = $props();
 
-  let draft = $state("");
-  let input = $state<HTMLInputElement>();
+  let input = $state<HTMLTextAreaElement>();
 
   /**
    * Take the caret. For an owner whose surface *is* this box — a dialog opened by
@@ -119,27 +138,50 @@
     if (wiki.keydown(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      void commit();
+      if (!draft.trim() && onEmptyEnter) onEmptyEnter();
+      else void commit();
     }
   }
+
+  /**
+   * A Quick Note is one line. The box wraps — a thought longer than the box used to
+   * scroll sideways and hide its own beginning while the GM was still writing it,
+   * though the pane draws the same line wrapped — but Enter commits, so the only way
+   * a line break gets in is a paste, and it goes in as a space.
+   */
+  function onInput(el: HTMLTextAreaElement) {
+    if (/[\r\n]/.test(el.value)) {
+      const caret = el.selectionStart;
+      draft = el.value.replace(/\r?\n/g, " ");
+      el.value = draft;
+      el.setSelectionRange(caret, caret);
+    }
+    void wiki.offer(el);
+  }
+
+  const look = {
+    boxed: `rounded-lg border border-border bg-card/60 px-3 py-2
+            focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/40`,
+    bare: "border-0 bg-transparent p-0",
+  };
 </script>
 
-<input
+<textarea
   bind:this={input}
   bind:value={draft}
   data-wiki-capture
-  type="text"
+  rows="1"
   aria-label={ariaLabel}
+  aria-describedby={ariaDescribedby}
+  aria-autocomplete="list"
   {placeholder}
   autocomplete="off"
-  class="w-full rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-foreground
-         outline-none placeholder:text-muted-foreground/60
-         focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/40
-         {className}"
-  oninput={(e) => void wiki.offer(e.currentTarget)}
+  class="block max-h-32 w-full resize-none overflow-y-auto text-sm leading-5 text-foreground outline-none
+         field-sizing-content placeholder:text-muted-foreground
+         {look[variant]} {className}"
+  oninput={(e) => onInput(e.currentTarget)}
   onkeydown={handleKeydown}
-  onblur={wiki.close}
-/>
+  onblur={wiki.close}></textarea>
 
 {#if wiki.current}
   <!-- `mousedown` swallowed so choosing a note with the pointer does not blur the

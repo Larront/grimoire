@@ -248,7 +248,7 @@ _Avoid_: "scrap," "scratch note," "orphan" ([[Orphan Note]] means something else
 
 ### Quick Notes Dialog
 
-Where a Quick Note is _captured_: a dialog holding a single capture box, opened with `Ctrl/Cmd+Shift+N` from anywhere in the app. Type a line, commit it, and the dialog is done — it is a gesture, not a place, and it lists nothing. Any exit commits whatever is in the box, because the premise of the feature is not losing the thought. Distinct from the [[Quick Notes Pane]], which is where Quick Notes are read.
+Where a Quick Note is _captured_: a dialog holding a single capture box, opened with `Ctrl/Cmd+Shift+N` from anywhere in the app. Type a line and Enter parks it, clearing the box for the next; Enter on an empty box closes — it is a gesture, not a place, and it lists nothing. Any exit commits whatever is in the box, because the premise of the feature is not losing the thought. Distinct from the [[Quick Notes Pane]], which is where Quick Notes are read.
 _Avoid_: "Scratchpad" (the design-time name, superseded), "quick capture," "new quick note dialog."
 
 ### Quick Notes Pane

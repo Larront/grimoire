@@ -193,6 +193,15 @@
   // reachable from here (docs/design-system.md §Keyboard & Accessibility) — the palette is
   // where a GM looks for a thing whose key they have not learned yet. It sets the
   // same flag the keystroke does: one surface, two ways in.
+  // A command with a key says so, in Meta: the palette is where a GM looks for a
+  // thing whose key they have not learned, so it is where the key gets taught.
+  const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+  function shortcut(keys: string[]): string {
+    return isMac
+      ? "⌘" + keys.map((k) => (k === "Shift" ? "⇧" : k)).join("")
+      : ["Ctrl", ...keys].join("+");
+  }
+
   function cmdCaptureQuickNote() {
     searchPalette.open = false;
     dialogs.quickNoteOpen = true;
@@ -292,7 +301,17 @@
     }
   }
 
-  const ALL_COMMANDS = [
+  interface PaletteCommand {
+    label: string;
+    testid: string;
+    noteOnly: boolean;
+    icon: typeof Settings;
+    action: () => void;
+    /** The command's own key, after Ctrl/Cmd — shown on the row. */
+    keys?: string[];
+  }
+
+  const ALL_COMMANDS: PaletteCommand[] = [
     {
       label: "Create new note",
       testid: "cmd-create-note",
@@ -334,6 +353,7 @@
       testid: "cmd-capture-quick-note",
       noteOnly: false,
       icon: NotebookPen,
+      keys: ["Shift", "N"],
       action: cmdCaptureQuickNote,
     },
     {
@@ -369,6 +389,7 @@
       testid: "cmd-open-settings",
       noteOnly: false,
       icon: Settings,
+      keys: [","],
       action: cmdOpenSettings,
     },
     {
@@ -472,7 +493,7 @@
 
   const allMatchedCommands = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
-    const eligible = [...audioCommands, ...ALL_COMMANDS].filter(
+    const eligible = ([...audioCommands, ...ALL_COMMANDS] as PaletteCommand[]).filter(
       (c) => !c.noteOnly || activeTabIsNote,
     );
     return q ? eligible.filter((c) => c.label.toLowerCase().includes(q)) : eligible;
@@ -733,7 +754,9 @@
   {/if}
 {/snippet}
 
-<Command.Dialog bind:open={searchPalette.open} shouldFilter={false}>
+<!-- 560px, as DESIGN.md §5 says — it had drifted to the dialog default (384px), and the
+     Quick Notes Dialog takes this width and place too. -->
+<Command.Dialog bind:open={searchPalette.open} shouldFilter={false} class="sm:max-w-[560px]">
   <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
@@ -788,6 +811,11 @@
             >
               <Icon class="size-4 shrink-0 text-muted-foreground" />
               <span class="text-sm font-medium">{cmd.label}</span>
+              {#if cmd.keys}
+                <Command.Shortcut class="font-mono text-[11px] tracking-normal"
+                  >{shortcut(cmd.keys)}</Command.Shortcut
+                >
+              {/if}
             </Command.Item>
           {/each}
           {@render showMoreRow("commands", commandsShowMore)}
