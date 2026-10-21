@@ -12,6 +12,7 @@ import { api } from "$lib/api";
 import { untrack } from "svelte";
 import { notes } from "$lib/stores/notes.svelte";
 import { linksTick } from "$lib/stores/links-tick.svelte";
+import { tagsTick } from "$lib/stores/tags-tick.svelte";
 import { onLedgerEvents } from "$lib/ledger/events";
 import { createSaveStatus } from "./save-status.svelte";
 import { staleGuard } from "./stale-guard";
@@ -81,6 +82,26 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     }
   }
 
+  // Keyed like the links: reached from `loadAll` and from the tagsTick effect.
+  function loadTags(n: Note) {
+    const whenCurrent = guardOn(n.path);
+    api.silent
+      .readNoteTags(n.path)
+      .then((loaded) =>
+        whenCurrent(() => {
+          tags = loaded;
+          tagsLoadError = false;
+        }),
+      )
+      .catch(() =>
+        whenCurrent(() => {
+          tags = [];
+          tagsLoadError = true;
+        }),
+      );
+    refreshAllTags();
+  }
+
   // Fetch the whole fan-out for `n`. Split out from the note-change $effect so a
   // wholesale refetch (bulk external rebuild — ledger:rebuilt) can rerun it for
   // the *current* note, whose path is unchanged and so wouldn't retrigger below.
@@ -93,19 +114,7 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     aliasCollisions = [];
     saves.reset();
     const whenCurrent = guardOn(targetPath);
-    api.silent
-      .readNoteTags(targetPath)
-      .then((loaded) =>
-        whenCurrent(() => {
-          tags = loaded;
-        }),
-      )
-      .catch(() =>
-        whenCurrent(() => {
-          tags = [];
-          tagsLoadError = true;
-        }),
-      );
+    loadTags(n);
     api.silent
       .getNoteAliases(noteId)
       .then((loaded) =>
@@ -132,7 +141,6 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
         }),
       );
     loadLinks(n);
-    refreshAllTags();
   }
 
   // Reload the fan-out whenever the note (keyed by path) changes.
@@ -161,6 +169,15 @@ export function createNoteDetailsSource(getNote: () => Note | null) {
     const n = untrack(() => getNote());
     if (!n) return;
     loadLinks(n);
+  });
+
+  // The Tag Manager renamed, merged or deleted a tag — maybe one of this note's.
+  $effect(() => {
+    const tick = tagsTick.value;
+    if (tick === 0) return;
+    const n = untrack(() => getNote());
+    if (!n) return;
+    loadTags(n);
   });
 
   // A bulk external change rebuilt the ledger under this note's feet. Its path
