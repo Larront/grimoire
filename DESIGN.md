@@ -299,7 +299,7 @@ Iron Deep background. File tree rows at `--row-h` height, 12px horizontal paddin
 
 ### Command Palette (Signature Component)
 
-560px wide, horizontally centred over the content area. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
+560px wide, horizontally centred over the content area, its top a third of the way down. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. A command with its own key shows it on the row, right-aligned in Meta (`Ctrl+Shift+N`, `⌘⇧N` on a Mac) — the palette is where a GM looks for a key they have not learned. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
 
 ### Slash Menu
 
@@ -311,6 +311,16 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 - **Selection:** the row Enter runs is Crimson Tint; the pointer moving onto a row selects it, so one row is lit. No match says "No blocks match …", and Enter then breaks the line.
 - **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
 - **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
+
+### Quick Notes Dialog
+
+`Ctrl/Cmd+Shift+N` from anywhere: one box to park a thought in. It takes the palette's width and place, and its look — the box *is* the surface, with a NotebookPen beside it, not a field drawn inside a card.
+
+- **The box** wraps as it fills (to about six lines, then scrolls), because a long thought scrolled sideways hides its own beginning. Enter parks; a pasted line break becomes a space.
+- **The keys:** Enter parks the line and clears the box for the next; Enter on an empty box closes. Escape or a click away parks whatever is there and closes. The footer says which, in Meta, for what is in the box now: "↵ park · esc park & close", or "↵ or esc close".
+- **Saying it landed:** a tick and "Parked · N today" in the footer, announced politely. No toast — a GM parking five lines in a row would get five.
+- **Open Quick Notes** in the footer parks what is in the box and opens the pane.
+- **Over the palette,** the palette closes; two modals are never stacked.
 
 ### Link Menu
 

@@ -258,8 +258,11 @@
     value={draft}
     {placeholder}
     aria-label={ariaLabel}
+    aria-autocomplete="list"
     rows={multiline ? Math.max(2, draft.split("\n").length) : 1}
-    class="linked-textarea {multiline ? '' : 'linked-textarea-wrap'} w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
+    class="linked-textarea {multiline
+      ? ''
+      : 'linked-textarea-wrap'} w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
       void wiki.offer(e.currentTarget);
@@ -273,6 +276,7 @@
     value={draft}
     {placeholder}
     aria-label={ariaLabel}
+    aria-autocomplete="list"
     class="w-full bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);

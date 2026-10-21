@@ -15,7 +15,7 @@
     ChevronDown,
     Music2,
     Plus,
-    Inbox,
+    NotebookPen,
     Network,
     Settings,
     Search,
@@ -413,7 +413,7 @@
                   aria-label="Quick Notes"
                   onclick={shell.openQuickNotes}
                 >
-                  <Inbox class="size-4" strokeWidth={1.5} />
+                  <NotebookPen class="size-4" strokeWidth={1.5} />
                   <span>Quick Notes</span>
                 </button>
               {/snippet}

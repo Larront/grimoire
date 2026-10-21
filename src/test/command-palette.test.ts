@@ -1151,6 +1151,8 @@ describe("command palette – Commands group wiring", () => {
       '[data-testid="cmd-capture-quick-note"]',
     ) as HTMLElement;
     expect(item).toBeTruthy();
+    // ...and it teaches the key, which the palette is where a GM looks for.
+    expect(item.querySelector('[data-slot="command-shortcut"]')?.textContent).toBe("Ctrl+Shift+N");
     await fireEvent.click(item);
     await flush();
 
