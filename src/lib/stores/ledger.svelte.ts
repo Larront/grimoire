@@ -73,6 +73,11 @@ export const unlinkedPinsModal = $state({
 function createLedgerStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
+  // Bumped by every successful open, including a reopen of the ledger already
+  // open. The path can't say "opened again": re-exploring the Example World
+  // reopens the same sandbox path over a freshly reset database, so anything
+  // that reloads on a path change keeps serving rows that are gone.
+  let openGeneration = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let accent = $state<AccentPreset>("accent-crimson");
@@ -92,6 +97,7 @@ function createLedgerStore() {
   function applyOpenResult(result: OpenLedgerResult): void {
     path = result.path;
     isOpen = true;
+    openGeneration++;
 
     if (result.failed_imports.length > 0) {
       failedImportsModal.failures = result.failed_imports;
@@ -366,6 +372,7 @@ function createLedgerStore() {
       if (existingPath) {
         path = existingPath;
         isOpen = true;
+        openGeneration++;
       }
       const savedAccent = await api.getAccentPreset().catch(() => null);
       if (savedAccent) accent = savedAccent as AccentPreset;
@@ -382,6 +389,11 @@ function createLedgerStore() {
     },
     get isOpen() {
       return isOpen;
+    },
+    /** Counts opens. Read it to re-run whenever a ledger is (re)opened — the
+     *  path alone misses a reopen of the same ledger. */
+    get openGeneration() {
+      return openGeneration;
     },
     get isLoading() {
       return isLoading;
