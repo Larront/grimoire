@@ -67,11 +67,14 @@ function createPdfSceneLinksStore() {
     );
   }
 
-  // Emptied when the ledger closes *and* when it changes: the cache is keyed by a
+  // Emptied when the ledger closes *and* on every open: the cache is keyed by a
   // ledger-relative PDF path, so entries carried across a switch would answer for
-  // the wrong vault's file of the same name.
+  // the wrong vault's file of the same name. A reopen of the same path counts too —
+  // re-exploring the Example World resets the sandbox's database, and links made
+  // while exploring are gone from it.
   $effect.root(() => {
     $effect(() => {
+      ledger.openGeneration;
       ledger.path;
       ledger.isOpen;
       byPath.clear();

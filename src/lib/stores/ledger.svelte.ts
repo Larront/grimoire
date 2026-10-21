@@ -8,6 +8,7 @@ import {
   toastUnlinkedPins,
 } from "$lib/toast";
 import { pendingSaves } from "$lib/stores/pending-saves";
+import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
 import type { MigrationPlan } from "$lib/bindings.gen";
 
@@ -317,6 +318,9 @@ function createLedgerStore() {
       // freshly reset copy.
       await pendingSaves.flushAll();
       const sandboxPath = await api.exploreSampleLedger();
+      // The backend just replaced the sandbox, so the tabs saved for it name notes,
+      // maps and scenes of a copy that is gone — some made while exploring.
+      new LocalStorageTabPersistence(sandboxPath).clear();
       await openAtPath(sandboxPath);
       isSample = true;
       pendingStartHere = true;

@@ -546,8 +546,13 @@ function createTabsStore() {
     dragging = value;
   }
 
+  // Re-read on every open, not only on a change of path: re-exploring the Example
+  // World reopens the same sandbox path over a fresh copy, and the tabs still drawn
+  // would point at notes made while exploring. `exploreSample` forgets the sandbox's
+  // saved tabs first, so the re-read finds none.
   $effect.root(() => {
     $effect(() => {
+      ledger.openGeneration;
       if (ledger.isOpen && ledger.path) {
         persistence = new LocalStorageTabPersistence(ledger.path);
         const saved = persistence.load();
