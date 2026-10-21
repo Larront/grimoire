@@ -1,12 +1,11 @@
 <script lang="ts">
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import { BookOpen, ChevronDown, FolderOpen, Heart } from "@lucide/svelte";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { buttonVariants } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
-  import AdoptDialog from "$lib/components/AdoptDialog.svelte";
 
   let open = $state(false);
-  let adoptOpen = $state(false);
   let recentLedgers = $state<RecentLedger[]>([]);
 
   const ledgerName = $derived(
@@ -57,7 +56,7 @@
       type="button"
       data-testid="make-mine-btn"
       onclick={() => {
-        adoptOpen = true;
+        dialogs.adoptOpen = true;
       }}
       class={cn(
         buttonVariants({ variant: "ghost", size: "sm" }),
@@ -130,5 +129,3 @@
     {/if}
   </div>
 {/if}
-
-<AdoptDialog bind:open={adoptOpen} />

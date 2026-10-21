@@ -6,7 +6,7 @@ use crate::db::schema::{
 };
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 /// Recursively copies src into dst, creating dst if it does not exist.
@@ -433,23 +433,49 @@ pub fn explore_sample_ledger(app: AppHandle) -> Result<String, String> {
 /// Copies the current (possibly-edited) sandbox at `app_data_dir/sample-world/` to
 /// `parent/name/` and returns the destination path. The frontend follows up with the
 /// vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
+///
+/// Async, and the copy on a blocking thread: the sandbox is tens of megabytes, and a
+/// synchronous command runs on the main thread, where it froze the window for as long
+/// as the disk took.
 #[tauri::command]
 #[specta::specta]
-pub fn adopt_sample_ledger(parent: String, name: String, app: AppHandle) -> Result<String, String> {
+pub async fn adopt_sample_ledger(
+    parent: String,
+    name: String,
+    app: AppHandle,
+) -> Result<String, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
     let sandbox = app_data_dir.join("sample-world");
 
+    tauri::async_runtime::spawn_blocking(move || adopt_into(&sandbox, Path::new(&parent), &name))
+        .await
+        .map_err(|e| format!("Adopt task failed: {}", e))?
+        .map(|dest| dest.to_string_lossy().to_string())
+}
+
+/// The copy `adopt_sample_ledger` makes, without the app handle.
+///
+/// **Never onto something that exists.** `copy_dir_tree` clears its destination first,
+/// which is right for resetting the sandbox and was a disaster here: a GM naming their
+/// world after a folder already in the chosen location had that folder deleted —
+/// permanently, not to the Recycle Bin — and replaced with the example (2026-10 design
+/// review). The refusal carries a code so the dialog can say it in words.
+pub fn adopt_into(sandbox: &Path, parent: &Path, name: &str) -> Result<PathBuf, String> {
     if !sandbox.exists() {
         return Err("No sample sandbox found to adopt — explore the sample first.".to_string());
     }
-
-    let dest = Path::new(&parent).join(&name);
-    copy_dir_tree(&sandbox, &dest)?;
-
-    Ok(dest.to_string_lossy().to_string())
+    let dest = parent.join(name);
+    if dest.exists() {
+        return Err(format!(
+            "LEDGER_EXISTS: '{}' already exists",
+            dest.to_string_lossy()
+        ));
+    }
+    copy_dir_tree(sandbox, &dest)?;
+    Ok(dest)
 }
 
 #[cfg(test)]
@@ -629,6 +655,35 @@ mod tests {
             "the adopted Quick Note lost its text: {:?}",
             carried[0].body
         );
+    }
+
+    #[test]
+    fn adopt_refuses_a_folder_that_already_exists_and_leaves_it_alone() {
+        let sandbox = tempdir().unwrap();
+        fs::write(sandbox.path().join("example.md"), "Example").unwrap();
+        let parent = tempdir().unwrap();
+        let theirs = parent.path().join("Gods Ascendant");
+        fs::create_dir(&theirs).unwrap();
+        fs::write(theirs.join("session-12.md"), "Their own notes").unwrap();
+
+        let err = adopt_into(sandbox.path(), parent.path(), "Gods Ascendant").unwrap_err();
+        assert!(err.starts_with("LEDGER_EXISTS:"), "unexpected error: {err}");
+        assert_eq!(
+            fs::read_to_string(theirs.join("session-12.md")).unwrap(),
+            "Their own notes"
+        );
+        assert!(!theirs.join("example.md").exists());
+    }
+
+    #[test]
+    fn adopt_copies_into_a_new_folder_named_for_the_world() {
+        let sandbox = tempdir().unwrap();
+        fs::write(sandbox.path().join("example.md"), "Example").unwrap();
+        let parent = tempdir().unwrap();
+
+        let dest = adopt_into(sandbox.path(), parent.path(), "The Ashfen Vale").unwrap();
+        assert_eq!(dest, parent.path().join("The Ashfen Vale"));
+        assert!(dest.join("example.md").exists());
     }
 
     // ── sample world integrity ────────────────────────────────────────────────

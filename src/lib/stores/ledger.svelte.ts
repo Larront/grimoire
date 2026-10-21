@@ -284,7 +284,12 @@ function createLedgerStore() {
     isLoading = true;
     error = null;
     try {
-      const destPath = await api.adoptSampleLedger(parent, name);
+      // The copy is of what is on disk, so the last edits have to be there first —
+      // as `exploreSample` flushes before it resets.
+      await pendingSaves.flushAll();
+      // Silent: the Adopt dialog says what went wrong, beside the field it is about,
+      // and a generic toast on top of it said the same thing worse.
+      const destPath = await api.silent.adoptSampleLedger(parent, name);
       const opened = await openLedger(destPath);
       if (!opened) {
         // openLedger only resolves false (without throwing) when no path was

@@ -9,6 +9,10 @@ export const commands = {
 	 *  Copies the current (possibly-edited) sandbox at `app_data_dir/sample-world/` to
 	 *  `parent/name/` and returns the destination path. The frontend follows up with the
 	 *  vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
+	 * 
+	 *  Async, and the copy on a blocking thread: the sandbox is tens of megabytes, and a
+	 *  synchronous command runs on the main thread, where it froze the window for as long
+	 *  as the disk took.
 	 */
 	adoptSampleLedger: (parent: string, name: string) => __TAURI_INVOKE<string>("adopt_sample_ledger", { parent, name }),
 	/**

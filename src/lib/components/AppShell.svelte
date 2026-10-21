@@ -6,6 +6,7 @@
   import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import QuickNoteDialog from "./QuickNoteDialog.svelte";
+  import AdoptDialog from "./AdoptDialog.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
   import SampleBanner from "./SampleBanner.svelte";
@@ -121,6 +122,7 @@
     <UnlinkedPinsDialog bind:open={unlinkedPinsModal.open} pins={unlinkedPinsModal.pins} />
     <SearchPalette />
     <QuickNoteDialog />
+    <AdoptDialog bind:open={dialogs.adoptOpen} />
     <SampleEffects />
     <!-- The shell is exactly the window's height, not at least it. With only a minimum,
          any pane whose content was taller than the window — a PDF's pages, a long track

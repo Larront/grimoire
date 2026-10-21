@@ -312,6 +312,22 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 - **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
 - **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
 
+### New world fields
+
+Name and location for a new world, one part (`NewLedgerFields`) in both places a world is made: the Splash's create form and the Adopt dialog.
+
+- **Field labels** above a 32px field and a 32px folder button. The button reads "Choose a folder…" until one is picked, then the end of its path and "Change…"; paths keep their end, not their start, with the whole path on hover.
+- **Where it will live:** once there is a name and a folder, a Meta line says "Saved as …\Campaigns\The Ashfen Vale" — the folder chosen is the parent, and the world gets a folder of its own inside it.
+- **Problems under the field they are about**, with the circle-x, once the GM has tried to go on, and following the typing from then. The confirm button is never disabled to say "not yet": pressed early, it says what is missing.
+
+### Adopt dialog
+
+"Make this world mine", from the sidebar while the Example World is open. 448px. Says what will happen — copied with every change into a new folder, opened as theirs, the example left to explore — then the New world fields, then Cancel and **Make it mine**.
+
+- **Never over an existing folder.** A folder already there by that name is refused, under the name, and left alone.
+- **Can't be closed while copying** ("Copying…"); a failure says what to do, not the raw error.
+- **On success,** the world opens and a toast names it: "“The Ashfen Vale” is yours. It's saved in …\Campaigns."
+
 ### Quick Notes Dialog
 
 `Ctrl/Cmd+Shift+N` from anywhere: one box to park a thought in. It takes the palette's width and place, and its look — the box *is* the surface, with a NotebookPen beside it, not a field drawn inside a card.

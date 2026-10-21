@@ -2,9 +2,9 @@
   import { Button } from "$lib/components/ui/button";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
   import { api } from "$lib/api";
-  import { open } from "@tauri-apps/plugin-dialog";
   import { Folder, Plus, LoaderCircle, BookOpen, X } from "@lucide/svelte";
-  import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
+  import NewLedgerFields from "$lib/components/NewLedgerFields.svelte";
+  import { fieldsReady, ledgerDestination } from "$lib/utils/ledger-name";
 
   let recentLedgers = $state<RecentLedger[]>([]);
   let isLoadingRecents = $state(true);
@@ -15,8 +15,8 @@
   let mode = $state<"idle" | "creating">("idle");
   let newLedgerName = $state("");
   let newLedgerParent = $state<string | null>(null);
-  let nameError = $state<string | null>(null);
-  let isPickingLocation = $state(false);
+  /** Whether Create has been pressed — the fields show their problems from then. */
+  let createAttempted = $state(false);
 
   $effect(() => {
     if (!ledger.isOpen) {
@@ -69,13 +69,13 @@
     mode = "creating";
     newLedgerName = "";
     newLedgerParent = null;
-    nameError = null;
+    createAttempted = false;
     errorMsg = null;
   }
 
   function cancelCreate() {
     mode = "idle";
-    nameError = null;
+    createAttempted = false;
     errorMsg = null;
   }
 
@@ -91,31 +91,14 @@
     }
   }
 
-  async function handleChooseLocation() {
-    isPickingLocation = true;
-    try {
-      const selected = await open({
-        directory: true,
-        title: "Choose Location",
-      });
-      if (selected && typeof selected === "string") {
-        newLedgerParent = selected;
-        if (nameError === MISSING_LOCATION_ERROR) nameError = null;
-      }
-    } finally {
-      isPickingLocation = false;
-    }
-  }
-
   async function handleCreateLedger() {
-    const name = newLedgerName.trim();
-    nameError = validateLedgerName(name, newLedgerParent);
-    if (nameError) return;
+    createAttempted = true;
+    if (openingPath !== null || !fieldsReady(newLedgerName, newLedgerParent)) return;
 
     openingPath = "__creating__";
     errorMsg = null;
     try {
-      await ledger.openLedger(`${newLedgerParent}/${name}`);
+      await ledger.openLedger(ledgerDestination(newLedgerParent, newLedgerName));
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -175,71 +158,17 @@
     {:else if mode === "creating"}
       <!-- ── Create new ledger form ───────────────────────────────── -->
       <div class="flex flex-col gap-3 mt-9 w-70 relative z-10 splash-fade-delay-1">
-        <span class="text-xs font-semibold text-foreground-muted">
-          New Ledger
-        </span>
+        <span class="text-xs font-semibold text-foreground-muted"> New Ledger </span>
 
-        <!-- Ledger name -->
-        <div class="flex flex-col gap-1.5">
-          <label for="ledger-name" class="font-sans text-[11px] text-muted-foreground">
-            Name
-          </label>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            id="ledger-name"
-            type="text"
-            placeholder="My Campaign"
-            bind:value={newLedgerName}
-            autofocus
-            disabled={openingPath !== null}
-            onkeydown={(e) => {
-              if (e.key === "Enter") handleCreateLedger();
-              if (e.key === "Escape") cancelCreate();
-            }}
-            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
-                   text-[13px] text-foreground placeholder:text-foreground-faint
-                   focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
-                   focus-visible:ring-offset-1 focus-visible:ring-offset-background
-                   disabled:opacity-50 w-full"
-          />
-        </div>
-
-        <!-- Storage location -->
-        <div class="flex flex-col gap-1.5">
-          <span class="font-sans text-[11px] text-muted-foreground">Location</span>
-          <button
-            type="button"
-            onclick={handleChooseLocation}
-            disabled={openingPath !== null || isPickingLocation}
-            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
-                   flex items-center gap-2 text-left w-full min-w-0
-                   hover:bg-(--background-elevated) transition-colors duration-150
-                   disabled:opacity-50 cursor-pointer disabled:cursor-default"
-          >
-            <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-            {#if newLedgerParent}
-              <span class="font-sans text-[12px] text-foreground truncate min-w-0">
-                {newLedgerParent}
-              </span>
-            {:else}
-              <!-- Muted, not `foreground/30`. This reads like a placeholder but it is
-                   the button's only label until a folder is picked, and DESIGN.md's
-                   Sub-AA Exception is explicitly off-limits for anything interactive or
-                   meaning-bearing. At 30% it measured ~1.5:1 and the control looked
-                   empty. The italic still marks it as not-yet-chosen. -->
-              <span class="font-sans text-[12px] text-muted-foreground italic">
-                Choose location...
-              </span>
-            {/if}
-          </button>
-        </div>
-
-        <!-- Inline validation error -->
-        {#if nameError}
-          <p class="font-sans text-[11px] text-destructive leading-snug" role="alert">
-            {nameError}
-          </p>
-        {/if}
+        <NewLedgerFields
+          bind:name={newLedgerName}
+          bind:parent={newLedgerParent}
+          placeholder="My Campaign"
+          disabled={openingPath !== null}
+          attempted={createAttempted}
+          onSubmit={() => void handleCreateLedger()}
+          onCancel={cancelCreate}
+        />
 
         <!-- Actions -->
         <div class="flex gap-2 mt-1">
@@ -255,7 +184,7 @@
           <Button
             size="sm"
             onclick={handleCreateLedger}
-            disabled={openingPath !== null || !newLedgerName.trim() || !newLedgerParent}
+            disabled={openingPath !== null}
             class="flex-1 text-[11px]"
           >
             {#if openingPath === "__creating__"}
@@ -328,9 +257,7 @@
     {:else}
       <!-- ── Returning user ───────────────────────────────────── -->
       <div class="w-70 mt-8 relative z-10 splash-fade-delay-1">
-        <span
-          class="text-xs font-semibold text-foreground-muted mb-2.5 block"
-        >
+        <span class="text-xs font-semibold text-foreground-muted mb-2.5 block">
           Recent Ledgers
         </span>
 

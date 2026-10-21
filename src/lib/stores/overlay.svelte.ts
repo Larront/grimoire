@@ -36,4 +36,7 @@ export const dialogs = $state({
    *  Palette's own state: it is a shell-level dialog like the two above, and the
    *  gesture that opens it is a keystroke of its own, not a palette command. */
   quickNoteOpen: false,
+  /** "Make this world mine". The shell's rather than the sidebar's: the sidebar
+   *  unmounts below 1024px, and took the dialog and its typed name with it. */
+  adoptOpen: false,
 });
