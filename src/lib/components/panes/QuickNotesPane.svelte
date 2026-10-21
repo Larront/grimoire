@@ -240,7 +240,7 @@
       {:else}
         {#each days as day (day.key)}
           <section data-capture-day={day.key} class="mb-8 last:mb-0">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+            <h2 class="text-xs font-semibold text-muted-foreground">
               {day.label}
             </h2>
             <ul class="mt-3 flex flex-col gap-1.5">
