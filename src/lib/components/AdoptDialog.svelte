@@ -1,174 +1,144 @@
 <script lang="ts">
+  /*
+    Make this world mine — keep the Example World, edits and all, as the GM's own.
+
+    Revised in the 2026-10 design review:
+    - It never copies over a folder that exists. It used to delete one with the same
+      name in the chosen place, then put the example there; the backend now refuses
+      and this says so under the name.
+    - It says what will happen — a new folder, the edits with it, the example left to
+      explore — and "Make it mine" is always pressable: pressed too early, it says
+      what is missing beside that field rather than sitting greyed out with no reason.
+    - It can't be closed while the copy runs, and the world it made is named in a
+      toast when it opens.
+    - Mounted by the shell, not the sidebar, which unmounts below 1024px and took the
+      dialog and the typed name with it.
+  */
+  import { untrack } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import { Folder, LoaderCircle } from "@lucide/svelte";
+  import { CircleX, LoaderCircle } from "@lucide/svelte";
+  import NewLedgerFields from "$lib/components/NewLedgerFields.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
-  import { open } from "@tauri-apps/plugin-dialog";
-  import { validateLedgerName, MISSING_LOCATION_ERROR } from "$lib/utils/ledger-name";
+  import { toastSuccess } from "$lib/toast";
+  import { fieldsReady, shortPath } from "$lib/utils/ledger-name";
 
-  let { open: dialogOpen = $bindable(false) }: { open: boolean } = $props();
+  let { open = $bindable(false) }: { open: boolean } = $props();
 
   let name = $state("");
   let parent = $state<string | null>(null);
-  let nameError = $state<string | null>(null);
-  let adoptError = $state<string | null>(null);
-  let isAdopting = $state(false);
-  let isPickingLocation = $state(false);
+  let attempted = $state(false);
+  let copying = $state(false);
+  /** The backend refused this name in this folder: something is already there. */
+  let refused = $state<string | null>(null);
+  /** The copy failed for any other reason. */
+  let failed = $state<string | null>(null);
+
+  // A refusal is about the name and folder it was given for; change either and it goes.
+  $effect(() => {
+    void name;
+    void parent;
+    untrack(() => {
+      refused = null;
+      failed = null;
+    });
+  });
 
   function reset() {
     name = "";
     parent = null;
-    nameError = null;
-    adoptError = null;
-    isAdopting = false;
-    isPickingLocation = false;
+    attempted = false;
+    copying = false;
+    refused = null;
+    failed = null;
   }
 
-  function validate(): boolean {
-    nameError = validateLedgerName(name, parent);
-    return nameError === null;
+  function cancel() {
+    if (copying) return;
+    open = false;
+    reset();
   }
 
-  async function handleChooseLocation() {
-    isPickingLocation = true;
+  async function confirm() {
+    attempted = true;
+    if (copying || !fieldsReady(name, parent)) return;
+    const world = name.trim();
+    const folder = parent;
+    copying = true;
+    refused = null;
+    failed = null;
     try {
-      const selected = await open({
-        directory: true,
-        title: "Choose Location",
-      });
-      if (selected && typeof selected === "string") {
-        parent = selected;
-        if (nameError === MISSING_LOCATION_ERROR) nameError = null;
+      await ledger.adopt(folder, world);
+      open = false;
+      reset();
+      toastSuccess(`“${world}” is yours. It's saved in ${shortPath(folder)}.`);
+    } catch (e) {
+      // The raw error is in the log; the GM gets what to do about it.
+      if (String(e).includes("LEDGER_EXISTS")) {
+        refused = `There's already a folder called “${world}” there. Choose another name or folder.`;
+      } else {
+        failed = "Couldn't copy the world there. Try another folder.";
       }
     } finally {
-      isPickingLocation = false;
+      copying = false;
     }
-  }
-
-  async function handleConfirm() {
-    if (!validate()) return;
-    isAdopting = true;
-    adoptError = null;
-    try {
-      await ledger.adopt(parent!, name.trim());
-      dialogOpen = false;
-      reset();
-    } catch (e) {
-      // Stay open so the GM can retry with a different name or location
-      adoptError = `Couldn't adopt this world: ${e}`;
-    } finally {
-      isAdopting = false;
-    }
-  }
-
-  function handleCancel() {
-    reset();
-    dialogOpen = false;
   }
 </script>
 
 <Dialog.Root
-  bind:open={dialogOpen}
+  bind:open
   onOpenChange={(v) => {
     if (!v) reset();
   }}
 >
-  <Dialog.Content showCloseButton={false}>
-    <div data-testid="adopt-dialog" class="flex flex-col gap-5">
+  <Dialog.Content
+    showCloseButton={false}
+    class="sm:max-w-md"
+    escapeKeydownBehavior={copying ? "ignore" : "close"}
+    interactOutsideBehavior={copying ? "ignore" : "close"}
+  >
+    <div data-testid="adopt-dialog" class="flex min-w-0 flex-col gap-5">
       <Dialog.Header>
-        <Dialog.Title>Make This World Mine</Dialog.Title>
+        <Dialog.Title>Make this world mine</Dialog.Title>
         <Dialog.Description>
-          Copy this example world to your own location and make it yours to edit freely.
+          Grimoire copies this world, with everything you've changed, into a new folder and opens it
+          as yours. The example stays, to explore fresh any time.
         </Dialog.Description>
       </Dialog.Header>
 
-      <div class="flex flex-col gap-3">
-        <!-- Name field -->
-        <div class="flex flex-col gap-1.5">
-          <label for="adopt-name" class="font-sans text-[11px] text-muted-foreground"> Name </label>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            id="adopt-name"
-            type="text"
-            placeholder="My World"
-            bind:value={name}
-            autofocus
-            disabled={isAdopting}
-            onkeydown={(e) => {
-              if (e.key === "Enter") handleConfirm();
-              if (e.key === "Escape") handleCancel();
-            }}
-            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
-                   text-[13px] text-foreground placeholder:text-foreground-faint
-                   focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
-                   focus-visible:ring-offset-1 focus-visible:ring-offset-background
-                   disabled:opacity-50 w-full"
-          />
-        </div>
+      <NewLedgerFields
+        bind:name
+        bind:parent
+        placeholder="My World"
+        disabled={copying}
+        {attempted}
+        nameRefused={refused}
+        onSubmit={() => void confirm()}
+        onCancel={cancel}
+      />
 
-        <!-- Location field -->
-        <div class="flex flex-col gap-1.5">
-          <span class="font-sans text-[11px] text-muted-foreground">Location</span>
-          <button
-            type="button"
-            data-testid="adopt-choose-location-btn"
-            onclick={handleChooseLocation}
-            disabled={isAdopting || isPickingLocation}
-            class="h-9 px-3 rounded-[6px] bg-(--hover-overlay) border border-border
-                   flex items-center gap-2 text-left w-full min-w-0
-                   hover:bg-(--background-elevated) transition-colors duration-150
-                   disabled:opacity-50 cursor-pointer disabled:cursor-default"
-          >
-            <Folder class="w-3.5 h-3.5 shrink-0 text-muted-foreground/70" />
-            {#if parent}
-              <span class="font-sans text-[12px] text-foreground truncate min-w-0">
-                {parent}
-              </span>
-            {:else}
-              <span class="font-sans text-[12px] text-muted-foreground italic">
-                Choose location...
-              </span>
-            {/if}
-          </button>
-        </div>
-
-        <!-- Validation / adoption error -->
-        {#if nameError || adoptError}
-          <p
-            data-testid="adopt-error"
-            class="font-sans text-[11px] text-destructive leading-snug"
-            role="alert"
-          >
-            {nameError ?? adoptError}
-          </p>
-        {/if}
-      </div>
-
-      <Dialog.Footer>
-        <Button
-          variant="ghost"
-          size="sm"
-          onclick={handleCancel}
-          disabled={isAdopting}
-          class="text-[11px] text-muted-foreground"
+      {#if failed}
+        <p
+          data-testid="adopt-error"
+          role="alert"
+          class="flex items-start gap-1.5 text-(length:--font-ui) text-error"
         >
-          Cancel
-        </Button>
-        <Button
-          data-testid="adopt-confirm-btn"
-          size="sm"
-          onclick={handleConfirm}
-          disabled={isAdopting || !name.trim() || !parent}
-          class="text-[11px]"
-        >
-          {#if isAdopting}
-            <LoaderCircle class="w-3 h-3 animate-spin mr-1.5" />
-            Adopting...
+          <CircleX size={14} class="mt-0.5 shrink-0" aria-hidden="true" />
+          {failed}
+        </p>
+      {/if}
+
+      <div class="flex justify-end gap-2">
+        <Button variant="ghost" onclick={cancel} disabled={copying}>Cancel</Button>
+        <Button data-testid="adopt-confirm-btn" onclick={() => void confirm()} disabled={copying}>
+          {#if copying}
+            <LoaderCircle class="animate-spin" aria-hidden="true" />
+            Copying…
           {:else}
-            Make It Mine
+            Make it mine
           {/if}
         </Button>
-      </Dialog.Footer>
+      </div>
     </div>
   </Dialog.Content>
 </Dialog.Root>
