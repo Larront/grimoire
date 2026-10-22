@@ -9,6 +9,9 @@ let mockLedgerOpen = $state(false);
 // a second ledger from inside the first never lowers `isOpen`, so a collection keyed on
 // the flag alone would keep serving the ledger the GM left.
 let mockLedgerPath = $state("/ledgers/one");
+// Bumped by every open. Reopening the ledger already open changes neither the flag nor
+// the path, and only this says it happened.
+let mockOpenGeneration = $state(0);
 
 vi.mock("$lib/stores/ledger.svelte", () => ({
   ledger: {
@@ -17,6 +20,9 @@ vi.mock("$lib/stores/ledger.svelte", () => ({
     },
     get path() {
       return mockLedgerOpen ? mockLedgerPath : null;
+    },
+    get openGeneration() {
+      return mockOpenGeneration;
     },
   },
 }));
@@ -44,6 +50,7 @@ function mount<T>(opts: { fetch: () => Promise<T[]>; onClose?: () => void }) {
 beforeEach(() => {
   mockLedgerOpen = false;
   mockLedgerPath = "/ledgers/one";
+  mockOpenGeneration = 0;
 });
 
 afterEach(() => {
@@ -89,6 +96,29 @@ describe("createLedgerCollection", () => {
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(collection.items).toEqual(["two's note"]);
+  });
+
+  it("refetches when the open ledger is opened again at the same path", async () => {
+    // Re-exploring the Example World from inside itself: the sandbox is reset and
+    // reopened at the path it already had, so neither the flag nor the path moves —
+    // but the rows the list holds are gone from the ledger.
+    let rows = ["captured while exploring"];
+    const fetch = vi.fn(async () => rows);
+    const collection = mount({ fetch });
+
+    mockLedgerOpen = true;
+    mockOpenGeneration++;
+    flushSync();
+    await flush();
+    expect(collection.items).toEqual(["captured while exploring"]);
+
+    rows = [];
+    mockOpenGeneration++;
+    flushSync();
+    await flush();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(collection.items).toEqual([]);
   });
 
   it("ignores a slower fetch from the ledger that was left", async () => {
