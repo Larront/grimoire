@@ -1,0 +1,7 @@
+[env]
+# The bundled SQLite (libsqlite3-sys `bundled`) is compiled with the `sqlite_dbpage`
+# virtual table, which SQLite's recover extension reads a damaged database through.
+# The extension itself is vendored in `vendor/sqlite-recover` and built by `build.rs`.
+# `db::recover` checks for the table at runtime and a test pins it, so a build that
+# loses this line fails loudly rather than silently skipping recovery.
+LIBSQLITE3_FLAGS = "-DSQLITE_ENABLE_DBPAGE_VTAB"

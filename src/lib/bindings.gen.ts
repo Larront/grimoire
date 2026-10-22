@@ -576,10 +576,15 @@ export type OpenLedgerResult = {
 	 */
 	recovered_from_backup: string | null,
 	/**
-	 *  Where a damaged database was kept, after a restore or a rebuild — so the GM
-	 *  can be shown it (and try another tool on it).
+	 *  Where a damaged database was kept, after a restore, a salvage or a rebuild — so
+	 *  the GM can be shown it (and try another tool on it).
 	 */
 	damaged_file: string | null,
+	/**
+	 *  Set when a damaged database with no usable snapshot was salvaged on the way in
+	 *  (2026-10 design review): what came back of what only the database held.
+	 */
+	salvaged: SalvageSummary | null,
 	/**  Set only by a rebuild: what it brought back besides the notes. */
 	rebuilt: RebuildSummary | null,
 };
@@ -697,6 +702,23 @@ export type RetagUndo = {
 	pins: TagsBefore<number>[],
 	/**  The style rows for both names before the retag. */
 	styles: TagStyleRow[],
+};
+
+/**
+ *  What salvaging a damaged database brought back of what only the database held.
+ *  Notes are not counted: they come back from their files on every open regardless.
+ */
+export type SalvageSummary = {
+	scenes: number,
+	/**  Maps with their image, from the database — titles and pins intact. */
+	maps: number,
+	pins: number,
+	quick_notes: number,
+	/**
+	 *  Maps the database had lost, brought back from their images without pins — the
+	 *  rebuild's own recovery, run over the salvaged database by `open_ledger`.
+	 */
+	maps_from_images: number,
 };
 
 export type Scene = {

@@ -5,6 +5,7 @@ import {
   dismissDbRecovery,
   toastDbRebuilt,
   toastDbRestored,
+  toastDbSalvaged,
   toastError,
   toastMigrationReport,
 } from "$lib/toast";
@@ -13,7 +14,7 @@ import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
-import type { MigrationPlan } from "$lib/bindings.gen";
+import type { MigrationPlan, SalvageSummary } from "$lib/bindings.gen";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -44,8 +45,10 @@ interface OpenLedgerResult {
   unlinked_pins: UnlinkedPin[];
   /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
   recovered_from_backup: string | null;
-  /** Where a damaged database was kept, after a restore or a rebuild. */
+  /** Where a damaged database was kept, after a restore, a salvage or a rebuild. */
   damaged_file?: string | null;
+  /** Set when a damaged database with no backup was salvaged on the way in. */
+  salvaged?: SalvageSummary | null;
   /** Set only by a rebuild: what came back besides the notes. */
   rebuilt?: { maps_recovered: number } | null;
 }
@@ -122,6 +125,8 @@ function createLedgerStore() {
       toastDbRebuilt(world, result.rebuilt.maps_recovered, showDamaged(result.damaged_file));
     } else if (result.recovered_from_backup) {
       toastDbRestored(world, result.recovered_from_backup, showDamaged(result.damaged_file));
+    } else if (result.salvaged) {
+      toastDbSalvaged(world, result.salvaged, showDamaged(result.damaged_file));
     } else {
       dismissDbRecovery();
     }

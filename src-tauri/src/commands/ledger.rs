@@ -70,9 +70,12 @@ pub struct OpenLedgerResult {
     /// snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
     /// so the frontend can say when scenes, pins and maps are from.
     pub recovered_from_backup: Option<String>,
-    /// Where a damaged database was kept, after a restore or a rebuild — so the GM
-    /// can be shown it (and try another tool on it).
+    /// Where a damaged database was kept, after a restore, a salvage or a rebuild — so
+    /// the GM can be shown it (and try another tool on it).
     pub damaged_file: Option<String>,
+    /// Set when a damaged database with no usable snapshot was salvaged on the way in
+    /// (2026-10 design review): what came back of what only the database held.
+    pub salvaged: Option<db::SalvageSummary>,
     /// Set only by a rebuild: what it brought back besides the notes.
     pub rebuilt: Option<RebuildSummary>,
 }
@@ -90,6 +93,7 @@ pub struct RebuildSummary {
 struct Recovery {
     restored_at: Option<String>,
     damaged_file: Option<PathBuf>,
+    salvaged: Option<db::SalvageSummary>,
     rebuilt: Option<RebuildSummary>,
 }
 
@@ -110,29 +114,37 @@ pub fn open_ledger(
     // Lock/corruption posture (issue #116): a locked DB waited out a 5s busy
     // timeout and surfaces as ERR_DB_LOCKED; a corrupt DB auto-restores from
     // the last known-good snapshot when one exists (the damaged file is kept
-    // aside), otherwise ERR_DB_CORRUPT sends the frontend to the rebuild
-    // dialog — real scene/pin loss is never silently accepted.
-    let (mut conn, recovery) = match db::open_validated_connection(&ledger_path) {
+    // aside). Without one, SQLite's own recovery salvages what it can read of
+    // the damaged file, and is used if it brought back any scene, map, pin or
+    // Quick Note (2026-10 design review). Otherwise ERR_DB_CORRUPT sends the
+    // frontend to the rebuild dialog — real scene/pin loss is never accepted
+    // without the GM being told.
+    let (mut conn, mut recovery) = match db::open_validated_connection(&ledger_path) {
         Ok(conn) => (conn, Recovery::default()),
         Err(db::DbOpenError::Corrupt(detail)) => {
             log::warn!("[open_ledger] database failed validation: {detail}");
-            match db::restore_from_snapshot(&ledger_path)? {
-                Some(restored) => {
-                    log::info!(
-                        "[open_ledger] restored database from snapshot taken {}",
-                        restored.taken_at
-                    );
-                    let conn =
-                        db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-                    let recovery = Recovery {
-                        restored_at: Some(restored.taken_at),
-                        damaged_file: restored.kept,
-                        rebuilt: None,
-                    };
-                    (conn, recovery)
+            let recovery = if let Some(restored) = db::restore_from_snapshot(&ledger_path)? {
+                log::info!(
+                    "[open_ledger] restored database from snapshot taken {}",
+                    restored.taken_at
+                );
+                Recovery {
+                    restored_at: Some(restored.taken_at),
+                    damaged_file: restored.kept,
+                    ..Recovery::default()
                 }
-                None => return Err(format!("ERR_DB_CORRUPT: {detail}")),
-            }
+            } else if let Some(salvaged) = db::salvage_damaged_db(&ledger_path)? {
+                log::info!("[open_ledger] salvaged damaged database: {:?}", salvaged.summary);
+                Recovery {
+                    damaged_file: salvaged.kept,
+                    salvaged: Some(salvaged.summary),
+                    ..Recovery::default()
+                }
+            } else {
+                return Err(format!("ERR_DB_CORRUPT: {detail}"));
+            };
+            let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+            (conn, recovery)
         }
         Err(e) => return Err(e.message()),
     };
@@ -151,6 +163,17 @@ pub fn open_ledger(
         &ledger_path,
         &crate::format_migration::MigrationContext::load(&mut conn),
     )?;
+
+    // A salvage is a rebuild that kept what it could read: the maps it could not
+    // come back from their images, as they do after a rebuild. Best-effort — the
+    // salvaged database is already in place, and a failure here must not turn the
+    // open into one that no longer knows it was recovered.
+    if let Some(salvaged) = recovery.salvaged.as_mut() {
+        match crate::commands::maps::recover_maps_from_images(&ledger_path, &mut conn) {
+            Ok(n) => salvaged.maps_from_images = n,
+            Err(e) => log::warn!("[open_ledger] maps from images after salvage failed: {e}"),
+        }
+    }
 
     finish_open(path, ledger_path, conn, recovery, &app, &ledger, cleared)
 }
@@ -260,9 +283,9 @@ pub fn rebuild_ledger_db(
     // from their files, without their pins, which lived only in the database.
     let maps_recovered = crate::commands::maps::recover_maps_from_images(&ledger_path, &mut conn)?;
     let recovery = Recovery {
-        restored_at: None,
         damaged_file: kept,
         rebuilt: Some(RebuildSummary { maps_recovered }),
+        ..Recovery::default()
     };
     finish_open(path, ledger_path, conn, recovery, &app, &ledger, cleared)
 }
@@ -380,6 +403,7 @@ fn finish_open(
         unlinked_pins: import_report.unlinked_pins,
         recovered_from_backup: recovery.restored_at,
         damaged_file: recovery.damaged_file.map(|p| p.to_string_lossy().to_string()),
+        salvaged: recovery.salvaged,
         rebuilt: recovery.rebuilt,
     })
 }
