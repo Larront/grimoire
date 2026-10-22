@@ -20,6 +20,9 @@ vi.mock("$lib/toast", () => ({
   toastExternalMoveLinks: vi.fn(),
   toastUnlinkedPins: vi.fn(),
   toastUnreadableNotes: vi.fn(),
+  toastDbRestored: vi.fn(),
+  toastDbRebuilt: vi.fn(),
+  dismissDbRecovery: vi.fn(),
   toastMigrationReport: vi.fn(),
 }));
 import { toastUndo } from "$lib/toast";

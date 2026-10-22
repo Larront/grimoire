@@ -68,8 +68,29 @@ pub struct OpenLedgerResult {
     pub unlinked_pins: Vec<UnlinkedPin>,
     /// Set when the database was auto-restored from the `.grimoire/backups`
     /// snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
-    /// so the frontend can toast "scenes and pins reflect <date>".
+    /// so the frontend can say when scenes, pins and maps are from.
     pub recovered_from_backup: Option<String>,
+    /// Where a damaged database was kept, after a restore or a rebuild — so the GM
+    /// can be shown it (and try another tool on it).
+    pub damaged_file: Option<String>,
+    /// Set only by a rebuild: what it brought back besides the notes.
+    pub rebuilt: Option<RebuildSummary>,
+}
+
+/// What a rebuild recovered besides the notes. See `rebuild_ledger_db`.
+#[derive(serde::Serialize, specta::Type)]
+pub struct RebuildSummary {
+    /// Maps brought back from their images, without their pins.
+    #[specta(type = i32)]
+    pub maps_recovered: i64,
+}
+
+/// How an open came about, for `finish_open` to report.
+#[derive(Default)]
+struct Recovery {
+    restored_at: Option<String>,
+    damaged_file: Option<PathBuf>,
+    rebuilt: Option<RebuildSummary>,
 }
 
 #[tauri::command]
@@ -91,16 +112,24 @@ pub fn open_ledger(
     // the last known-good snapshot when one exists (the damaged file is kept
     // aside), otherwise ERR_DB_CORRUPT sends the frontend to the rebuild
     // dialog — real scene/pin loss is never silently accepted.
-    let (mut conn, recovered) = match db::open_validated_connection(&ledger_path) {
-        Ok(conn) => (conn, None),
+    let (mut conn, recovery) = match db::open_validated_connection(&ledger_path) {
+        Ok(conn) => (conn, Recovery::default()),
         Err(db::DbOpenError::Corrupt(detail)) => {
             log::warn!("[open_ledger] database failed validation: {detail}");
             match db::restore_from_snapshot(&ledger_path)? {
-                Some(taken_at) => {
-                    log::info!("[open_ledger] restored database from snapshot taken {taken_at}");
+                Some(restored) => {
+                    log::info!(
+                        "[open_ledger] restored database from snapshot taken {}",
+                        restored.taken_at
+                    );
                     let conn =
                         db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
-                    (conn, Some(taken_at))
+                    let recovery = Recovery {
+                        restored_at: Some(restored.taken_at),
+                        damaged_file: restored.kept,
+                        rebuilt: None,
+                    };
+                    (conn, recovery)
                 }
                 None => return Err(format!("ERR_DB_CORRUPT: {detail}")),
             }
@@ -123,7 +152,7 @@ pub fn open_ledger(
         &crate::format_migration::MigrationContext::load(&mut conn),
     )?;
 
-    finish_open(path, ledger_path, conn, recovered, &app, &ledger, cleared)
+    finish_open(path, ledger_path, conn, recovery, &app, &ledger, cleared)
 }
 
 /// What the consent prompt is built from, or `None` when no pending migration
@@ -184,7 +213,8 @@ pub fn migrate_ledger_format(
     // The notes pass has finished, so this open may proceed past the gate even
     // though a partial failure will have left the stamp behind.
     let cleared = crate::format_version::cleared_by_consented_migration();
-    let ledger_result = finish_open(path, ledger_path, conn, None, &app, &ledger, cleared)?;
+    let ledger_result =
+        finish_open(path, ledger_path, conn, Recovery::default(), &app, &ledger, cleared)?;
 
     Ok(MigrateFormatResult {
         report,
@@ -211,20 +241,37 @@ pub fn rebuild_ledger_db(
     ledger: State<AppLedger>,
 ) -> Result<OpenLedgerResult, String> {
     let ledger_path = PathBuf::from(&path);
-    db::move_corrupt_db_aside(&ledger_path)?;
-    let mut conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+    let (mut conn, kept) = match db::open_validated_connection(&ledger_path) {
+        // A retry after a rebuild that failed part-way: the damaged database went
+        // aside last time, and what is here is the fresh one that attempt made.
+        // Moving that aside too buried the real damaged file among copies.
+        Ok(conn) => (conn, db::latest_damaged_db(&ledger_path)),
+        Err(_) => {
+            let kept = db::move_corrupt_db_aside(&ledger_path)?;
+            let conn = db::open_validated_connection(&ledger_path).map_err(|e| e.message())?;
+            (conn, kept)
+        }
+    };
     let cleared = crate::format_version::enforce_at_open(
         &ledger_path,
         &crate::format_migration::MigrationContext::load(&mut conn),
     )?;
-    finish_open(path, ledger_path, conn, None, &app, &ledger, cleared)
+    // Map images live in the world's own folders, so the maps can come back — named
+    // from their files, without their pins, which lived only in the database.
+    let maps_recovered = crate::commands::maps::recover_maps_from_images(&ledger_path, &mut conn)?;
+    let recovery = Recovery {
+        restored_at: None,
+        damaged_file: kept,
+        rebuilt: Some(RebuildSummary { maps_recovered }),
+    };
+    finish_open(path, ledger_path, conn, recovery, &app, &ledger, cleared)
 }
 
 fn finish_open(
     path: String,
     ledger_path: PathBuf,
     mut conn: SqliteConnection,
-    recovered_from_backup: Option<String>,
+    recovery: Recovery,
     app: &AppHandle,
     ledger: &State<AppLedger>,
     // The [[Ledger Format Version]] gate (ADR-0017), as a value rather than a
@@ -312,6 +359,8 @@ fn finish_open(
 
     {
         let mut state = ledger.lock().map_err(|_| crate::ledger::ERR_LOCK_POISONED)?;
+        // The world being left (switching, or reopening) is backed up as it is now.
+        state.snapshot_before_close();
         state.path = Some(ledger_path.clone());
         state.connection = Some(conn);
         state.search_index = search_index;
@@ -329,7 +378,9 @@ fn finish_open(
         map_count,
         failed_imports: import_report.failed,
         unlinked_pins: import_report.unlinked_pins,
-        recovered_from_backup,
+        recovered_from_backup: recovery.restored_at,
+        damaged_file: recovery.damaged_file.map(|p| p.to_string_lossy().to_string()),
+        rebuilt: recovery.rebuilt,
     })
 }
 

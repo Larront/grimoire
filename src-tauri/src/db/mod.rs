@@ -139,31 +139,70 @@ pub fn write_snapshot(conn: &mut SqliteConnection, ledger_path: &Path) -> Result
     Ok(())
 }
 
+/// Snapshot the database, but only one that passes its integrity check: a damaged
+/// database snapshotted on its way out would overwrite the good backup that could
+/// have restored it. Used when a world closes (2026-10 design review) — the open-time
+/// snapshot alone meant a restore lost that whole session's scenes, pins, maps and
+/// Quick Notes.
+pub fn snapshot_if_sound(conn: &mut SqliteConnection, ledger_path: &Path) -> Result<(), String> {
+    quick_check(conn)?;
+    write_snapshot(conn, ledger_path)
+}
+
 /// Move the damaged database (and any WAL/SHM sidecars, which could otherwise
 /// re-corrupt a restored file) aside as `ledger.db.corrupt-<unix-ts>`. The
-/// file is preserved, never deleted — it may still be salvageable.
-pub fn move_corrupt_db_aside(ledger_path: &Path) -> Result<(), String> {
+/// file is preserved, never deleted — it may still be salvageable. Returns where
+/// the database itself went, so the GM can be shown it.
+pub fn move_corrupt_db_aside(ledger_path: &Path) -> Result<Option<PathBuf>, String> {
     let db_file = db_path(ledger_path);
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let mut kept = None;
     for suffix in ["", "-wal", "-shm"] {
         let src = PathBuf::from(format!("{}{suffix}", db_file.display()));
         if src.exists() {
             let dst = PathBuf::from(format!("{}.corrupt-{ts}{suffix}", db_file.display()));
             std::fs::rename(&src, &dst)
                 .map_err(|e| format!("Failed to move damaged database aside: {e}"))?;
+            if suffix.is_empty() {
+                kept = Some(dst);
+            }
         }
     }
-    Ok(())
+    Ok(kept)
+}
+
+/// The most recently kept damaged database, if any — `ledger.db.corrupt-<ts>`.
+pub fn latest_damaged_db(ledger_path: &Path) -> Option<PathBuf> {
+    let db_file = db_path(ledger_path);
+    let dir = db_file.parent()?;
+    let prefix = format!("{}.corrupt-", db_file.file_name()?.to_string_lossy());
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            name.starts_with(&prefix) && !name.ends_with("-wal") && !name.ends_with("-shm")
+        })
+        .max()
+}
+
+/// A restore from the snapshot: when the snapshot was taken, and where the damaged
+/// database was kept.
+#[derive(Debug, PartialEq)]
+pub struct Restored {
+    pub taken_at: String,
+    pub kept: Option<PathBuf>,
 }
 
 /// Attempt recovery from the snapshot: validate it, move the damaged database
 /// aside, and put the snapshot in its place. Returns the snapshot's modified
 /// date (for the "scenes and pins reflect <date>" toast) or `None` when no
 /// usable snapshot exists — the caller then falls back to the rebuild dialog.
-pub fn restore_from_snapshot(ledger_path: &Path) -> Result<Option<String>, String> {
+pub fn restore_from_snapshot(ledger_path: &Path) -> Result<Option<Restored>, String> {
     let backup = backup_path(ledger_path);
     if !backup.exists() {
         return Ok(None);
@@ -185,10 +224,10 @@ pub fn restore_from_snapshot(ledger_path: &Path) -> Result<Option<String>, Strin
         .map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339())
         .unwrap_or_default();
 
-    move_corrupt_db_aside(ledger_path)?;
+    let kept = move_corrupt_db_aside(ledger_path)?;
     std::fs::copy(&backup, db_path(ledger_path))
         .map_err(|e| format!("Failed to restore backup: {e}"))?;
-    Ok(Some(taken_at))
+    Ok(Some(Restored { taken_at, kept }))
 }
 
 #[cfg(test)]
@@ -265,6 +304,31 @@ mod tests {
         assert_eq!(restore_from_snapshot(tmp.path()).unwrap(), None);
         // The damaged file is untouched until the GM chooses to rebuild.
         assert!(db_path(tmp.path()).exists());
+    }
+
+    #[test]
+    fn a_damaged_database_is_never_snapshotted_over_a_good_backup() {
+        let tmp = tempdir().unwrap();
+        let mut conn = open_validated_connection(tmp.path()).unwrap();
+        snapshot_if_sound(&mut conn, tmp.path()).unwrap();
+        let good = std::fs::read(backup_path(tmp.path())).unwrap();
+        drop(conn);
+
+        std::fs::write(db_path(tmp.path()), b"definitely not a database").unwrap();
+        if let Ok(mut damaged) = SqliteConnection::establish(&db_path(tmp.path()).to_string_lossy()) {
+            assert!(snapshot_if_sound(&mut damaged, tmp.path()).is_err());
+        }
+        assert_eq!(std::fs::read(backup_path(tmp.path())).unwrap(), good);
+    }
+
+    #[test]
+    fn the_kept_damaged_file_is_named_and_found_again() {
+        let tmp = tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".grimoire")).unwrap();
+        std::fs::write(db_path(tmp.path()), b"damaged").unwrap();
+        let kept = move_corrupt_db_aside(tmp.path()).unwrap().unwrap();
+        assert!(kept.to_string_lossy().contains("ledger.db.corrupt-"));
+        assert_eq!(latest_damaged_db(tmp.path()), Some(kept));
     }
 
     #[test]

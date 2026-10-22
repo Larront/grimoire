@@ -336,6 +336,16 @@ What a repair leaves behind: pins whose note row was re-created (usually a folde
 - **The list:** 448px, a heading per map, a row per pin — its name, then "was" and the note it used to open, both truncating rather than squeezing each other.
 - **Choosing a pin** opens its map with the pin selected, its Linked Note search filled with the old note's name and holding the caret: Enter links the first match. Nothing re-links itself — a note with the same name may not be the same note.
 
+### A world that can't open as it is
+
+When a world's database is damaged. With a backup, it is restored on the way in, and a closable toast names the world and says when its scenes, maps, pins and Quick Notes are from, with **Show damaged file**. Without one, the one recovery that asks first: an alert dialog, 448px, titled with the world's name ("“Ashfen” can't open as it is").
+
+- **Said once.** The dialog is the whole message — no toast repeating its title, no error code under it on the Splash.
+- **What comes back and what doesn't, before the choice:** every note from its file, each map from its image without its pins; scenes and Quick Notes can't be. The damaged file is kept, and **Show damaged file** shows it.
+- **Not now** and **Rebuild from notes** (primary — it deletes nothing; the damage is already done). While rebuilding it can't be closed; a failure is said in the dialog, with the circle-x.
+- **Afterwards,** a lasting, closable toast says what came back and what couldn't. A recovery toast belongs to its world: closing or switching takes it down.
+- **Backups** are taken as a world opens and as it closes, so a restore keeps the last session's work.
+
 ### Notes Grimoire couldn't open
 
 What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: a neutral permanent toast, "N notes couldn't be opened", saying they're safe, and **Show notes** behind it.

@@ -10,6 +10,100 @@ use tauri::State;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/// A map's title from its image's file name: `ashfen-region` → `Ashfen Region`. A name
+/// with spaces is the GM's own (Grimoire names map images after their maps) and is
+/// kept as it is.
+fn title_from_image_name(stem: &str) -> String {
+    if stem.contains(' ') {
+        return stem.to_string();
+    }
+    stem.split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut chars = w.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// After a rebuild (2026-10 design review): every image in the world's own folders
+/// that is not a map's yet comes back as a map — titled from its file name, without
+/// its pins, which lived only in the database. Map images are the only images there:
+/// a note's images live in the hidden `.grimoire/images`, which this skips with every
+/// other dotted folder. Answers how many came back.
+pub fn recover_maps_from_images(
+    ledger_path: &Path,
+    conn: &mut diesel::SqliteConnection,
+) -> Result<i64, String> {
+    let known: std::collections::HashSet<String> = maps::table
+        .select(maps::image_path)
+        .load::<Option<String>>(conn)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    let mut images: Vec<(String, std::path::PathBuf)> = Vec::new();
+    fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, std::path::PathBuf)>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let child = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, &child, out);
+            } else {
+                let lower = name.to_lowercase();
+                if [".png", ".jpg", ".jpeg", ".webp"].iter().any(|ext| lower.ends_with(ext)) {
+                    out.push((child, path));
+                }
+            }
+        }
+    }
+    walk(ledger_path, "", &mut images);
+    images.sort();
+
+    // One map per name per folder: the same image kept in two formats
+    // (`ashfen-region.png` and `.webp`) is one map, not two of the same name.
+    let without_ext = |rel: &str| rel.rsplit_once('.').map(|(s, _)| s.to_string());
+    let mut taken: std::collections::HashSet<String> =
+        known.iter().filter_map(|rel| without_ext(rel)).collect();
+
+    let mut recovered = 0;
+    for (rel, full) in images {
+        if known.contains(&rel) {
+            continue;
+        }
+        let Some(key) = without_ext(&rel) else { continue };
+        if !taken.insert(key) {
+            continue;
+        }
+        let Ok((width, height)) = image::image_dimensions(&full) else {
+            continue;
+        };
+        let stem = full.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let title = title_from_image_name(&stem);
+        diesel::insert_into(maps::table)
+            .values(&NewMap {
+                title: &title,
+                image_path: Some(&rel),
+                image_width: Some(width as i32),
+                image_height: Some(height as i32),
+            })
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+        recovered += 1;
+    }
+    Ok(recovered)
+}
+
 fn resolve_map_filename(base_name: &str, ext: &str, parent_dir: &Path) -> (String, std::path::PathBuf) {
     let mut name = base_name.to_string();
     let mut counter = 2u32;
@@ -594,6 +688,40 @@ pub fn delete_annotation(annotation_id: i32, ledger: State<AppLedger>) -> Result
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_rebuild_brings_maps_back_from_their_images() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("Maps")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".grimoire/images")).unwrap();
+        let img = image::RgbImage::new(4, 3);
+        img.save(dir.path().join("Maps/ashfen-region.png")).unwrap();
+        // The same map kept in a second format is the same map.
+        img.save(dir.path().join("Maps/ashfen-region.webp")).unwrap();
+        img.save(dir.path().join("Maps/The Ember Keep.png")).unwrap();
+        // A note's pasted image is not a map.
+        img.save(dir.path().join(".grimoire/images/sketch.png")).unwrap();
+
+        let mut conn = crate::db::establish_connection(dir.path()).unwrap();
+        assert_eq!(super::recover_maps_from_images(dir.path(), &mut conn).unwrap(), 2);
+
+        use crate::db::schema::maps;
+        use diesel::prelude::*;
+        let mut got: Vec<(String, Option<String>, Option<i32>)> = maps::table
+            .select((maps::title, maps::image_path, maps::image_width))
+            .load(&mut conn)
+            .unwrap();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("Ashfen Region".into(), Some("Maps/ashfen-region.png".into()), Some(4)),
+                ("The Ember Keep".into(), Some("Maps/The Ember Keep.png".into()), Some(4)),
+            ]
+        );
+        // Run again, nothing new: a map already there is not made twice.
+        assert_eq!(super::recover_maps_from_images(dir.path(), &mut conn).unwrap(), 0);
+    }
+
     use super::{get_pin_categories_for_map_from_conn, move_map_image_inner, resolve_map_filename};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
