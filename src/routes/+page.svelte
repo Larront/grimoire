@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger, type RecentLedger } from "$lib/stores/ledger.svelte";
-  import { api } from "$lib/api";
+  import { api, friendlyMessage } from "$lib/api";
   import { Folder, Plus, LoaderCircle, BookOpen, X } from "@lucide/svelte";
   import NewLedgerFields from "$lib/components/NewLedgerFields.svelte";
   import { fieldsReady, ledgerDestination } from "$lib/utils/ledger-name";
@@ -10,6 +10,18 @@
   let isLoadingRecents = $state(true);
   let openingPath = $state<string | null>(null);
   let errorMsg = $state<string | null>(null);
+
+  /**
+   * What the Splash says when an open fails: nothing when a dialog has taken the
+   * refusal over (a damaged database, notes on an older format) — that dialog says it
+   * all — and otherwise the GM's words, never the raw error. It used to print
+   * "ERR_DB_CORRUPT: file is not a database" in red under the recovery dialog, and
+   * leave it there after Cancel (2026-10 design review).
+   */
+  function splashError(e: unknown): string | null {
+    if (ledger.corruptLedgerPath || ledger.formatMigration) return null;
+    return friendlyMessage(e);
+  }
 
   // Create ledger form
   let mode = $state<"idle" | "creating">("idle");
@@ -37,7 +49,7 @@
       await api.removeRecentLedger(ledgerPath);
       recentLedgers = recentLedgers.filter((v) => v.path !== ledgerPath);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = splashError(e);
     }
   }
 
@@ -47,7 +59,7 @@
     try {
       await ledger.openLedger(ledgerPath);
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = splashError(e);
     } finally {
       openingPath = null;
     }
@@ -59,7 +71,7 @@
     try {
       await ledger.openLedger();
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = splashError(e);
     } finally {
       openingPath = null;
     }
@@ -85,7 +97,7 @@
     try {
       await ledger.exploreSample();
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = splashError(e);
     } finally {
       openingPath = null;
     }
@@ -100,7 +112,7 @@
     try {
       await ledger.openLedger(ledgerDestination(newLedgerParent, newLedgerName));
     } catch (e) {
-      errorMsg = String(e);
+      errorMsg = splashError(e);
     } finally {
       openingPath = null;
     }

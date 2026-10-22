@@ -572,9 +572,16 @@ export type OpenLedgerResult = {
 	/**
 	 *  Set when the database was auto-restored from the `.grimoire/backups`
 	 *  snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
-	 *  so the frontend can toast "scenes and pins reflect <date>".
+	 *  so the frontend can say when scenes, pins and maps are from.
 	 */
 	recovered_from_backup: string | null,
+	/**
+	 *  Where a damaged database was kept, after a restore or a rebuild — so the GM
+	 *  can be shown it (and try another tool on it).
+	 */
+	damaged_file: string | null,
+	/**  Set only by a rebuild: what it brought back besides the notes. */
+	rebuilt: RebuildSummary | null,
 };
 
 export type OutboundLink = {
@@ -623,6 +630,12 @@ export type QuickNote = {
 	id: number,
 	body: string,
 	captured_at: string,
+};
+
+/**  What a rebuild recovered besides the notes. See `rebuild_ledger_db`. */
+export type RebuildSummary = {
+	/**  Maps brought back from their images, without their pins. */
+	maps_recovered: number,
 };
 
 export type RecentEntityResult = {

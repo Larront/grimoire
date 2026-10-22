@@ -239,3 +239,68 @@ export function toastUndo(
     },
   });
 }
+
+/**
+ * A damaged database recovered on open (#116, 2026-10 design review): restored from
+ * the last backup, or rebuilt from the notes. Lasting — the GM may be mid-prep and
+ * should be able to read what is missing — but closable, and taken down by the next
+ * open (`dismissDbRecovery`). It used to be a toast with no close button that
+ * followed the GM to the Splash and into every other world.
+ */
+const DB_RECOVERY_ID = "db-recovery";
+
+export function toastDbRestored(
+  world: string,
+  takenAt: string,
+  onShowDamaged: (() => void) | null,
+) {
+  const when = new Date(takenAt).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  toast(`“${world}” was restored from its last backup`, {
+    id: DB_RECOVERY_ID,
+    duration: 2 ** 31 - 1,
+    closeButton: true,
+    description: `Its scenes, maps, pins and Quick Notes are as they were on ${when}; changes to them after that couldn't be kept. Your notes are unaffected.`,
+    action: onShowDamaged
+      ? {
+          label: "Show damaged file",
+          onClick: (e) => {
+            e.preventDefault();
+            onShowDamaged();
+          },
+        }
+      : undefined,
+  });
+}
+
+export function toastDbRebuilt(
+  world: string,
+  mapsRecovered: number,
+  onShowDamaged: (() => void) | null,
+) {
+  const n = mapsRecovered;
+  toast(`“${world}” was rebuilt from its notes`, {
+    id: DB_RECOVERY_ID,
+    duration: 2 ** 31 - 1,
+    closeButton: true,
+    description:
+      n > 0
+        ? `Its ${n} map${n === 1 ? "" : "s"} came back from ${n === 1 ? "its image" : "their images"}, without pins. Its scenes and Quick Notes couldn't be recovered.`
+        : "Its scenes, maps and Quick Notes couldn't be recovered.",
+    action: onShowDamaged
+      ? {
+          label: "Show damaged file",
+          onClick: (e) => {
+            e.preventDefault();
+            onShowDamaged();
+          },
+        }
+      : undefined,
+  });
+}
+
+export function dismissDbRecovery() {
+  toast.dismiss(DB_RECOVERY_ID);
+}

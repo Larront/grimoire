@@ -1,7 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { toast } from "svelte-sonner";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, friendlyMessage } from "$lib/api";
-import { toastError, toastMigrationReport } from "$lib/toast";
+import {
+  dismissDbRecovery,
+  toastDbRebuilt,
+  toastDbRestored,
+  toastError,
+  toastMigrationReport,
+} from "$lib/toast";
 import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
@@ -38,6 +44,20 @@ interface OpenLedgerResult {
   unlinked_pins: UnlinkedPin[];
   /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
   recovered_from_backup: string | null;
+  /** Where a damaged database was kept, after a restore or a rebuild. */
+  damaged_file?: string | null;
+  /** Set only by a rebuild: what came back besides the notes. */
+  rebuilt?: { maps_recovered: number } | null;
+}
+
+/** A world's name as the GM sees it: its folder's. */
+export function worldNameOf(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/** Show a kept damaged database in its folder. */
+function showDamaged(file: string | null | undefined): (() => void) | null {
+  return file ? () => void revealItemInDir(file).catch(() => {}) : null;
 }
 
 export interface RecentLedger {
@@ -67,6 +87,8 @@ function createLedgerStore() {
   // Set when open_ledger reported ERR_DB_CORRUPT with no usable snapshot —
   // DbRecoveryDialog (mounted in the root layout) offers Rebuild/Cancel.
   let corruptLedgerPath = $state<string | null>(null);
+  /** Why the last rebuild failed, in the GM's words — shown in the rebuild dialog. */
+  let rebuildError = $state<string | null>(null);
   // Set when open_ledger refused because the vault's notes are on an older
   // format (ADR-0017) — FormatMigrationDialog (also in the root layout) composes
   // its copy from this plan and offers Update/Cancel. Declining leaves it null
@@ -79,6 +101,10 @@ function createLedgerStore() {
     path = result.path;
     isOpen = true;
     openGeneration++;
+    // An open is of an ordinary world unless the caller says otherwise —
+    // `exploreSample` sets this back after its open. Switching worlds from inside the
+    // Example World used to leave the next one labelled "Example World".
+    isSample = false;
 
     // Every open, empty or not: a world that reads cleanly takes the last one's
     // list, and its toast, down.
@@ -89,13 +115,15 @@ function createLedgerStore() {
     // named rather than counted (issue #224).
     unlinkedPins.replace(result.unlinked_pins);
 
-    // Invisible background recovery → informational toast (issue #116).
-    if (result.recovered_from_backup) {
-      const taken = new Date(result.recovered_from_backup);
-      toast("Ledger restored from a backup", {
-        description: `The database was damaged and has been restored — scenes and pins reflect ${taken.toLocaleString()}. The damaged file was kept beside it.`,
-        duration: Infinity,
-      });
+    // A damaged database recovered on the way in (#116): say what came back and what
+    // didn't, lastingly; any other open takes the last such word down.
+    const world = worldNameOf(result.path);
+    if (result.rebuilt) {
+      toastDbRebuilt(world, result.rebuilt.maps_recovered, showDamaged(result.damaged_file));
+    } else if (result.recovered_from_backup) {
+      toastDbRestored(world, result.recovered_from_backup, showDamaged(result.damaged_file));
+    } else {
+      dismissDbRecovery();
     }
   }
 
@@ -124,15 +152,17 @@ function createLedgerStore() {
    *  format refusal with no prompt would be a dead end.
    *
    *  Returns whether a prompt took the refusal over, which is what decides if it
-   *  is also toasted. Only the [[Format Migration]] prompt answers yes: it states
-   *  the whole refusal — the count, what changes, and both ways out — so a toast
-   *  beside it would say less than the dialog behind it. The rebuild prompt is
-   *  left reporting, because a damaged database is a fault the GM should be told
-   *  about whether or not they take the offer to repair it. */
+   *  is also toasted. Both prompts answer yes: each states the whole refusal and its
+   *  ways out, so a toast beside it says less than the dialog behind it. The rebuild
+   *  prompt used to be left reporting too, and the GM got the dialog's title again
+   *  as a red toast they couldn't even close while the dialog was up (2026-10 design
+   *  review). */
   async function routeOpenRefusal(ledgerPath: string, e: unknown): Promise<boolean> {
     const raw = String(e);
     if (raw.includes("ERR_DB_CORRUPT")) {
       corruptLedgerPath = ledgerPath;
+      rebuildError = null;
+      return true;
     }
     if (raw.includes("ERR_FORMAT_MIGRATION_REQUIRED")) {
       // Ask the scan what would change, so the prompt is composed from the
@@ -207,8 +237,10 @@ function createLedgerStore() {
     if (!target) return false;
     isLoading = true;
     error = null;
+    rebuildError = null;
     try {
-      const result = await api.rebuildLedgerDb(target);
+      // Quiet: a failure is said in the dialog, beside the button that failed.
+      const result = await api.silent.rebuildLedgerDb(target);
       applyOpenResult(result);
       recordRecent(result);
       corruptLedgerPath = null;
@@ -216,8 +248,12 @@ function createLedgerStore() {
     } catch (e) {
       // A rebuilt database can still be a vault whose *notes* are behind: the
       // rebuild ran, the format gate refused, and without this the GM would be
-      // left holding a generic toast and no way through.
+      // left with no way through. The migration prompt then says it all.
       await routeOpenRefusal(target, e);
+      if (!formatMigration) {
+        corruptLedgerPath = target;
+        rebuildError = friendlyMessage(e);
+      }
       error = String(e);
       throw e;
     } finally {
@@ -227,6 +263,7 @@ function createLedgerStore() {
 
   function dismissCorruptLedger(): void {
     corruptLedgerPath = null;
+    rebuildError = null;
   }
 
   /** The GM said yes to the [[Format Migration]] prompt: the backend backs the
@@ -347,6 +384,9 @@ function createLedgerStore() {
     pendingStartHere = false;
     accent = "accent-crimson";
     error = null;
+    // A world's own news goes with it: the restore or rebuild toast used to sit on
+    // over the Splash, and over the next world, reading as theirs.
+    dismissDbRecovery();
   }
 
   async function checkExistingLedger(): Promise<void> {
@@ -395,6 +435,9 @@ function createLedgerStore() {
     },
     get pendingStartHere() {
       return pendingStartHere;
+    },
+    get rebuildError() {
+      return rebuildError;
     },
     get corruptLedgerPath() {
       return corruptLedgerPath;

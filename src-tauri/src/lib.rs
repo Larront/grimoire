@@ -405,8 +405,17 @@ pub fn run() {
             disable_webview_pinch_zoom(_app);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // Quitting is a close too: back the open world up on the way out.
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                if let Ok(mut state) = app.state::<ledger::AppLedger>().lock() {
+                    state.snapshot_before_close();
+                }
+            }
+        });
 }
 
 /// Turn off WebView2's built-in pinch-zoom ("Page Scale" zoom). By default a
