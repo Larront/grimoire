@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
 pub mod models;
+mod recover;
 pub mod schema;
 
 use diesel::prelude::*;
-use diesel::sql_types::Text;
+use diesel::sql_types::{BigInt, Nullable, Text};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
@@ -87,7 +88,12 @@ pub fn open_validated_connection(ledger_path: &Path) -> Result<SqliteConnection,
     let grimoire_dir = ledger_path.join(".grimoire");
     std::fs::create_dir_all(&grimoire_dir)
         .map_err(|e| DbOpenError::Other(format!("Failed to create .grimoire directory: {e}")))?;
-    let db_file = db_path(ledger_path);
+    open_validated_file(&db_path(ledger_path))
+}
+
+/// [`open_validated_connection`] on any database file — also how a salvaged database
+/// is proven before it takes the damaged one's place.
+fn open_validated_file(db_file: &Path) -> Result<SqliteConnection, DbOpenError> {
     let db_url = db_file
         .to_str()
         .ok_or_else(|| DbOpenError::Other("Invalid Ledger path.".to_string()))?;
@@ -230,9 +236,162 @@ pub fn restore_from_snapshot(ledger_path: &Path) -> Result<Option<Restored>, Str
     Ok(Some(Restored { taken_at, kept }))
 }
 
+/// What salvaging a damaged database brought back of what only the database held.
+/// Notes are not counted: they come back from their files on every open regardless.
+#[derive(Debug, Default, PartialEq, QueryableByName, serde::Serialize, specta::Type)]
+pub struct SalvageSummary {
+    #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
+    pub scenes: i64,
+    /// Maps with their image, from the database — titles and pins intact.
+    #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
+    pub maps: i64,
+    #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
+    pub pins: i64,
+    #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
+    pub quick_notes: i64,
+    /// Maps the database had lost, brought back from their images without pins — the
+    /// rebuild's own recovery, run over the salvaged database by `open_ledger`.
+    #[diesel(sql_type = BigInt)]
+    #[specta(type = i32)]
+    pub maps_from_images: i64,
+}
+
+impl SalvageSummary {
+    fn anything(&self) -> bool {
+        self.scenes + self.maps + self.pins + self.quick_notes > 0
+    }
+}
+
+/// A salvage of the damaged database, and where the damaged file was kept.
+#[derive(Debug, PartialEq)]
+pub struct Salvaged {
+    pub summary: SalvageSummary,
+    pub kept: Option<PathBuf>,
+}
+
+/// When there is no usable snapshot (2026-10 design review): copy every row SQLite can
+/// still read out of the damaged database into a new one, prove it opens as a ledger
+/// database, and put it in the damaged one's place — which is kept aside, as a restore
+/// keeps it. Returns `None`, leaving the damaged file untouched, when recovery fails or
+/// brings back no scene, map, pin or Quick Note: the rebuild dialog gives the same
+/// result, and asks first.
+pub fn salvage_damaged_db(ledger_path: &Path) -> Result<Option<Salvaged>, String> {
+    let db_file = db_path(ledger_path);
+    let staged = db_file.with_extension("db.salvage");
+    let discard = || {
+        let _ = std::fs::remove_file(&staged);
+    };
+    discard();
+
+    let attempt = (|| {
+        recover::recover_into(&db_file, &staged)?;
+        let mut conn = open_validated_file(&staged).map_err(DbOpenError::message)?;
+        drop_dangling_references(&mut conn)?;
+        count_salvaged(&mut conn)
+    })();
+    let summary = match attempt {
+        Ok(summary) if summary.anything() => summary,
+        Ok(_) => {
+            log::info!("[db] salvage recovered nothing the rebuild would not");
+            discard();
+            return Ok(None);
+        }
+        Err(e) => {
+            log::warn!("[db] salvage failed: {e}");
+            discard();
+            return Ok(None);
+        }
+    };
+
+    let kept = move_corrupt_db_aside(ledger_path)?;
+    std::fs::rename(&staged, &db_file)
+        .map_err(|e| format!("Failed to put the salvaged database in place: {e}"))?;
+    Ok(Some(Salvaged { summary, kept }))
+}
+
+fn count_salvaged(conn: &mut SqliteConnection) -> Result<SalvageSummary, String> {
+    // Only maps with an image count: `finish_open` prunes the others.
+    diesel::sql_query(
+        "SELECT
+            (SELECT COUNT(*) FROM scenes) AS scenes,
+            (SELECT COUNT(*) FROM maps WHERE image_path IS NOT NULL) AS maps,
+            (SELECT COUNT(*) FROM pins JOIN maps ON maps.id = pins.map_id
+                WHERE maps.image_path IS NOT NULL) AS pins,
+            (SELECT COUNT(*) FROM quick_notes) AS quick_notes,
+            0 AS maps_from_images",
+    )
+    .get_result(conn)
+    .map_err(|e| e.to_string())
+}
+
+#[derive(QueryableByName)]
+struct ForeignKeyViolation {
+    #[diesel(sql_type = Text)]
+    table: String,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    rowid: Option<i64>,
+    #[diesel(sql_type = BigInt)]
+    fkid: i64,
+}
+
+#[derive(QueryableByName)]
+struct ForeignKey {
+    #[diesel(sql_type = BigInt)]
+    id: i64,
+    #[diesel(sql_type = Text)]
+    from: String,
+    #[diesel(sql_type = Text)]
+    on_delete: String,
+}
+
+fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// A salvaged row can outlive the row it refers to — a pin whose map sat on an
+/// unreadable page. Each is settled the way the schema settles a deleted parent:
+/// `ON DELETE SET NULL` clears the reference, anything else removes the row. Repeated
+/// until clean, because a removed pin leaves its own tags dangling in turn.
+fn drop_dangling_references(conn: &mut SqliteConnection) -> Result<(), String> {
+    for _ in 0..8 {
+        let dangling: Vec<ForeignKeyViolation> = diesel::sql_query("PRAGMA foreign_key_check")
+            .load(conn)
+            .map_err(|e| e.to_string())?;
+        if dangling.is_empty() {
+            return Ok(());
+        }
+        for row in dangling {
+            let rowid = row
+                .rowid
+                .ok_or_else(|| format!("dangling reference in {} without a rowid", row.table))?;
+            let table = quote_ident(&row.table);
+            let keys: Vec<ForeignKey> =
+                diesel::sql_query(format!("PRAGMA foreign_key_list({table})"))
+                    .load(conn)
+                    .map_err(|e| e.to_string())?;
+            let key = keys
+                .iter()
+                .find(|k| k.id == row.fkid)
+                .ok_or_else(|| format!("no foreign key {} on {}", row.fkid, row.table))?;
+            let sql = if key.on_delete == "SET NULL" {
+                format!("UPDATE {table} SET {} = NULL WHERE rowid = {rowid}", quote_ident(&key.from))
+            } else {
+                format!("DELETE FROM {table} WHERE rowid = {rowid}")
+            };
+            diesel::sql_query(sql).execute(conn).map_err(|e| e.to_string())?;
+        }
+    }
+    Err("references still dangling after repair".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diesel::connection::SimpleConnection;
     use tempfile::tempdir;
 
     #[test]
@@ -339,6 +498,175 @@ mod tests {
         std::fs::write(backup_path(tmp.path()), b"also garbage").unwrap();
 
         assert_eq!(restore_from_snapshot(tmp.path()).unwrap(), None);
+    }
+
+    /// The recover extension reads pages through `sqlite_dbpage`, which the bundled
+    /// SQLite only has because `.cargo/config.toml` asks for it. Losing that line would
+    /// otherwise only show as every salvage quietly failing.
+    #[test]
+    fn the_bundled_sqlite_can_read_a_damaged_database_page_by_page() {
+        assert!(recover::available());
+    }
+
+    #[derive(QueryableByName)]
+    struct Page {
+        #[diesel(sql_type = BigInt)]
+        pageno: i64,
+    }
+
+    #[derive(QueryableByName)]
+    struct PageSize {
+        #[diesel(sql_type = BigInt)]
+        page_size: i64,
+    }
+
+    #[derive(QueryableByName)]
+    struct Count {
+        #[diesel(sql_type = BigInt)]
+        n: i64,
+    }
+
+    fn count(conn: &mut SqliteConnection, sql: &str) -> i64 {
+        diesel::sql_query(sql).get_result::<Count>(conn).unwrap().n
+    }
+
+    /// A world with enough notes that their table spans many pages, beside one of
+    /// everything only the database holds.
+    fn world_with_scenes_pins_and_quick_notes(ledger: &Path) {
+        let mut conn = open_validated_connection(ledger).unwrap();
+        conn.batch_execute(
+            "INSERT INTO scenes (name) VALUES ('Tavern');
+             INSERT INTO maps (title, image_path, image_width, image_height)
+                 VALUES ('Sword Coast', 'Sword Coast.png', 800, 600);
+             INSERT INTO pins (map_id, x, y, title) VALUES (1, 0.5, 0.5, 'Waterdeep');
+             INSERT INTO quick_notes (body, captured_at)
+                 VALUES ('The innkeeper lied', '2026-10-21T19:30:00Z');",
+        )
+        .unwrap();
+        fill_with_notes(&mut conn);
+    }
+
+    fn fill_with_notes(conn: &mut SqliteConnection) {
+        diesel::sql_query(
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 400)
+             INSERT INTO notes (path, title)
+                 SELECT 'note-' || i || '.md', 'A long enough title to fill pages ' || hex(randomblob(40))
+                 FROM n",
+        )
+        .execute(conn)
+        .unwrap();
+    }
+
+    /// Overwrite one page in the middle of the notes table, as a torn write or a bad
+    /// sector would. Everything else in the file is left as it was.
+    fn damage_a_notes_page(ledger: &Path) {
+        let page = {
+            let mut conn = open_validated_connection(ledger).unwrap();
+            let size: PageSize = diesel::sql_query("PRAGMA page_size").get_result(&mut conn).unwrap();
+            let leaf: Page = diesel::sql_query(
+                "SELECT pageno FROM dbstat WHERE name = 'notes' AND pagetype = 'leaf'
+                 ORDER BY pageno LIMIT 1 OFFSET 3",
+            )
+            .get_result(&mut conn)
+            .unwrap();
+            (leaf.pageno, size.page_size)
+        };
+        let (pageno, size) = page;
+        let mut bytes = std::fs::read(db_path(ledger)).unwrap();
+        let start = ((pageno - 1) * size) as usize;
+        bytes[start..start + size as usize].fill(0xAB);
+        std::fs::write(db_path(ledger), bytes).unwrap();
+    }
+
+    #[test]
+    fn salvage_brings_back_scenes_pins_and_quick_notes_from_a_damaged_database() {
+        let tmp = tempdir().unwrap();
+        world_with_scenes_pins_and_quick_notes(tmp.path());
+        damage_a_notes_page(tmp.path());
+        assert!(matches!(
+            open_validated_connection(tmp.path()),
+            Err(DbOpenError::Corrupt(_))
+        ));
+
+        let salvaged = salvage_damaged_db(tmp.path()).unwrap().expect("the salvage should be used");
+        assert_eq!(
+            salvaged.summary,
+            SalvageSummary { scenes: 1, maps: 1, pins: 1, quick_notes: 1, maps_from_images: 0 }
+        );
+
+        // What is in place now opens as a ledger database, the pin still on its map.
+        let mut conn = open_validated_connection(tmp.path()).unwrap();
+        #[derive(QueryableByName)]
+        struct PinOnMap {
+            #[diesel(sql_type = Text)]
+            pin: String,
+            #[diesel(sql_type = Text)]
+            map: String,
+        }
+        let row: PinOnMap = diesel::sql_query(
+            "SELECT pins.title AS pin, maps.title AS map FROM pins JOIN maps ON maps.id = pins.map_id",
+        )
+        .get_result(&mut conn)
+        .unwrap();
+        assert_eq!((row.pin.as_str(), row.map.as_str()), ("Waterdeep", "Sword Coast"));
+        assert_eq!(count(&mut conn, "SELECT COUNT(*) AS n FROM scenes WHERE name = 'Tavern'"), 1);
+
+        // The damaged page really was lost — those notes come back from their files.
+        let notes = count(&mut conn, "SELECT COUNT(*) AS n FROM notes");
+        assert!(notes > 0 && notes < 400, "expected some notes lost with their page, kept {notes}");
+
+        // The damaged file is kept, as a restore keeps it, and nothing is left staged.
+        assert_eq!(latest_damaged_db(tmp.path()), salvaged.kept);
+        assert!(salvaged.kept.is_some());
+        assert!(!db_path(tmp.path()).with_extension("db.salvage").exists());
+    }
+
+    #[test]
+    fn a_salvage_with_nothing_the_rebuild_lacks_leaves_the_damaged_file_for_the_dialog() {
+        let tmp = tempdir().unwrap();
+        fill_with_notes(&mut open_validated_connection(tmp.path()).unwrap());
+        damage_a_notes_page(tmp.path());
+        let damaged = std::fs::read(db_path(tmp.path())).unwrap();
+
+        assert_eq!(salvage_damaged_db(tmp.path()).unwrap(), None);
+        assert_eq!(std::fs::read(db_path(tmp.path())).unwrap(), damaged);
+        assert_eq!(latest_damaged_db(tmp.path()), None);
+        assert!(!db_path(tmp.path()).with_extension("db.salvage").exists());
+    }
+
+    #[test]
+    fn a_file_that_was_never_a_database_cannot_be_salvaged() {
+        let tmp = tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(".grimoire")).unwrap();
+        std::fs::write(db_path(tmp.path()), b"this is not a sqlite database, not even close")
+            .unwrap();
+
+        assert_eq!(salvage_damaged_db(tmp.path()).unwrap(), None);
+        assert!(db_path(tmp.path()).exists());
+    }
+
+    #[test]
+    fn a_salvaged_row_whose_parent_was_lost_is_settled_as_a_deletion_would_settle_it() {
+        let tmp = tempdir().unwrap();
+        let mut conn = open_validated_connection(tmp.path()).unwrap();
+        conn.batch_execute(
+            "PRAGMA foreign_keys = OFF;
+             INSERT INTO maps (id, title, image_path, image_width, image_height)
+                 VALUES (1, 'Sword Coast', 'Sword Coast.png', 800, 600);
+             INSERT INTO pins (id, map_id, x, y, title, note_id) VALUES (1, 1, 0, 0, 'Waterdeep', 999);
+             INSERT INTO pins (id, map_id, x, y, title) VALUES (2, 99, 0, 0, 'Lost');
+             INSERT INTO pin_tags (pin_id, tag) VALUES (2, 'port');
+             PRAGMA foreign_keys = ON;",
+        )
+        .unwrap();
+
+        drop_dangling_references(&mut conn).unwrap();
+
+        // `note_id` is ON DELETE SET NULL: the pin stays, unlinked.
+        assert_eq!(count(&mut conn, "SELECT COUNT(*) AS n FROM pins WHERE id = 1 AND note_id IS NULL"), 1);
+        // `map_id` is ON DELETE CASCADE: the pin goes, and its tags after it.
+        assert_eq!(count(&mut conn, "SELECT COUNT(*) AS n FROM pins WHERE id = 2"), 0);
+        assert_eq!(count(&mut conn, "SELECT COUNT(*) AS n FROM pin_tags"), 0);
     }
 
     #[test]

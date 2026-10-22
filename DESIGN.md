@@ -338,7 +338,7 @@ What a repair leaves behind: pins whose note row was re-created (usually a folde
 
 ### A world that can't open as it is
 
-When a world's database is damaged. With a backup, it is restored on the way in, and a closable toast names the world and says when its scenes, maps, pins and Quick Notes are from, with **Show damaged file**. Without one, the one recovery that asks first: an alert dialog, 448px, titled with the world's name ("“Ashfen” can't open as it is").
+When a world's database is damaged. With a backup, it is restored on the way in, and a closable toast names the world and says when its scenes, maps, pins and Quick Notes are from, with **Show damaged file**. Without one, what SQLite can still read of the damaged file is salvaged on the way in, and used without asking if it brings back any scene, map, pin or Quick Note: the toast counts what came back and says the damaged part couldn't ("3 scenes, 2 maps, 14 pins and 1 Quick Note came back; anything on the damaged part of the file couldn't."), with maps that came back from their images said apart, because they have no pins (ADR-0019). Only when nothing can be salvaged, the one recovery that asks first: an alert dialog, 448px, titled with the world's name ("“Ashfen” can't open as it is").
 
 - **Said once.** The dialog is the whole message — no toast repeating its title, no error code under it on the Splash.
 - **What comes back and what doesn't, before the choice:** every note from its file, each map from its image without its pins; scenes and Quick Notes can't be. The damaged file is kept, and **Show damaged file** shows it.

@@ -1,5 +1,6 @@
 import { toast } from "svelte-sonner";
 import MigrationReportBody from "$lib/components/toasts/MigrationReportBody.svelte";
+import type { SalvageSummary } from "$lib/bindings.gen";
 
 // Errors auto-expire like every other toast: the tool must never pin a
 // permanent surface to the corner during live play (DESIGN.md — "the tool
@@ -263,6 +264,52 @@ export function toastDbRestored(
     duration: 2 ** 31 - 1,
     closeButton: true,
     description: `Its scenes, maps, pins and Quick Notes are as they were on ${when}; changes to them after that couldn't be kept. Your notes are unaffected.`,
+    action: onShowDamaged
+      ? {
+          label: "Show damaged file",
+          onClick: (e) => {
+            e.preventDefault();
+            onShowDamaged();
+          },
+        }
+      : undefined,
+  });
+}
+
+/** `n` things, singular or plural: "1 pin", "14 pins". */
+function count(n: number, singular: string, plural = `${singular}s`) {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/**
+ * A damaged database with no usable backup, salvaged by SQLite's own recovery on the
+ * way in (2026-10 design review): what it read back of what only the database holds.
+ * What sat on the damaged part of the file is lost, and nothing can say what that was,
+ * so the toast says so rather than implying a whole world came back.
+ */
+export function toastDbSalvaged(
+  world: string,
+  salvaged: SalvageSummary,
+  onShowDamaged: (() => void) | null,
+) {
+  const parts = [
+    salvaged.scenes && count(salvaged.scenes, "scene"),
+    salvaged.maps && count(salvaged.maps, "map"),
+    salvaged.pins && count(salvaged.pins, "pin"),
+    salvaged.quick_notes && count(salvaged.quick_notes, "Quick Note"),
+  ].filter((p): p is string => !!p);
+  const list =
+    parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+  const m = salvaged.maps_from_images;
+  const fromImages =
+    m > 0
+      ? ` ${count(m, "more map", "more maps")} came back from ${m === 1 ? "its image" : "their images"}, without pins.`
+      : "";
+  toast(`“${world}” was recovered from its damaged database`, {
+    id: DB_RECOVERY_ID,
+    duration: 2 ** 31 - 1,
+    closeButton: true,
+    description: `${list} came back; anything on the damaged part of the file couldn't.${fromImages} Your notes are unaffected.`,
     action: onShowDamaged
       ? {
           label: "Show damaged file",
