@@ -60,8 +60,10 @@
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 
-  /* Semantic feedback */
-  --error: #d4645a;
+  /* Semantic feedback. Error was #d4645a until the 2026-10 design review: as text on
+     a raised surface (a menu's Delete) it came to 4.2:1. This clears 4.5:1 on every
+     dark surface, raised included. */
+  --error: #dc6e64;
   --success: #6ab187;
 
   /* Hover overlays */
