@@ -29,12 +29,17 @@ const REFUSAL =
 const TIMELINE_SENTENCE =
   'Timeline events will be written with their title as a heading instead of a "Title:" line, so a description can run to more than one paragraph.';
 
+const TIMELINE_CHANGE =
+  "Timelines: each event's title becomes a heading instead of a “Title:” line.";
+
 const PLAN = {
   from: 0,
   to: 1,
   sentences: [TIMELINE_SENTENCE],
+  changes: [TIMELINE_CHANGE],
   file_count: 23,
   warnings: [],
+  notes: Array.from({ length: 23 }, (_, i) => ({ path: `Lore/Note ${i}.md`, warnings: [] })),
 } as const;
 
 const OPENED = {
@@ -72,6 +77,7 @@ function migrateResult(report: Partial<Record<string, unknown>> = {}) {
       from: 0,
       to: 1,
       migrated: Array.from({ length: 23 }, (_, i) => `Note ${i}.md`),
+      notes: [],
       failed: [],
       warnings: [],
       backup_dir: `${VAULT}/.grimoire/format-backup-20260730T120000Z`,
@@ -104,34 +110,46 @@ describe("the consent prompt is composed from the plan", () => {
     expect(asked?.[1]).toMatchObject({ path: VAULT });
 
     await waitFor(() => {
-      const text = getByTestId("format-migration-dialog").textContent ?? "";
-      // The union count, and the migration's own sentence — not copy written here.
-      expect(text).toContain("23 notes");
-      expect(text).toContain("title as a heading");
+      const text = (getByTestId("format-migration-dialog").textContent ?? "").replace(/\s+/g, " ");
+      // The world, the union count, and the migration's own short line — not copy
+      // written here. The why is the report's.
+      expect(text).toContain("“old-world” has 23 notes to update");
+      expect(text).toContain("each event's title becomes a heading");
+      expect(text).not.toContain("more than one paragraph");
       // And the reassurance the whole mechanism is built on.
-      expect(text).toContain("copied first");
+      expect(text).toContain("copied before it's rewritten");
     });
+    // The notes by name, as many as fit, and how many more.
+    const notes = getByTestId("format-migration-notes").textContent ?? "";
+    expect(notes).toContain("Note 0");
+    expect(notes).not.toContain(".md");
+    expect(notes).toContain("and 15 more");
     // Nothing has been opened or rewritten yet.
     expect(ledger.isOpen).toBe(false);
     expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).not.toContain("migrate_ledger_format");
   });
 
-  it("carries the Timeline prose warning, named per file", async () => {
+  it("carries the Timeline prose warning, under the note it is about", async () => {
+    const warning =
+      "In “The Shattering”, a line starting with # gets a space in front, so it stays in the description instead of starting a new event.";
     const { getByTestId } = render(FormatMigrationDialog);
     await refuseOpen({
       ...PLAN,
       file_count: 2,
-      warnings: [
-        'Lore/Chronicle.md: a description line starting with # is indented by one space, so it stays part of the event "The Shattering" instead of starting a new one',
+      warnings: [`Lore/Chronicle.md: ${warning}`],
+      notes: [
+        { path: "Lore/Chronicle.md", warnings: [warning] },
+        { path: "Lore/Annals.md", warnings: [] },
       ],
     });
 
     await waitFor(() => {
       const text = getByTestId("format-migration-dialog").textContent ?? "";
       expect(text).toContain("One line of your own writing changes");
-      expect(text).toContain("Lore/Chronicle.md");
-      expect(text).toContain("indented by one space");
     });
+    const notes = getByTestId("format-migration-notes").textContent ?? "";
+    expect(notes).toContain("Chronicle");
+    expect(notes).toContain("gets a space in front");
   });
 
   it("says nothing about prose when the scan raised no warning", async () => {
@@ -144,15 +162,15 @@ describe("the consent prompt is composed from the plan", () => {
 
   it("counts one affected note in the singular", async () => {
     const { getByTestId } = render(FormatMigrationDialog);
-    await refuseOpen({ ...PLAN, file_count: 1 });
+    await refuseOpen({ ...PLAN, file_count: 1, notes: [PLAN.notes[0]] });
 
     await waitFor(() => {
-      expect(getByTestId("format-migration-dialog").textContent).toContain("1 note in this ledger");
+      expect(getByTestId("format-migration-dialog").textContent).toContain("has 1 note to update");
     });
   });
 
-  it("renders one sentence per pending migration", async () => {
-    // A vault several versions behind: the dialog is the sentences of whichever
+  it("renders one line per pending migration", async () => {
+    // A vault several versions behind: the dialog is the lines of whichever
     // migrations found work, so nobody edits it again.
     const { getByTestId } = render(FormatMigrationDialog);
     await refuseOpen({
@@ -160,12 +178,13 @@ describe("the consent prompt is composed from the plan", () => {
       from: 0,
       to: 3,
       sentences: [TIMELINE_SENTENCE, "Scene blocks will be written as fences."],
+      changes: [TIMELINE_CHANGE, "Scene players: the HTML becomes a block."],
     });
 
     await waitFor(() => {
-      const text = getByTestId("format-migration-dialog").textContent ?? "";
-      expect(text).toContain("title as a heading");
-      expect(text).toContain("Scene blocks will be written as fences.");
+      const text = getByTestId("format-migration-changes").textContent ?? "";
+      expect(text).toContain("each event's title becomes a heading");
+      expect(text).toContain("Scene players: the HTML becomes a block.");
     });
   });
 
@@ -220,11 +239,40 @@ describe("saying yes", () => {
     // the description as a prop now rather than interpolated into a string,
     // because it is rendered as a link that reveals the file.
     const [message, options] = vi.mocked(toast).mock.calls.at(-1) ?? [];
-    expect(message).toBe("23 notes updated");
-    expect(
-      (options as { componentProps?: { reportPath?: string } })?.componentProps?.reportPath,
-    ).toBe(`${VAULT}/.grimoire/format-backup-20260730T120000Z/migration-report.md`);
-    expect((options as { duration?: number })?.duration).not.toBe(Infinity);
+    // It names the world, and the notes.
+    expect(message).toBe("“old-world”: 23 notes updated");
+    const props = (options as { componentProps?: { reportPath?: string; prose?: string } })
+      ?.componentProps;
+    expect(props?.reportPath).toBe(
+      `${VAULT}/.grimoire/format-backup-20260730T120000Z/migration-report.md`,
+    );
+    expect(props?.prose).toContain("Note 0, Note 1, Note 2 and 20 more");
+    expect((options as { duration?: number })?.duration).toBeLessThan(60_000);
+  });
+
+  it("says where the GM's own writing changed, and stays up", async () => {
+    const warning =
+      "In “The Founding”, a line starting with # gets a space in front, so it stays in the description instead of starting a new event.";
+    const { getByTestId } = render(FormatMigrationDialog);
+    await refuseOpen();
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "migrate_ledger_format"
+        ? migrateResult({
+            migrated: ["Lore/Chronicle.md"],
+            notes: [{ path: "Lore/Chronicle.md", warnings: [warning] }],
+          })
+        : null,
+    );
+    await waitFor(() => getByTestId("format-migration-confirm"));
+    await fireEvent.click(getByTestId("format-migration-confirm"));
+    await flush();
+    await flush();
+
+    const [, options] = vi.mocked(toast).mock.calls.at(-1) ?? [];
+    const o = options as { duration?: number; componentProps?: { prose?: string } };
+    // Named once, and where in it.
+    expect(o.componentProps?.prose).toMatch(/^Chronicle: in “The Founding”/);
+    expect(o.duration).toBeGreaterThan(24 * 60 * 60 * 1000);
   });
 
   it("a partial failure opens the vault and names the casualties, persistently", async () => {
@@ -248,12 +296,72 @@ describe("saying yes", () => {
     // Consent was given and the casualties are named, so the vault opens — the
     // alternative is a permanent lockout from a campaign over one file.
     expect(ledger.isOpen).toBe(true);
-    const [message, options] = vi.mocked(toast.error).mock.calls.at(-1) ?? [];
-    expect(message).toContain("1 note couldn't be updated");
-    expect((options as { duration?: number })?.duration).toBe(Infinity);
-    expect(
-      (options as { componentProps?: { reportPath?: string } })?.componentProps?.reportPath,
-    ).toContain("migration-report.md");
+    // Calm, not red — nothing was lost — lasting, naming the note, with Try again.
+    expect(toast.error).not.toHaveBeenCalled();
+    const [message, options] = vi.mocked(toast).mock.calls.at(-1) ?? [];
+    expect(message).toBe("“old-world”: 1 note wasn't updated");
+    const o = options as {
+      duration?: number;
+      action?: { label: string };
+      componentProps?: { reportPath?: string; prose?: string };
+    };
+    expect(o.duration).toBeGreaterThan(24 * 60 * 60 * 1000);
+    expect(o.action?.label).toBe("Try again");
+    expect(o.componentProps?.prose).toContain("Locked couldn't be written");
+    expect(o.componentProps?.reportPath).toContain("migration-report.md");
+  });
+
+  it("Try again replaces the failure in place, and a success drops the button", async () => {
+    const { getByTestId } = render(FormatMigrationDialog);
+    await refuseOpen();
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "migrate_ledger_format"
+        ? migrateResult({
+            migrated: ["Alpha.md"],
+            failed: [{ path: "Locked.md", reason: "access denied" }],
+            stamped: false,
+          })
+        : null,
+    );
+    await waitFor(() => getByTestId("format-migration-confirm"));
+    await fireEvent.click(getByTestId("format-migration-confirm"));
+    await flush();
+    await flush();
+
+    const [, failure] = vi.mocked(toast).mock.calls.at(-1) ?? [];
+    const tryAgain = (failure as unknown as { action: { onClick: (e: Event) => void } }).action;
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "migrate_ledger_format" ? migrateResult({ migrated: ["Locked.md"] }) : null,
+    );
+    vi.mocked(toast.dismiss).mockClear();
+    tryAgain.onClick(new Event("click"));
+    await flush();
+    await flush();
+
+    // Dismissing first would take the new toast down with the old: they share an id.
+    expect(toast.dismiss).not.toHaveBeenCalledWith("format-migration");
+    const [message, success] = vi.mocked(toast).mock.calls.at(-1) ?? [];
+    expect(message).toBe("“old-world”: 1 note updated");
+    const o = success as { id?: string; action?: unknown };
+    expect(o.id).toBe("format-migration");
+    // Present and empty, so the update clears the old Try again.
+    expect(o).toHaveProperty("action", undefined);
+  });
+
+  it("a failed update is said in the prompt, which stays", async () => {
+    const { getByTestId, findByTestId } = render(FormatMigrationDialog);
+    await refuseOpen();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "migrate_ledger_format") throw "ERR_FORMAT_BACKUP_FAILED: could not copy";
+      return null;
+    });
+    await waitFor(() => getByTestId("format-migration-confirm"));
+    await fireEvent.click(getByTestId("format-migration-confirm"));
+
+    const error = await findByTestId("format-migration-error");
+    expect(error.textContent).toContain("Couldn't update them");
+    expect(error.textContent).not.toContain("ERR_");
   });
 
   it("cannot be dismissed while the notes are being rewritten", async () => {

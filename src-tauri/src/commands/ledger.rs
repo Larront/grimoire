@@ -195,6 +195,29 @@ pub fn migrate_ledger_format(
 ) -> Result<MigrateFormatResult, String> {
     let ledger_path = PathBuf::from(&path);
 
+    // Retrying the remainder of a partial update from inside that very world: it is
+    // open, its watcher is live, and `require_unwatched` below rightly refused — the
+    // GM got "Something went wrong" (2026-10 design review). It is reopened at the
+    // end, so close it first, backing it up on the way as any close does.
+    {
+        let same = |p: &std::path::Path| {
+            std::fs::canonicalize(p).ok() == std::fs::canonicalize(&ledger_path).ok()
+        };
+        let open_here = ledger
+            .lock()
+            .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
+            .path
+            .as_deref()
+            .is_some_and(same);
+        if open_here {
+            crate::ledger_watch::stop(&app);
+            ledger
+                .lock()
+                .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
+                .close();
+        }
+    }
+
     // The database first, as on every other open: Grimoire's own store migrates
     // on its own silent terms, and the notes pass must not be the thing that
     // discovers the database is unopenable. Then the notes — before the reconcile

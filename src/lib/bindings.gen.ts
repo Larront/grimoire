@@ -183,10 +183,12 @@ export const commands = {
 	from: number,
 	to: number,
 	/**
-	 *  One sentence per pending migration **that found work**. A migration
-	 *  finding nothing contributes nothing.
+	 *  One sentence per pending migration **that found work** — the why, for the
+	 *  report. A migration finding nothing contributes nothing.
 	 */
 	sentences: string[],
+	/**  The same migrations' one-line summaries — what changes, for the prompt. */
+	changes: string[],
 	/**
 	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
 	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
@@ -194,6 +196,12 @@ export const commands = {
 	file_count: number,
 	/**  Warnings the scan produced, each prefixed with the file it came from. */
 	warnings: string[],
+	/**
+	 *  Every note the update will rewrite, by vault-relative path, with the
+	 *  warnings that are its own — so the prompt can name them rather than count
+	 *  them (2026-10 design review).
+	 */
+	notes: PlannedNote[],
 } | null>("plan_format_migration", { path }),
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
@@ -496,10 +504,12 @@ export type MigrationPlan = {
 	from: number,
 	to: number,
 	/**
-	 *  One sentence per pending migration **that found work**. A migration
-	 *  finding nothing contributes nothing.
+	 *  One sentence per pending migration **that found work** — the why, for the
+	 *  report. A migration finding nothing contributes nothing.
 	 */
 	sentences: string[],
+	/**  The same migrations' one-line summaries — what changes, for the prompt. */
+	changes: string[],
 	/**
 	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
 	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
@@ -507,6 +517,12 @@ export type MigrationPlan = {
 	file_count: number,
 	/**  Warnings the scan produced, each prefixed with the file it came from. */
 	warnings: string[],
+	/**
+	 *  Every note the update will rewrite, by vault-relative path, with the
+	 *  warnings that are its own — so the prompt can name them rather than count
+	 *  them (2026-10 design review).
+	 */
+	notes: PlannedNote[],
 };
 
 /**  What happened, once the GM said yes. */
@@ -515,6 +531,11 @@ export type MigrationReport = {
 	to: number,
 	/**  Vault-relative paths of the files actually rewritten. */
 	migrated: string[],
+	/**
+	 *  The same files with the warnings that are their own — what the GM was told
+	 *  would change in their writing, so the toast can say where it did.
+	 */
+	notes: PlannedNote[],
 	/**
 	 *  Files that could not be written, with the reason — the casualties the
 	 *  partial-failure path is required to name.
@@ -624,6 +645,13 @@ export type PinCategory = {
 	icon: string,
 	color: string,
 	shape: string,
+};
+
+/**  One note the update will rewrite. */
+export type PlannedNote = {
+	path: string,
+	/**  Path-free: the prompt shows them under the note's name. */
+	warnings: string[],
 };
 
 export type QuickNote = {

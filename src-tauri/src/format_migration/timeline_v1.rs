@@ -173,8 +173,8 @@ fn serialize_new(events: &[Event]) -> (Vec<String>, Vec<String>) {
                     // The one change that edits the GM's own prose rather than
                     // Grimoire's syntax, so it is the one the prompt warns about.
                     warnings.push(format!(
-                        "a description line starting with # is indented by one space, so it \
-                         stays part of the event \"{}\" instead of starting a new one",
+                        "In “{}”, a line starting with # gets a space in front, so it stays \
+                         in the description instead of starting a new event.",
                         display_title(&event.title)
                     ));
                     lines.push(format!(" {line}"));
