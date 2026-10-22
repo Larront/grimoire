@@ -25,7 +25,7 @@ import { tagsTick } from "$lib/stores/tags-tick.svelte";
 const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_NAME_TAKEN: "That name is already taken.",
   ERR_EMPTY_NAME: "That needs a name.",
-  ERR_BAD_NAME: "That name can't contain / or \\.",
+  ERR_BAD_NAME: "A name can't contain / \\ : * ? \" < > | or end with a full stop.",
   ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
   ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",

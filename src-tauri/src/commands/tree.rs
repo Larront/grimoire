@@ -290,16 +290,7 @@ fn resolve_renamed_folder_path(
     old_path: &str,
     new_name: &str,
 ) -> Result<String, String> {
-    let trimmed = new_name.trim();
-    if trimmed.is_empty() {
-        return Err("ERR_EMPTY_NAME: A folder needs a name".to_string());
-    }
-    if trimmed.contains('/') || trimmed.contains('\\') {
-        return Err("ERR_BAD_NAME: A folder name cannot contain a path separator".to_string());
-    }
-    if trimmed == "." || trimmed == ".." {
-        return Err(format!("ERR_BAD_NAME: '{}' is not a folder name", trimmed));
-    }
+    let trimmed = crate::commands::names::check_file_name(new_name, "folder")?;
 
     let (parent, _) = split_folder_path(old_path);
     let new_path = join_in_folder(parent, trimmed);
