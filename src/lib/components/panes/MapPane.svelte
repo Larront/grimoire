@@ -26,6 +26,7 @@
   import { toastUndo } from "$lib/toast";
   import { notes } from "$lib/stores/notes.svelte";
   import { paneDetailState } from "$lib/stores/pane-detail-state.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
   import { createAnnotationDetailsSource } from "$lib/details/annotation-details-source.svelte";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
@@ -73,7 +74,11 @@
   // `selectedPin` on every save, and the map must not chase a pin the GM is moving.
   const PANEL_CLEARANCE = 320 + 16 + 24; // DetailSurface w-80, its right-4 inset, breathing room
   const focusKey = $derived(
-    selectedPin ? `pin:${selectedPin.id}` : selectedAnnotation ? `ann:${selectedAnnotation.id}` : null,
+    selectedPin
+      ? `pin:${selectedPin.id}`
+      : selectedAnnotation
+        ? `ann:${selectedAnnotation.id}`
+        : null,
   );
   $effect(() => {
     if (!focusKey) return;
@@ -209,6 +214,19 @@
       });
   });
 
+  // A pin chosen in the unlinked-pins list: select it here once the pins are in. The
+  // list used to open the map and leave the GM to find the pin among identical icons.
+  $effect(() => {
+    if (!mapLoaded || unlinkedPins.goTo?.mapId !== mapId) return;
+    untrack(() => {
+      const pinId = unlinkedPins.takeGoTo(mapId);
+      const pin = pins.find((p) => p.id === pinId);
+      if (!pin) return;
+      selectedAnnotation = null;
+      selectedPin = pin;
+    });
+  });
+
   // ── Tab title sync ─────────────────────────────────────────────────────────
   $effect(() => {
     if (mapData) {
@@ -314,6 +332,7 @@
       async () => {
         try {
           await api.deletePin(id);
+          unlinkedPins.resolve(id);
         } catch (e) {
           // The window elapsed but the delete failed, so the pin still exists on disk
           // and the map is the thing that is now wrong. Put it back.
@@ -667,9 +686,7 @@
             ? "Click and drag to draw a rectangle"
             : "Click and drag to draw a circle"}
       <div class="absolute bottom-5 left-0 right-0 flex justify-center z-1000 pointer-events-none">
-        <div
-          class="bg-popover border border-border rounded-lg px-4 py-2 shadow-float"
-        >
+        <div class="bg-popover border border-border rounded-lg px-4 py-2 shadow-float">
           <p class="text-xs text-muted-foreground">{hint}</p>
         </div>
       </div>

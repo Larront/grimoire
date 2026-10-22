@@ -7,7 +7,7 @@
 // subscribe to `ledger:rebuilt` itself and had to have `NotePane` relay it —
 // a pane choreographing, which CONTEXT.md says panes do not do (#212).
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { UnlinkedPin } from "$lib/stores/ledger.svelte";
+import type { UnlinkedPin } from "$lib/bindings.gen";
 
 /** Every Ledger Watcher event, mapped to the payload it carries. */
 export interface LedgerEvents {

@@ -1,12 +1,8 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
 import { api, friendlyMessage } from "$lib/api";
-import {
-  toastError,
-  toastImportFailures,
-  toastMigrationReport,
-  toastUnlinkedPins,
-} from "$lib/toast";
+import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
+import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
 import type { MigrationPlan } from "$lib/bindings.gen";
@@ -25,13 +21,9 @@ export interface FailedImport {
   reason: string;
 }
 
-/** A pin the open-time ledger repair left pointing at nothing (#224). */
-export interface UnlinkedPin {
-  pin_id: number;
-  pin_title: string;
-  map_id: number;
-  map_title: string;
-}
+/** A pin a repair left pointing at nothing (#224) — see `unlinked-pins.svelte.ts`. */
+export type { UnlinkedPin } from "$lib/bindings.gen";
+import type { UnlinkedPin } from "$lib/bindings.gen";
 
 interface OpenLedgerResult {
   path: string;
@@ -60,14 +52,6 @@ export interface RecentLedger {
 export const failedImportsModal = $state({
   open: false,
   failures: [] as FailedImport[],
-});
-
-/** The pins an open-time repair unlinked, and the dialog that lists them (#224).
- *  `pins` outlives the toast on purpose: the toast is how the GM learns, this is
- *  where they go on finding out, and closing one must not lose the other. */
-export const unlinkedPinsModal = $state({
-  open: false,
-  pins: [] as UnlinkedPin[],
 });
 
 function createLedgerStore() {
@@ -103,10 +87,7 @@ function createLedgerStore() {
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are
     // named rather than counted (issue #224).
-    unlinkedPinsModal.pins = result.unlinked_pins;
-    toastUnlinkedPins(result.unlinked_pins.length, () => {
-      unlinkedPinsModal.open = true;
-    });
+    unlinkedPins.replace(result.unlinked_pins);
 
     // Invisible background recovery → informational toast (issue #116).
     if (result.recovered_from_backup) {

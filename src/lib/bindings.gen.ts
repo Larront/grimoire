@@ -760,12 +760,17 @@ export type TemplateEntry = {
  *  placed it: the pin's own title and the map it sits on.
  * 
  *  Carries no note path and no row id the GM ever sees — those went with the row,
- *  and the pin is the thing they have to go and re-link.
+ *  and the pin is the thing they have to go and re-link. It does carry the *title*
+ *  of the note it pointed at, read before the row went: the usual cause is a folder
+ *  reorganised outside Grimoire, so the note is still there under a new path, and
+ *  the GM should not have to remember which one it was (2026-10 design review).
  */
 export type UnlinkedPin = {
 	pin_id: number,
 	pin_title: string,
 	map_id: number,
 	map_title: string,
+	/**  The title of the note the pin pointed at before the repair. */
+	was_note_title: string,
 };
 

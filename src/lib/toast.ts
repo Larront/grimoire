@@ -150,22 +150,44 @@ export function toastMigrationReport(report: {
  * No paths, no ids, no counts of database rows: what happened, and what they may
  * want to do about it.
  */
-export function toastUnlinkedPins(count: number, onShowPins: () => void) {
+export function toastUnlinkedPins(count: number, someFixed: boolean, onShowPins: () => void) {
   // A permanent toast belongs to the ledger that raised it. Opening another one
   // with nothing to repair has to take it down, or a message about vault A's pins
-  // hangs over vault B and its "Show pins" opens an empty list.
+  // hangs over vault B and its "Show pins" opens an empty list. And it goes when
+  // the last pin is fixed.
   if (count === 0) {
     toast.dismiss("unlinked-pins");
     return;
   }
-  toast(`${count} pin${count === 1 ? "" : "s"} lost ${count === 1 ? "its" : "their"} note`, {
-    id: "unlinked-pins",
-    duration: Infinity,
-    closeButton: true,
-    description:
-      "Some of this ledger's bookkeeping was repaired when it opened. Your notes are intact, but these pins need linking to them again.",
-    action: { label: "Show pins", onClick: onShowPins },
-  });
+  const one = count === 1;
+  const pins = `${count} pin${one ? "" : "s"}`;
+  // Raised again under the same id as pins are fixed, so it counts down in place.
+  toast(
+    someFixed
+      ? `${pins} still need${one ? "s" : ""} ${one ? "its" : "their"} note`
+      : `${pins} lost ${one ? "its" : "their"} note`,
+    {
+      id: "unlinked-pins",
+      // Permanent, but not `Infinity`: svelte-sonner restarts an updated toast's timer
+      // with its duration, and `setTimeout(fn, Infinity)` fires at once — so counting
+      // this toast down closed it. The longest delay a timer takes (~24 days) is the
+      // same promise and survives the update.
+      duration: 2 ** 31 - 1,
+      closeButton: true,
+      // Not "when it opened": the same repair runs mid-session too.
+      description: `Grimoire repaired this world's records. Your notes are intact, but ${
+        one ? "this pin needs" : "these pins need"
+      } linking to ${one ? "its" : "their"} note again.`,
+      action: {
+        label: "Show pins",
+        // The toast stays: it is how the GM gets back to the list after fixing one.
+        onClick: (e) => {
+          e.preventDefault();
+          onShowPins();
+        },
+      },
+    },
+  );
 }
 
 /**

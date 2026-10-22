@@ -328,6 +328,14 @@ Name and location for a new world, one part (`NewLedgerFields`) in both places a
 - **Can't be closed while copying** ("Copying…"); a failure says what to do, not the raw error.
 - **On success,** the world opens and a toast names it: "“The Ashfen Vale” is yours. It's saved in …\Campaigns."
 
+### Pins to re-link
+
+What a repair leaves behind: pins whose note row was re-created (usually a folder reorganised outside Grimoire), so they open nothing. A permanent toast, "N pins lost their note", and a list behind its **Show pins**.
+
+- **The list lasts until the work is done.** Show pins leaves the toast up; the toast counts down as pins are linked again or deleted ("1 pin still needs its note") and goes at zero. The palette's "Show pins to re-link" reopens the list while any remain. A mid-session repair adds to it.
+- **The list:** 448px, a heading per map, a row per pin — its name, then "was" and the note it used to open, both truncating rather than squeezing each other.
+- **Choosing a pin** opens its map with the pin selected, its Linked Note search filled with the old note's name and holding the caret: Enter links the first match. Nothing re-links itself — a note with the same name may not be the same note.
+
 ### Quick Notes Dialog
 
 `Ctrl/Cmd+Shift+N` from anywhere: one box to park a thought in. It takes the palette's width and place, and its look — the box *is* the surface, with a NotebookPen beside it, not a field drawn inside a card.
