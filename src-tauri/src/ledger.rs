@@ -68,10 +68,6 @@ impl LedgerState {
         })
     }
 
-    /// Forget the open ledger. Dropping the connection and the search index is
-    /// what lets go of their files under the vault, so nothing here may keep a
-    /// clone of either. The caller stops the watcher first (`ledger_watch::stop`)
-    /// so no event fires against a half-closed ledger.
     /// Back up the open world's database as it is now, before letting it go — on
     /// close, on switching to another world, and on quitting. Best-effort: a
     /// failed snapshot is logged and never blocks the close.
@@ -83,6 +79,10 @@ impl LedgerState {
         }
     }
 
+    /// Forget the open ledger. Dropping the connection and the search index is
+    /// what lets go of their files under the vault, so nothing here may keep a
+    /// clone of either. The caller stops the watcher first (`ledger_watch::stop`)
+    /// so no event fires against a half-closed ledger.
     pub fn close(&mut self) {
         self.snapshot_before_close();
         self.connection = None;

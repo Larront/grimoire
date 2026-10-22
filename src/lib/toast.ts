@@ -103,16 +103,51 @@ export function toastExternalMoveLinks(oldName: string, count: number, onUpdate:
  * corner-noise about something the app already finished.
  *
  * Nothing at all when nothing was rewritten: the plan is recomputed at migrate
- * time, so a vault whose work vanished in between just opens.
+ * time, so a vault whose work vanished in between just opens (and an earlier
+ * word about it is taken down).
  */
-export function toastMigrationReport(report: {
-  migrated: string[];
-  failed: { path: string; reason: string }[];
-  report_path: string;
-}) {
+const FORMAT_UPDATE_ID = "format-migration";
+
+/** A note as the GM knows it: its name, not its path. */
+function noteName(path: string): string {
+  const name = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
+  return path.startsWith(".grimoire/templates/") ? `${name} (template)` : name;
+}
+
+/** "A", "A and B", "A, B and C", "A, B, C and 4 more". */
+function noteList(paths: string[]): string {
+  const names = paths.map(noteName);
+  if (names.length <= 1) return names.join("");
+  if (names.length <= 3) return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+}
+
+export function dismissFormatUpdate() {
+  toast.dismiss(FORMAT_UPDATE_ID);
+}
+
+// Revised in the 2026-10 design review: it names the world and the notes; when a
+// line of the GM's own writing changed, it says where and stays up until closed
+// (the prompt promised that change, and an eight-second toast forgot it); and a
+// partial failure is calm — nothing was lost — names what wasn't updated, and offers
+// Try again. It belongs to its world: opening or closing one takes it down.
+export function toastMigrationReport(
+  world: string,
+  report: {
+    migrated: string[];
+    notes: { path: string; warnings: string[] }[];
+    failed: { path: string; reason: string }[];
+    report_path: string;
+  },
+  onTryAgain: () => void,
+) {
   const done = report.migrated.length;
   const failed = report.failed.length;
-  if (done === 0 && failed === 0) return;
+  if (done === 0 && failed === 0) {
+    // A Try again that found the work already done: the old word is now untrue.
+    dismissFormatUpdate();
+    return;
+  }
 
   // The report is a place on disk, so both descriptions render it as a link that
   // reveals the file rather than as a path the GM has to read and retype. See
@@ -126,25 +161,63 @@ export function toastMigrationReport(report: {
       // toast.ts and the component import each other.
       onError: () => toastError("Couldn't show the report — it may have moved"),
     },
+    // A Try again that worked replaces the failure toast in place, and an update
+    // keeps whatever it doesn't name — the old Try again included. The failure
+    // branch sets its own after this.
+    action: undefined,
   });
 
   if (failed > 0) {
-    toast.error(`${failed} note${failed === 1 ? "" : "s"} couldn't be updated`, {
-      id: "format-migration",
-      duration: Infinity,
+    const one = failed === 1;
+    const updated = done ? ` ${done} ${done === 1 ? "was" : "were"} updated.` : "";
+    toast(`“${world}”: ${failed} note${one ? " wasn't" : "s weren't"} updated`, {
+      id: FORMAT_UPDATE_ID,
+      // Not `Infinity` — see `toastUnlinkedPins`.
+      duration: 2 ** 31 - 1,
       closeButton: true,
       ...body(
-        `${done} of ${done + failed} were updated. The rest are still in the old format — the report lists them:`,
+        `${noteList(report.failed.map((f) => f.path))} couldn't be written — ${
+          one ? "it may be" : "they may be"
+        } read-only or open in another program. ${one ? "It's" : "They're"} untouched.${updated} The report:`,
       ),
+      action: {
+        label: "Try again",
+        onClick: (e) => {
+          e.preventDefault();
+          onTryAgain();
+        },
+      },
     });
     return;
   }
 
-  toast(`${done} note${done === 1 ? "" : "s"} updated`, {
-    id: "format-migration",
+  const changed = report.notes.filter((n) => n.warnings.length > 0);
+  const title = `“${world}”: ${done} note${done === 1 ? "" : "s"} updated`;
+  if (changed.length > 0) {
+    // The GM was told a line of their own writing would change: say where.
+    const first = changed[0];
+    const lines = changed.reduce((n, note) => n + note.warnings.length, 0);
+    const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+    const where =
+      lines === 1
+        ? `${noteName(first.path)}: ${lower(first.warnings[0])}`
+        : `${lines} lines of your own writing changed, in ${noteList(changed.map((n) => n.path))}.`;
+    // One note, and it's the one that changed: name it once.
+    const which = done === 1 ? "" : `${noteList(report.migrated)}. `;
+    toast(title, {
+      id: FORMAT_UPDATE_ID,
+      duration: 2 ** 31 - 1,
+      closeButton: true,
+      ...body(`${which}${where} Copies from before, and the report:`),
+    });
+    return;
+  }
+
+  toast(title, {
+    id: FORMAT_UPDATE_ID,
     duration: ERROR_DURATION,
     closeButton: true,
-    ...body("Copies of them from before the change, and a report of what changed, are here:"),
+    ...body(`${noteList(report.migrated)}. Copies from before, and the report:`),
   });
 }
 

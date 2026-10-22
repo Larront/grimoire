@@ -24,6 +24,7 @@ vi.mock("$lib/toast", () => ({
   toastDbRebuilt: vi.fn(),
   dismissDbRecovery: vi.fn(),
   toastMigrationReport: vi.fn(),
+  dismissFormatUpdate: vi.fn(),
 }));
 import { toastUndo } from "$lib/toast";
 import { invoke } from "@tauri-apps/api/core";

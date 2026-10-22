@@ -1,39 +1,78 @@
 <script lang="ts">
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { ledger } from "$lib/stores/ledger.svelte";
-  import { LoaderCircle } from "@lucide/svelte";
+  import { ledger, worldNameOf } from "$lib/stores/ledger.svelte";
+  import { CircleX, LoaderCircle } from "@lucide/svelte";
+  import type { MigrationPlan } from "$lib/bindings.gen";
 
   // The consent prompt in front of a [[Format Migration]] (ADR-0017, #184).
   //
-  // Every specific word here comes from the plan the scan produced: the count,
-  // one sentence per pending migration that found work, and the warnings. The
-  // dialog itself owns only the frame and the two buttons, which is what lets a
-  // vault three versions behind render correctly with nobody editing this file.
+  // Every specific word here comes from the plan the scan produced: the notes, one
+  // line per pending migration that found work, and the warnings. The dialog owns
+  // only the frame and the two buttons, which is what lets a vault three versions
+  // behind render correctly with nobody editing this file.
   //
-  // Generic copy — "some things are written differently" — was cheaper and rots
-  // in a specific way: it gives the GM nothing to weigh, so the yes becomes
-  // reflexive, and a reflexive yes to a mass rewrite of someone's campaign is
-  // exactly what consent was for.
+  // Revised in the 2026-10 design review, on the frame its sibling DbRecoveryDialog
+  // had just been given: it names the world (over another one it read as that one
+  // being rewritten), and the notes — by name, under their folders — rather than a
+  // count. What changes is one short line each; the reasons are the report's. A
+  // warning sits under the note it is about. Everything is in the description, so a
+  // screen reader hears all of it, and it can't be closed while the update runs.
   let isMigrating = $state(false);
 
-  const plan = $derived(ledger.formatMigration?.plan ?? null);
-  // Composed as strings rather than inline markup: the count and its noun have to
-  // read as one phrase, and template whitespace would put a line break inside it.
+  // Rendered from the last plan, not the live one: the store clears the plan before
+  // the close animation ends, and the prompt used to flash empty on its way out.
+  let shown = $state<{ path: string; plan: MigrationPlan } | null>(null);
+  $effect(() => {
+    if (ledger.formatMigration) shown = ledger.formatMigration;
+  });
+  const plan = $derived(shown?.plan ?? null);
+  const world = $derived(shown ? worldNameOf(shown.path) : "");
+  /** The world is already open — reached by reopening it to finish an update. */
+  const samePath = (a: string, b: string) => {
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    return norm(a) === norm(b);
+  };
+  const alreadyOpen = $derived(
+    !!shown && ledger.isOpen && ledger.path !== null && samePath(ledger.path, shown.path),
+  );
+
   const count = $derived(
     plan ? `${plan.file_count} ${plan.file_count === 1 ? "note" : "notes"}` : "",
   );
-  const heading = $derived(
-    `${count} in this ledger need${plan?.file_count === 1 ? "s" : ""} updating`,
-  );
+
+  /** A note as the GM knows it: its name, not its path. */
+  function noteName(path: string): string {
+    const name = path.split("/").pop()?.replace(/\.md$/i, "") ?? path;
+    return path.startsWith(".grimoire/templates/") ? `${name} (template)` : name;
+  }
+
+  const SHOWN_NOTES = 8;
+  /** Notes under their folders, as many as fit, then "and N more". */
+  const groups = $derived.by(() => {
+    if (!plan) return { folders: [], more: 0 };
+    const folders = new Map<string, MigrationPlan["notes"]>();
+    for (const note of plan.notes.slice(0, SHOWN_NOTES)) {
+      const folder = note.path.startsWith(".grimoire/templates/")
+        ? "Templates"
+        : note.path.split("/").slice(0, -1).join("/") || world;
+      folders.set(folder, [...(folders.get(folder) ?? []), note]);
+    }
+    return {
+      folders: [...folders.entries()],
+      more: Math.max(0, plan.notes.length - SHOWN_NOTES),
+    };
+  });
+
+  const warningCount = $derived(plan?.warnings.length ?? 0);
 
   async function handleMigrate() {
     isMigrating = true;
     try {
       await ledger.migrateLedgerFormat();
     } catch {
-      // The command wrapper toasted the failure. Keep the dialog open so the GM
-      // can retry or back out — a silent close would leave them at the welcome
-      // screen with no idea whether their notes had been touched.
+      // Said in the dialog (`ledger.migrateError`); it stays open to try again or
+      // back out — a silent close would leave the GM not knowing whether their
+      // notes had been touched.
     } finally {
       isMigrating = false;
     }
@@ -44,81 +83,120 @@
      a dismissal that only cleared this state would leave the GM watching nothing
      happen while the migration finished and opened the ledger behind it. -->
 <AlertDialog.Root
-  open={plan !== null}
+  open={ledger.formatMigration !== null}
   onOpenChange={(v) => {
     if (!v && !isMigrating) ledger.dismissFormatMigration();
   }}
 >
-  <AlertDialog.Content data-testid="format-migration-dialog">
+  <AlertDialog.Content
+    data-testid="format-migration-dialog"
+    class="data-[size=default]:sm:max-w-md"
+    escapeKeydownBehavior={isMigrating ? "ignore" : "close"}
+  >
     <AlertDialog.Header>
-      <AlertDialog.Title>{heading}</AlertDialog.Title>
-      <AlertDialog.Description>
-        Grimoire has changed how it writes part of your notes. Opening this ledger rewrites {count}
-        on disk, once.
+      <AlertDialog.Title>“{world}” has {count} to update</AlertDialog.Title>
+      <AlertDialog.Description class="flex flex-col gap-3 text-(length:--font-ui)">
+        <p>
+          Grimoire has changed how it writes part of your notes. Each note is copied before it's
+          rewritten, once, and a report says what changed.
+        </p>
+
+        {#if plan}
+          <ul class="list-disc space-y-1 pl-5" data-testid="format-migration-changes">
+            {#each plan.changes as change (change)}
+              <li>{change}</li>
+            {/each}
+          </ul>
+
+          <div class="flex flex-col gap-2">
+            {#if warningCount > 0}
+              <p class="text-foreground">
+                {warningCount === 1
+                  ? "One line of your own writing changes — it's marked below."
+                  : `${warningCount} lines of your own writing change — they're marked below.`}
+              </p>
+            {/if}
+            <div
+              data-pane-scroll
+              data-testid="format-migration-notes"
+              class="max-h-56 overflow-y-auto rounded-md border border-border px-3 py-2"
+            >
+              {#each groups.folders as [folder, notes] (folder)}
+                <p class="pt-1 text-xs font-semibold text-muted-foreground" title={folder}>
+                  {folder.split("/").pop()}
+                </p>
+                <ul class="mb-1">
+                  {#each notes as note (note.path)}
+                    <li class="py-0.5">
+                      <span class="text-foreground" title={note.path}>{noteName(note.path)}</span>
+                      {#each note.warnings as warning (warning)}
+                        <span class="mt-0.5 block border-l-2 border-border pl-2 text-xs">
+                          {warning}
+                        </span>
+                      {/each}
+                    </li>
+                  {/each}
+                </ul>
+              {/each}
+              {#if groups.more > 0}
+                <p class="pt-1 text-xs">and {groups.more} more — the report lists every one.</p>
+              {/if}
+            </div>
+          </div>
+
+          <p>
+            The copies and the report go in this world's hidden <code class="font-mono text-xs"
+              >.grimoire</code
+            >
+            folder.
+            {alreadyOpen
+              ? "If not now, it will ask again next time this world opens."
+              : "If you'd rather not, the world won't open and nothing is written."}
+          </p>
+        {/if}
       </AlertDialog.Description>
     </AlertDialog.Header>
 
-    {#if plan}
-      <div class="space-y-3 text-sm">
-        <ul class="text-muted-foreground list-disc space-y-2 pl-5">
-          {#each plan.sentences as sentence (sentence)}
-            <li>{sentence}</li>
-          {/each}
-        </ul>
-
-        {#if plan.warnings.length > 0}
-          <!-- The one part of the change that edits the GM's own prose rather
-                 than Grimoire's syntax, and therefore the part most deserving of
-                 being asked about. Named per file, because that is what a GM can
-                 act on. -->
-          <div class="border-border bg-muted/40 space-y-1.5 rounded-md border p-3">
-            <p class="font-medium">
-              {plan.warnings.length === 1
-                ? "One line of your own writing changes:"
-                : `${plan.warnings.length} lines of your own writing change:`}
-            </p>
-            <ul class="text-muted-foreground max-h-32 list-disc space-y-1 overflow-y-auto pl-5">
-              {#each plan.warnings as warning (warning)}
-                <li>{warning}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-
-        <p class="text-muted-foreground">
-          Every note it touches is copied first — plain markdown files inside this ledger's <code
-            >.grimoire</code
-          > folder, with a report of everything that changed. If you'd rather not, this ledger won't be
-          opened and nothing is written.
-        </p>
-      </div>
+    {#if ledger.migrateError}
+      <p
+        role="alert"
+        data-testid="format-migration-error"
+        class="flex items-start gap-1.5 text-(length:--font-ui) text-error"
+      >
+        <CircleX size={14} class="mt-0.5 shrink-0" aria-hidden="true" />
+        Couldn't update them: {ledger.migrateError}
+      </p>
     {/if}
 
-    <AlertDialog.Footer>
+    <div class="flex items-center justify-end gap-2">
       <!-- Guarded rather than `disabled`: bits-ui's Cancel does not forward that
-             attribute, and there is nothing to cancel anyway — the pass cannot be
-             stopped once it is rewriting, so the honest behaviour is to refuse the
-             click and say so through `aria-disabled`. -->
+           attribute, and there is nothing to cancel anyway — the pass cannot be
+           stopped once it is rewriting, so the honest behaviour is to refuse the
+           click and say so through `aria-disabled`. -->
       <AlertDialog.Cancel
         data-testid="format-migration-cancel"
         aria-disabled={isMigrating}
         class={isMigrating ? "pointer-events-none opacity-50" : undefined}
         onclick={() => {
           if (!isMigrating) ledger.dismissFormatMigration();
-        }}>Don't open</AlertDialog.Cancel
+        }}>{alreadyOpen ? "Not now" : "Don't open"}</AlertDialog.Cancel
       >
       <AlertDialog.Action
         data-testid="format-migration-confirm"
         disabled={isMigrating}
-        onclick={handleMigrate}
+        onclick={(e: MouseEvent) => {
+          // The dialog closes itself when the update lands; until then it stays.
+          e.preventDefault();
+          void handleMigrate();
+        }}
       >
         {#if isMigrating}
-          <LoaderCircle class="size-3.5 animate-spin" />
+          <LoaderCircle class="size-3.5 animate-spin" aria-hidden="true" />
           Updating…
         {:else}
           Update {count}
         {/if}
       </AlertDialog.Action>
-    </AlertDialog.Footer>
+    </div>
   </AlertDialog.Content>
 </AlertDialog.Root>

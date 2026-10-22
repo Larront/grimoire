@@ -65,23 +65,55 @@
     },
     {
       label: "Migration, clean",
-      hint: "neutral with a description",
+      hint: "neutral, names the notes, fades",
       fire: () =>
-        toastMigrationReport({
-          migrated: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"],
-          failed: [],
-          report_path: REPORT_PATH,
-        }),
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["Lore/Chronicle.md", "Sessions/Session 1.md", "Start Here.md"],
+            notes: [],
+            failed: [],
+            report_path: REPORT_PATH,
+          },
+          () => {},
+        ),
+    },
+    {
+      label: "Migration, own writing changed",
+      hint: "neutral, says where, stays",
+      fire: () =>
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["Lore/Chronicle.md"],
+            notes: [
+              {
+                path: "Lore/Chronicle.md",
+                warnings: [
+                  "In “The Founding”, a line starting with # gets a space in front, so it stays in the description instead of starting a new event.",
+                ],
+              },
+            ],
+            failed: [],
+            report_path: REPORT_PATH,
+          },
+          () => {},
+        ),
     },
     {
       label: "Migration, partial",
-      hint: "persistent error + long description",
+      hint: "neutral, persistent, Try again",
       fire: () =>
-        toastMigrationReport({
-          migrated: ["a", "b"],
-          failed: [{ path: "notes/keep.md", reason: "unparseable" }],
-          report_path: REPORT_PATH,
-        }),
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["a.md", "b.md"],
+            notes: [],
+            failed: [{ path: "notes/keep.md", reason: "unparseable" }],
+            report_path: REPORT_PATH,
+          },
+          () => toastSuccess("Try again clicked"),
+        ),
     },
   ];
 

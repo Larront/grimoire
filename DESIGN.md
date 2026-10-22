@@ -346,6 +346,16 @@ When a world's database is damaged. With a backup, it is restored on the way in,
 - **Afterwards,** a lasting, closable toast says what came back and what couldn't. A recovery toast belongs to its world: closing or switching takes it down.
 - **Backups** are taken as a world opens and as it closes, so a restore keeps the last session's work.
 
+### Updating a world's notes
+
+When a world's notes are written in an older format, it asks before rewriting them: an alert dialog, 448px, titled with the world and the count ("“Ashfen” has 3 notes to update").
+
+- **Reassurance first:** each note is copied before it's rewritten, and a report says what changed. Then one short line per change; why each change was made goes in the report, not the prompt.
+- **The notes by name,** in a scrolling box with a heading per folder, up to eight, then "and N more — the report lists every one". A line of the GM's own writing that changes is said under its note, set off by a rule, and counted above the box.
+- **Don't open** and **Update N** (primary). From inside an open world it's **Not now**, and it will ask again next time. While updating it can't be closed; a failure is said in the dialog, with the circle-x.
+- **Afterwards,** a toast names the world and the notes. A clean update fades. When a line of the GM's own writing changed, it says where and stays until closed. Notes that couldn't be written are a calm, lasting toast naming them — they're untouched — with **Try again**, which replaces the toast where it stands. Like the other repair toasts, it belongs to its world.
+- **Copies are kept until it's all done.** A Try again adds to the same backup folder and the same report; older backups are only pruned once every note is updated.
+
 ### Notes Grimoire couldn't open
 
 What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: a neutral permanent toast, "N notes couldn't be opened", saying they're safe, and **Show notes** behind it.

@@ -3,6 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, friendlyMessage } from "$lib/api";
 import {
   dismissDbRecovery,
+  dismissFormatUpdate,
   toastDbRebuilt,
   toastDbRestored,
   toastDbSalvaged,
@@ -14,7 +15,7 @@ import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
-import type { MigrationPlan, SalvageSummary } from "$lib/bindings.gen";
+import type { MigrationPlan, MigrationReport, SalvageSummary } from "$lib/bindings.gen";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -97,10 +98,13 @@ function createLedgerStore() {
   // its copy from this plan and offers Update/Cancel. Declining leaves it null
   // and the ledger closed: the refusal that put it here simply stands.
   let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(null);
+  /** Why the last update failed, in the GM's words — shown in the update prompt. */
+  let migrateError = $state<string | null>(null);
 
   /** Applies a successful open_ledger result to store state and surfaces
-   *  failed imports and snapshot recovery. */
-  function applyOpenResult(result: OpenLedgerResult): void {
+   *  failed imports and snapshot recovery — and, when the open came from a note
+   *  format update, how that went. */
+  function applyOpenResult(result: OpenLedgerResult, formatUpdate?: MigrationReport): void {
     path = result.path;
     isOpen = true;
     openGeneration++;
@@ -129,6 +133,16 @@ function createLedgerStore() {
       toastDbSalvaged(world, result.salvaged, showDamaged(result.damaged_file));
     } else {
       dismissDbRecovery();
+    }
+    // A note-format update's word belongs to the world it was about. A Try again
+    // replaces it in place: dismissing first would take the new word down with the
+    // old, since the toast library removes by id.
+    if (formatUpdate) {
+      toastMigrationReport(world, formatUpdate, () =>
+        runFormatUpdate(result.path).catch((e) => toastError(friendlyMessage(e))),
+      );
+    } else {
+      dismissFormatUpdate();
     }
   }
 
@@ -281,14 +295,15 @@ function createLedgerStore() {
     if (!target) return false;
     isLoading = true;
     error = null;
+    migrateError = null;
     try {
-      const result = await api.migrateLedgerFormat(target.path);
-      applyOpenResult(result.ledger);
-      recordRecent(result.ledger);
+      await runFormatUpdate(target.path);
       formatMigration = null;
-      toastMigrationReport(result.report);
       return true;
     } catch (e) {
+      // Said in the prompt, beside the button that failed — a toast raised under the
+      // prompt can't even be clicked while it is up.
+      migrateError = friendlyMessage(e);
       error = String(e);
       throw e;
     } finally {
@@ -296,11 +311,21 @@ function createLedgerStore() {
     }
   }
 
+  /** Run the update over `ledgerPath`, open it, and say how it went — with a Try
+   *  again on a partial failure that runs this again (the backend closes the open
+   *  world first). */
+  async function runFormatUpdate(ledgerPath: string): Promise<void> {
+    const result = await api.silent.migrateLedgerFormat(ledgerPath);
+    applyOpenResult(result.ledger, result.report);
+    recordRecent(result.ledger);
+  }
+
   /** Declining opens nothing: there is no compatibility mode, because with no
    *  reader for the old format an un-migrated vault would not expose the GM to a
    *  risk they accepted — it would destroy content they never see leave. */
   function dismissFormatMigration(): void {
     formatMigration = null;
+    migrateError = null;
   }
 
   async function adopt(parent: string, name: string): Promise<boolean> {
@@ -389,9 +414,10 @@ function createLedgerStore() {
     pendingStartHere = false;
     accent = "accent-crimson";
     error = null;
-    // A world's own news goes with it: the restore or rebuild toast used to sit on
-    // over the Splash, and over the next world, reading as theirs.
+    // A world's own news goes with it: the restore or rebuild toast, and the note-
+    // format update's, used to sit on over the Splash and the next world.
     dismissDbRecovery();
+    dismissFormatUpdate();
   }
 
   async function checkExistingLedger(): Promise<void> {
@@ -449,6 +475,9 @@ function createLedgerStore() {
     },
     get formatMigration() {
       return formatMigration;
+    },
+    get migrateError() {
+      return migrateError;
     },
     clearPendingStartHere() {
       pendingStartHere = false;
