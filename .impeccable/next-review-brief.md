@@ -1,21 +1,35 @@
 # Brief: the rest of Grimoire's design review
 
-Hand this to the agent at the start of a new session. It describes what an earlier
-review already covered and settled, and what is left to look at.
+Hand this to the agent at the start of a new session. It says what the review has
+already covered and settled, and what is left to look at.
+
+_Last updated 2026-10-23._
 
 ## Context
 
 Grimoire is a Tauri 2 desktop app for tabletop RPG Game Masters: notes, maps and
-ambient audio in one local "ledger". Read `PRODUCT.md`, `DESIGN.md` and `CONTEXT.md`
-before starting. All three were updated by the previous review and are current.
+ambient audio in one local "ledger" (a "world" in the GM's words). Read `PRODUCT.md`,
+`DESIGN.md` and `CONTEXT.md` before starting. All three are kept current by the review.
 
-The previous review (October 2026, merged to `next` at `5f62448`) worked at the level of
-the design system and the main screens. It did **not** review components one by one. The
-system-wide fixes reach every component, but the surfaces listed below have not had a
-design judgement of their own layout, behaviour and states.
+The review has two rounds. The first (October 2026, merged to `next` at `5f62448`) worked
+at the level of the design system and the main screens. The second, still running, goes
+**one surface at a time**: a critique of the real running app, the findings shown to the
+owner in plain language, UX questions asked, then fixes on a `feature/…` branch merged
+into `next`. Each surface's critique is in `.impeccable/critique/`.
 
-The previous critique snapshot is in `.impeccable/critique/`. It's history only; it lists
-nothing still to do.
+## Done in the second round
+
+Each is merged into `next` unless noted. DESIGN.md has an entry for most of them.
+
+- **At the table:** scene editor, PDF viewer and scene links, the scene player inside
+  notes, the mini player, statblock in use.
+- **Note blocks:** Timeline, Image, Infobox, the slash menu, the block handle menu, the
+  wikilink suggestion, the link hover preview.
+- **Dialogs:** Settings (all sections), TagManagerDialog, QuickNoteDialog, AdoptDialog,
+  UnlinkedPinsDialog, FailedImportsDialog, DbRecoveryDialog (plus a follow-up that
+  salvages a damaged database with SQLite's own recovery before asking to rebuild,
+  `feature/sqlite-recover-damaged-ledger`), and FormatMigrationDialog (on
+  `feature/format-migration-review`, awaiting merge).
 
 ## Already decided — do not reopen
 
@@ -35,7 +49,8 @@ reason one fails.
   titles use Nunito. (DESIGN.md §3)
 - **The type scale.** Title 44 / H1 28 / H2 22 / H3 18 / H4 16, prose 16px at Balanced
   density, note column capped at 46rem. Field labels are Nunito 12px semibold in muted
-  grey. Nothing is set below 11px.
+  grey, not uppercase. Nothing is set below 11px. Density is app-wide; the accent is
+  per world (the Density Scale Rule).
 - **Live play.** A scene card's picture plays or pauses it, and a labelled Edit button
   opens the editor. The sidebar's Scenes group lists favourites (or the three newest)
   with always-visible play buttons. A playing row must not use the "current page"
@@ -45,85 +60,85 @@ reason one fails.
 - **Repeated titles.** A `# Title` that repeats the note title is fixed in content (the
   sample world, templates), not hidden when rendering. Hiding it was tried and broke the
   cursor.
+- **Note format updates** follow ADR-0017: the GM consents, a decline opens nothing,
+  there is no compatibility mode.
+- **Repair surfaces share one pattern** (unlinked pins, notes that couldn't open,
+  database recovery, note format updates). They name the world; say it once (no toast
+  repeating a dialog); use a calm, lasting, closable toast that counts down and belongs
+  to its world (opening or closing a world takes it down); offer a way back to the list
+  from the command palette (and the file tree, where it fits); and give reasons in the
+  GM's words, never the OS's. Follow it for anything similar.
+- **Focus** uses the app's global 2px outline with a 2px offset; components don't add
+  their own rings.
 
-## What to review, in priority order
+## What to review, in order
 
 Use `/impeccable critique <target>` on one surface at a time, and judge it from the
 **real running app**, not just the code. Show the owner the findings for each surface
 before fixing anything.
 
-### 1. Surfaces a GM uses at the table
+### 1. Remaining dialogs and secondary screens
 
-1. **Scene editor**: `src/lib/components/panes/ScenePane.svelte`. This was never opened
-   in the previous review. Check the hero header, the slot list, adding tracks (local and
-   Spotify), the volume mixer, the thumbnail and colour pickers, and the controls drawn
-   over the scene's art.
-2. **PDF viewer and scene links**: `panes/PdfPane.svelte`, `PdfPage.svelte`,
-   `PdfSceneLinkLayer.svelte` and `SceneLinkBubble.svelte`. These are deliberately left
-   out of the neutral thumbnail rule, because the hue pairs each highlight with its chip.
-   Check whether that pairing actually reads, plus search, the toolbar and zoom.
-3. **The scene player inside notes**: `editor/SceneBlockView.svelte`. Review it on its
-   own: the collapsed strip, the expanded mixer, the scene picker
-   (`panes/ScenePicker.svelte`), and the unresolved-scene state.
-4. **The mini player**: `sidebar/MiniPlayer.svelte`, `MiniPlayerTrack.svelte` and
-   `MiniPlayerVisualizer.svelte`. Check it while playing, paused and expanded, and with
-   Spotify controls.
-5. **Statblock in use**: `editor/StatblockBlockView.svelte`. Check edit mode, HP and pool
-   interaction, mark tracks, presets, and tiled encounters inside a callout. Damage
-   targets were flagged as small for use at the table.
+1. **Template editor**: `panes/TemplatePane.svelte` and `sidebar/SidebarTemplates.svelte`.
+2. **The Splash Screen** (`src/routes/+page.svelte`), added by the owner. All its modes:
+   returning with Recent Ledgers, first-time (no recent ledgers), and creating a world
+   (the create form shares `NewLedgerFields.svelte` with the Adopt dialog). Include
+   **Explore an example world**, which resets the example without asking.
+3. **Ledger home**: `panes/LedgerHome.svelte` (the empty-ledger home inside the app).
+4. **SampleBanner**.
+5. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte`,
+   `panes/ScenesDashboard.svelte` and `sidebar/SidebarTemplates.svelte`. The scenes
+   dashboard's card menu has 8 actions, still opens the old colour and icon windows, and
+   deletes a scene through a modal.
 
-### 2. Note blocks not yet looked at closely
+### 2. States, not screens
 
-- **Timeline**: `editor/TimelineBlockView.svelte`, with "The Ashfen Chronicle" as the
-  sample.
-- **Image block**: `editor/ImageBlockView.svelte`. Check the controls over the image,
-  alignment, width and the caption.
-- **Infobox**: `editor/InfoboxBlockView.svelte`. Check its edit states, and the gap an
-  empty title row leaves (noticed but not fixed).
-- The **slash menu**, **block handle menu**, **wikilink suggestion** and **link hover
-  preview** (all in `editor/`).
-
-### 3. Dialogs and secondary screens
-
-- **Settings** sections that weren't reviewed: Statblocks
-  (`StatblockPresetsSettings.svelte`), Integrations and About (`SettingsDialog.svelte`).
-- **TagManagerDialog**, **QuickNoteDialog**, **AdoptDialog** ("Make this world mine"),
-  **UnlinkedPinsDialog**, **FailedImportsDialog**, **DbRecoveryDialog** and
-  **FormatMigrationDialog**.
-- **Template editor**: `panes/TemplatePane.svelte` and `sidebar/SidebarTemplates.svelte`.
-- **Ledger home**: `panes/LedgerHome.svelte`, and **SampleBanner**.
-- **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte`,
-  `panes/ScenesDashboard.svelte` (whose scene card menu has 8 actions) and
-  `sidebar/SidebarTemplates.svelte`.
-
-### 4. States, not screens
-
-These come up across all of the above:
+These come up across everything above:
 
 - **Toasts.** Every kind can be fired from the dev-only "Toasts" pill (bottom left in dev
-  builds). Since the review, toasts have no coloured stripe and use the shared floating
-  shadow.
+  builds).
 - **Banners**: the conflict banner and the deleted-note banner in `panes/NotePane.svelte`.
 - **Empty states**: an empty ledger, no scenes, no quick notes, a note with no backlinks.
-- **The first-time splash** (no recent ledgers) in `src/routes/+page.svelte`. The
-  previous review only saw the returning-user state.
 - **Edge cases**: long names, a large ledger (hundreds of notes, many scenes and tags), a
-  missing image file, load errors.
+  missing image file, load errors. Lists sort names as text, not by number ("Annal 1,
+  Annal 10, Annal 11"), everywhere including the file tree.
 - **Keyboard-only use** of a whole task, such as opening a note, playing a scene and
-  dropping a pin.
+  dropping a pin. Keyboard use of the map was spun off as a separate task; check whether
+  it has landed.
 - **The collapsed sidebar rail**: it has no active-state marker, and Quick Notes and
   Templates aren't reachable from it.
 
-## Known open items from the previous review
+### 3. Animation consistency, last (added by the owner)
+
+Expand and collapse should animate the same way everywhere. Today: the statblock's
+collapse has no animation (only its chevron rotates); callouts have one; the scene
+block's mixer slides with a grid-rows transition; the sidebar and file tree use Svelte
+`slide`; shadcn popovers, menus and dialogs use `animate-in` fade and zoom. Survey every
+collapsible and transition, pick one motion vocabulary (respecting reduced motion), and
+apply it.
+
+## Leftovers from surfaces already reviewed
+
+Not fixed yet; pick them up when they fit a pass above:
+
+- **Statblock**: several blocks can be in edit mode at once; collapsing near a note's end
+  scrolls the block away; links inside entries aren't Tab stops; a fresh block's visible
+  "+" adds a section, not a row.
+- **Infobox**: its narrow panel lost about 16px to the row-controls gutter when Row List
+  was rebuilt.
+- **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
+  tool is planned as the escape hatch.
+
+## Known open items
 
 - **Sample art.** The owner is supplying four images. Don't invent or download art:
   - `src-tauri/sample-world/.grimoire/images/mira-ashvale.png` (portrait)
   - `src-tauri/sample-world/.grimoire/images/the-ember-keep.png` (landscape)
   - `src-tauri/sample-world/.grimoire/thumbnails/boss-battle.*` and `town-market.*`.
     These are picked up automatically by `seed_sample_world_scenes`.
-- **The detector** reports about 30 leftover findings, mostly advisory or false
-  positives: variable-font names read literally, test-file colours, a hex code inside a
-  comment, and small radii on inline elements.
+- **The detector** reports leftover findings, mostly advisory or false positives:
+  variable-font names read literally, test-file colours, a hex code inside a comment, and
+  small radii on inline elements.
 - **The website** (`site/DESIGN.md`) still calls the iron "cold metal" in its voice
   copy. That wording is the owner's call.
 
@@ -137,22 +152,36 @@ Protocol:
 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222" bun run tauri dev
 ```
 
-The previous session's minimal driver is at `.impeccable/tmp/cdp.ts`, run with
-`bun cdp.ts shot <out.png> [w h]` or `bun cdp.ts eval "<js>"`. Open the sample world with
-**Explore an example world** on the splash. Some cautions:
+Keep scratch files **outside the repo**. The last session's helpers are in
+`%LOCALAPPDATA%\Temp\grimoire-review-B\` (they may have been cleaned away; they are small
+to rebuild): `cdp.ts` (`shot`, `zoom`, `eval`, `key`, `click`), `cleanup.js`, and
+fixtures that build throwaway worlds under `%LOCALAPPDATA%\Temp\grimoire-review\`.
 
+Cautions:
+
+- **Never open, migrate or rebuild the owner's real worlds** ("No Room For A Wallflower",
+  "Gods Ascendant", "Lost Mine of Phandelver"). Test in the example world or a throwaway
+  world. After using a throwaway world, close it and remove it from Recent Ledgers, so the
+  list is exactly those three.
+- Don't use the palette's "Switch ledger…" or "Open new ledger" (they open a native file
+  picker the agent can't drive). Don't call `navigator.clipboard`.
 - Editing a non-component `.ts` file or a `.md` file triggers a full page reload, which
-  sends the app back to the splash.
+  sends the app back to the splash. Hot reload can also leave **two copies of a store
+  module**; a script that imports the newest copy may see an empty store while the app
+  still has a world open. Reload the page, or check every copy, before trusting it.
 - Changing a theme in Settings is a persisted setting. Put it back to the owner's choice
   (Dark, Crimson) afterwards.
 - Pause any audio you start.
+- svelte-sonner: a toast with `duration: Infinity` that is later updated closes at once;
+  lasting toasts use `2 ** 31 - 1`. A toast under an open dialog can't be clicked.
 
 ## Working agreements
 
 - Explain findings in plain language first, with code names as supporting detail.
 - Make technical decisions yourself. Ask the owner only about UX choices, and about
   changing an ADR or a documented decision.
-- Keep modules consistent with each other first; simple code second.
+- Keep modules consistent with each other first; simple code second. Prefer fixes that
+  help several surfaces.
 - Follow `docs/agents/git-workflow.md`: branch from `next` (`feature/…`), commit per step
   with messages in the repo's narrative style, and merge back into `next` with `--no-ff`
   when the owner asks.
