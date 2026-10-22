@@ -14,9 +14,6 @@ import MigrationReportBody from "$lib/components/toasts/MigrationReportBody.svel
 // app has finished — that still auto-expires, including a migration that swept
 // the whole vault cleanly.
 const ERROR_DURATION = 8000;
-// A partial-import failure carries a required "Show details" follow-up, so it
-// lingers longer than a plain error to give the action time to be used.
-const IMPORT_FAILURE_DURATION = 10000;
 
 export function toastError(message: string) {
   // `id: message` dedupes identical errors: a repeating failure replaces its
@@ -32,23 +29,42 @@ export function toastSuccess(message: string) {
   toast.success(message, { duration: 3000 });
 }
 
-export function toastImportFailures(
-  failures: { path: string; reason: string }[],
-  onShowDetails: () => void,
-) {
-  if (failures.length === 0) return;
-  const n = failures.length;
-  // A failed import is a failure — render it with the error icon/colour like
-  // every other failure, not as a neutral notice that fades before it's read.
-  toast.error(`Couldn't import ${n} file${n === 1 ? "" : "s"}`, {
-    id: "import-failures",
-    duration: IMPORT_FAILURE_DURATION,
-    closeButton: true,
-    action: {
-      label: "Show details",
-      onClick: onShowDetails,
+/**
+ * Notes Grimoire couldn't read when the world opened (2026-10 design review).
+ *
+ * Calm and lasting, on the terms the unlinked-pins toast sets: nothing was lost —
+ * the files are untouched and keep their records — so this is not an alarm, but the
+ * state outlives a glance (a cloud-only file stays unreadable until the sync app
+ * runs) and only the GM can resolve it. It used to be a red ten-second error whose
+ * list was gone once read. Counts down in place as notes come good; goes at zero.
+ */
+export function toastUnreadableNotes(count: number, someFixed: boolean, onShow: () => void) {
+  if (count === 0) {
+    toast.dismiss("import-failures");
+    return;
+  }
+  const one = count === 1;
+  toast(
+    someFixed
+      ? `${count} note${one ? "" : "s"} still can't be opened`
+      : `${count} note${one ? "" : "s"} couldn't be opened`,
+    {
+      id: "import-failures",
+      // Not `Infinity` — see `toastUnlinkedPins`.
+      duration: 2 ** 31 - 1,
+      closeButton: true,
+      description: `${one ? "It's" : "They're"} safe in your world's folder, untouched. Grimoire couldn't read ${
+        one ? "it" : "them"
+      } this time.`,
+      action: {
+        label: "Show notes",
+        onClick: (e) => {
+          e.preventDefault();
+          onShow();
+        },
+      },
     },
-  });
+  );
 }
 
 /**

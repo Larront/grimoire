@@ -21,7 +21,7 @@
     toastError,
     toastSuccess,
     toastUndo,
-    toastImportFailures,
+    toastUnreadableNotes,
     toastExternalMoveLinks,
     toastMigrationReport,
   } from "$lib/toast";
@@ -53,17 +53,9 @@
         toastUndo("Deleted 'Harbour Watch'", () => console.log("[toast lab] undo window elapsed")),
     },
     {
-      label: "Import failures",
-      hint: "error + action button",
-      fire: () =>
-        toastImportFailures(
-          [
-            { path: "notes/keep.md", reason: "unreadable frontmatter" },
-            { path: "notes/harbour.md", reason: "not UTF-8" },
-            { path: "notes/aurelia.md", reason: "empty file" },
-          ],
-          () => toastSuccess("Show details clicked"),
-        ),
+      label: "Notes that couldn't open",
+      hint: "persistent, neutral, one action",
+      fire: () => toastUnreadableNotes(3, false, () => toastSuccess("Show notes clicked")),
     },
     {
       label: "External move",

@@ -16,7 +16,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
-  import { ledger, failedImportsModal } from "$lib/stores/ledger.svelte";
+  import { ledger } from "$lib/stores/ledger.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
   import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
@@ -115,10 +115,7 @@
   <Sidebar.Provider bind:open={sidebarOpen} onOpenChange={persistSidebarOpen}>
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
-    <FailedImportsDialog
-      bind:open={failedImportsModal.open}
-      failures={failedImportsModal.failures}
-    />
+    <FailedImportsDialog />
     <UnlinkedPinsDialog />
     <SearchPalette />
     <QuickNoteDialog />

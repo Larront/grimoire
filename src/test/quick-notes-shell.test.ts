@@ -19,6 +19,8 @@ vi.mock("$lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastExternalMoveLinks: vi.fn(),
   toastUnlinkedPins: vi.fn(),
+  toastUnreadableNotes: vi.fn(),
+  toastMigrationReport: vi.fn(),
 }));
 import { toastUndo } from "$lib/toast";
 import { invoke } from "@tauri-apps/api/core";

@@ -55,7 +55,10 @@ pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Pa
     loop {
         let filename = format!("{}.md", resolved_title);
         let full_path = parent_dir.join(&filename);
-        if !full_path.exists() {
+        // Free only when the file is known *not* to be there. `exists()` answered
+        // false for a file it couldn't check — a cloud-only file, one another program
+        // had locked — and a new note of the same name was written over it.
+        if matches!(full_path.try_exists(), Ok(false)) {
             return (resolved_title, full_path);
         }
         resolved_title = format!("{} {}", base_title, counter);

@@ -165,6 +165,13 @@ export const commands = {
 	movePdf: (oldPath: string, destFolder: string) => __TAURI_INVOKE<string>("move_pdf", { oldPath, destFolder }),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
 	/**
+	 *  Read the open world's notes from disk again — the reconcile and index walk an open
+	 *  does, without closing and reopening it. The Try again of the notes Grimoire couldn't
+	 *  open: once OneDrive is running or the other program has let go, they read. Emits
+	 *  `ledger:rebuilt`, as the Ledger Watcher's bulk path does, so open views refetch.
+	 */
+	rereadNotes: () => __TAURI_INVOKE<RereadReport>("reread_notes"),
+	/**
 	 *  What the consent prompt is built from, or `None` when no pending migration
 	 *  finds work — in which case there is no prompt at all and `open_ledger` will
 	 *  have stamped the vault forward in silence.
@@ -342,8 +349,17 @@ export type FailedFile = {
 	reason: string,
 };
 
+/**
+ *  A note file — or a folder, its path ending in `/` — that this walk could not read.
+ * 
+ *  **Its record is left alone.** It used to count as gone from disk, so a note that
+ *  was only briefly unreadable (a cloud-only file with the sync app off, a file another
+ *  program had locked) lost its record: pins unlinked, backlinks gone, and back as a
+ *  different note on the next good open (2026-10 design review).
+ */
 export type FailedImport = {
 	path: string,
+	/**  Why, in the GM's words — see `describe_unreadable`. The OS's own text is logged. */
 	reason: string,
 };
 
@@ -634,6 +650,13 @@ export type RecentLedger = {
 export type RenameNoteResult = {
 	note: Note,
 	updated_count: number,
+};
+
+/**  What reading the notes again found. See `reread_notes`. */
+export type RereadReport = {
+	/**  Notes (and folders) still unreadable. */
+	failed_imports: FailedImport[],
+	unlinked_pins: UnlinkedPin[],
 };
 
 export type ResolvedNote = {

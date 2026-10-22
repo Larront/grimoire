@@ -12,12 +12,15 @@
   import {
     ChevronRight,
     FileText,
+    FileWarning,
+    FolderX,
     Map as MapIcon,
     MapPinPlus,
     Folder,
     BookOpen,
   } from "@lucide/svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
   import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
@@ -50,6 +53,9 @@
 
   // A PDF node is path-addressed (ADR-0011): no id, detected by extension.
   const isPdf = $derived(!node.is_dir && node.path.toLowerCase().endsWith(".pdf"));
+  // A note, or folder, the open couldn't read. Muted with a warning, saying so on hover,
+  // and a note's click opens the list rather than doing nothing (2026-10 design review).
+  const unreadable = $derived(unreadableNotes.has(node.is_dir ? `${node.path}/` : node.path));
 
   // Active state: is this node the active tab in the focused pane?
   const isActive = $derived.by(() => {
@@ -294,12 +300,16 @@
     {#if !node.is_dir}
       <Sidebar.MenuButton
         {isActive}
-        title={node.name}
+        title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
         draggable={renamingPath !== node.path}
         ondragstart={handleDragStart}
         ondragend={handleDragEnd}
         onclick={() => {
           if (renamingPath === node.path) return;
+          if (unreadable) {
+            unreadableNotes.show();
+            return;
+          }
           if (node.note_id !== null) {
             tabs.navigateOpen({ type: "note", id: node.note_id, title: node.name });
           } else if (node.map_id !== null) {
@@ -312,7 +322,9 @@
           sidebar?.setOpenMobile(false);
         }}
       >
-        {#if node.map_id !== null}
+        {#if unreadable}
+          <FileWarning class="size-4 shrink-0 text-muted-foreground" />
+        {:else if node.map_id !== null}
           <MapIcon class="size-4 shrink-0 text-muted-foreground" />
         {:else if isPdf}
           <BookOpen class="size-4 shrink-0 text-muted-foreground" />
@@ -342,7 +354,7 @@
             onCancel={() => (renamingPath = null)}
           />
         {:else}
-          <span class="truncate">{node.name}</span>
+          <span class="truncate {unreadable ? 'text-muted-foreground' : ''}">{node.name}</span>
         {/if}
       </Sidebar.MenuButton>
     {:else}
@@ -359,17 +371,21 @@
               {#snippet child({ props })}
                 <Sidebar.MenuButton
                   {...props}
-                  title={node.name}
+                  title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
                   draggable={renamingPath !== node.path}
                   ondragstart={handleDragStart}
                   ondragend={handleDragEnd}
                   class={isDropTarget ? "ring-1 ring-primary/50" : undefined}
                 >
                   <ChevronRight class="transition-transform" />
-                  <Folder class="size-4 shrink-0 text-muted-foreground" />
+                  {#if unreadable}
+                    <FolderX class="size-4 shrink-0 text-muted-foreground" />
+                  {:else}
+                    <Folder class="size-4 shrink-0 text-muted-foreground" />
+                  {/if}
                   <Rename.Root
                     this="span"
-                    class="flex-1 truncate text-sm"
+                    class="flex-1 truncate text-sm {unreadable ? 'text-muted-foreground' : ''}"
                     bind:value={
                       () => (renamingPath === node.path ? renameValue : node.name),
                       (val) => {

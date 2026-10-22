@@ -7,6 +7,7 @@
     FileText,
     Map,
     MapPin,
+    FileWarning,
     Clapperboard,
     FilePlus,
     Settings,
@@ -39,6 +40,7 @@
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+  import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
@@ -364,6 +366,17 @@
         unlinkedPins.show();
       },
       when: () => unlinkedPins.count > 0,
+    },
+    {
+      label: "Show notes that couldn't open",
+      testid: "cmd-show-unreadable-notes",
+      noteOnly: false,
+      icon: FileWarning,
+      action: () => {
+        searchPalette.open = false;
+        unreadableNotes.show();
+      },
+      when: () => unreadableNotes.count > 0,
     },
     {
       label: "Capture a Quick Note",
