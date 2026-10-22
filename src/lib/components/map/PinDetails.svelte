@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
   import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
@@ -50,7 +51,27 @@
   let draftTitle = $state("");
   let draftDescription = $state("");
   let noteSearchQuery = $state("");
+  let noteSearchInput = $state<HTMLInputElement>();
   let appearanceOpen = $state(false);
+
+  /** The note this pin opened before a repair unlinked it, while it is still unlinked. */
+  const wasNote = $derived(pin.note_id == null ? unlinkedPins.wasNoteFor(pin.id) : null);
+
+  // Each pin starts its note search afresh — with the name of the note it used to open,
+  // when a repair unlinked it, so re-linking is usually one click (2026-10 design review).
+  // A pin chosen in the unlinked-pins list arrives with the caret in the search.
+  let searchFor: number | null = null;
+  $effect(() => {
+    const id = pin.id;
+    const was = wasNote;
+    untrack(() => {
+      if (searchFor !== id) {
+        searchFor = id;
+        noteSearchQuery = was ?? "";
+      }
+      if (unlinkedPins.takeFocus(id)) void tick().then(() => noteSearchInput?.select());
+    });
+  });
 
   // The row the drafts were loaded from. The `pin` prop is read through the
   // pane's `{#if selectedPin}`, so by teardown it can already be null —
@@ -197,8 +218,24 @@
     </div>
   {:else}
     <div class="flex flex-col gap-1">
+      {#if wasNote}
+        <p class="text-xs text-foreground-muted" data-testid="pin-was-note">
+          Was linked to “{wasNote}”
+        </p>
+      {/if}
       <input
+        bind:this={noteSearchInput}
         bind:value={noteSearchQuery}
+        aria-label="Search notes to link"
+        onkeydown={(e) => {
+          // Enter takes the first match, as the link menus do.
+          const first = noteSearchQuery.trim() ? filteredNotes[0] : undefined;
+          if (e.key === "Enter" && first) {
+            e.preventDefault();
+            save({ note_id: first.id });
+            noteSearchQuery = "";
+          }
+        }}
         class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
         placeholder="Search notes…"
       />
@@ -278,9 +315,7 @@
       <div class="flex flex-col gap-3 pt-3">
         <!-- Shape -->
         <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="text-xs font-semibold text-foreground-muted"
-            >Shape</span
-          >
+          <span class="text-xs font-semibold text-foreground-muted">Shape</span>
           <div class="flex gap-1">
             {#each PIN_SHAPES as shape (shape)}
               <button
@@ -306,9 +341,7 @@
 
         <!-- Icon -->
         <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="text-xs font-semibold text-foreground-muted"
-            >Icon</span
-          >
+          <span class="text-xs font-semibold text-foreground-muted">Icon</span>
           <div class="grid grid-cols-4 gap-1">
             {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
               <button
@@ -328,9 +361,7 @@
 
         <!-- Color -->
         <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="text-xs font-semibold text-foreground-muted"
-            >Color</span
-          >
+          <span class="text-xs font-semibold text-foreground-muted">Color</span>
           <!-- The same picker as a scene's. Default clears the pin's own colour, so it
                wears what it would without one — its category's, if it has one. -->
           <ColorPicker

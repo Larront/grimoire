@@ -6,6 +6,7 @@
     Tag,
     FileText,
     Map,
+    MapPin,
     Clapperboard,
     FilePlus,
     Settings,
@@ -37,6 +38,7 @@
   import { ledger } from "$lib/stores/ledger.svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
@@ -309,6 +311,8 @@
     action: () => void;
     /** The command's own key, after Ctrl/Cmd — shown on the row. */
     keys?: string[];
+    /** Offered only while this holds. */
+    when?: () => boolean;
   }
 
   const ALL_COMMANDS: PaletteCommand[] = [
@@ -347,6 +351,19 @@
       noteOnly: false,
       icon: NotebookPen,
       action: cmdOpenQuickNotes,
+    },
+    {
+      // While a repair's unlinked pins remain: the toast is not the only way back to
+      // the list, and a GM who closed it still has pins to fix.
+      label: "Show pins to re-link",
+      testid: "cmd-show-unlinked-pins",
+      noteOnly: false,
+      icon: MapPin,
+      action: () => {
+        searchPalette.open = false;
+        unlinkedPins.show();
+      },
+      when: () => unlinkedPins.count > 0,
     },
     {
       label: "Capture a Quick Note",
@@ -494,7 +511,7 @@
   const allMatchedCommands = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     const eligible = ([...audioCommands, ...ALL_COMMANDS] as PaletteCommand[]).filter(
-      (c) => !c.noteOnly || activeTabIsNote,
+      (c) => (!c.noteOnly || activeTabIsNote) && (c.when?.() ?? true),
     );
     return q ? eligible.filter((c) => c.label.toLowerCase().includes(q)) : eligible;
   });

@@ -16,6 +16,7 @@
 import { api } from "$lib/api";
 import { untrack } from "svelte";
 import { createSaveStatus } from "./save-status.svelte";
+import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { tagsTick } from "$lib/stores/tags-tick.svelte";
 import { staleGuard } from "./stale-guard";
 import type { Note, Pin, PinCategory } from "$lib/types/ledger";
@@ -177,6 +178,8 @@ export function createPinDetailsSource(
     await saves.run(async () => {
       const saved = (await api.silent.updatePin(updated)) as Pin;
       applyPin(saved);
+      // A pin a repair unlinked is fixed the moment it has a note again.
+      if (saved.note_id != null) unlinkedPins.resolve(saved.id);
     });
   }
 

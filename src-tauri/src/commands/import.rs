@@ -19,7 +19,7 @@ use crate::db::schema::{maps, pins};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -33,13 +33,18 @@ pub struct FailedImport {
 /// placed it: the pin's own title and the map it sits on.
 ///
 /// Carries no note path and no row id the GM ever sees — those went with the row,
-/// and the pin is the thing they have to go and re-link.
+/// and the pin is the thing they have to go and re-link. It does carry the *title*
+/// of the note it pointed at, read before the row went: the usual cause is a folder
+/// reorganised outside Grimoire, so the note is still there under a new path, and
+/// the GM should not have to remember which one it was (2026-10 design review).
 #[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct UnlinkedPin {
     pub pin_id: i32,
     pub pin_title: String,
     pub map_id: i32,
     pub map_title: String,
+    /// The title of the note the pin pointed at before the repair.
+    pub was_note_title: String,
 }
 
 #[derive(Serialize, specta::Type, Debug)]
@@ -87,21 +92,27 @@ pub fn reconcile_notes_with_disk(
             let paths: Vec<&str> = batch.iter().map(|s| s.as_str()).collect();
             // Read the casualties *before* the delete: afterwards the pins hold
             // NULL and there is no way back to which note they meant.
-            let doomed: Vec<i32> = n::notes
+            let doomed: HashMap<i32, String> = n::notes
                 .filter(n::path.eq_any(&paths))
-                .select(n::id)
-                .load(c)?;
+                .select((n::id, n::title))
+                .load::<(i32, String)>(c)?
+                .into_iter()
+                .collect();
+            let doomed_ids: Vec<i32> = doomed.keys().copied().collect();
             let mut hit: Vec<UnlinkedPin> = pins::table
                 .inner_join(maps::table)
-                .filter(pins::note_id.eq_any(&doomed))
-                .select((pins::id, pins::title, maps::id, maps::title))
-                .load::<(i32, String, i32, String)>(c)?
+                .filter(pins::note_id.eq_any(&doomed_ids))
+                .select((pins::id, pins::title, maps::id, maps::title, pins::note_id))
+                .load::<(i32, String, i32, String, Option<i32>)>(c)?
                 .into_iter()
-                .map(|(pin_id, pin_title, map_id, map_title)| UnlinkedPin {
+                .map(|(pin_id, pin_title, map_id, map_title, note_id)| UnlinkedPin {
                     pin_id,
                     pin_title,
                     map_id,
                     map_title,
+                    was_note_title: note_id
+                        .and_then(|id| doomed.get(&id).cloned())
+                        .unwrap_or_default(),
                 })
                 .collect();
             unlinked_pins.append(&mut hit);
@@ -530,6 +541,9 @@ mod tests {
         assert_eq!(report.unlinked_pins[0].pin_title, "Waterdeep");
         assert_eq!(report.unlinked_pins[0].map_title, "Sword Coast");
         assert_eq!(report.unlinked_pins[0].map_id, 1);
+        // ...and which note it meant, by the name the GM knows it by — so they can
+        // find it again at its new path.
+        assert_eq!(report.unlinked_pins[0].was_note_title, "Waterdeep");
     }
 
     /// The common case, and the one that must stay quiet: the repair looks, finds

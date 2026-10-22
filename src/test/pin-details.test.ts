@@ -444,3 +444,38 @@ describe("PinDetails — colour picker fallback", () => {
     expect(btn.getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+// ── A pin a repair unlinked (2026-10 design review) ──────────────────────────
+
+describe("PinDetails — a pin a repair unlinked", () => {
+  it("names the note it used to open and starts the search with it; Enter links the first match", async () => {
+    const { unlinkedPins } = await import("$lib/stores/unlinked-pins.svelte");
+    const { notes } = await import("$lib/stores/notes.svelte");
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "get_notes" ? [linkedNote] : null,
+    );
+    await notes.load();
+    unlinkedPins.replace([
+      { pin_id: 1, pin_title: "Test Pin", map_id: 5, map_title: "Map", was_note_title: "Aldric" },
+    ]);
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+
+    const view = render(PinDetails, {
+      props: { pin: basePin, onUpdate, onDelete: vi.fn() },
+    });
+    await flush();
+
+    expect(view.getByTestId("pin-was-note").textContent).toContain("Was linked to “Aldric”");
+    const search = view.getByLabelText("Search notes to link") as HTMLInputElement;
+    expect(search.value).toBe("Aldric");
+
+    await fireEvent.keyDown(search, { key: "Enter" });
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ note_id: 42 }));
+
+    unlinkedPins.replace([]);
+    vi.mocked(invoke).mockResolvedValue([]);
+    await notes.load();
+    vi.mocked(invoke).mockResolvedValue(null);
+  });
+});

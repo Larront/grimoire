@@ -23,13 +23,14 @@
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
-  import { ledger, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
+  import { ledger } from "$lib/stores/ledger.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
+  import { toastExternalMoveLinks, toastSuccess } from "$lib/toast";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
   import {
@@ -111,12 +112,7 @@
       // and unlinks every pin holding it (#224). The open-time repair reports
       // this through `open_ledger`'s result; mid-session there is no result to
       // ride on, so it arrives as its own event.
-      "pins:unlinked": (pins) => {
-        unlinkedPinsModal.pins = pins;
-        toastUnlinkedPins(pins.length, () => {
-          unlinkedPinsModal.open = true;
-        });
-      },
+      "pins:unlinked": (pins) => unlinkedPins.add(pins),
       // A targeted external move left other notes linking to the old path. Offer
       // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
       // The count is display-only; the command recomputes the real set on Update.
