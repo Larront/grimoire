@@ -20,6 +20,8 @@
     Settings,
     Search,
     Files,
+    LayoutTemplate,
+    SquarePen,
   } from "@lucide/svelte";
   import { Button, buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
@@ -48,7 +50,7 @@
   import LedgerSelector from "./LedgerSelector.svelte";
   import SidebarScenes from "./SidebarScenes.svelte";
   import RailScenes from "./RailScenes.svelte";
-  import SidebarTemplates from "./SidebarTemplates.svelte";
+  import { createUntitledNote } from "$lib/utils/note-actions";
 
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
@@ -330,11 +332,22 @@
                 New
                 <ChevronDown class="ms-auto size-3.5 opacity-60" />
               </DropdownMenu.Trigger>
+              <!-- Note and Note from template go beside the open note, as Ctrl+N does
+                   (see `newNoteFolder`). The template items are the sidebar's only
+                   templates: the footer list they replace pushed Files out of sight
+                   when opened (2026-10 design review). -->
               <DropdownMenu.Content align="start" class="w-(--bits-dropdown-menu-anchor-width)">
-                <DropdownMenu.Item onSelect={() => handleNewNote(null)}>
+                <DropdownMenu.Item
+                  onSelect={() =>
+                    void createUntitledNote().catch((e) => console.error("create note failed:", e))}
+                >
                   <FilePlus strokeWidth={1.5} />
                   Note
                   <DropdownMenu.Shortcut>Ctrl+N</DropdownMenu.Shortcut>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item data-testid="sidebar-new-from-template" onSelect={shell.openTemplatePicker}>
+                  <LayoutTemplate strokeWidth={1.5} />
+                  Note from template…
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => handleNewFolder(null)}>
                   <FolderPlus strokeWidth={1.5} />
@@ -347,6 +360,11 @@
                 <DropdownMenu.Item onSelect={handleNewScene}>
                   <Music2 strokeWidth={1.5} />
                   Scene
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item data-testid="sidebar-manage-templates" onSelect={shell.openTemplates}>
+                  <SquarePen strokeWidth={1.5} />
+                  Templates…
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
@@ -489,10 +507,8 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <!-- Templates keeps its own hiding rule; see `SidebarTemplates`. The mini
-         player and the ledger selector are both rows of text and controls with
-         nothing to narrow to, so they go when the strip does. -->
-    <SidebarTemplates />
+    <!-- The mini player and the ledger selector are both rows of text and controls
+         with nothing to narrow to, so they go when the strip does. -->
     <div class={EXPANDED_ONLY}>
       <MiniPlayer />
       <LedgerSelector />

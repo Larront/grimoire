@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { ledger } from "$lib/stores/ledger.svelte";
-  import { searchPalette } from "$lib/stores/search.svelte";
-  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+  import { shell } from "$lib/utils/shell-actions";
+  import { createUntitledNote } from "$lib/utils/note-actions";
   import type { Note } from "$lib/types/ledger";
   import { LoaderCircle } from "@lucide/svelte";
 
@@ -15,7 +15,7 @@
     isCreatingNote = true;
     errorMsg = null;
     try {
-      await createUntitledNoteAtRoot();
+      await createUntitledNote();
     } catch (e) {
       errorMsg = String(e);
     } finally {
@@ -45,10 +45,7 @@
       </Button>
       <button
         data-testid="start-from-template"
-        onclick={() => {
-          searchPalette.open = true;
-          searchPalette.openToTemplatePicker = true;
-        }}
+        onclick={shell.openTemplatePicker}
         class="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         …or start from a template

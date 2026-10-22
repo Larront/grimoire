@@ -26,8 +26,10 @@ export function toastError(message: string) {
   });
 }
 
-export function toastSuccess(message: string) {
-  toast.success(message, { duration: 3000 });
+/** A confirmation, with an optional way straight to what it made. Longer when it
+ *  carries one, so there is time to reach the button. */
+export function toastSuccess(message: string, action?: { label: string; onClick: () => void }) {
+  toast.success(message, { duration: action ? 6000 : 3000, action });
 }
 
 /**

@@ -2,6 +2,7 @@
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import TagManagerDialog from "./TagManagerDialog.svelte";
+  import TemplatesDialog from "./TemplatesDialog.svelte";
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
@@ -17,7 +18,7 @@
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
-  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+  import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
   import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
@@ -42,7 +43,7 @@
   // own to say it again.
   async function createNote() {
     try {
-      await createUntitledNoteAtRoot();
+      await createUntitledNote();
     } catch (e) {
       console.error("create_note failed:", e);
     }
@@ -115,6 +116,7 @@
   <Sidebar.Provider bind:open={sidebarOpen} onOpenChange={persistSidebarOpen}>
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
+    <TemplatesDialog />
     <FailedImportsDialog />
     <UnlinkedPinsDialog />
     <SearchPalette />

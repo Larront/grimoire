@@ -14,8 +14,8 @@
     Sun,
     FolderOpen,
     RefreshCw,
-    BookTemplate,
     LayoutTemplate,
+    SquarePen,
     FileDown,
     Network,
     NotebookPen,
@@ -41,7 +41,7 @@
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
-  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+  import { createNoteFromTemplate, createUntitledNote } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -87,7 +87,6 @@
   let loadedForPath = $state<string | null>(null);
   let searchQuery = $state("");
   let templatePickerMode = $state(false);
-  let templateList = $state<TemplateEntry[]>([]);
   let noteResults = $state<NoteSearchResult[]>([]);
   let mapResults = $state<MapSearchResult[]>([]);
   let sceneResults = $state<SceneSearchResult[]>([]);
@@ -153,7 +152,7 @@
   async function cmdCreateNote() {
     searchPalette.open = false;
     try {
-      await createUntitledNoteAtRoot();
+      await createUntitledNote();
     } catch (e) {
       console.error("create_note failed:", e);
     }
@@ -244,27 +243,23 @@
     }
   }
 
-  async function cmdCreateTemplate() {
+  // A template is named before it exists, in the Templates dialog, so a new one is
+  // never a file called "Untitled" offered in every list (2026-10 design review).
+  function cmdCreateTemplate() {
     searchPalette.open = false;
-    try {
-      const entry = await api.createTemplate();
-      await templates.load();
-      tabs.openTab({
-        type: "template",
-        id: 0,
-        title: entry.display_name,
-        badge: "Template",
-        templatePath: entry.path,
-      });
-    } catch (e) {
-      console.error("create_template failed:", e);
-    }
+    dialogs.templatesNaming = true;
+    dialogs.templatesOpen = true;
   }
 
+  function cmdManageTemplates() {
+    searchPalette.open = false;
+    dialogs.templatesOpen = true;
+  }
+
+  // Read afresh each time: templates live where the Ledger Watcher doesn't look.
   async function cmdCreateNoteFromTemplate() {
     try {
-      const list = await api.listTemplates();
-      templateList = list ?? [];
+      await templates.load();
       templatePickerMode = true;
       searchQuery = "";
     } catch (e) {
@@ -272,13 +267,22 @@
     }
   }
 
+  /** The picker's rows: every template, narrowed by what has been typed. */
+  const pickerTemplates = $derived.by(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return templates.templates;
+    return templates.templates.filter(
+      (t) =>
+        t.display_name.toLowerCase().includes(q) ||
+        t.tags.some((tag) => tag.toLowerCase().includes(q)),
+    );
+  });
+
   async function selectTemplate(template: TemplateEntry) {
     templatePickerMode = false;
     searchPalette.open = false;
     try {
-      const newNote = await api.createNoteFromTemplate(template.path, null);
-      await notes.load();
-      tabs.openTab({ type: "note", id: newNote.id, title: "Untitled", rename: true });
+      await createNoteFromTemplate(template.path);
     } catch (e) {
       console.error("create_note_from_template failed:", e);
     }
@@ -298,8 +302,19 @@
     if (!note) return;
     searchPalette.open = false;
     try {
-      await api.saveNoteAsTemplate(note.path);
+      // It used to say nothing at all, and open nothing.
+      const entry = await api.saveNoteAsTemplate(note.path);
       await templates.load();
+      toastSuccess(`Saved “${note.title}” as a template`, {
+        label: "Open",
+        onClick: () =>
+          tabs.openTab({
+            type: "template",
+            id: 0,
+            title: entry.display_name,
+            templatePath: entry.path,
+          }),
+      });
     } catch (e) {
       console.error("save_note_as_template failed:", e);
     }
@@ -390,7 +405,7 @@
       label: "Create note from template",
       testid: "cmd-create-note-from-template",
       noteOnly: false,
-      icon: BookTemplate,
+      icon: LayoutTemplate,
       action: cmdCreateNoteFromTemplate,
     },
     {
@@ -399,6 +414,13 @@
       noteOnly: false,
       icon: LayoutTemplate,
       action: cmdCreateTemplate,
+    },
+    {
+      label: "Manage templates",
+      testid: "cmd-manage-templates",
+      noteOnly: false,
+      icon: LayoutTemplate,
+      action: cmdManageTemplates,
     },
     {
       label: "Save note as template",
@@ -700,7 +722,6 @@
       recentEntities = [];
       pendingModifier = null;
       templatePickerMode = false;
-      templateList = [];
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
@@ -787,23 +808,51 @@
 <!-- 560px, as DESIGN.md §5 says — it had drifted to the dialog default (384px), and the
      Quick Notes Dialog takes this width and place too. -->
 <Command.Dialog bind:open={searchPalette.open} shouldFilter={false} class="sm:max-w-[560px]">
-  <Command.Input placeholder="Type a command or search..." bind:value={searchQuery} />
+  <Command.Input
+    placeholder={templatePickerMode ? "Choose a template…" : "Type a command or search..."}
+    bind:value={searchQuery}
+  />
   <Command.List>
     <Command.Empty>No results found.</Command.Empty>
     {#if templatePickerMode}
+      <!-- Typing narrows the list by name or tag; it used to filter nothing. Each row
+           says what the note will be tagged, the half of a template that isn't text. -->
       <Command.Group heading="Choose a template">
-        {#each templateList as template (template.path)}
+        {#each pickerTemplates as template (template.path)}
           <Command.Item
             data-testid="cmd-template-result"
-            value={template.display_name}
+            value={template.path}
             onSelect={() => selectTemplate(template)}
             class="flex items-center gap-2"
           >
-            <BookTemplate class="size-4 shrink-0 text-muted-foreground" />
-            <span class="text-sm font-medium">{template.display_name}</span>
+            <LayoutTemplate class="size-4 shrink-0 text-muted-foreground" />
+            <span class="min-w-0 flex-1 truncate text-sm font-medium" title={template.display_name}
+              >{template.display_name}</span
+            >
+            {#if template.tags.length}
+              <span class="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground"
+                >{template.tags.join(", ")}</span
+              >
+            {/if}
           </Command.Item>
         {/each}
+        <Command.Item
+          data-testid="cmd-template-manage"
+          value="manage-templates"
+          onSelect={cmdManageTemplates}
+          class="flex items-center gap-2 text-muted-foreground"
+        >
+          <SquarePen class="size-4 shrink-0" />
+          <span class="text-sm">Manage templates…</span>
+        </Command.Item>
       </Command.Group>
+      {#if pickerTemplates.length === 0}
+        <p class="px-3 pb-3 text-sm text-muted-foreground" data-testid="cmd-template-none">
+          {templates.templates.length
+            ? `No template matches “${searchQuery.trim()}”.`
+            : "This world has no templates yet."}
+        </p>
+      {/if}
     {:else}
       {#if visibleRecent.length > 0}
         <Command.Group heading="Recent">
