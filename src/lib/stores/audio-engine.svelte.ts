@@ -818,19 +818,21 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     }
   }
 
-  // Ledger teardown — on a close, and on a switch to another ledger.
+  // Ledger teardown — on a close, and on every open, a switch to another ledger or not.
   //
-  // Keyed on the path rather than on `isOpen`, which never lowers when a second
+  // Keyed on the open rather than on `isOpen`, which never lowers when a second
   // ledger is opened from inside the first: watching the flag alone leaves the
   // previous campaign's scene playing under the new one's notes, with no scene in
-  // the open ledger that the mini player's stop button belongs to. The contexts
-  // are built lazily on the next play, so tearing them down costs nothing.
+  // the open ledger that the mini player's stop button belongs to. Nor on the path:
+  // re-exploring the Example World reopens the same sandbox path over a fresh
+  // database, where the playing scene's id may name nothing or another scene. The
+  // contexts are built lazily on the next play, so tearing them down costs nothing.
   //
   // `undefined` until the first ledger is observed, which is not the same as `null`: the
   // first run has nothing bound and so nothing to tear down. Treating it as a change
   // would fire a teardown during start-up, whose only reachable effect is to stop audio
   // something else had already begun.
-  let boundLedgerPath: string | null | undefined;
+  let boundLedgerOpen: number | null | undefined;
   $effect.root(() => {
     // A track of the playing scene changed on some surface: take its new settings. A
     // loop turned on or off reaches a local track that is already playing.
@@ -854,10 +856,10 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     });
 
     $effect(() => {
-      const path = ledger.isOpen ? ledger.path : null;
-      if (path === boundLedgerPath) return;
-      const firstBinding = boundLedgerPath === undefined;
-      boundLedgerPath = path;
+      const open = ledger.isOpen ? ledger.openGeneration : null;
+      if (open === boundLedgerOpen) return;
+      const firstBinding = boundLedgerOpen === undefined;
+      boundLedgerOpen = open;
       if (firstBinding) return;
       stopAll();
       mutedSlotIds = new Set();
