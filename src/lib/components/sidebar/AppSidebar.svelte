@@ -249,8 +249,8 @@
 </script>
 
 <!--
-  One entry on the collapsed strip: its own group, so it is spaced exactly as
-  Graph and Quick Notes are, and its own button. Rendered only when collapsed —
+  One entry on the collapsed strip: its own group, so every entry is spaced
+  alike, and its own button. Rendered only when collapsed —
   these stand in for surfaces the expanded sidebar draws in full.
 -->
 {#snippet strip(testid: string, label: string, Icon: typeof Search, onclick: () => void)}
@@ -375,31 +375,15 @@
          and, under it, that scene's pause — the mini player cannot be 48px wide. -->
     <RailScenes onReveal={() => reveal("sidebar-scenes-section")} />
 
-    <!-- Navigate: the two destinations that are neither a file nor a scene, as one
-         group directly under search. They used to float between the Scenes and
-         Templates groups as two orphan rows; together and near the top they read as
-         a set, and they stay out of the way of the long Files tree. Graph is on the
-         collapsed strip, Quick Notes is not — see #233 for why its count can't be. -->
-    <Sidebar.Group>
+    <!-- Quick Notes directly under search: the inbox a GM empties between
+         sessions, with a count worth seeing at a glance. Expanded-only — see #233
+         for why its count can't be on the strip. Graph used to share this group,
+         but it is an occasional look across the world rather than a place a GM
+         returns to, so it sits subdued in the footer beside Settings. -->
+    <Sidebar.Group class={EXPANDED_ONLY}>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton>
-              {#snippet child({ props })}
-                <button
-                  type="button"
-                  {...props}
-                  data-testid="sidebar-graph"
-                  aria-label="Graph"
-                  onclick={shell.openGraph}
-                >
-                  <Network class={ROW_ICON} strokeWidth={1.5} />
-                  <span class={EXPANDED_ONLY}>Graph</span>
-                </button>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-          <Sidebar.MenuItem class={EXPANDED_ONLY}>
             <Sidebar.MenuButton>
               {#snippet child({ props })}
                 <button
@@ -513,10 +497,32 @@
       <MiniPlayer />
       <LedgerSelector />
     </div>
-    <!-- Settings, subdued, at the foot of the sidebar as it is at the foot of the
-         rail (#235). A dialog opener rather than a place, so it is the last thing
-         here rather than a row among the groups. -->
+    <!-- Graph and Settings, subdued, at the foot of the sidebar as Settings is at
+         the foot of the rail (#235). Neither is reached for mid-session: Graph is
+         an occasional overview (also in the command palette), Settings a dialog
+         opener rather than a place, so they are the last things here rather than
+         rows among the groups. -->
     <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton>
+          {#snippet child({ props })}
+            <button
+              type="button"
+              {...props}
+              data-testid="sidebar-graph"
+              aria-label="Graph"
+              class={cn(
+                String(props.class ?? ""),
+                "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+              )}
+              onclick={shell.openGraph}
+            >
+              <Network class={ROW_ICON} strokeWidth={1.5} />
+              <span class={EXPANDED_ONLY}>Graph</span>
+            </button>
+          {/snippet}
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
       <Sidebar.MenuItem>
         <Sidebar.MenuButton>
           {#snippet child({ props })}

@@ -22,6 +22,7 @@
   import { shell } from "$lib/utils/shell-actions";
   import { slide } from "svelte/transition";
   import { EXPANDED_ONLY } from "./strip-classes";
+  import { cn } from "$lib/utils";
   import type { SceneWithCount } from "$lib/types/ledger";
 
   const RECENT_FALLBACK = 3;
@@ -107,9 +108,14 @@
                         data-testid="sidebar-scene-play"
                         aria-label="{showPause ? 'Pause' : 'Play'} {scene.name}"
                         aria-pressed={isPlaying}
-                        class={isPlaying
-                          ? "text-primary hover:text-primary"
-                          : "text-muted-foreground hover:text-foreground"}
+                        class={cn(
+                          // A filled glyph reads a size heavier than the outlined icons
+                          // around it, so it drops to 12px to sit at their weight.
+                          "[&>svg]:size-3",
+                          isPlaying
+                            ? "text-primary hover:text-primary"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
                         onclick={() => togglePlay(scene)}
                       >
                         {#if showPause}
