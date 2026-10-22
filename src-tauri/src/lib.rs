@@ -128,6 +128,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             move_map,
             move_pdf,
             open_ledger,
+            reread_notes,
             plan_format_migration,
             read_note_content,
             read_note_tags,
@@ -255,6 +256,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
+            reread_notes,
             plan_format_migration,
             migrate_ledger_format,
             rebuild_ledger_db,

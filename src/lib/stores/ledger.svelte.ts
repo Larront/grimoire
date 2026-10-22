@@ -1,7 +1,8 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "svelte-sonner";
 import { api, friendlyMessage } from "$lib/api";
-import { toastError, toastImportFailures, toastMigrationReport } from "$lib/toast";
+import { toastError, toastMigrationReport } from "$lib/toast";
+import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
@@ -50,11 +51,6 @@ export interface RecentLedger {
   missing?: boolean;
 }
 
-export const failedImportsModal = $state({
-  open: false,
-  failures: [] as FailedImport[],
-});
-
 function createLedgerStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
@@ -84,12 +80,9 @@ function createLedgerStore() {
     isOpen = true;
     openGeneration++;
 
-    if (result.failed_imports.length > 0) {
-      failedImportsModal.failures = result.failed_imports;
-      toastImportFailures(result.failed_imports, () => {
-        failedImportsModal.open = true;
-      });
-    }
+    // Every open, empty or not: a world that reads cleanly takes the last one's
+    // list, and its toast, down.
+    unreadableNotes.replace(result.failed_imports);
 
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are

@@ -8,7 +8,7 @@ use crate::db::schema::{maps, notes, pin_categories, scenes};
 use crate::ledger::AppLedger;
 use diesel::prelude::*;
 use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 pub(crate) fn seed_default_categories(conn: &mut SqliteConnection) -> Result<(), String> {
     let count: i64 = pin_categories::table
@@ -351,6 +351,45 @@ pub fn close_ledger(app: AppHandle, ledger: State<AppLedger>) -> Result<(), Stri
         .map_err(|_| crate::ledger::ERR_LOCK_POISONED)?
         .close();
     Ok(())
+}
+
+/// What reading the notes again found. See `reread_notes`.
+#[derive(serde::Serialize, specta::Type)]
+pub struct RereadReport {
+    /// Notes (and folders) still unreadable.
+    pub failed_imports: Vec<FailedImport>,
+    pub unlinked_pins: Vec<UnlinkedPin>,
+}
+
+/// Read the open world's notes from disk again — the reconcile and index walk an open
+/// does, without closing and reopening it. The Try again of the notes Grimoire couldn't
+/// open: once OneDrive is running or the other program has let go, they read. Emits
+/// `ledger:rebuilt`, as the Ledger Watcher's bulk path does, so open views refetch.
+#[tauri::command]
+#[specta::specta]
+pub fn reread_notes(app: AppHandle, ledger: State<AppLedger>) -> Result<RereadReport, String> {
+    let report = {
+        let mut guard = ledger.lock().map_err(|_| "Ledger lock poisoned".to_string())?;
+        let (report, index) = {
+            let crate::ledger::OpenLedger { path, conn, .. } = guard.open()?;
+            let path = path.to_path_buf();
+            let report = reconcile_notes_with_disk(&path, conn)?;
+            let all_maps: Vec<Map> = maps::table.load::<Map>(conn).unwrap_or_default();
+            let all_scenes: Vec<Scene> = scenes::table.load::<Scene>(conn).unwrap_or_default();
+            let index =
+                crate::note_index::rebuild_all_from_ledger(&path, conn, &all_maps, &all_scenes)?;
+            (report, index)
+        };
+        guard.search_index = index;
+        report
+    };
+    if let Err(e) = app.emit("ledger:rebuilt", ()) {
+        log::warn!("[reread_notes] failed to emit ledger:rebuilt: {e}");
+    }
+    Ok(RereadReport {
+        failed_imports: report.failed,
+        unlinked_pins: report.unlinked_pins,
+    })
 }
 
 #[cfg(test)]

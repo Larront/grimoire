@@ -336,6 +336,15 @@ What a repair leaves behind: pins whose note row was re-created (usually a folde
 - **The list:** 448px, a heading per map, a row per pin — its name, then "was" and the note it used to open, both truncating rather than squeezing each other.
 - **Choosing a pin** opens its map with the pin selected, its Linked Note search filled with the old note's name and holding the caret: Enter links the first match. Nothing re-links itself — a note with the same name may not be the same note.
 
+### Notes Grimoire couldn't open
+
+What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: a neutral permanent toast, "N notes couldn't be opened", saying they're safe, and **Show notes** behind it.
+
+- **Lasting, like Pins to re-link:** Show notes leaves the toast up; it counts down as notes come good and goes at zero. The palette ("Show notes that couldn't open") and the file tree reopen the list. A world that opens cleanly takes the last one's list down.
+- **The list:** 448px, a heading per folder, a row per note — its name (not its path), why it wouldn't read in the GM's words (never the OS's text, which is logged), and a **Show in folder** button. A folder that wouldn't list is a row of its own.
+- **Try again** reads the world's notes again without reopening it, and says how many open now.
+- **In the file tree,** such a note is muted with a warning icon and says so on hover; clicking it opens the list.
+
 ### Quick Notes Dialog
 
 `Ctrl/Cmd+Shift+N` from anywhere: one box to park a thought in. It takes the palette's width and place, and its look — the box *is* the surface, with a NotebookPen beside it, not a field drawn inside a card.

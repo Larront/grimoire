@@ -1,4 +1,4 @@
-import { render, cleanup } from "@testing-library/svelte";
+import { render, cleanup, fireEvent, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { flushSync } from "svelte";
@@ -10,150 +10,154 @@ vi.mock("svelte-sonner", () => ({
     dismiss: vi.fn(),
   }),
 }));
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  revealItemInDir: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { toast as sonner } from "svelte-sonner";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import FailedImportsDialog from "../lib/components/FailedImportsDialog.svelte";
-import { ledger, failedImportsModal } from "../lib/stores/ledger.svelte";
+import { ledger } from "../lib/stores/ledger.svelte";
+import { unreadableNotes } from "../lib/stores/unreadable-notes.svelte";
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  unreadableNotes.replace([]);
   vi.mocked(invoke).mockResolvedValue(null);
   vi.mocked(sonner).mockClear();
-  (sonner.error as ReturnType<typeof vi.fn>).mockClear();
-  failedImportsModal.open = false;
-  failedImportsModal.failures = [];
+  vi.mocked(sonner.dismiss).mockClear();
+  vi.mocked(sonner.success).mockClear();
 });
 
 const sampleFailures = [
-  { path: "notes/foo.md", reason: "Permission denied" },
-  { path: "data/bar.md", reason: "Broken symlink" },
+  {
+    path: "Sessions/Session 4.md",
+    reason: "Another program is using it. Close that program, or wait for syncing to finish.",
+  },
+  {
+    path: "Lore/Embers.md",
+    reason: "It's only in the cloud. Start OneDrive, or your sync app, and try again.",
+  },
+  { path: "Archive/", reason: "Your computer won't let Grimoire read it. Check its permissions." },
 ];
 
-// ── Dialog rendering ──────────────────────────────────────────────
+function openResult(failed_imports: typeof sampleFailures) {
+  return {
+    path: "/worlds/Ashfen",
+    note_count: 3,
+    scene_count: 0,
+    map_count: 0,
+    failed_imports,
+    unlinked_pins: [],
+  };
+}
 
-describe("FailedImportsDialog — content", () => {
-  it("renders each failure path and reason when open", async () => {
-    const { findByText } = render(FailedImportsDialog, {
-      open: true,
-      failures: sampleFailures,
-    });
+// ── Opening a world ─────────────────────────────────────────────────
 
-    expect(await findByText("notes/foo.md")).toBeTruthy();
-    expect(await findByText("Permission denied")).toBeTruthy();
-    expect(await findByText("data/bar.md")).toBeTruthy();
-    expect(await findByText("Broken symlink")).toBeTruthy();
-  });
-
-  it("shows the correct count in the description", async () => {
-    const { findByText } = render(FailedImportsDialog, {
-      open: true,
-      failures: sampleFailures,
-    });
-
-    expect(await findByText(/2 files could not be imported/i)).toBeTruthy();
-  });
-
-  it("singular 'file' for one failure", async () => {
-    const { findByText } = render(FailedImportsDialog, {
-      open: true,
-      failures: [sampleFailures[0]],
-    });
-
-    expect(await findByText(/1 file could not be imported/i)).toBeTruthy();
-  });
-});
-
-// ── Toast integration ─────────────────────────────────────────────
-
-describe("failed imports — toast triggered by open_ledger", () => {
+describe("a world with notes it couldn't read", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockResolvedValue(null);
   });
 
-  it("shows no toast when open_ledger returns zero failures", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
-      if (cmd === "open_ledger") {
-        return {
-          path: "/vault",
-          note_count: 1,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [],
-          unlinked_pins: [],
-        };
-      }
-      return null;
-    });
-
-    await ledger.openLedger("/vault");
-    expect(vi.mocked(sonner)).not.toHaveBeenCalled();
-  });
-
-  it("shows toast with correct count when open_ledger returns failures", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
-      if (cmd === "open_ledger") {
-        return {
-          path: "/vault",
-          note_count: 3,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: sampleFailures,
-          unlinked_pins: [],
-        };
-      }
-      return null;
-    });
-
-    await ledger.openLedger("/vault");
-    expect(vi.mocked(sonner.error)).toHaveBeenCalledWith(
-      "Couldn't import 2 files",
-      expect.objectContaining({
-        action: expect.objectContaining({ label: "Show details" }),
-      }),
+  it("says nothing when every note read", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult([]) : null,
     );
+    await ledger.openLedger("/worlds/Ashfen");
+    expect(vi.mocked(sonner)).not.toHaveBeenCalled();
+    expect(vi.mocked(sonner.error)).not.toHaveBeenCalled();
   });
 
-  it("toast onClick sets failedImportsModal.open to true", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
-      if (cmd === "open_ledger") {
-        return {
-          path: "/vault",
-          note_count: 1,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: [sampleFailures[0]],
-          unlinked_pins: [],
-        };
-      }
-      return null;
-    });
+  it("says so calmly, keeps the list, and the toast opens it and stays", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult(sampleFailures) : null,
+    );
+    await ledger.openLedger("/worlds/Ashfen");
 
-    await ledger.openLedger("/vault");
-    expect(failedImportsModal.open).toBe(false);
-
-    const opts = vi.mocked(sonner.error).mock.calls[0][1] as unknown as {
-      action: { onClick: () => void };
-    };
-    flushSync(() => opts.action.onClick());
-    expect(failedImportsModal.open).toBe(true);
+    expect(unreadableNotes.items).toEqual(sampleFailures);
+    const [title, opts] = vi.mocked(sonner).mock.calls[0] as unknown as [
+      string,
+      { action: { onClick: (e: Event) => void } },
+    ];
+    expect(title).toBe("3 notes couldn't be opened");
+    const event = new Event("click", { cancelable: true });
+    flushSync(() => opts.action.onClick(event));
+    expect(unreadableNotes.open).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
   });
 
-  it("sets failedImportsModal.failures to the returned failures", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
-      if (cmd === "open_ledger") {
-        return {
-          path: "/vault",
-          note_count: 1,
-          scene_count: 0,
-          map_count: 0,
-          failed_imports: sampleFailures,
-          unlinked_pins: [],
-        };
-      }
-      return null;
-    });
+  it("takes the last world's list down when the next opens cleanly", async () => {
+    unreadableNotes.replace(sampleFailures);
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult([]) : null,
+    );
+    await ledger.openLedger("/worlds/Other");
+    expect(unreadableNotes.count).toBe(0);
+    expect(vi.mocked(sonner.dismiss)).toHaveBeenCalledWith("import-failures");
+  });
+});
 
-    await ledger.openLedger("/vault");
-    expect(failedImportsModal.failures).toEqual(sampleFailures);
+// ── The list ────────────────────────────────────────────────────────
+
+describe("FailedImportsDialog", () => {
+  async function open(items = sampleFailures) {
+    unreadableNotes.replace(items);
+    unreadableNotes.show();
+    const view = render(FailedImportsDialog);
+    await view.findByTestId("failed-imports-dialog");
+    return view;
+  }
+
+  it("names each note by its name, under its folder, with why in words", async () => {
+    const view = await open();
+    expect(view.getByText("Session 4")).toBeTruthy();
+    expect(view.getByText("Sessions")).toBeTruthy();
+    expect(view.getByText("Archive (folder)")).toBeTruthy();
+    expect(view.getByText(/only in the cloud/)).toBeTruthy();
+    expect(view.queryByText(/os error/)).toBeNull();
+    expect(view.getAllByTestId("failed-import-row")).toHaveLength(3);
+  });
+
+  it("says the files are safe, in the singular for one", async () => {
+    const view = await open([sampleFailures[0]]);
+    expect(view.getByText("A note Grimoire couldn't open")).toBeTruthy();
+    expect(view.getByText(/It's still in your world's folder, untouched/)).toBeTruthy();
+  });
+
+  it("shows a note in its folder on disk", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult([]) : null,
+    );
+    await ledger.openLedger("/worlds/Ashfen");
+    const view = await open();
+    await fireEvent.click(view.getByLabelText("Show Session 4 in its folder"));
+    expect(revealItemInDir).toHaveBeenCalledWith("/worlds/Ashfen/Sessions/Session 4.md");
+  });
+
+  it("tries again: notes that read now leave the list, and it says how many", async () => {
+    const view = await open();
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "reread_notes" ? { failed_imports: [sampleFailures[2]], unlinked_pins: [] } : null,
+    );
+    await fireEvent.click(view.getByTestId("failed-imports-retry"));
+
+    await waitFor(() =>
+      expect(view.getByTestId("failed-imports-outcome").textContent).toContain("2 open now."),
+    );
+    expect(unreadableNotes.items).toEqual([sampleFailures[2]]);
+    expect(view.getAllByTestId("failed-import-row")).toHaveLength(1);
+  });
+
+  it("closes, and says so, when everything reads", async () => {
+    await open([sampleFailures[0]]);
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "reread_notes" ? { failed_imports: [], unlinked_pins: [] } : null,
+    );
+    await unreadableNotes.retry();
+    expect(unreadableNotes.open).toBe(false);
+    expect(vi.mocked(sonner.success)).toHaveBeenCalledWith(
+      "Every note opens again",
+      expect.anything(),
+    );
   });
 });
