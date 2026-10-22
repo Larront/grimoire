@@ -1244,9 +1244,68 @@ describe("command palette – Commands group wiring", () => {
 
 describe("command palette – Create note from template", () => {
   const fakeTemplates = [
-    { display_name: "NPC", path: ".grimoire/templates/NPC.md" },
-    { display_name: "Location", path: ".grimoire/templates/Location.md" },
+    { display_name: "NPC", path: ".grimoire/templates/NPC.md", tags: ["npc"] },
+    { display_name: "Location", path: ".grimoire/templates/Location.md", tags: ["location"] },
   ];
+
+  async function openPicker() {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+    // The picker asks for a template rather than a command.
+    return document.body.querySelector(
+      'input[placeholder="Choose a template…"]',
+    ) as HTMLInputElement;
+  }
+
+  const resultNames = () =>
+    [...document.body.querySelectorAll('[data-testid="cmd-template-result"]')].map((r) =>
+      r.querySelector("span")?.textContent?.trim(),
+    );
+
+  // It used to show every template whatever was typed (2026-10 design review).
+  it("narrows the picker by what is typed, by name or by tag", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    const input = await openPicker();
+
+    input.value = "loc";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual(["Location"]);
+
+    input.value = "npc";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual(["NPC"]);
+  });
+
+  it("says so when nothing matches, and still offers the way to the templates", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    const input = await openPicker();
+
+    input.value = "dragon";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual([]);
+    expect(document.body.querySelector('[data-testid="cmd-template-none"]')?.textContent).toContain(
+      "dragon",
+    );
+    expect(document.body.querySelector('[data-testid="cmd-template-manage"]')).toBeTruthy();
+  });
 
   afterEach(() => {
     searchPalette.open = false;
@@ -1330,9 +1389,9 @@ describe("command palette – Create note from template", () => {
     await fireEvent.click(cmdItem);
     await flush();
 
-    const templateItem = document.body.querySelector(
-      '[data-testid="cmd-template-result"]',
-    ) as HTMLElement;
+    const templateItem = [
+      ...document.body.querySelectorAll<HTMLElement>('[data-testid="cmd-template-result"]'),
+    ].find((r) => r.textContent?.includes("NPC"))!;
     await fireEvent.click(templateItem);
     await flush();
 
@@ -2178,11 +2237,6 @@ describe("command palette – Save note as template", () => {
 // ── Create new template (issue #48) ──────────────────────────────────────────
 
 describe("command palette – Create new template", () => {
-  const fakeEntry = {
-    display_name: "Untitled",
-    path: ".grimoire/templates/Untitled.md",
-  };
-
   afterEach(() => {
     searchPalette.open = false;
   });
@@ -2197,31 +2251,14 @@ describe("command palette – Create new template", () => {
     expect(document.body.querySelector('[data-testid="cmd-create-template"]')).toBeTruthy();
   });
 
-  it("selecting it invokes create_template and closes palette", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "create_template") return Promise.resolve(fakeEntry);
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    const input = getSearchInput();
-    input.value = "template";
-    await fireEvent.input(input);
-    await flush();
-
-    const item = document.body.querySelector('[data-testid="cmd-create-template"]') as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
-
-    expect(invoke).toHaveBeenCalledWith("create_template");
-    expect(searchPalette.open).toBe(false);
+  afterEach(() => {
+    dialogs.templatesOpen = false;
+    dialogs.templatesNaming = false;
   });
 
-  it("selecting it opens a template tab with badge 'Template'", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "create_template") return Promise.resolve(fakeEntry);
-      return Promise.resolve(null);
-    });
+  // A template is named before it exists (2026-10 design review): the command opens
+  // the Templates dialog at its name field, and no "Untitled" file is made.
+  it("selecting it opens the Templates dialog ready for a name, and makes nothing yet", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -2233,10 +2270,10 @@ describe("command palette – Create new template", () => {
     await fireEvent.click(item);
     await flush();
 
-    const activeTab = tabs.activeTab;
-    expect(activeTab?.type).toBe("template");
-    expect(activeTab?.badge).toBe("Template");
-    expect((activeTab as any)?.templatePath).toBe(fakeEntry.path);
+    expect(searchPalette.open).toBe(false);
+    expect(dialogs.templatesOpen).toBe(true);
+    expect(dialogs.templatesNaming).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith("create_template", expect.anything());
   });
 });
 

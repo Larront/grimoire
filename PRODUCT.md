@@ -34,7 +34,7 @@ Notes, maps and ambient audio in one tool. A GM's lore, their annotated world ma
 
 Shipped (0.4.0, prerelease):
 
-- **Notes** — Markdown editor with wikilinks, backlinks, aliases, tags, templates (including a built-in Encounter template) and note blocks: Timeline, Infobox, Statblock (with click-down pools and mark tracks), Callout.
+- **Notes** — Markdown editor with wikilinks, backlinks, aliases, tags, templates (four built in: NPC, Location, Session Log, Encounter) and note blocks: Timeline, Infobox, Statblock (with click-down pools and mark tracks), Callout.
 - **Maps** — images annotated with pins and pin categories; pins link to notes.
 - **Scenes** — named sets of audio slots (local audio, Spotify) played from a Scene Dashboard, embeddable in notes and linkable from PDF passages.
 - **PDFs** — read-only viewing inside the ledger, with Scene-links as the only annotation kind.

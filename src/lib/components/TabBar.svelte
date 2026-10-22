@@ -11,9 +11,11 @@
     File,
     Network,
     NotebookPen,
+    LayoutTemplate,
+    BookOpen,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import type { TabType } from "$lib/stores/tabs.svelte";
+  import { tabKey, type TabType } from "$lib/stores/tabs.svelte";
 
   interface Props {
     pane: "left" | "right";
@@ -137,6 +139,10 @@
         return Network;
       case "quickNotes":
         return NotebookPen;
+      case "template":
+        return LayoutTemplate;
+      case "pdf":
+        return BookOpen;
       case "empty":
         return File;
     }
@@ -171,7 +177,7 @@
   class="flex h-(--tab-bar-h) shrink-0 items-center border-b border-sidebar-border bg-background overflow-hidden"
 >
   <div use:observeOverflow class="flex flex-1 overflow-hidden min-w-0 h-full">
-    {#each tabList as tab, i (tab.id + tab.type)}
+    {#each tabList as tab, i (tabKey(tab))}
       {@const isActive = i === activeIndex}
       {@const isSource = isDragging && dragSrcIdx === i}
       {@const isTarget = isDragging && dropIdx === i}
@@ -207,7 +213,7 @@
               "flex items-center gap-1.5 px-3 h-full w-full cursor-pointer select-none group",
               isActive
                 ? "bg-background text-foreground border-b-2 border-b-primary"
-                : "bg-sidebar text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                : "bg-sidebar text-muted-foreground hover:bg-surface-hover hover:text-foreground",
             ].join(" ")}
             onauxclick={(e) => {
               if (e.button === 2) return;
@@ -215,12 +221,15 @@
             }}
           >
             <Icon class="size-3.5 shrink-0" />
-            <span class="truncate text-sm flex-1">{tab.title}</span>
-            {#if tab.badge}
+            <span class="truncate text-sm flex-1" title={tab.title}>{tab.title}</span>
+            <!-- Read from the type, not stored on the tab: a stored badge was dropped by
+                 persistence, so a template tab forgot what it was on reload. Neutral — a
+                 kind of tab is not a signal (DESIGN.md §2). -->
+            {#if tab.type === "template"}
               <span
                 data-testid="tab-badge"
-                class="shrink-0 rounded border border-primary/40 bg-primary/10 px-1 text-[11px] text-primary/80 leading-tight py-0.5"
-                >{tab.badge}</span
+                class="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] leading-tight text-muted-foreground"
+                >Template</span
               >
             {/if}
             <button
@@ -260,7 +269,7 @@
   <!-- New tab button -->
   <button
     type="button"
-    class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+    class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors shrink-0"
     onclick={() => tabs.addEmptyTab(pane)}
     aria-label="New tab"
   >
@@ -272,7 +281,7 @@
     <div use:clickOutside class="relative shrink-0">
       <button
         type="button"
-        class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors shrink-0"
+        class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors shrink-0"
         onclick={() => (dropdownOpen = !dropdownOpen)}
         aria-label="Show all tabs"
       >
@@ -282,7 +291,7 @@
         <div
           class="absolute right-0 top-full z-50 min-w-[180px] rounded-lg border border-sidebar-border bg-popover text-popover-foreground p-1"
         >
-          {#each tabList as tab, i (tab.id + tab.type)}
+          {#each tabList as tab, i (tabKey(tab))}
             {@const Icon = getIcon(tab.type)}
             <button
               type="button"

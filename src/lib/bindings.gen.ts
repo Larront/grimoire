@@ -64,7 +64,7 @@ export const commands = {
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
 	createSceneSlot: (sceneId: number, source: string, sourceId: string, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("create_scene_slot", { sceneId, source, sourceId, label, volume, loop, slotOrder, shuffle }),
-	createTemplate: () => __TAURI_INVOKE<TemplateEntry>("create_template"),
+	createTemplate: (name: string) => __TAURI_INVOKE<TemplateEntry>("create_template", { name }),
 	deleteAnnotation: (annotationId: number) => __TAURI_INVOKE<number>("delete_annotation", { annotationId }),
 	deleteFolder: (folderPath: string) => __TAURI_INVOKE<null>("delete_folder", { folderPath }),
 	deleteMap: (mapId: number) => __TAURI_INVOKE<number>("delete_map", { mapId }),
@@ -320,6 +320,7 @@ export const commands = {
 	writeNoteContent: (notePath: string, content: string) => __TAURI_INVOKE<null>("write_note_content", { notePath, content }),
 	writeNoteTags: (notePath: string, tags: string[]) => __TAURI_INVOKE<null>("write_note_tags", { notePath, tags }),
 	writeTemplate: (path: string, content: string) => __TAURI_INVOKE<null>("write_template", { path, content }),
+	writeTemplateTags: (path: string, tags: string[]) => __TAURI_INVOKE<null>("write_template_tags", { path, tags }),
 };
 
 /* Types */
@@ -839,6 +840,11 @@ export type TagsBefore<K> = {
 export type TemplateEntry = {
 	display_name: string,
 	path: string,
+	/**
+	 *  The tags a note made from it starts with — what the template gives
+	 *  besides its text, so a list can say so without opening each one.
+	 */
+	tags: string[],
 };
 
 /**

@@ -12,7 +12,8 @@ import AppShell from "$lib/components/AppShell.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { ledger } from "$lib/stores/ledger.svelte";
 import { searchPalette } from "$lib/stores/search.svelte";
-import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+import { notes } from "$lib/stores/notes.svelte";
+import { createUntitledNote } from "$lib/utils/note-actions";
 import type { Note } from "$lib/types/ledger";
 
 vi.mock("svelte-sonner", () => ({
@@ -69,14 +70,13 @@ function pressShortcut(target: Window | Element = window, init: KeyboardEventIni
 const createCalls = () => vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "create_note");
 
 describe("Ctrl/Cmd+N — a new note", () => {
-  it("creates Untitled at the ledger root and opens it, named, in the focused pane", async () => {
+  it("creates Untitled at the ledger root when no note is open, and opens it named", async () => {
     await ledger.openLedger(LEDGER_PATH);
     render(AppShell);
 
     await pressShortcut();
 
     await waitFor(() => expect(createCalls()).toHaveLength(1));
-    // Root, always: no parent inferred from the tree's selection or the open tab.
     expect(createCalls()[0][1]).toEqual({
       noteTitle: "Untitled",
       notePath: "Untitled.md",
@@ -86,12 +86,45 @@ describe("Ctrl/Cmd+N — a new note", () => {
     expect(tabs.activeTab?.type).toBe("note");
   });
 
+  // 2026-10 design review: beside the open note, not always at the root (#227 was
+  // "root, always"). Only the page in front of the GM decides — never the tree.
+  it("creates Untitled in the folder of the note the GM is in", async () => {
+    const mira = { ...CREATED, id: 3, title: "Mira", path: "Characters/Mira.md" } as Note;
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_notes") return Promise.resolve([mira]);
+      if (cmd === "create_note") return Promise.resolve({ ...CREATED, id: 8 });
+      if (cmd === "get_file_tree")
+        return Promise.resolve({ name: "", path: "", is_dir: true, children: [] });
+      return Promise.resolve([]);
+    });
+    await notes.load();
+    tabs.openTab({ type: "note", id: mira.id, title: mira.title });
+
+    await createUntitledNote();
+
+    expect(createCalls()[0][1]).toEqual({
+      noteTitle: "Untitled",
+      notePath: "Characters/Untitled.md",
+      noteParentPath: "Characters",
+    });
+  });
+
+  it("creates at the root when the focused pane shows something other than a note", async () => {
+    tabs.openTab({ type: "graph", id: 0, title: "Graph" });
+
+    await createUntitledNote();
+
+    expect(createCalls()[0][1]).toEqual(
+      expect.objectContaining({ notePath: "Untitled.md", noteParentPath: null }),
+    );
+  });
+
   // Asserted off the shell, because the TabBar clears the flag as soon as it has
   // acted on it — by the time a rendered shell settles, the rename is over.
   it("opens the note named, so the first thing a GM types is its title", async () => {
     await ledger.openLedger(LEDGER_PATH);
 
-    await createUntitledNoteAtRoot();
+    await createUntitledNote();
 
     expect(tabs.activeTab?.rename).toBe(true);
   });

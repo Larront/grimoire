@@ -1,14 +1,11 @@
 // A new ledger's name and where it goes — shared by the Splash's create form and the
 // Adopt dialog through `NewLedgerFields`, so both say the same things in the same words.
+//
+// A world's folder name follows the rule every file and folder name does, so
+// `nameProblem` lives with that rule and is re-exported here for the form.
+import { nameProblem } from "./file-name";
 
-/** What is wrong with a name for a new world's folder, or null when it will do. */
-export function nameProblem(name: string): string | null {
-  const trimmed = name.trim();
-  if (!trimmed) return "Give it a name.";
-  if (/[/\\:*?"<>|]/.test(trimmed)) return "A name can't contain / \\ : * ? \" < > |";
-  if (trimmed === "." || trimmed === "..") return "That name isn't allowed.";
-  return null;
-}
+export { nameProblem };
 
 /** Said under Location when nothing has been chosen. */
 export const NO_LOCATION = "Choose where to save it.";

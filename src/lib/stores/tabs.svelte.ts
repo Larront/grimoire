@@ -15,9 +15,20 @@ export interface Tab {
   id: number;
   title: string;
   rename?: boolean;
-  badge?: string;
   templatePath?: string;
   pdfPath?: string;
+}
+
+/**
+ * What makes a tab the one it is. Templates and PDFs are path-keyed (ADR-0011)
+ * and all carry `id: 0`, so `type + id` called every template the same tab: a
+ * second one open made the tab bar's keyed `#each` throw and stop updating
+ * (2026-10 design review). Everything that asks "is this the same tab?" asks here.
+ */
+export function tabKey(tab: Tab): string {
+  if (tab.type === "template") return `template:${tab.templatePath}`;
+  if (tab.type === "pdf") return `pdf:${tab.pdfPath}`;
+  return `${tab.type}:${tab.id}`;
 }
 
 export interface TabPane {
@@ -76,10 +87,7 @@ function createTabsStore() {
   }
 
   function tabMatches(t: Tab, tab: Tab): boolean {
-    if (tab.type === "template")
-      return t.type === "template" && t.templatePath === tab.templatePath;
-    if (tab.type === "pdf") return t.type === "pdf" && t.pdfPath === tab.pdfPath;
-    return t.type === tab.type && t.id === tab.id;
+    return tabKey(t) === tabKey(tab);
   }
 
   function openTab(tab: Tab, targetPane?: "left" | "right") {
@@ -301,22 +309,32 @@ function createTabsStore() {
     }
   }
 
-  // PDFs are path-keyed, not id-keyed (ADR-0011), so closeTabByTypeAndId can't
-  // reach them. Close every pdf tab matching `pdfPath` across both panes — a
-  // deleted PDF must not leave a broken tab behind (issue #101).
-  function closeTabsByPdfPath(pdfPath: string) {
-    let idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+  // Close every tab with this key across both panes.
+  function closeTabsByKey(key: string) {
+    let idx = left.tabs.findIndex((t) => tabKey(t) === key);
     while (idx !== -1) {
       closeTab("left", idx);
-      idx = left.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+      idx = left.tabs.findIndex((t) => tabKey(t) === key);
     }
     if (right) {
-      let ridx = right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath);
+      let ridx = right.tabs.findIndex((t) => tabKey(t) === key);
       while (right && ridx !== -1) {
         closeTab("right", ridx);
-        ridx = right ? right.tabs.findIndex((t) => t.type === "pdf" && t.pdfPath === pdfPath) : -1;
+        ridx = right ? right.tabs.findIndex((t) => tabKey(t) === key) : -1;
       }
     }
+  }
+
+  // PDFs are path-keyed, not id-keyed (ADR-0011), so closeTabByTypeAndId can't
+  // reach them. A deleted PDF must not leave a broken tab behind (issue #101).
+  function closeTabsByPdfPath(pdfPath: string) {
+    closeTabsByKey(tabKey({ type: "pdf", id: 0, title: "", pdfPath }));
+  }
+
+  // Nor may a deleted template: its tab kept saving into a file that was gone,
+  // and every keystroke raised an error toast (2026-10 design review).
+  function closeTabsByTemplatePath(templatePath: string) {
+    closeTabsByKey(tabKey({ type: "template", id: 0, title: "", templatePath }));
   }
 
   // Re-key an open pdf tab when its file is renamed on disk, so the tab keeps
@@ -421,7 +439,7 @@ function createTabsStore() {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };
       } else {
-        const idx = right.tabs.findIndex((t) => t.type === tab.type && t.id === tab.id);
+        const idx = right.tabs.findIndex((t) => tabMatches(t, tab));
         if (idx !== -1) {
           right = { ...right, activeIndex: idx };
         } else {
@@ -432,7 +450,7 @@ function createTabsStore() {
         }
       }
     } else {
-      const idx = left.tabs.findIndex((t) => t.type === tab.type && t.id === tab.id);
+      const idx = left.tabs.findIndex((t) => tabMatches(t, tab));
       if (idx !== -1) {
         left = { ...left, activeIndex: idx };
       } else {
@@ -463,7 +481,6 @@ function createTabsStore() {
       type: tab.type,
       id: tab.id,
       title: tab.title,
-      badge: tab.badge,
       templatePath: tab.templatePath,
       pdfPath: tab.pdfPath,
     };
@@ -494,7 +511,7 @@ function createTabsStore() {
   ) {
     const current = pane === "left" ? left : right;
     if (!current) return;
-    const existingIdx = current.tabs.findIndex((t) => t.type === entry.type && t.id === entry.id);
+    const existingIdx = current.tabs.findIndex((t) => tabMatches(t, entry));
     const newTabs = [...current.tabs];
     const newActiveIndex = existingIdx !== -1 ? existingIdx : current.activeIndex;
     if (existingIdx === -1) newTabs[current.activeIndex] = entry;
@@ -616,6 +633,7 @@ function createTabsStore() {
     closeActiveTab,
     closeTabByTypeAndId,
     closeTabsByPdfPath,
+    closeTabsByTemplatePath,
     updateTabTitle,
     repointNoteTab,
     updateTemplateTab,

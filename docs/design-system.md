@@ -141,7 +141,7 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 | Variable    | Dark      | Light     |
 | ----------- | --------- | --------- |
-| `--error`   | `#d4645a` | `#a02020` |
+| `--error`   | `#dc6e64` | `#a02020` |
 | `--success` | `#6ab187` | `#2e6e4a` |
 
 Both are muted and warm-adjacent — they read as semantic signals without clashing against the palette.

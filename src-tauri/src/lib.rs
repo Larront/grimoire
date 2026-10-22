@@ -183,6 +183,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             write_note_content,
             write_note_tags,
             write_template,
+            write_template_tags,
         ])
 }
 
@@ -379,6 +380,7 @@ pub fn run() {
             create_template,
             read_template,
             write_template,
+            write_template_tags,
             save_note_as_template,
             // Links
             get_backlinks,

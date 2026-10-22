@@ -39,4 +39,11 @@ export const dialogs = $state({
   /** "Make this world mine". The shell's rather than the sidebar's: the sidebar
    *  unmounts below 1024px, and took the dialog and its typed name with it. */
   adoptOpen: false,
+  /** Every template in the world: open one to edit, rename, delete, make one.
+   *  Templates had a list in the sidebar footer that buried the Files tree when
+   *  opened (2026-10 design review); they are managed here instead, and made
+   *  into notes from the New menu and the palette. */
+  templatesOpen: false,
+  /** Open it with the new template's name field ready, for "Create new template". */
+  templatesNaming: false,
 });

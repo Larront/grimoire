@@ -3,7 +3,7 @@
 Hand this to the agent at the start of a new session. It says what the review has
 already covered and settled, and what is left to look at.
 
-_Last updated 2026-10-23._
+_Last updated 2026-10-23 (after the Template editor)._
 
 ## Context
 
@@ -28,8 +28,15 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
 - **Dialogs:** Settings (all sections), TagManagerDialog, QuickNoteDialog, AdoptDialog,
   UnlinkedPinsDialog, FailedImportsDialog, DbRecoveryDialog (plus a follow-up that
   salvages a damaged database with SQLite's own recovery before asking to rebuild,
-  `feature/sqlite-recover-damaged-ledger`), and FormatMigrationDialog (on
-  `feature/format-migration-review`, awaiting merge).
+  `feature/sqlite-recover-damaged-ledger`), and FormatMigrationDialog.
+- **Template editor** (on `feature/template-editor-review`, awaiting merge): the
+  sidebar's Templates accordion is gone; templates are made from New → _Note from
+  template…_ and the palette, and tended in a Templates dialog shaped like the Tag
+  Manager. The pane shows and edits a template's tags. Also, app-wide: tabs have one
+  identity (`tabKey`), so two template or PDF tabs no longer freeze the tab bar; new
+  notes go beside the open note (CONTEXT.md, Note Placement — this reversed #227's
+  "root, always"); one name check for files and folders (`names.rs`, `file-name.ts`);
+  sidebar and tab hover take the Hover Overlay; Ember Error is `#dc6e64`.
 
 ## Already decided — do not reopen
 
@@ -79,34 +86,42 @@ before fixing anything.
 
 ### 1. Remaining dialogs and secondary screens
 
-1. **Template editor**: `panes/TemplatePane.svelte` and `sidebar/SidebarTemplates.svelte`.
-2. **The Splash Screen** (`src/routes/+page.svelte`), added by the owner. All its modes:
+1. **The Splash Screen** (`src/routes/+page.svelte`), added by the owner. All its modes:
    returning with Recent Ledgers, first-time (no recent ledgers), and creating a world
    (the create form shares `NewLedgerFields.svelte` with the Adopt dialog). Include
    **Explore an example world**, which resets the example without asking.
-3. **Ledger home**: `panes/LedgerHome.svelte` (the empty-ledger home inside the app).
-4. **SampleBanner**.
-5. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte`,
-   `panes/ScenesDashboard.svelte` and `sidebar/SidebarTemplates.svelte`. The scenes
-   dashboard's card menu has 8 actions, still opens the old colour and icon windows, and
-   deletes a scene through a modal.
+2. **Ledger home**: `panes/LedgerHome.svelte` (the empty-ledger home inside the app).
+3. **SampleBanner**.
+4. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
+   `panes/ScenesDashboard.svelte`. The scenes dashboard's card menu has 8 actions, still
+   opens the old colour and icon windows, and deletes a scene through a modal. The file
+   tree has no "New from template" on a folder yet; a GM in a folder's note gets it
+   there through New → Note from template.
 
 ### 2. States, not screens
 
 These come up across everything above:
 
 - **Toasts.** Every kind can be fired from the dev-only "Toasts" pill (bottom left in dev
-  builds).
+  builds). `toastUndo` (27 callers) runs its delete on its own 5-second timer while the
+  toast pauses on hover, so the delete can happen with Undo still showing. Move it onto
+  sonner's `onAutoClose` / `onDismiss` (an action click only calls `deleteToast`, not
+  `onDismiss`, so Undo needs its own guard).
 - **Banners**: the conflict banner and the deleted-note banner in `panes/NotePane.svelte`.
 - **Empty states**: an empty ledger, no scenes, no quick notes, a note with no backlinks.
 - **Edge cases**: long names, a large ledger (hundreds of notes, many scenes and tags), a
   missing image file, load errors. Lists sort names as text, not by number ("Annal 1,
-  Annal 10, Annal 11"), everywhere including the file tree.
+  Annal 10, Annal 11"), everywhere including the file tree; templates now sort
+  naturally through `compareNames` (`utils/file-name.ts`), which the rest can reuse. A
+  long note or template name is cut at the edge of its 44px title field (an `<input>`),
+  so it reads as if that were the whole name. In a tab, the _Template_ badge leaves
+  little room for the name ("Facti…").
 - **Keyboard-only use** of a whole task, such as opening a note, playing a scene and
   dropping a pin. Keyboard use of the map was spun off as a separate task; check whether
   it has landed.
 - **The collapsed sidebar rail**: it has no active-state marker, and Quick Notes and
-  Templates aren't reachable from it.
+  Templates aren't reachable from it (Templates are in the New menu, which collapses
+  with it, and in the palette).
 
 ### 3. Animation consistency, last (added by the owner)
 

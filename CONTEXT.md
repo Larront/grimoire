@@ -47,7 +47,7 @@ Five semantic families. No sixth family. No decorative color use.
 - `--background`, `--background-subtle`, `--background-elevated`, `--background-border`
 - `--foreground`, `--foreground-muted` (66%/62% opacity), `--foreground-faint` (42% opacity — sub-AA, decorative only)
 - `--primary`, `--primary-foreground`, `--primary-subtle`, `--primary-muted`
-- `--error` (`#d4645a` dark / `#a02020` light) — destructive actions, failures
+- `--error` (`#dc6e64` dark / `#a02020` light) — destructive actions, failures
 - `--success` (`#6ab187` dark / `#2e6e4a` light) — system confirmations only
 
 ### Focus Ring
@@ -74,9 +74,9 @@ Dark. Light and System are available in Settings.
 
 `[ Sidebar ] [ Main Content ] [ Right Rail ]`
 
-- **Sidebar** — docked on ≥1024px, overlay sheet on ≤1023px. **Collapsed, it _is_ the 48px icon strip**; there is no separate always-present rail beside it. Expanded it carries the search bar, a New menu, Quick Notes, Scenes (favourites and All Scenes), Files (tree), and a footer of Templates, the mini player, the ledger selector, Graph and Settings. Graph sits subdued in the footer rather than among the groups: it is an occasional overview, not a place a GM returns to mid-session.
-  - **Collapsed** it carries, top to bottom: Search, Files, Scenes, and Graph and Settings in the footer. What cannot be 48px wide is hidden rather than squeezed — the New menu, the file tree, the scene favourites, Quick Notes, Templates, the mini player and the ledger selector. Search, Files and Scenes are **stand-ins** — buttons drawn only when collapsed, standing in for a surface that cannot be 48px wide. Files and Scenes each expand the sidebar and scroll to their group; Search opens the [[Command Palette]], as its expanded bar does. Graph and Settings are ordinary rows that simply lose their labels.
-  - **Quick Notes is expanded-only**, unlike Graph and Settings. A count legible on the strip needs a pill small enough to clear a 20px glyph inside a 32px button — about 14px, which a two-digit number does not fit comfortably. `Ctrl/Cmd+Shift+N` catches a thought from anywhere regardless, so collapsing leaves Quick Notes unlisted rather than unreachable, as Templates already is.
+- **Sidebar** — docked on ≥1024px, overlay sheet on ≤1023px. **Collapsed, it _is_ the 48px icon strip**; there is no separate always-present rail beside it. Expanded it carries the search bar, a New menu, Quick Notes, Scenes (favourites and All Scenes), Files (tree), and a footer of the mini player, the ledger selector, Graph and Settings. Templates are in the New menu ([[Templates Dialog]]). Graph sits subdued in the footer rather than among the groups: it is an occasional overview, not a place a GM returns to mid-session.
+  - **Collapsed** it carries, top to bottom: Search, Files, Scenes, and Graph and Settings in the footer. What cannot be 48px wide is hidden rather than squeezed — the New menu, the file tree, the scene favourites, Quick Notes, the mini player and the ledger selector. Search, Files and Scenes are **stand-ins** — buttons drawn only when collapsed, standing in for a surface that cannot be 48px wide. Files and Scenes each expand the sidebar and scroll to their group; Search opens the [[Command Palette]], as its expanded bar does. Graph and Settings are ordinary rows that simply lose their labels.
+  - **Quick Notes is expanded-only**, unlike Graph and Settings. A count legible on the strip needs a pill small enough to clear a 20px glyph inside a 32px button — about 14px, which a two-digit number does not fit comfortably. `Ctrl/Cmd+Shift+N` catches a thought from anywhere regardless, so collapsing leaves Quick Notes unlisted rather than unreachable, as Templates (in the New menu and the palette) are.
   - **The Scenes stand-in carries the playing scene.** While a scene sounds it draws the playing bars instead of its glyph, and the scene's Pause/Resume sits beneath it as an entry of its own — collapsing to focus on a note costs the mini player, not the GM's hold on the music.
   - **Collapsed or expanded persists** across restarts, in `localStorage` beside the drag-to-resize width. Expanding restores the remembered width; a drag never collapses the sidebar.
   - **Toggled** by the trigger in the left pane's tab bar and by `Cmd/Ctrl+\`. There is no brand-mark toggle — the wordmark is the expanded header's identity and nothing replaces it collapsed.
@@ -179,12 +179,17 @@ _Avoid_: using "tag" and "category" interchangeably.
 
 ### Template
 
-A static markdown file stored in `ledger/.grimoire/templates/`. Its filename (minus `.md`) is its display name in the template picker. When used to create a note, the file's full content — including any frontmatter (e.g. `tags: [npc]`) — is copied verbatim into the new note. No variable substitution.
+A static markdown file stored in `ledger/.grimoire/templates/`. Its filename (minus `.md`) is its display name, so it is named before it is made — never an "Untitled" left in every list. When used to create a note, the file's full content — including any frontmatter (e.g. `tags: [npc]`) — is copied verbatim into the new note, which goes beside the open note like any other (see [[Note Placement]]). No variable substitution. Its **tags** are half of what it gives, so the template pane shows and edits them under its name ("Tags for new notes"), and every list of templates says them.
 _Avoid_: "note template" (redundant — templates always produce notes), "snippet" (implies fragment, not a full document structure).
 
-### Templates Section
+### Templates Dialog
 
-The collapsible section at the bottom of the Files sidebar that lists all files in `ledger/.grimoire/templates/`. Provides inline rename and delete, and a "+" header button to create new templates. Distinct from the note/map file tree — templates are not part of the ledger note hierarchy.
+Where templates are tended: every template in the world, naturally sorted, with its tags; a row opens it to edit, its ⋯ menu renames it in place or deletes it with Undo, and **New template** asks for a name first. Reached from the sidebar's New menu (_Templates…_) and the palette (_Manage templates_, _Create new template_). Making a note from one is not its job — that is New → _Note from template…_ and the palette's template picker, which filters by name or tag. Replaced the **Templates Section**, a footer accordion that pushed the Files tree out of sight when opened (2026-10 design review). Templates live where the [[Ledger Watcher]] does not look, so each list re-reads them as it opens.
+_Avoid_: "Templates Section" (gone).
+
+### Note Placement
+
+Where a new note goes when the GM didn't point at a folder — New → Note, New → Note from template, `Ctrl/Cmd+N`, the palette: **beside the note in the focused pane**, or the world's top level when that pane shows anything else. The folder opens to show it. Never inferred from the Files tree's selection; the tree's own _New note_ uses the folder it was invoked on. Was "root, always" (#227) until the 2026-10 design review.
 
 ### Command Palette
 

@@ -8,6 +8,7 @@ pub mod link_targets;
 pub mod links;
 pub mod maps;
 pub mod media;
+pub mod names;
 pub mod notes;
 pub mod pdf_scene_links;
 pub mod preferences;

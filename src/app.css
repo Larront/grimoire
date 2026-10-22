@@ -1338,7 +1338,7 @@ input[type="range"].hue-slider:focus-visible {
 
    `var(--background)` is the correct on-hue text in *both* themes without a
    per-mode branch: in dark mode it is Iron Dark against light semantic hues
-   (#1c1917 on #d4645a = 4.7:1, on #6ab187 = 6.8:1) and in light mode it is
+   (#1c1917 on #dc6e64 = 5.4:1, on #6ab187 = 6.8:1) and in light mode it is
    Parchment against dark ones (#faf8f5 on #a02020 = 7.3:1, on #2e6e4a = 5.8:1).
    The accent ships its own designed pair. */
 [data-sonner-toaster] [data-sonner-toast] {

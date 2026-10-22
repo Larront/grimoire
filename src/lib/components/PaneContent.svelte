@@ -58,7 +58,13 @@
     {/key}
   {:else if activeTab.type === "template" && activeTab.templatePath}
     {#key activeTab.templatePath}
-      <TemplatePane templatePath={activeTab.templatePath} templateTitle={activeTab.title} />
+      <TemplatePane
+        templatePath={activeTab.templatePath}
+        templateTitle={activeTab.title}
+        fresh={activeTab.rename}
+        {pane}
+        tabIndex={activeIndex}
+      />
     {/key}
   {:else if activeTab.type === "pdf" && activeTab.pdfPath}
     {#key activeTab.pdfPath}

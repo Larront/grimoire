@@ -21,4 +21,10 @@ export const shell = {
   openScenes: () => tabs.navigateOpen({ type: "scenes", id: 0, title: "All Scenes" }),
   openGraph: () => tabs.openTab({ type: "graph", id: 0, title: "Graph" }),
   openQuickNotes: () => tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" }),
+  /** The palette, at its list of templates to make a note from. */
+  openTemplatePicker: () => {
+    searchPalette.open = true;
+    searchPalette.openToTemplatePicker = true;
+  },
+  openTemplates: () => (dialogs.templatesOpen = true),
 };

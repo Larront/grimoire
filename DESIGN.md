@@ -22,7 +22,7 @@ colors:
   parchment-subtle: "#f2ede8"
   parchment-border: "#1f1a1d1a"
   # Feedback
-  ember-error: "#d4645a"
+  ember-error: "#dc6e64"
   verdant-confirm: "#6ab187"
   # Graph categorical ramp — dark values; see The Dataviz Exception. The Graph pane is
   # the only consumer, and these are deliberately NOT the accent presets.
@@ -179,7 +179,7 @@ _The ramp was pure grey (`#181818` / `#1f1f1f` / `#262626`, R=G=B) until October
 
 ### Feedback
 
-- **Ember Error** (`#d4645a` dark / `#a02020` light): Destructive actions, failure states. Never decorative. Always paired with a status icon.
+- **Ember Error** (`#dc6e64` dark / `#a02020` light): Destructive actions, failure states. Never decorative. Always paired with a status icon. As text it clears 4.5:1 on every dark surface, a menu's raised one included; it was `#d4645a` until the 2026-10 review, which a menu's Delete set at 4.2:1.
 - **Verdant Confirm** (`#6ab187` dark / `#2e6e4a` light): System confirmations only. The one non-warm color in the system; its semantic is too universal to refuse.
 
 ### Named Rules
@@ -406,6 +406,15 @@ A modal dialog, 448px, from Settings, the command palette ("Manage tags") or the
 - **The colour goes with the tag:** a rename keeps it, a merge keeps the target's, a delete drops it.
 - **Hidden means every note carrying the tag**, not only the notes it colours.
 - **Changes reach what is open:** a note's or pin's Details and the graph refresh when a tag changes here.
+
+### Templates
+
+A template gives a new note two things, its text and its tags, and every surface that shows one says both. One icon everywhere (`LayoutTemplate`). (2026-10 design review: they had a footer accordion that buried the Files tree, tags nobody could see or set, and a name of "Untitled".)
+
+- **Making a note from one:** New → _Note from template…_ (or the palette's _Create note from template_, or the empty world's link) opens the palette's picker, "Choose a template…". Typing narrows it by name or tag; each row shows its tags at the right; _Manage templates…_ ends the list. The note goes beside the open note (CONTEXT.md, Note Placement) and opens with its title selected.
+- **The Templates dialog:** shaped like the Tag Manager — 448px, from New → _Templates…_ and the palette. Rows are naturally sorted ("Annal 2" before "Annal 10"), name and tags; the row opens the template, ⋯ has Edit, Rename, Delete. **New template asks for a name first**, then opens it with the caret in its text. A name is checked as it is typed — the characters Windows refuses, a trailing full stop, a name already used — and the reason sits under the field, circle-x, with what was typed kept. Delete hides the row at once and is undone from the toast; the file and any open tab go only when the toast does.
+- **The template pane:** the note column and title. Under the name, a field label, _Tags for new notes_, with the tag chip editor — not a label above the title. A refused name stays typed, with the reason under it and "Esc puts the old name back".
+- **The tab:** the template icon and a neutral _Template_ badge (border and muted text, 11px), drawn from the tab's type so it survives a reload. Never crimson — a kind of tab is not a signal.
 
 ### Link Preview
 
