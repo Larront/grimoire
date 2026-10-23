@@ -288,10 +288,12 @@
     }
   }
 
+  // Carries on an earlier exploration rather than wiping it; only the Splash's
+  // "Start it over" makes a fresh copy (2026-10 design review).
   async function cmdExploreSample() {
     searchPalette.open = false;
     try {
-      await ledger.exploreSample();
+      await ledger.continueSample();
     } catch (e) {
       console.error("explore sample failed:", e);
     }

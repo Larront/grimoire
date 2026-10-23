@@ -82,6 +82,13 @@ export const commands = {
 	deleteStatblockPreset: (name: string) => __TAURI_INVOKE<null>("delete_statblock_preset", { name }),
 	deleteTemplate: (path: string) => __TAURI_INVOKE<null>("delete_template", { path }),
 	/**
+	 *  The sandbox an earlier exploration left, if there is one: its path, without
+	 *  touching it. The Splash offers to continue it rather than wiping it, which
+	 *  `explore_sample_ledger` always does (2026-10 design review: a GM who explored,
+	 *  wrote notes and came back lost them without a word).
+	 */
+	existingSampleLedger: () => __TAURI_INVOKE<string | null>("existing_sample_ledger"),
+	/**
 	 *  Copies the bundled sample-world resource tree to a writable sandbox at
 	 *  `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 	 *  database with the sample map and pins, and returns the sandbox path.

@@ -379,6 +379,37 @@ function createLedgerStore() {
     }
   }
 
+  /** Where an earlier exploration of the example left it, or null when there is none. */
+  async function existingSample(): Promise<string | null> {
+    try {
+      return (await api.silent.existingSampleLedger()) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Open the example as an earlier exploration left it: its notes, its tabs. The
+   * Splash offers this beside starting over, which `exploreSample` does (2026-10
+   * design review — exploring again used to wipe a GM's changes without a word).
+   */
+  async function continueSample(): Promise<boolean> {
+    const sandboxPath = await existingSample();
+    if (!sandboxPath) return exploreSample();
+    isLoading = true;
+    error = null;
+    try {
+      await openAtPath(sandboxPath);
+      isSample = true;
+      return true;
+    } catch (e) {
+      error = String(e);
+      throw e;
+    } finally {
+      isLoading = false;
+    }
+  }
+
   /**
    * Density is app-wide now (`appPrefs.density`). This stays for the one ledger that had a
    * density of its own before, which `checkExistingLedger` hands over once.
@@ -489,6 +520,8 @@ function createLedgerStore() {
     openLedger,
     adopt,
     exploreSample,
+    existingSample,
+    continueSample,
     closeLedger,
     checkExistingLedger,
     getRecentLedgers,
