@@ -32,10 +32,14 @@ function mockInvoke(recents: unknown[]) {
   });
 }
 
+// The Splash reads its worlds and the example's state together, so give the
+// promise chain a few turns.
 async function flush() {
-  await act(async () => {
-    await Promise.resolve();
-  });
+  for (let i = 0; i < 4; i++) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 }
 
 describe("Splash — missing recent ledgers (issue #111)", () => {
@@ -56,7 +60,9 @@ describe("Splash — missing recent ledgers (issue #111)", () => {
     const row = getByTestId("recent-missing");
     expect(row.textContent).toContain("Lost World");
     expect(row.textContent).toContain("Folder not found");
-    expect(row.textContent).toContain("/mnt/usb/lost-world");
+    // The end of the path on the row, the whole of it on hover.
+    expect(row.textContent).toContain("lost-world");
+    expect(row.querySelector("[title='/mnt/usb/lost-world']")).toBeTruthy();
     // The healthy entry still renders as an openable row.
     expect(getByText("My Campaign")).toBeTruthy();
     // A missing entry never triggers open_ledger — there is no open button for it.
@@ -65,10 +71,11 @@ describe("Splash — missing recent ledgers (issue #111)", () => {
 
   it("remove button calls remove_recent_ledger and drops the row", async () => {
     mockInvoke([PRESENT, MISSING]);
-    const { getByTestId, queryByTestId } = render(HomePage);
+    const { getByLabelText, queryByTestId } = render(HomePage);
     await flush();
 
-    await fireEvent.click(getByTestId("recent-remove-btn"));
+    // Every world can be taken off the list now, not only a missing one.
+    await fireEvent.click(getByLabelText("Remove Lost World from recent worlds"));
     await flush();
 
     const calls = vi.mocked(invoke).mock.calls;

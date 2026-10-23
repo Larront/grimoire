@@ -385,6 +385,30 @@ pub fn seed_sample_world_pdf_links(conn: &mut SqliteConnection) -> Result<(), St
     Ok(())
 }
 
+/// The sandbox an earlier exploration left, if there is one: its path, without
+/// touching it. The Splash offers to continue it rather than wiping it, which
+/// `explore_sample_ledger` always does (2026-10 design review: a GM who explored,
+/// wrote notes and came back lost them without a word).
+#[tauri::command]
+#[specta::specta]
+pub fn existing_sample_ledger(app: AppHandle) -> Result<Option<String>, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+    Ok(existing_sandbox(&app_data_dir.join("sample-world")))
+}
+
+/// `sandbox`, as a string, when it holds a world an exploration made — its
+/// database is the last thing a reset writes, so a half-copied sandbox has none.
+fn existing_sandbox(sandbox: &std::path::Path) -> Option<String> {
+    sandbox
+        .join(".grimoire")
+        .join("ledger.db")
+        .is_file()
+        .then(|| sandbox.to_string_lossy().to_string())
+}
+
 /// Copies the bundled sample-world resource tree to a writable sandbox at
 /// `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 /// database with the sample map and pins, and returns the sandbox path.
@@ -489,6 +513,22 @@ mod tests {
     use diesel::prelude::*;
     use std::fs;
     use tempfile::tempdir;
+
+    // ── an earlier exploration ────────────────────────────────────────────────
+
+    #[test]
+    fn an_explored_sandbox_is_found_only_once_it_has_a_database() {
+        let parent = tempdir().unwrap();
+        let sandbox = parent.path().join("sample-world");
+        assert_eq!(existing_sandbox(&sandbox), None, "no sandbox at all");
+
+        fs::create_dir_all(sandbox.join(".grimoire")).unwrap();
+        fs::write(sandbox.join("Start Here.md"), "# Start Here").unwrap();
+        assert_eq!(existing_sandbox(&sandbox), None, "copied but never opened");
+
+        establish_connection(&sandbox).unwrap();
+        assert_eq!(existing_sandbox(&sandbox), Some(sandbox.to_string_lossy().to_string()));
+    }
 
     // ── sample scene thumbnails ───────────────────────────────────────────────
 

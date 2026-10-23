@@ -59,7 +59,7 @@
   }
 
   const field = `h-8 w-full min-w-0 rounded-md border border-border bg-background px-2.5
-                 text-(length:--font-ui) text-foreground placeholder:text-muted-foreground
+                 text-(length:--font-ui) text-foreground placeholder:text-foreground-faint
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
                  aria-invalid:border-error disabled:opacity-50`;
 </script>

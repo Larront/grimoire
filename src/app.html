@@ -4,7 +4,23 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tauri + SvelteKit + Typescript App</title>
+    <title>Grimoire</title>
+    <!-- The page's colour before any stylesheet arrives, so a launch opens on iron
+         rather than a white flash (2026-10 design review). Iron Dark and Parchment
+         from shared/tokens.css; mode-watcher sets `.light` before first paint for a
+         GM who chose it. The window's own colour is set in tauri.conf.json. -->
+    <style>
+      html {
+        background-color: #1c1917;
+        color: #f0ece8;
+        color-scheme: dark;
+      }
+      html.light {
+        background-color: #faf8f5;
+        color: #1a1614;
+        color-scheme: light;
+      }
+    </style>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

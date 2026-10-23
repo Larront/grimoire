@@ -328,12 +328,12 @@ _Avoid_: "admonition" (the Sphinx/MkDocs term; the ledger's word is callout, mat
 
 ### Splash
 
-The full-window arrival screen shown whenever no ledger is open (`src/routes/+page.svelte`). Three states: **first-time** (no recent ledgers — hosts the onboarding entry), **returning** (Recent Ledgers list), and **creating** (new-ledger form). Distinct from the empty-ledger home (_"Every world begins with its first note"_), which shows when a ledger is open but holds no notes.
+The full-window arrival screen shown whenever no ledger is open (`src/routes/+page.svelte`). Three states: **first-time** (no recent ledgers — the example world is the invitation), **returning** (the ledger last opened as the subject, with **Continue** focused, and the other recent ledgers beneath), and **creating** (the new-world form, in place of the worlds). Its copy says "world", never "ledger". Distinct from the empty-ledger home (_"Every world begins with its first note"_), which shows when a ledger is open but holds no notes.
 _Avoid_: "welcome screen," "start page," "home" (the empty-ledger home is a separate surface).
 
 ### Sample Ledger
 
-A bundled, pre-populated example ledger the app copies to disk so a first-time GM can explore a living world — interlinked notes, a map, a timeline, a few scenes, one parked Quick Note — before building their own. Surfaced via the _Explore an example world_ action on the first-time Splash. Tool-voice noun; user-facing copy always says "world," never "sample ledger."
+A bundled, pre-populated example ledger the app copies to disk so a first-time GM can explore a living world — interlinked notes, a map, a timeline, a few scenes, one parked Quick Note — before building their own. Surfaced on the Splash — the invitation the first time, a quiet line after — and in the palette. **An earlier exploration is continued, not wiped:** the copy lives in the app's data folder, and the Splash offers _Continue exploring_ (opens it as left) beside _Start it over_ (a fresh copy, the only path that resets it). Exploring used to reset it every time without a word (2026-10 design review). Tool-voice noun; user-facing copy always says "world," never "sample ledger."
 _Avoid_: "demo ledger," "template ledger" (a Template produces a single note, not a ledger), "tutorial" (it teaches by exploration, not a guided tour).
 
 ### PDF
