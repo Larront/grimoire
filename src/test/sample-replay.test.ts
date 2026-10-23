@@ -35,10 +35,14 @@ function mockSampleInvoke(recents: (typeof RECENT_LEDGER)[] = []) {
   });
 }
 
+// The Splash reads its worlds and the example's state together, so give the
+// promise chain a few turns.
 async function flush() {
-  await act(async () => {
-    await Promise.resolve();
-  });
+  for (let i = 0; i < 4; i++) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 }
 
 async function openPaletteAndSearch(query: string) {
