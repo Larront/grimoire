@@ -188,6 +188,8 @@ _The ramp was pure grey (`#181818` / `#1f1f1f` / `#262626`, R=G=B) until October
 
 **The Signal Rule.** The accent means one of five things: *selected*, *focused*, *the primary action*, *playing*, or *this is a link* (as an underline, never as the words' colour). Anything else stays neutral — create buttons, "you are in the sample", tag and alias pills, callouts, quotes, title rules, toggles in Settings. In a worldbuilding tool nearly every proper noun is a link; when links were painted crimson, the accent was a tenth of the prose and stopped meaning anything at all.
 
+_The one exception is the wordmark._ "Grimoire" is set in the accent wherever it appears — the Splash, the sidebar, the website — because it is the brand's single mark and reads the same in all three (2026-10 design review). It licenses nothing else: no crimson rules, glows or headings beside it.
+
 **The No Decorative Color Rule.** Color never categorizes file types, tag categories, or organizes information visually. Only the five semantic families exist. Differentiate with shape, icon, or text.
 
 **The Sub-AA Exception.** Ember Faint (42% opacity) is intentionally below AA contrast. Reserved strictly for non-essential decorative labels, section headers, and placeholders. Prohibited for body text, interactive elements, or any content that conveys meaning.
@@ -311,6 +313,20 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 - **Selection:** the row Enter runs is Crimson Tint; the pointer moving onto a row selects it, so one row is lit. No match says "No blocks match …", and Enter then breaks the line.
 - **After inserting:** the caret goes into the new block's first field or the line after it — a block is never left selected for the next keystroke to replace. A selected block shows a 2px Crimson outline while the editor has focus.
 - **Screen readers:** focus stays in the text, and the editor points at the selected row; groups are named.
+
+### Splash
+
+What a GM sees whenever no world is open. Two columns over Iron Dark, the content starting a sixth of the way down (less on a short window), and nothing else on the canvas — no glow, no rule under the wordmark. Chosen in the 2026-10 design review from three layouts tried in the running app; it was a 280px launcher column that cut the GM's own world names short.
+
+- **Left: what Grimoire is, and the ways to start.** The wordmark (Title size, the accent — see the Signal Rule's exception), one line in the website's voice ("A spellbook of record for the world you're building: …"), then **New world** and **Open a world folder…** as ghost buttons in Ember Ash, and the example world as a quiet underlined line.
+- **Right: the GM's own world.** The one last opened is the subject: its name in Metamorphous at Title size (three lines at most, whole on hover), what is in it and when it was last opened in words ("205 notes · last opened a week ago"), and **Continue**, the one primary button, **focused on launch** so Enter carries on. The other worlds follow under the field label "Other worlds" as list rows in Nunito: name, contents, time, and a ✕ on hover or focus that takes a world off the list (its folder stays). The list scrolls in its own space with the pane scrollbar.
+- **A world whose folder can't be found** is muted and can't be opened. It shows the end of its path ("Folder not found · …/Old/Ironhold", the whole path on hover), **Look again** for a drive just plugged back in, and its ✕.
+- **The first time** (no recent worlds), the right side is the example world: "The Ashfen Vale", its own line ("a fog-bound corner of somebody else's"), what is inside it, and **Explore it**, focused.
+- **The example world continues.** When an earlier exploration exists, the action is **Continue exploring** (or "Continue the example world"), which opens it as it was left; **Start it over** makes a fresh copy. Exploring used to wipe a GM's changes without a word.
+- **New world** puts the create form (New world fields, under a "New world" heading) in the right-hand column, so the left side and the wordmark stay where they are. Cancel or Escape gives focus back to New world.
+- **Failures are said once,** by the toast the call raises. There is no error line under the page.
+- **Words:** "world" throughout; "ledger" is the code's word.
+- **Launch** opens on Iron, not white: the window's own background is set (`tauri.conf.json`), and the page carries Iron Dark (or Parchment, under `.light`) before any stylesheet arrives (`app.html`).
 
 ### New world fields
 
