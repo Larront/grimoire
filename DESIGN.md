@@ -348,7 +348,9 @@ Name and location for a new world, one part (`NewLedgerFields`) in both places a
 
 ### Adopt dialog
 
-"Make this world mine", from the sidebar while the Example World is open. 448px. Says what will happen — copied with every change into a new folder, opened as theirs, the example left to explore — then the New world fields, then Cancel and **Make it mine**.
+"Make this world mine", while the example (The Ashfen Vale) is open: from the sidebar's world menu, or beside New note on its home. 448px. Says what will happen — copied with every change into a new folder, opened as theirs, the example left as it is, to come back to or start over — then the New world fields, then Cancel and **Make it mine**.
+
+_The example has no banner_ (2026-10 design review). It is named as itself, marked "example" in the world menu and the window title; its home says "An example world · …" and "What you change here is kept for next time."; the world menu keeps the GM's recent worlds, so the way back is where it always is.
 
 - **Never over an existing folder.** A folder already there by that name is refused, under the name, and left alone.
 - **Can't be closed while copying** ("Copying…"); a failure says what to do, not the raw error.
