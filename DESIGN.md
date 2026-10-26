@@ -300,7 +300,7 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
-A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus (out of the Tab order — every row would be two stops). F2 and Delete work from the row itself. A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus.
+A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus (out of the Tab order — every row would be two stops). F2 and Delete work from the row itself. A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus. The empty space under the last row is the world's root: right-click it for the folder menu's making items, or drop on it.
 
 ### Command Palette (Signature Component)
 
@@ -316,7 +316,8 @@ Every menu is one design — a right-click, a "⋯", the New menu, the tab bar's
 - **Order:** what the GM came for first (Play on a scene card), then what makes or opens, then what edits, then Delete — last, alone after a rule, naming what it deletes ("Delete “Boss Battle”"). Ember Error with its bin icon; highlighted, the words go Ember Ash on a red tint and the icon stays red, because any tint behind Ember Error takes it under 4.5:1.
 - **Findable:** a right-click menu always has a visible way in too (a "⋯", or the item's own button), and opens from the keyboard on the focused thing with Shift+F10 or the menu key.
 - **Focus:** an item that opens something elsewhere — a note to rename, a popover — hands focus there; otherwise the menu returns it to what opened it.
-- **Deleting:** an Undo toast that commits when it closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it.
+- **Deleting:** a note, folder or PDF — the GM's own files — goes to the Recycle Bin (the Trash on a Mac) at once, and a toast says so; restored from there, it comes back into the world. Everything else is an Undo toast that hides the thing at once and commits when the toast closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it. A map is one of those: its pins live in the database, which no bin gives back. Focus goes to what takes the deleted thing's place.
+- **Nowhere else:** the webview's own menu (Back, Refresh) never shows; a right-click keeps the native menu only in text the GM can edit or has selected.
 
 ### Slash Menu
 

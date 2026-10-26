@@ -75,6 +75,11 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
     when the toast closes now.
   - **Undo couldn't be pressed over a dialog or the sidebar's sheet**; a click on a toast
     now passes through and doesn't close them (`isOnToast`).
+  - **A file-tree delete was permanent.** Notes, folders and PDFs go to the Recycle Bin
+    now (`commands/recycle.rs`, the `trash` crate), the owner's call; maps and scenes
+    keep Undo, as their database rows can't come back from a bin.
+  - **The webview's own menu** (with a Refresh that reloads the app) showed on any
+    right-click the app didn't handle.
 
 ## Already decided — do not reopen
 
@@ -185,18 +190,11 @@ Not fixed yet; pick them up when they fit a pass above:
   was rebuilt.
 - **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
   tool is planned as the escape hatch.
-- **Context menus**:
-  - **Deleting from the file tree should send notes, folders and PDFs to the Recycle Bin
-    (Trash on a Mac), with no Undo toast** — the owner's decision. Not built: it needs
-    the `trash` crate, and the registry could not be reached from the review machine.
-    Until then the tree still deletes for good when its (now honest) Undo toast closes.
-    Maps and scenes keep Undo either way: a map's pins and a scene live in the database,
-    which no recycle bin can give back.
-  - The map's title badge hovers with a crimson border and carries a second shadow.
-  - `ColorPicker` with no colour chosen shows an empty swatch beside a hex value.
-  - The pin and annotation panels label their sections in Title Case ("Linked Note",
-    "Text Colour"); menus are sentence case now.
-  - Right-clicking empty space in the file tree shows the webview's own menu.
+- **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
+  map badge, the colour picker's empty state, sentence-case panel labels, a menu for the
+  tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
+  Scene"); a "⋯" isn't in the Tab order (Shift+F10 reaches the same menu); a folder
+  deleted to the Recycle Bin doesn't say how many notes went with it.
 
 ## Known open items
 
