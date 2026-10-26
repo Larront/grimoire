@@ -167,11 +167,10 @@ pub fn delete_folder_inner(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
 ) -> Result<(), String> {
-    // Delete files first — if this succeeds and the DB step fails, the user
-    // sees stale tree entries (recoverable). Reverse order (ghost notes in DB
+    // Files first, to the Recycle Bin — if this succeeds and the DB step fails, the
+    // user sees stale tree entries (recoverable). Reverse order (ghost notes in DB
     // after files are gone) is worse.
-    fs::remove_dir_all(ledger_path.join(folder_path))
-        .map_err(|e| format!("remove_dir_all: {}", e))?;
+    crate::commands::recycle::to_recycle_bin(&ledger_path.join(folder_path))?;
 
     let prefix = format!("{}/", folder_path);
     let like_pattern = format!("{}%", prefix);

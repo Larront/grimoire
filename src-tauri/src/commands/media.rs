@@ -432,11 +432,12 @@ pub fn save_pdf_bytes(
     import_pdf_bytes_to(&ledger_path, &target_folder, &filename, &bytes)
 }
 
-/// Delete a PDF from the ledger. PDFs are path-addressed (ADR-0011) — no DB row
-/// to clean up, just the file. `validate_path` rejects any traversal attempt.
+/// Delete a PDF from the ledger, to the Recycle Bin. PDFs are path-addressed
+/// (ADR-0011) — no DB row to clean up, just the file. `validate_path` rejects any
+/// traversal attempt.
 pub fn delete_pdf_inner(ledger_path: &Path, pdf_path: &str) -> Result<(), String> {
     let abs = validate_path(ledger_path, pdf_path)?;
-    std::fs::remove_file(&abs).map_err(|e| format!("remove pdf: {}", e))
+    crate::commands::recycle::to_recycle_bin(&abs)
 }
 
 #[tauri::command]

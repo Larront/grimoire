@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
+import { recycleBin } from "$lib/utils/platform";
 import { logError } from "$lib/log";
 import { linksTick } from "$lib/stores/links-tick.svelte";
 import { tagsTick } from "$lib/stores/tags-tick.svelte";
@@ -27,6 +28,7 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_EMPTY_NAME: "That needs a name.",
   ERR_BAD_NAME: "A name can't contain / \\ : * ? \" < > | or end with a full stop.",
   ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
+  ERR_RECYCLE: `Couldn't move it to the ${recycleBin}, so it's still here.`,
   ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",

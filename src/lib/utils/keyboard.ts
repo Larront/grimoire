@@ -1,3 +1,5 @@
+import { isMac } from "./platform";
+
 /**
  * Whether a keystroke landed somewhere the GM is typing.
  *
@@ -12,8 +14,6 @@ export function isTypingIn(target: EventTarget | null): boolean {
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
-
-const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
 
 /**
  * A modifier shortcut as the GM's platform writes it: `Ctrl+Shift+N`, or `⌘⇧N` on
