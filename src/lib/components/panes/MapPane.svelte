@@ -36,8 +36,11 @@
   interface Props {
     mapId: number;
     pane: "left" | "right";
+    /** Opened by Rename in the tree's menu: start naming it. */
+    rename?: boolean;
+    tabIndex?: number;
   }
-  let { mapId, pane }: Props = $props();
+  let { mapId, pane, rename = false, tabIndex = 0 }: Props = $props();
 
   // A map's surface always floats, whatever the pane measures: docking would
   // shrink the canvas and a sheet would swallow it (ADR-0006 §2). And it carries
@@ -244,6 +247,15 @@
     draftTitle = mapData.title;
     renamingTitle = true;
   }
+
+  // The tree's Rename opens the map here and asks for its name, as a note's does
+  // (2026-10 design review — a map had no Rename anywhere but its own title).
+  $effect(() => {
+    if (rename && mapData) {
+      startTitleRename();
+      tabs.clearRenameFlag(pane, tabIndex);
+    }
+  });
 
   async function commitTitleRename() {
     if (!mapData || !draftTitle.trim()) {

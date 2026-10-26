@@ -92,7 +92,7 @@ describe("FileTree delete — note", () => {
     });
     await openContextMenu(container);
 
-    const deleteItem = await clickMenuItem("Delete Note");
+    const deleteItem = await clickMenuItem("Delete “Test Note”");
     await fireEvent.click(deleteItem);
 
     expect(toastUndo).toHaveBeenCalledWith(
@@ -110,7 +110,7 @@ describe("FileTree delete — map", () => {
     });
     await openContextMenu(container);
 
-    const deleteItem = await clickMenuItem("Delete Map");
+    const deleteItem = await clickMenuItem("Delete “Test Map”");
     await fireEvent.click(deleteItem);
 
     expect(toastUndo).toHaveBeenCalledWith(
@@ -127,12 +127,66 @@ describe("FileTree delete — folder", () => {
     });
     await openContextMenu(container);
 
-    const deleteItem = await clickMenuItem("Delete Folder");
+    const deleteItem = await clickMenuItem("Delete “My Folder”");
     await fireEvent.click(deleteItem);
 
     expect(toastUndo).toHaveBeenCalledWith(
       expect.stringContaining("My Folder"),
       expect.any(Function),
     );
+  });
+});
+
+// ── The row's menu (2026-10 design review) ──────────────────────────────────
+
+function menuLabels() {
+  return Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]')).map((el) =>
+    (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+  );
+}
+
+describe("FileTree row menu", () => {
+  it("offers a folder its new things, a template among them, then Rename, then Delete", async () => {
+    const { container } = render(FileTree, { props: { node: folderNode, ...defaultProps } });
+    await openContextMenu(container);
+    await clickMenuItem("New note");
+    expect(menuLabels()).toEqual([
+      "New note",
+      "New note from template…",
+      "New folder",
+      "New map…",
+      "Import PDF…",
+      "Rename F2",
+      "Delete “My Folder” Del",
+    ]);
+  });
+
+  it("opens the template picker for a note in that folder", async () => {
+    const { shell } = await import("$lib/utils/shell-actions");
+    const { searchPalette } = await import("$lib/stores/search.svelte");
+    const { container } = render(FileTree, { props: { node: folderNode, ...defaultProps } });
+    await openContextMenu(container);
+    await fireEvent.click(await clickMenuItem("New note from template…"));
+    expect(searchPalette.templateFolder).toBe("My Folder");
+    expect(searchPalette.open).toBe(true);
+    shell.openTemplatePickerIn(null);
+    searchPalette.open = false;
+  });
+
+  it("deletes from the row with the Delete key, as its menu says", async () => {
+    const { getByRole } = render(FileTree, { props: { node: noteNode, ...defaultProps } });
+    await fireEvent.keyDown(getByRole("button", { name: /^Test Note$/ }), { key: "Delete" });
+    expect(toastUndo).toHaveBeenCalledWith(expect.stringContaining("Test Note"), expect.any(Function));
+  });
+
+  it("starts naming a folder with F2", async () => {
+    const { getByRole, container } = render(FileTree, { props: { node: folderNode, ...defaultProps } });
+    await fireEvent.keyDown(getByRole("button", { name: /^My Folder$/ }), { key: "F2" });
+    await waitFor(() => expect(container.querySelector("input")).toBeTruthy());
+  });
+
+  it("has a visible way into the same menu", () => {
+    const { getByRole } = render(FileTree, { props: { node: noteNode, ...defaultProps } });
+    expect(getByRole("button", { name: "More for Test Note" })).toBeTruthy();
   });
 });

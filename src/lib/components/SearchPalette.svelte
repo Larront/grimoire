@@ -42,7 +42,7 @@
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
-  import { createNoteFromTemplate, createUntitledNote } from "$lib/utils/note-actions";
+  import { createNoteFromTemplate, createUntitledNote, newNoteFolder } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -278,7 +278,7 @@
     templatePickerMode = false;
     searchPalette.open = false;
     try {
-      await createNoteFromTemplate(template.path);
+      await createNoteFromTemplate(template.path, searchPalette.templateFolder ?? newNoteFolder());
     } catch (e) {
       console.error("create_note_from_template failed:", e);
     }
@@ -720,6 +720,7 @@
       recentEntities = [];
       pendingModifier = null;
       templatePickerMode = false;
+      searchPalette.templateFolder = null;
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;

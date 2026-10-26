@@ -44,6 +44,8 @@
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
+  import { treeRename, freeName } from "$lib/stores/tree-rename.svelte";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { shell } from "$lib/utils/shell-actions";
   import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY } from "./strip-classes";
   import FileTree from "./FileTree.svelte";
@@ -203,10 +205,26 @@
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
+      // In a folder, a map is its picture, so the picture is chosen first and saved
+      // there. The folder used to be ignored: the map was made with no picture and
+      // never appeared in the tree at all (2026-10 design review).
+      let picture: string | null = null;
+      if (parentNode) {
+        const picked = await open({
+          title: "Choose Map Image",
+          filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+        });
+        if (!picked || typeof picked !== "string") return;
+        picture = picked;
+      }
       const newMap = await api.createMapEmpty("Untitled Map");
+      if (parentNode && picture) {
+        await api.assignMapImage(newMap.id, picture, parentNode.path);
+        treeExpansion.reveal(parentNode.path);
+      }
       await maps.load();
       refresh();
-      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map" });
+      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map", rename: true });
     } catch (e) {
       console.error("create map failed:", e);
     }
@@ -242,8 +260,15 @@
 
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
-      await api.createFolder(`${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`);
+      // A free name, because making a folder that already exists does nothing: a
+      // second New folder used to leave the first one where it was and add nothing.
+      const siblings = (parentNode ?? tree)?.children ?? [];
+      const name = freeName("New folder", siblings.map((n) => n.name));
+      const path = parentNode ? `${parentNode.path}/${name}` : name;
+      await api.createFolder(path);
       if (parentNode) treeExpansion.reveal(parentNode.path);
+      // The row starts naming itself once the rebuilt tree draws it.
+      treeRename.path = path;
       refresh();
     } catch (e) {
       console.error("create folder failed:", e);

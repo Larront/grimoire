@@ -2,6 +2,7 @@
   import { api } from "$lib/api";
   import type { FileNode, Note } from "$lib/types/ledger";
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Rename from "$lib/components/ui/rename";
@@ -18,6 +19,14 @@
     MapPinPlus,
     Folder,
     BookOpen,
+    Ellipsis,
+    FilePlus,
+    FileUp,
+    FolderPlus,
+    LayoutTemplate,
+    PanelRightOpen,
+    Pencil,
+    Trash2,
   } from "@lucide/svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
@@ -34,6 +43,9 @@
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
+  import { treeRename } from "$lib/stores/tree-rename.svelte";
+  import { shell } from "$lib/utils/shell-actions";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import { open } from "@tauri-apps/plugin-dialog";
   import { readFile } from "@tauri-apps/plugin-fs";
   import { onDestroy } from "svelte";
@@ -263,6 +275,134 @@
     renamingPath = target.path;
   }
 
+  // A folder just made by New folder starts out being named.
+  $effect(() => {
+    if (treeRename.path === node.path) {
+      treeRename.path = null;
+      startRename(node);
+    }
+  });
+
+  // And a row just renamed has focus back once the rebuilt tree draws it.
+  let rowEl = $state<HTMLButtonElement | null>(null);
+  $effect(() => {
+    if (treeRename.focus === node.path && rowEl) {
+      treeRename.focus = null;
+      rowEl.focus();
+    }
+  });
+
+  // ── The row's menu ────────────────────────────────────────────────────────
+  // One list, drawn twice: by a right-click (or Shift+F10) and by the row's "⋯".
+  // Every row names its Delete, and F2 and Delete do the same from the row itself
+  // (2026-10 design review — the menus here had no icons, no keys, Title Case, and
+  // a folder could not start a note from a template).
+
+  type Kind = "folder" | "map" | "pdf" | "note";
+  const kind: Kind = $derived(
+    node.is_dir ? "folder" : node.map_id !== null ? "map" : isPdf ? "pdf" : "note",
+  );
+
+  type Action = {
+    label: string;
+    icon: typeof Pencil;
+    run: () => void;
+    key?: string;
+    destructive?: boolean;
+  };
+
+  // An action that opens something elsewhere hands focus on: the menu must not take
+  // it back to the row as it closes, and the sidebar's sheet gets out of the way.
+  // Rename used to open the note and leave focus on the row, under the sheet.
+  let handingOff = false;
+  function handOff(run: () => void) {
+    return () => {
+      handingOff = true;
+      sidebar?.setOpenMobile(false);
+      run();
+    };
+  }
+
+  function openInRightPane() {
+    if (node.note_id !== null) {
+      tabs.navigateOpen({ type: "note", id: node.note_id, title: node.name }, "right");
+    } else if (node.map_id !== null) {
+      tabs.navigateOpen({ type: "map", id: node.map_id, title: node.name }, "right");
+    } else if (isPdf) {
+      tabs.navigateOpen({ type: "pdf", id: 0, title: node.name, pdfPath: node.path }, "right");
+    }
+  }
+
+  function rename() {
+    if (kind === "note") {
+      handOff(() => tabs.openTabWithRename("note", node.note_id!, node.name))();
+    } else if (kind === "map") {
+      handOff(() => tabs.openTabWithRename("map", node.map_id!, node.name))();
+    } else {
+      // The inline field focuses itself; the menu must not take focus back either.
+      handingOff = true;
+      startRename(node);
+    }
+  }
+
+  function remove() {
+    if (kind === "folder") deleteFolder(node);
+    else if (kind === "map") deleteMap(node);
+    else if (kind === "pdf") deletePdf(node);
+    else deleteNote(node);
+  }
+
+  const groups: Action[][] = $derived.by(() => {
+    const renameAction: Action = { label: "Rename", icon: Pencil, run: rename, key: "F2" };
+    const deleteAction: Action = {
+      label: `Delete “${node.name}”`,
+      icon: Trash2,
+      run: remove,
+      key: "Del",
+      destructive: true,
+    };
+    if (kind === "folder") {
+      return [
+        [
+          { label: "New note", icon: FilePlus, run: handOff(() => handleNewNote(node)) },
+          {
+            label: "New note from template…",
+            icon: LayoutTemplate,
+            run: handOff(() => shell.openTemplatePickerIn(node.path)),
+          },
+          { label: "New folder", icon: FolderPlus, run: () => handleNewFolder(node) },
+          { label: "New map…", icon: MapPinPlus, run: handOff(() => handleNewMap(node)) },
+          { label: "Import PDF…", icon: FileUp, run: () => importPdfToFolder(node) },
+        ],
+        [renameAction],
+        [deleteAction],
+      ];
+    }
+    return [
+      [
+        { label: "Open in right pane", icon: PanelRightOpen, run: handOff(openInRightPane) },
+        renameAction,
+      ],
+      [deleteAction],
+    ];
+  });
+
+  function onRowKeydown(e: KeyboardEvent) {
+    if (isTypingIn(e.target) || renamingPath === node.path) return;
+    if (e.key === "F2") {
+      e.preventDefault();
+      rename();
+    } else if (e.key === "Delete") {
+      e.preventDefault();
+      remove();
+    }
+  }
+
+  function keepFocusIfHandedOff(e: Event) {
+    if (handingOff) e.preventDefault();
+    handingOff = false;
+  }
+
   async function handleRename(target: FileNode, newName: string): Promise<boolean> {
     if (!newName.trim() || newName === target.name) {
       renamingPath = null;
@@ -274,6 +414,9 @@
         // backend keeps the folder in its current parent (#162 — composing the
         // path here is what once moved every renamed subfolder to the root).
         const updatedCount = await api.renameFolder(target.path, newName.trim());
+        const slash = target.path.lastIndexOf("/");
+        treeRename.focus =
+          slash > 0 ? `${target.path.slice(0, slash)}/${newName.trim()}` : newName.trim();
         if (updatedCount > 0) {
           toastSuccess(`${updatedCount} ${updatedCount === 1 ? "note" : "notes"} updated`);
         }
@@ -284,6 +427,7 @@
         // title. `newName` is the stem; the backend appends `.pdf`.
         const newPath = await api.renamePdf(target.path, newName.trim());
         tabs.updatePdfTab(target.path, newName.trim(), newPath);
+        treeRename.focus = newPath;
         refresh();
       }
       renamingPath = null;
@@ -295,10 +439,46 @@
   }
 </script>
 
+<!-- The row's "⋯": the same menu, findable without a right-click. Out of the Tab
+     order — every row would be two stops — since Shift+F10, F2 and Delete reach the
+     same actions from the row itself. -->
+{#snippet more()}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      tabindex={-1}
+      aria-label="More for {node.name}"
+      class="absolute top-1/2 right-1 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity
+             group-hover/tree-row:opacity-100 group-focus-within/tree-row:opacity-100 data-[state=open]:opacity-100
+             hover:bg-surface-hover hover:text-foreground"
+    >
+      <Ellipsis class="size-4" />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" class="max-w-72" onCloseAutoFocus={keepFocusIfHandedOff}>
+      {#each groups as group, g (g)}
+        {#if g > 0}<DropdownMenu.Separator />{/if}
+        {#each group as action (action.label)}
+          {@const Icon = action.icon}
+          <DropdownMenu.Item
+            variant={action.destructive ? "destructive" : "default"}
+            onSelect={action.run}
+          >
+            <Icon />
+            <span class="min-w-0 truncate">{action.label}</span>
+            {#if action.key}<DropdownMenu.Shortcut>{action.key}</DropdownMenu.Shortcut>{/if}
+          </DropdownMenu.Item>
+        {/each}
+      {/each}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{/snippet}
+
 <ContextMenu.Root>
-  <ContextMenu.Trigger>
+  <ContextMenu.Trigger class={node.is_dir ? undefined : "group/tree-row relative"}>
     {#if !node.is_dir}
       <Sidebar.MenuButton
+        class="group-hover/tree-row:pr-8 group-focus-within/tree-row:pr-8"
+        bind:ref={rowEl}
+        onkeydown={onRowKeydown}
         {isActive}
         title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
         draggable={renamingPath !== node.path}
@@ -350,6 +530,7 @@
               }
             }
             blurBehavior="exit"
+            fallbackSelectionBehavior="all"
             onSave={(val) => handleRename(node, val)}
             onCancel={() => (renamingPath = null)}
           />
@@ -357,6 +538,7 @@
           <span class="truncate {unreadable ? 'text-muted-foreground' : ''}">{node.name}</span>
         {/if}
       </Sidebar.MenuButton>
+      {@render more()}
     {:else}
       <Sidebar.MenuItem>
         <Collapsible.Root
@@ -367,44 +549,52 @@
                only the row below shows it. -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div ondragover={handleDragOver} ondragleave={handleDragLeave} ondrop={handleDrop}>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Sidebar.MenuButton
-                  {...props}
-                  title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
-                  draggable={renamingPath !== node.path}
-                  ondragstart={handleDragStart}
-                  ondragend={handleDragEnd}
-                  class={isDropTarget ? "ring-1 ring-primary/50" : undefined}
-                >
-                  <ChevronRight class="transition-transform" />
-                  {#if unreadable}
-                    <FolderX class="size-4 shrink-0 text-muted-foreground" />
-                  {:else}
-                    <Folder class="size-4 shrink-0 text-muted-foreground" />
-                  {/if}
-                  <Rename.Root
-                    this="span"
-                    class="flex-1 truncate text-sm {unreadable ? 'text-muted-foreground' : ''}"
-                    bind:value={
-                      () => (renamingPath === node.path ? renameValue : node.name),
-                      (val) => {
-                        renameValue = val;
+            <div class="group/tree-row relative">
+              <Collapsible.Trigger>
+                {#snippet child({ props })}
+                  <Sidebar.MenuButton
+                    {...props}
+                    title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
+                    draggable={renamingPath !== node.path}
+                    ondragstart={handleDragStart}
+                    ondragend={handleDragEnd}
+                    bind:ref={rowEl}
+        onkeydown={onRowKeydown}
+                    class="group-hover/tree-row:pr-8 group-focus-within/tree-row:pr-8 {isDropTarget
+                      ? 'ring-1 ring-primary/50'
+                      : ''}"
+                  >
+                    <ChevronRight class="transition-transform" />
+                    {#if unreadable}
+                      <FolderX class="size-4 shrink-0 text-muted-foreground" />
+                    {:else}
+                      <Folder class="size-4 shrink-0 text-muted-foreground" />
+                    {/if}
+                    <Rename.Root
+                      this="span"
+                      class="flex-1 truncate text-sm {unreadable ? 'text-muted-foreground' : ''}"
+                      bind:value={
+                        () => (renamingPath === node.path ? renameValue : node.name),
+                        (val) => {
+                          renameValue = val;
+                        }
                       }
-                    }
-                    bind:mode={
-                      () => (renamingPath === node.path ? "edit" : "view"),
-                      (val) => {
-                        if (val === "view") renamingPath = null;
+                      bind:mode={
+                        () => (renamingPath === node.path ? "edit" : "view"),
+                        (val) => {
+                          if (val === "view") renamingPath = null;
+                        }
                       }
-                    }
-                    blurBehavior="exit"
-                    onSave={(val) => handleRename(node, val)}
-                    onCancel={() => (renamingPath = null)}
-                  />
-                </Sidebar.MenuButton>
-              {/snippet}
-            </Collapsible.Trigger>
+                      blurBehavior="exit"
+                      fallbackSelectionBehavior="all"
+                      onSave={(val) => handleRename(node, val)}
+                      onCancel={() => (renamingPath = null)}
+                    />
+                  </Sidebar.MenuButton>
+                {/snippet}
+              </Collapsible.Trigger>
+              {@render more()}
+            </div>
             <Collapsible.Content forceMount>
               {#snippet child({ props, open })}
                 {#if open}
@@ -432,59 +622,21 @@
   </ContextMenu.Trigger>
 
   <ContextMenu.Portal>
-    <ContextMenu.Content>
-      {#if node.is_dir}
-        <ContextMenu.Item onSelect={() => handleNewNote(node)}>New Note</ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => handleNewFolder(node)}>New Subfolder</ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => handleNewMap(node)}>New Map</ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => importPdfToFolder(node)}>Import PDF…</ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => startRename(node)}>Rename</ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item variant="destructive" onSelect={() => deleteFolder(node)}>
-          Delete Folder
-        </ContextMenu.Item>
-      {:else if node.map_id !== null}
-        <ContextMenu.Item
-          onSelect={() =>
-            tabs.navigateOpen({ type: "map", id: node.map_id!, title: node.name }, "right")}
-          >Open in Right Pane</ContextMenu.Item
-        >
-        <ContextMenu.Separator />
-        <ContextMenu.Item variant="destructive" onSelect={() => deleteMap(node)}>
-          Delete Map
-        </ContextMenu.Item>
-      {:else if isPdf}
-        <ContextMenu.Item
-          onSelect={() =>
-            tabs.navigateOpen({ type: "pdf", id: 0, title: node.name, pdfPath: node.path })}
-          >Open</ContextMenu.Item
-        >
-        <ContextMenu.Item
-          onSelect={() =>
-            tabs.navigateOpen(
-              { type: "pdf", id: 0, title: node.name, pdfPath: node.path },
-              "right",
-            )}>Open in Right Pane</ContextMenu.Item
-        >
-        <ContextMenu.Item onSelect={() => startRename(node)}>Rename</ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item variant="destructive" onSelect={() => deletePdf(node)}>
-          Delete PDF
-        </ContextMenu.Item>
-      {:else}
-        <ContextMenu.Item
-          onSelect={() =>
-            tabs.navigateOpen({ type: "note", id: node.note_id!, title: node.name }, "right")}
-          >Open in Right Pane</ContextMenu.Item
-        >
-        <ContextMenu.Item onSelect={() => tabs.openTabWithRename("note", node.note_id!, node.name)}
-          >Rename</ContextMenu.Item
-        >
-        <ContextMenu.Separator />
-        <ContextMenu.Item variant="destructive" onSelect={() => deleteNote(node)}>
-          Delete Note
-        </ContextMenu.Item>
-      {/if}
+    <ContextMenu.Content class="max-w-72" onCloseAutoFocus={keepFocusIfHandedOff}>
+      {#each groups as group, g (g)}
+        {#if g > 0}<ContextMenu.Separator />{/if}
+        {#each group as action (action.label)}
+          {@const Icon = action.icon}
+          <ContextMenu.Item
+            variant={action.destructive ? "destructive" : "default"}
+            onSelect={action.run}
+          >
+            <Icon />
+            <span class="min-w-0 truncate">{action.label}</span>
+            {#if action.key}<ContextMenu.Shortcut>{action.key}</ContextMenu.Shortcut>{/if}
+          </ContextMenu.Item>
+        {/each}
+      {/each}
     </ContextMenu.Content>
   </ContextMenu.Portal>
 </ContextMenu.Root>
