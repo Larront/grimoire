@@ -819,7 +819,7 @@
     {#if templatePickerMode}
       <!-- Typing narrows the list by name or tag; it used to filter nothing. Each row
            says what the note will be tagged, the half of a template that isn't text. -->
-      <Command.Group heading="Choose a template">
+      <Command.Group heading="Templates">
         {#each pickerTemplates as template (template.path)}
           <Command.Item
             data-testid="cmd-template-result"

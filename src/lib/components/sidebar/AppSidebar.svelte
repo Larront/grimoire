@@ -23,7 +23,7 @@
     LayoutTemplate,
     SquarePen,
   } from "@lucide/svelte";
-  import { Button, buttonVariants } from "../ui/button";
+  import { buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
@@ -476,23 +476,16 @@
                           {/each}
                         </Sidebar.Menu>
                       {:else if tree}
-                        <div class="flex flex-col items-center gap-3 px-4 py-6 text-center">
-                          <div
-                            class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
-                          >
-                            <FilePlus class="size-5 text-primary" strokeWidth={1.5} />
-                          </div>
-                          <div class="space-y-1">
-                            <p class="text-(length:--font-body) font-medium">No notes yet</p>
-                            <p class="text-(length:--font-ui) text-muted-foreground">
-                              Create your first note to start building your world.
-                            </p>
-                          </div>
-                          <Button variant="outline" size="sm" onclick={() => handleNewNote(null)}>
-                            <FilePlus strokeWidth={1.5} />
-                            New Note
-                          </Button>
-                        </div>
+                        <!-- One quiet line, not a second "make your first note" beside
+                             the world's home, which already offers it (as does New ▾
+                             above). It had a crimson tile and a button of its own
+                             (2026-10 design review). -->
+                        <p
+                          class="px-2 py-1.5 text-(length:--font-ui) text-muted-foreground"
+                          data-testid="files-empty"
+                        >
+                          Your notes will be listed here.
+                        </p>
                       {/if}
                     </div>
                   </Sidebar.GroupContent>
@@ -529,7 +522,7 @@
               aria-label="Graph"
               class={cn(
                 String(props.class ?? ""),
-                "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                "text-muted-foreground hover:text-sidebar-foreground",
               )}
               onclick={shell.openGraph}
             >
@@ -554,7 +547,7 @@
               aria-label="Settings"
               class={cn(
                 String(props.class ?? ""),
-                "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                "text-muted-foreground hover:text-sidebar-foreground",
               )}
               onclick={shell.openSettings}
             >

@@ -1,61 +1,171 @@
+<script lang="ts" module>
+  /*
+    The world's home: what an empty pane shows.
+
+    Revised in the 2026-10 design review. It showed only while a world had no notes —
+    after the first one, an empty pane said "No tab open" and the world's name was
+    never seen again — and it did not read as the page after the Splash. It is now the
+    Splash's right-hand column carried into the world, in every empty pane: the
+    world's name at Title size, what is in it, one primary next step (New note), and
+    the notes last written in, to go back to. "Every world begins with its first note"
+    is said only while that is true.
+
+    New note takes focus once, when a world opens onto this page (as the Splash's
+    Continue does), so Enter writes the first note; closing tabs later does not pull
+    focus here. A failure is said by the toast the call raises, once.
+  */
+  /** The world open when New note last took focus on arrival. */
+  let arrivedFor = -1;
+</script>
+
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { api } from "$lib/api";
+  import type { Note } from "$lib/types/ledger";
   import { Button } from "$lib/components/ui/button";
   import { ledger } from "$lib/stores/ledger.svelte";
+  import { notes } from "$lib/stores/notes.svelte";
+  import { scenes } from "$lib/stores/scenes.svelte";
+  import { maps } from "$lib/stores/maps.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
   import { shell } from "$lib/utils/shell-actions";
   import { createUntitledNote } from "$lib/utils/note-actions";
-  import type { Note } from "$lib/types/ledger";
-  import { LoaderCircle } from "@lucide/svelte";
+  import { timeAgo, worldContents } from "$lib/utils/world-words";
+  import { ArrowRight, FileText, LoaderCircle } from "@lucide/svelte";
 
-  let isCreatingNote = $state(false);
-  let errorMsg = $state<string | null>(null);
+  let { pane }: { pane: "left" | "right" } = $props();
 
-  const ledgerName = $derived(ledger.path?.split(/[\\/]/).pop() ?? "My Ledger");
+  const RECENT = 5;
 
-  async function handleCreateFirstNote() {
-    isCreatingNote = true;
-    errorMsg = null;
+  let creating = $state(false);
+  let newNote = $state<HTMLButtonElement | null>(null);
+
+  const worldName = $derived(
+    ledger.isSample ? "The Ashfen Vale" : (ledger.path?.split(/[\\/]/).pop() ?? ""),
+  );
+  const written = $derived(notes.notes.filter((n) => !n.archived));
+  const contents = $derived(
+    worldContents({
+      note_count: written.length,
+      scene_count: scenes.scenes.length,
+      map_count: maps.maps.length,
+    }),
+  );
+  /** The notes as read when this page appeared, with their latest modified times. */
+  let freshNotes = $state<Note[] | null>(null);
+  const recent = $derived(
+    (freshNotes ?? written)
+      .filter((n) => !n.archived)
+      .sort((a, b) => b.modified_at.localeCompare(a.modified_at))
+      .slice(0, RECENT),
+  );
+
+  // New note takes focus on arrival only — the first time this world shows its
+  // home in the focused pane, and only if nothing else has focus.
+  // Saves move a note's modified time on the backend, not in the shared list, so
+  // read it afresh for "Recently edited" — when this page appears and whenever the
+  // list changes (a note made in the other pane). Here, not through `notes.load()`,
+  // whose loading state is what decides whether this page is shown at all.
+  $effect(() => {
+    void notes.notes;
+    api.silent
+      .getNotes()
+      .then((fresh) => (freshNotes = fresh))
+      .catch(() => {});
+  });
+
+  onMount(() => {
+    const generation = ledger.openGeneration;
+    if (arrivedFor === generation || pane !== tabs.focusedPane) return;
+    arrivedFor = generation;
+    const focused = document.activeElement;
+    if (!focused || focused === document.body) newNote?.focus();
+  });
+
+  async function writeNote() {
+    tabs.setFocusedPane(pane);
+    creating = true;
     try {
       await createUntitledNote();
     } catch (e) {
-      errorMsg = String(e);
+      // Said by the toast the call raised.
+      console.error("create note failed:", e);
     } finally {
-      isCreatingNote = false;
+      creating = false;
     }
+  }
+
+  function openNote(id: number, title: string) {
+    tabs.openTab({ type: "note", id, title }, pane);
   }
 </script>
 
-<!-- ── Ledger home (new, empty ledger) ─────────────────────────────── -->
-<div class="flex flex-col items-center justify-center h-full">
-  <div class="flex flex-col items-center gap-8 w-full max-w-120 px-10 splash-fade">
-    <h1 class="font-heading text-[2rem] font-normal text-foreground text-center leading-tight">
-      {ledgerName}
-    </h1>
+<div class="h-full overflow-y-auto" data-pane-scroll>
+  <div class="mx-auto flex w-full max-w-[34rem] flex-col px-8 pt-[16vh] pb-16 splash-fade">
+    <h2
+      class="line-clamp-3 font-heading text-[2.75rem] leading-[1.15] tracking-tight text-foreground text-balance"
+      title={worldName}
+    >
+      {worldName}
+    </h2>
+    <p class="mt-3 text-(length:--font-body) text-foreground-muted">
+      {written.length ? contents : "Every world begins with its first note."}
+    </p>
 
-    <div class="flex flex-col items-center gap-6">
-      <p class="font-sans text-sm italic text-foreground-muted text-center">
-        Every world begins with its first note.
-      </p>
-      <Button onclick={handleCreateFirstNote} disabled={isCreatingNote} class="gap-2">
-        {#if isCreatingNote}
-          <LoaderCircle class="w-3.5 h-3.5 animate-spin" />
-          Creating...
+    <div class="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+      <Button
+        bind:ref={newNote}
+        size="lg"
+        class="h-10 min-w-[8.5rem] gap-2 px-4 text-sm"
+        disabled={creating}
+        data-testid="home-new-note"
+        onclick={() => void writeNote()}
+      >
+        {#if creating}
+          <LoaderCircle class="animate-spin" />
+          Creating…
         {:else}
           New note
+          <ArrowRight data-icon="inline-end" />
         {/if}
       </Button>
       <button
+        type="button"
         data-testid="start-from-template"
+        class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
         onclick={shell.openTemplatePicker}
-        class="font-sans text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        …or start from a template
+        Note from template…
       </button>
     </div>
 
-    {#if errorMsg}
-      <p class="font-sans text-xs text-destructive text-center" role="alert">
-        {errorMsg}
-      </p>
+    {#if recent.length}
+      <section class="mt-14" aria-labelledby="home-recent-{pane}">
+        <h3 id="home-recent-{pane}" class="text-xs font-semibold text-foreground-muted">
+          Recently edited
+        </h3>
+        <!-- Pulled out by the rows' own padding, so names line up with the one above. -->
+        <ul class="-mx-3 mt-2 flex flex-col">
+          {#each recent as note (note.id)}
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-surface-hover"
+                data-testid="home-recent-note"
+                onclick={() => openNote(note.id, note.title)}
+              >
+                <FileText class="size-4 shrink-0 text-foreground-muted" strokeWidth={1.5} />
+                <span class="min-w-0 flex-1 truncate text-(length:--font-body) text-foreground" title={note.title}
+                  >{note.title}</span
+                >
+                <span class="shrink-0 text-(length:--font-ui) text-foreground-muted"
+                  >{timeAgo(note.modified_at)}</span
+                >
+              </button>
+            </li>
+          {/each}
+        </ul>
+      </section>
     {/if}
   </div>
 </div>
