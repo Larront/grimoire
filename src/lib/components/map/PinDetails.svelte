@@ -184,7 +184,7 @@
 </div>
 
 <!-- Linked note -->
-<DetailSection label="Linked Note" sectionKey="linked-note">
+<DetailSection label="Linked note" sectionKey="linked-note">
   {#if linkedNote}
     <!-- The note a pin points at is the reason a GM clicked it, so opening it is this
          panel's primary action: a labelled button, not a 14px icon in the corner.
@@ -322,10 +322,12 @@
                 type="button"
                 onclick={() => save({ shape })}
                 title={shape}
+                aria-label="Shape: {shape}"
+                aria-pressed={pin.shape === shape}
                 class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
                        {pin.shape === shape
                   ? 'border-primary bg-primary-subtle'
-                  : 'border-background-border hover:border-primary/50 hover:bg-primary-subtle/50'}"
+                  : 'border-background-border hover:bg-surface-hover'}"
                 style="color:{pin.shape === shape
                   ? resolvedColor
                   : 'var(--color-foreground-muted)'}"

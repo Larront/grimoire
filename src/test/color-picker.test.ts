@@ -83,3 +83,18 @@ describe("ColorPicker — a default that is a colour", () => {
     expect((getByLabelText("Hex colour") as HTMLInputElement).value).toBe("#b89a5e");
   });
 });
+
+// With nothing chosen, the hex field shows what the swatch shows (2026-10 design review).
+describe("ColorPicker with nothing chosen", () => {
+  it("names what it follows where the swatch is empty, rather than a hex it isn't wearing", () => {
+    const { getByLabelText } = render(ColorPicker, { props: { value: null, onchange: vi.fn() } });
+    expect((getByLabelText("Hex colour") as HTMLInputElement).placeholder).toBe("Default");
+  });
+
+  it("shows the colour it wears instead where there is one", () => {
+    const { getByLabelText } = render(ColorPicker, {
+      props: { value: null, noneSwatch: "#5b9ec9", defaultLabel: "Automatic", onchange: vi.fn() },
+    });
+    expect((getByLabelText("Hex colour") as HTMLInputElement).placeholder).toBe("#5b9ec9");
+  });
+});

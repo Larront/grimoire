@@ -196,6 +196,11 @@
     onchange={commit}
   />
 
+  <!-- With nothing chosen the field shows what the swatch shows: the colour worn instead
+       (a pin's category's, a tag's automatic one), or — where the swatch is empty — the
+       name of what it follows, as the pressed button beside it does. A scene's showed
+       the fallback's hex beside an empty swatch, which read as a colour chosen and not
+       drawn (2026-10 design review). -->
   <div class="flex items-center gap-2">
     <span
       class="size-7 shrink-0 rounded-md border border-border"
@@ -208,10 +213,10 @@
       aria-label="Hex colour"
       aria-invalid={hexInvalid}
       value={hexDraft ?? (value === null ? "" : hex)}
-      placeholder={hex}
+      placeholder={value === null ? (normalizeHex(noneSwatch) ?? defaultLabel) : hex}
       maxlength={7}
       class="h-8 w-24 rounded-md border bg-transparent px-2 font-mono text-[11px] text-foreground uppercase
-             placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+             placeholder:normal-case placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
              {hexInvalid ? 'border-error' : 'border-border'}"
       oninput={(e) => (hexDraft = (e.target as HTMLInputElement).value)}
       onkeydown={(e) => {
