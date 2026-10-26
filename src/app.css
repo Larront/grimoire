@@ -1333,6 +1333,15 @@ input[type="range"].hue-slider:focus-visible {
   --toast-close-button-transform: none;
 }
 
+/* A toast takes clicks while a dialog or the sidebar's sheet is open. Those set
+   `pointer-events: none` on <body> for everything outside themselves, and the toaster
+   inherited it — so Undo, raised by something done inside the dialog, could not be
+   pressed until the dialog closed (2026-10 design review). The dialogs, for their part,
+   don't count a click on a toast as one outside them (`isOnToast`). */
+[data-sonner-toaster] {
+  pointer-events: auto;
+}
+
 /* One hue per toast type. Neutral is the default; `--toast-on-hue` is the text
    punched out of a hue-filled button.
 

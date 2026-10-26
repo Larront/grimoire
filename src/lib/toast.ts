@@ -283,12 +283,18 @@ export function toastUnlinkedPins(count: number, someFixed: boolean, onShowPins:
 }
 
 /**
- * Show an undo toast. `onConfirm` runs after the toast's duration unless Undo is clicked.
+ * Show an undo toast. `onConfirm` runs when the toast closes, unless Undo was clicked.
  *
- * NOTHING IS DELETED UNTIL THE WINDOW ELAPSES — the destructive call is what gets
- * deferred, so Undo is a cancelled timer rather than a restore. That is what makes undo
- * lossless here: a pin's tags and id survive because the delete never happened, and no
- * caller has to know how to rebuild the thing it just removed.
+ * NOTHING IS DELETED WHILE THE TOAST IS UP — the destructive call is what gets deferred,
+ * so Undo is a cancelled commit rather than a restore. That is what makes undo lossless
+ * here: a pin's tags and id survive because the delete never happened, and no caller has
+ * to know how to rebuild the thing it just removed.
+ *
+ * The commit is the toast closing, not a timer of its own (2026-10 design review). The
+ * toast stops counting down while the pointer rests on it, and a separate five-second
+ * timer did not — so a GM reaching for Undo could find it still offered after the delete
+ * had happened, and clicking it did nothing. Closed by its timer or by its ✕, it commits;
+ * closed by Undo, it doesn't.
  *
  * `onUndo` is for callers that hid the thing OPTIMISTICALLY, which is the right move
  * wherever the deletion is visual — a pin the GM is looking at should leave the map on
@@ -302,14 +308,24 @@ export function toastUndo(
   onUndo?: () => void,
   duration = 5000,
 ) {
-  const timerId = setTimeout(onConfirm, duration);
+  // Settled once, either way: Undo also closes the toast, and that close must not then
+  // commit what Undo just cancelled.
+  let settled = false;
+  const commit = () => {
+    if (settled) return;
+    settled = true;
+    onConfirm();
+  };
 
   toast(message, {
     duration,
+    onAutoClose: commit,
+    onDismiss: commit,
     action: {
       label: "Undo",
       onClick: () => {
-        clearTimeout(timerId);
+        if (settled) return;
+        settled = true;
         onUndo?.();
       },
     },
