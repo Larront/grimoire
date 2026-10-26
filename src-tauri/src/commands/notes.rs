@@ -396,6 +396,17 @@ fn write_note_content_inner(
         .map_err(|e| e.to_string())?;
     note_mutation::commit_or_write(conn, index, &full_path, maybe_note.as_ref(), &content)?;
 
+    // The row's modified time follows the writes made here. It was set once, when the
+    // row was made, so a note's Details said "Modified" with its creation time and the
+    // world's home listed notes by when they were made, not written in (2026-10
+    // design review).
+    if maybe_note.is_some() {
+        diesel::update(notes.filter(path.eq(note_path)))
+            .set(modified_at.eq(chrono::Utc::now().to_rfc3339()))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
@@ -583,6 +594,27 @@ mod tests {
             .returning(Note::as_returning())
             .get_result(conn)
             .expect("insert note")
+    }
+
+    #[test]
+    fn saving_a_note_moves_its_modified_time_forward() {
+        let (dir, mut conn) = open_ledger_fixture();
+        fs::write(dir.path().join("Mira.md"), "old").unwrap();
+        let note = seed_note(&mut conn, "Mira.md", "Mira");
+        diesel::update(notes.filter(id.eq(note.id)))
+            .set(modified_at.eq("2020-01-01T00:00:00+00:00"))
+            .execute(&mut conn)
+            .unwrap();
+
+        write_note_content_inner(
+            OpenLedger { path: dir.path(), conn: &mut conn, index: None },
+            "Mira.md",
+            "new body",
+        )
+        .unwrap();
+
+        let after: Note = notes.find(note.id).first(&mut conn).unwrap();
+        assert!(after.modified_at.as_str() > "2026", "got {}", after.modified_at);
     }
 
     #[test]
