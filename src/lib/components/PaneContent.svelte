@@ -41,7 +41,7 @@
     {/key}
   {:else if activeTab.type === "map"}
     {#key activeTab.id}
-      <MapPane mapId={activeTab.id} {pane} />
+      <MapPane mapId={activeTab.id} rename={activeTab.rename} {pane} tabIndex={activeIndex} />
     {/key}
   {:else if activeTab.type === "scenes"}
     <ScenesDashboard />

@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Search } from "@lucide/svelte";
   import { searchPalette } from "$lib/stores/search.svelte";
-
-  const isMac = $derived(typeof navigator !== "undefined" && /mac/i.test(navigator.platform));
+  import { isMac } from "$lib/utils/platform";
 </script>
 
 <div

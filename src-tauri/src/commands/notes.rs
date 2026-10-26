@@ -345,7 +345,7 @@ fn delete_note_inner(l: OpenLedger, note_id: i32) -> Result<u32, String> {
     let note: Note = notes.find(note_id).first(conn).map_err(|e| e.to_string())?;
     let full_path = validate_path(ledger_path, &note.path)?;
     if full_path.exists() {
-        fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+        crate::commands::recycle::to_recycle_bin(&full_path)?;
     }
 
     note_index::remove(conn, index, note_id, &note.path)?;

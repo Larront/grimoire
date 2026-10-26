@@ -14,6 +14,16 @@ export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & {
   ref?: U | null;
 };
 
+/**
+ * Whether an event happened on a toast. A dialog or the sidebar's sheet treats any click
+ * outside it as "close me", and a toast is outside every one of them — so Undo, raised by
+ * something the GM did inside the dialog, only closed it (2026-10 design review). The
+ * modal content primitives pass a toast's events over rather than closing on them.
+ */
+export function isOnToast(e: Event): boolean {
+  return e.target instanceof Element && e.target.closest("[data-sonner-toaster]") !== null;
+}
+
 function parseTagsBlock(block: string): string[] {
   // Inline form: tags: [a, b, c]
   const inline = block.match(/^tags:\s*\[([^\]]*)\]/m);

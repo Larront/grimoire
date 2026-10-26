@@ -54,9 +54,14 @@ export async function createUntitledNote(): Promise<void> {
   await openNew(newNote, folder);
 }
 
-/** The same, starting from a template's text and tags. */
-export async function createNoteFromTemplate(templatePath: string): Promise<void> {
-  const folder = newNoteFolder();
-  const newNote = await api.createNoteFromTemplate(templatePath, folder);
-  await openNew(newNote, folder);
+/**
+ * The same, starting from a template's text and tags — into `folder` when the GM
+ * chose one (a folder's menu), else beside the open note.
+ */
+export async function createNoteFromTemplate(
+  templatePath: string,
+  folder: string | null = newNoteFolder(),
+): Promise<void> {
+  const newNote = await api.createNoteFromTemplate(templatePath, folder || null);
+  await openNew(newNote, folder || null);
 }

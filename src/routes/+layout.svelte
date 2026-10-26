@@ -9,6 +9,7 @@
   import { appPrefs } from "../lib/stores/app-prefs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
   import { checkForUpdates } from "$lib/updater";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import "../app.css";
 
   const { children } = $props();
@@ -68,7 +69,19 @@
       });
     });
   }
+
+  // The webview's own menu — Back, Refresh, Save as… — belongs to a browser. Anywhere
+  // the app has no menu of its own, a right-click used to raise it, and its Refresh
+  // reloads the whole app (2026-10 design review). It stays where it is the GM's tool:
+  // in text they can edit (spelling, paste) and over text they have selected (copy).
+  function onContextMenu(e: MouseEvent) {
+    if (e.defaultPrevented || isTypingIn(e.target)) return;
+    if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    e.preventDefault();
+  }
 </script>
+
+<svelte:window oncontextmenu={onContextMenu} />
 
 <ThemeWatcher />
 <!-- closeButton is set per-toast (errors, import failures) — transient success

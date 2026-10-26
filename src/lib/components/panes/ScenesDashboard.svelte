@@ -4,8 +4,8 @@
     Play,
     SlidersHorizontal,
     Plus,
+    Square,
     Star,
-    ExternalLink,
     Palette,
     Pencil,
     Trash2,
@@ -17,19 +17,18 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Popover from "$lib/components/ui/popover";
   import * as Rename from "$lib/components/ui/rename";
+  import SceneAppearance from "$lib/components/SceneAppearance.svelte";
+  import { toastUndo } from "$lib/toast";
+  import { isTypingIn } from "$lib/utils/keyboard";
+  import { SvelteSet } from "svelte/reactivity";
   import type { SceneWithCount } from "$lib/types/ledger";
   import {
-    ICON_OPTIONS,
     DEFAULT_SCENE_ICON as DefaultSceneIcon,
     sceneIcon,
     sceneThumbColors,
   } from "./thumbnail-presets";
-  import ColorPicker from "$lib/components/ColorPicker.svelte";
-  import { storedColorHex } from "$lib/color";
-  import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
 
   const cardBg = (scene: SceneWithCount) => sceneThumbColors(scene).bg;
   const cardFg = (scene: SceneWithCount) => sceneThumbColors(scene).fg;
@@ -50,8 +49,12 @@
     }
   }
 
+  // A scene being deleted leaves the grid at once; it is gone for good only when its
+  // Undo toast closes.
+  let pendingDeletion = new SvelteSet<number>();
+
   let sortedScenes = $derived(
-    [...scenes.scenes].sort((a, b) => {
+    scenes.scenes.filter((s) => !pendingDeletion.has(s.id)).sort((a, b) => {
       if (a.favorited !== b.favorited) return b.favorited - a.favorited;
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     }),
@@ -98,17 +101,31 @@
     }
   }
 
-  let deleteSceneTarget = $state<SceneWithCount | null>(null);
-
-  async function confirmDeleteScene() {
-    if (!deleteSceneTarget) return;
-    const id = deleteSceneTarget.id;
-    deleteSceneTarget = null;
-    try {
-      await scenes.deleteScene(id);
-    } catch (e) {
-      console.error("delete scene failed:", e);
-    }
+  // An undo toast, as a track's removal has, rather than the modal "cannot be undone"
+  // it was (2026-10 design review; DESIGN.md: a modal is disproportionate here). A
+  // scene that is sounding falls quiet while it waits, and comes back with Undo.
+  function deleteScene(scene: SceneWithCount) {
+    const id = scene.id;
+    const wasSounding = audioEngine.activeSceneId === id && !audioEngine.isScenePaused;
+    pendingDeletion.add(id);
+    if (wasSounding) void audioEngine.pauseScene();
+    toastUndo(
+      `Deleted “${scene.name}”`,
+      async () => {
+        try {
+          if (audioEngine.activeSceneId === id) audioEngine.stopAll();
+          await scenes.deleteScene(id);
+        } catch (e) {
+          console.error("delete scene failed:", e);
+        } finally {
+          pendingDeletion.delete(id);
+        }
+      },
+      () => {
+        pendingDeletion.delete(id);
+        if (wasSounding && audioEngine.activeSceneId === id) void audioEngine.resumeScene();
+      },
+    );
   }
 
   async function toggleFavorite(scene: SceneWithCount) {
@@ -119,28 +136,99 @@
     }
   }
 
-  let colorPickerScene = $state<SceneWithCount | null>(null);
-  let iconPickerScene = $state<SceneWithCount | null>(null);
+  // ── The card's menu ─────────────────────────────────────────────────────
+  // Playing first: at the table this is where a GM changes the room's sound. Then
+  // editing, then Delete. Picture, colour and icon are one Appearance popover at the
+  // card — the Scene pane's own — where a "Customise" submenu opened three windows.
 
-  async function applyColor(scene: SceneWithCount | null, color: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailColor(scene.id, color);
-    } catch (e) {
-      console.error("update thumbnail color failed:", e);
-    }
-    // The dialog stays open: a picker is something to try colours in, and the card
-    // behind it shows each one as it lands. Escape or the close button ends it.
+  let appearanceScene = $state<SceneWithCount | null>(null);
+  let appearanceAnchor = $state<HTMLElement | null>(null);
+
+  function cardOf(id: number): HTMLElement | null {
+    return document.querySelector(`[data-scene-card="${id}"]`);
   }
 
-  async function applyIcon(scene: SceneWithCount | null, icon: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailIcon(scene.id, icon);
-    } catch (e) {
-      console.error("update thumbnail icon failed:", e);
-    } finally {
-      iconPickerScene = null;
+  function openAppearance(scene: SceneWithCount) {
+    appearanceAnchor = cardOf(scene.id);
+    appearanceScene = scene;
+  }
+
+  // Rename and Appearance take focus somewhere of their own; the menu must not pull it
+  // back to the card as it closes (a scene's rename used to end with focus on nothing).
+  let handingOff = false;
+  function keepFocusIfHandedOff(e: Event) {
+    if (handingOff) e.preventDefault();
+    handingOff = false;
+  }
+
+  type Action = {
+    label: string;
+    icon: typeof Play;
+    run: () => void;
+    key?: string;
+    destructive?: boolean;
+  };
+
+  function actionsFor(scene: SceneWithCount, sounding: boolean): Action[][] {
+    const active = audioEngine.activeSceneId === scene.id;
+    return [
+      [
+        sounding
+          ? { label: "Stop", icon: Square, run: () => audioEngine.stopAll() }
+          : {
+              label: "Play",
+              icon: Play,
+              run: () =>
+                active && audioEngine.isScenePaused
+                  ? void audioEngine.resumeScene()
+                  : void audioEngine.playScene(scene.id),
+            },
+        { label: "Open", icon: SlidersHorizontal, run: () => openScene(scene) },
+      ],
+      [
+        {
+          label: "Rename",
+          icon: Pencil,
+          key: "F2",
+          run: () => {
+            handingOff = true;
+            startSceneRename(scene);
+          },
+        },
+        {
+          label: "Appearance…",
+          icon: Palette,
+          run: () => {
+            handingOff = true;
+            openAppearance(scene);
+          },
+        },
+        {
+          label: scene.favorited ? "Unfavourite" : "Favourite",
+          icon: Star,
+          run: () => toggleFavorite(scene),
+        },
+      ],
+      [
+        {
+          label: `Delete “${scene.name}”`,
+          icon: Trash2,
+          key: "Del",
+          destructive: true,
+          run: () => deleteScene(scene),
+        },
+      ],
+    ];
+  }
+
+  function onCardKeydown(e: KeyboardEvent, scene: SceneWithCount) {
+    if (isTypingIn(e.target)) return;
+    if (e.key === "F2") {
+      e.preventDefault();
+      startSceneRename(scene);
+    } else if (e.key === "Delete") {
+      e.preventDefault();
+      deleteScene(scene);
     }
   }
 
@@ -206,9 +294,11 @@
           {@const cardImgUrl = thumbnailUrls[scene.id]}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                data-scene-card
+                data-scene-card={scene.id}
                 data-playing={isPlaying || undefined}
+                onkeydown={(e) => onCardKeydown(e, scene)}
                 class="group flex flex-col overflow-hidden rounded-lg border bg-card/40 transition-colors {isPlaying
                   ? 'border-primary/60'
                   : 'border-border hover:border-foreground/20'}"
@@ -262,6 +352,7 @@
                   <div class="min-w-0 flex-1">
                   <Rename.Root
                     this="p"
+                    fallbackSelectionBehavior="all"
                     class="truncate font-heading text-sm text-foreground"
                     inputClass="bg-transparent px-0 py-0 font-heading text-sm"
                     bind:value={
@@ -300,56 +391,21 @@
               </div>
             </ContextMenu.Trigger>
 
-            <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => openScene(scene)}>
-                <ExternalLink class="size-4" />
-                Open
-              </ContextMenu.Item>
-              <ContextMenu.Item onclick={() => audioEngine.playScene(scene.id)}>
-                <Play class="size-4" />
-                Play
-              </ContextMenu.Item>
-              <ContextMenu.Separator />
-              <ContextMenu.Item onclick={() => toggleFavorite(scene)}>
-                <Star class="size-4" />
-                {scene.favorited ? "Unfavorite" : "Favorite"}
-              </ContextMenu.Item>
-              <ContextMenu.Separator />
-              <ContextMenu.Sub>
-                <ContextMenu.SubTrigger>
-                  <Palette class="size-4" />
-                  Customise
-                </ContextMenu.SubTrigger>
-                <ContextMenu.SubContent>
-                  <ContextMenu.Item onclick={() => changeThumbnail(scene.id)}
-                    >Change thumbnail</ContextMenu.Item
-                  >
-                  {#if scene.thumbnail_path}
-                    <ContextMenu.Item onclick={() => removeThumbnail(scene.id)}
-                      >Remove image</ContextMenu.Item
-                    >
-                  {/if}
+            <ContextMenu.Content class="max-w-72" onCloseAutoFocus={keepFocusIfHandedOff}>
+              {#each actionsFor(scene, isPlaying) as group, g (g)}
+                {#if g > 0}<ContextMenu.Separator />{/if}
+                {#each group as action (action.label)}
+                  {@const Icon = action.icon}
                   <ContextMenu.Item
-                    onclick={() => {
-                      colorPickerScene = scene;
-                    }}>Change color</ContextMenu.Item
+                    variant={action.destructive ? "destructive" : "default"}
+                    onSelect={action.run}
                   >
-                  <ContextMenu.Item
-                    onclick={() => {
-                      iconPickerScene = scene;
-                    }}>Change icon</ContextMenu.Item
-                  >
-                </ContextMenu.SubContent>
-              </ContextMenu.Sub>
-              <ContextMenu.Item onclick={() => startSceneRename(scene)}>
-                <Pencil class="size-4" />
-                Rename
-              </ContextMenu.Item>
-              <ContextMenu.Separator />
-              <ContextMenu.Item variant="destructive" onclick={() => (deleteSceneTarget = scene)}>
-                <Trash2 class="size-4" />
-                Delete
-              </ContextMenu.Item>
+                    <Icon />
+                    <span class="min-w-0 truncate">{action.label}</span>
+                    {#if action.key}<ContextMenu.Shortcut>{action.key}</ContextMenu.Shortcut>{/if}
+                  </ContextMenu.Item>
+                {/each}
+              {/each}
             </ContextMenu.Content>
           </ContextMenu.Root>
         {/each}
@@ -358,82 +414,26 @@
   </div>
 </div>
 
-<Dialog.Root
-  open={colorPickerScene !== null}
+<!-- At the card it was opened from, and focus goes back to that card's play control. -->
+<Popover.Root
+  open={appearanceScene !== null}
   onOpenChange={(o) => {
-    if (!o) colorPickerScene = null;
+    if (!o) appearanceScene = null;
   }}
 >
-  <Dialog.Content style="max-width: 18rem">
-    <Dialog.Header>
-      <Dialog.Title>Color</Dialog.Title>
-    </Dialog.Header>
-    {#if colorPickerScene}
-      <ColorPicker
-        value={storedColorHex(
-          scenes.scenes.find((s) => s.id === colorPickerScene?.id)?.thumbnail_color ?? null,
-        )}
-        onchange={(hex) => applyColor(colorPickerScene, hex)}
-      />
+  <Popover.Content
+    customAnchor={appearanceAnchor}
+    side="right"
+    align="start"
+    class="flex w-72 flex-col gap-4"
+    onCloseAutoFocus={(e) => {
+      e.preventDefault();
+      appearanceAnchor?.querySelector<HTMLElement>("[data-play-btn]")?.focus();
+    }}
+  >
+    {#if appearanceScene}
+      {@const live = scenes.scenes.find((x) => x.id === appearanceScene?.id) ?? appearanceScene}
+      <SceneAppearance scene={live} />
     {/if}
-  </Dialog.Content>
-</Dialog.Root>
-
-<Dialog.Root
-  open={iconPickerScene !== null}
-  onOpenChange={(o) => {
-    if (!o) iconPickerScene = null;
-  }}
->
-  <Dialog.Content style="max-width: 22rem">
-    <Dialog.Header>
-      <Dialog.Title>Choose icon</Dialog.Title>
-    </Dialog.Header>
-    <div data-icon-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ICON_OPTIONS as { name, label, icon: Icon } (name)}
-          <button
-            data-icon-btn={name}
-            aria-label={label}
-            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
-            onclick={() => applyIcon(iconPickerScene, name)}
-          >
-            <Icon class="size-5 text-foreground/70" />
-          </button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyIcon(iconPickerScene, null)}
-      >
-        Reset to default
-      </Button>
-    </div>
-  </Dialog.Content>
-</Dialog.Root>
-
-<AlertDialog.Root
-  open={deleteSceneTarget !== null}
-  onOpenChange={(o) => {
-    if (!o) deleteSceneTarget = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete scene</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete
-        <span class="font-medium text-foreground">{deleteSceneTarget?.name}</span>? This action
-        cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" onclick={confirmDeleteScene}>
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+  </Popover.Content>
+</Popover.Root>

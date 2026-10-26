@@ -97,7 +97,7 @@
   </DetailSection>
 
   <!-- Font size (text only) -->
-  <DetailSection label="Font Size — {annotation.font_size}px" sectionKey="font-size">
+  <DetailSection label="Font size — {annotation.font_size}px" sectionKey="font-size">
     <input
       id="ann-fontsize"
       type="range"
@@ -141,7 +141,7 @@
 {/if}
 
 <!-- Fill / text color -->
-<DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
+<DetailSection label={annotation.kind === "text" ? "Text colour" : "Fill colour"} sectionKey="color">
   <ColorPicker
     value={annotation.color}
     defaultValue={DEFAULT_ANNOTATION_COLOR}

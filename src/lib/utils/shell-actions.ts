@@ -22,7 +22,10 @@ export const shell = {
   openGraph: () => tabs.openTab({ type: "graph", id: 0, title: "Graph" }),
   openQuickNotes: () => tabs.navigateOpen({ type: "quickNotes", id: 0, title: "Quick Notes" }),
   /** The palette, at its list of templates to make a note from. */
-  openTemplatePicker: () => {
+  openTemplatePicker: () => shell.openTemplatePickerIn(null),
+  /** The same, for a note that goes into `folder` — a folder's own menu. */
+  openTemplatePickerIn: (folder: string | null) => {
+    searchPalette.templateFolder = folder;
     searchPalette.open = true;
     searchPalette.openToTemplatePicker = true;
   },

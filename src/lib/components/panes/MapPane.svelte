@@ -36,8 +36,11 @@
   interface Props {
     mapId: number;
     pane: "left" | "right";
+    /** Opened by Rename in the tree's menu: start naming it. */
+    rename?: boolean;
+    tabIndex?: number;
   }
-  let { mapId, pane }: Props = $props();
+  let { mapId, pane, rename = false, tabIndex = 0 }: Props = $props();
 
   // A map's surface always floats, whatever the pane measures: docking would
   // shrink the canvas and a sheet would swallow it (ADR-0006 §2). And it carries
@@ -244,6 +247,15 @@
     draftTitle = mapData.title;
     renamingTitle = true;
   }
+
+  // The tree's Rename opens the map here and asks for its name, as a note's does
+  // (2026-10 design review — a map had no Rename anywhere but its own title).
+  $effect(() => {
+    if (rename && mapData) {
+      startTitleRename();
+      tabs.clearRenameFlag(pane, tabIndex);
+    }
+  });
 
   async function commitTitleRename() {
     if (!mapData || !draftTitle.trim()) {
@@ -614,13 +626,16 @@
       }}
     />
 
-    <!-- Title badge -->
-    <div class="absolute top-3 left-3 z-1000">
+    <!-- Title badge. Opaque, with the button inside it, so hover can take the Hover
+         Overlay without the map showing through; it hovered with a crimson border and
+         carried a second shadow over `shadow-float` until the 2026-10 review. -->
+    <div class="absolute top-3 left-3 z-1000 rounded-lg border border-border bg-popover shadow-float">
       {#if renamingTitle}
         <!-- svelte-ignore a11y_autofocus -->
         <input
           autofocus
           bind:value={draftTitle}
+          onfocus={(e) => e.currentTarget.select()}
           onblur={commitTitleRename}
           onkeydown={(e) => {
             if (e.key === "Enter") {
@@ -630,16 +645,14 @@
             if (e.key === "Escape") renamingTitle = false;
           }}
           aria-label="Map name"
-          class="bg-popover border border-border shadow-float rounded-lg px-3 py-1.5
-                 font-heading text-sm shadow-sm"
+          class="rounded-lg bg-transparent px-3 py-1.5 font-heading text-sm"
         />
       {:else}
         <button
           onclick={startTitleRename}
           title="Click to rename"
-          aria-label="Rename map"
-          class="flex items-center gap-2 bg-popover border border-border shadow-float
-                 rounded-lg px-3 py-1.5 hover:border-primary/60 transition-colors cursor-pointer shadow-sm"
+          aria-label="Rename {mapData.title}"
+          class="flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors cursor-pointer hover:bg-surface-hover"
         >
           <span class="font-heading text-sm tracking-wide whitespace-nowrap">
             {mapData.title}

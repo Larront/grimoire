@@ -43,7 +43,7 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
   on request (`existing_sample_ledger`, `ledger.continueSample`). Launch opens on
   Iron, not white. The crimson wordmark is the Signal Rule's one named exception.
   DESIGN.md §5 Splash has the whole spec.
-- **SampleBanner** (on `feature/sample-banner-review`, awaiting merge): removed, with
+- **SampleBanner** (merged): removed, with
   its "dismissed" pref. The example is named as itself ("The Ashfen Vale", marked
   "example" in the world menu and the window title, through `ledger.worldName`); it
   keeps the usual world menu (recent worlds — the way back) with Make this world mine
@@ -62,6 +62,24 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
     notes.isLoading}`), so a rename lost the caret and undo history.
   - A note's `modified_at` was only its creation time; saves now move it.
   - Enter in a note's or template's title goes into its text.
+- **Context menus** (on `feature/context-menus-review`, awaiting merge): every menu is
+  one design (`ui/menu-styles.ts`, DESIGN.md §5 Menus) — the Block Handle's rows,
+  icons, sentence case, keys in Meta through `shortcut()`, arrows that stop at the
+  ends, Delete last and by name. Tree rows get a "⋯", F2 and Delete; a folder makes
+  notes from templates, names a new folder on the spot, and saves a new map's picture
+  in it. A tab's menu opens from the keyboard. A scene card leads with Play/Stop, opens
+  the Scene Editor's Appearance popover, and deletes with Undo. British spelling in GM
+  copy. Found and fixed on the way:
+  - **Undo could lie**: `toastUndo` committed on its own timer while the toast paused
+    on hover, so a folder could be deleted from disk with Undo still showing. It commits
+    when the toast closes now.
+  - **Undo couldn't be pressed over a dialog or the sidebar's sheet**; a click on a toast
+    now passes through and doesn't close them (`isOnToast`).
+  - **A file-tree delete was permanent.** Notes, folders and PDFs go to the Recycle Bin
+    now (`commands/recycle.rs`, the `trash` crate), the owner's call; maps and scenes
+    keep Undo, as their database rows can't come back from a bin.
+  - **The webview's own menu** (with a Refresh that reloads the app) showed on any
+    right-click the app didn't handle.
 
 ## Already decided — do not reopen
 
@@ -111,21 +129,15 @@ before fixing anything.
 
 ### 1. Remaining dialogs and secondary screens
 
-1. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
-   `panes/ScenesDashboard.svelte`. The scenes dashboard's card menu has 8 actions, still
-   opens the old colour and icon windows, and deletes a scene through a modal. The file
-   tree has no "New from template" on a folder yet; a GM in a folder's note gets it
-   there through New → Note from template.
+None left: the context menus were the last.
 
 ### 2. States, not screens
 
 These come up across everything above:
 
 - **Toasts.** Every kind can be fired from the dev-only "Toasts" pill (bottom left in dev
-  builds). `toastUndo` (27 callers) runs its delete on its own 5-second timer while the
-  toast pauses on hover, so the delete can happen with Undo still showing. Move it onto
-  sonner's `onAutoClose` / `onDismiss` (an action click only calls `deleteToast`, not
-  `onDismiss`, so Undo needs its own guard).
+  builds). `toastUndo` commits when its toast closes now (the context menus pass);
+  the rest haven't been looked at as a family.
 - **Banners**: the conflict banner and the deleted-note banner in `panes/NotePane.svelte`.
 - **Empty states**: an empty ledger, no scenes, no quick notes, a note with no backlinks.
 - **Edge cases**: long names, a large ledger (hundreds of notes, many scenes and tags), a
@@ -178,6 +190,11 @@ Not fixed yet; pick them up when they fit a pass above:
   was rebuilt.
 - **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
   tool is planned as the escape hatch.
+- **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
+  map badge, the colour picker's empty state, sentence-case panel labels, a menu for the
+  tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
+  Scene"); a "⋯" isn't in the Tab order (Shift+F10 reaches the same menu); a folder
+  deleted to the Recycle Bin doesn't say how many notes went with it.
 
 ## Known open items
 

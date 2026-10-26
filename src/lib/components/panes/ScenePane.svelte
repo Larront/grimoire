@@ -28,8 +28,6 @@
     SkipBack,
     SkipForward,
     Palette,
-    ImagePlus,
-    X,
     ChevronLeft,
     VolumeOff,
     Ellipsis,
@@ -37,15 +35,13 @@
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
-  import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
   import {
-    ICON_OPTIONS,
     DEFAULT_SCENE_ICON,
     sceneIcon,
     sceneThumbColors,
   } from "./thumbnail-presets";
-  import ColorPicker from "$lib/components/ColorPicker.svelte";
-  import { storedColorHex } from "$lib/color";
+  import SceneAppearance from "$lib/components/SceneAppearance.svelte";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import { open } from "@tauri-apps/plugin-dialog";
   import VolumeSlider from "$lib/components/VolumeSlider.svelte";
   import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
@@ -98,28 +94,6 @@
   // current choice. The popover stays open as choices land, so a GM can try a colour
   // against the icon without reopening anything.
   let appearanceOpen = $state(false);
-
-  async function applyColor(color: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailColor(scene.id, color);
-    } catch (e) {
-      console.error("update thumbnail color failed:", e);
-    } finally {
-      // Hand the header back to the stored colour — unless the GM has already moved on
-      // to another one while this save was in flight.
-      if (draftColor === color || color === null) draftColor = null;
-    }
-  }
-
-  async function applyIcon(icon: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailIcon(scene.id, icon);
-    } catch (e) {
-      console.error("update thumbnail icon failed:", e);
-    }
-  }
 
   // ---- Tab title sync ----
   $effect(() => {
@@ -680,81 +654,15 @@
             <span class="@max-md:sr-only">Appearance</span>
           </Popover.Trigger>
           <Popover.Content align="end" class="flex w-72 flex-col gap-4">
-            <!-- Picture -->
-            <section class="flex flex-col gap-1.5">
-              <h3 class="text-xs font-semibold text-muted-foreground">Picture</h3>
-              <div class="flex gap-2">
-                <Button
-                  data-edit-thumbnail-btn
-                  variant="outline"
-                  size="sm"
-                  onclick={() => changeThumbnail(scene.id)}
-                >
-                  <ImagePlus class="size-3.5" />
-                  {scene.thumbnail_path ? "Change picture" : "Choose picture"}
-                </Button>
-                {#if scene.thumbnail_path}
-                  <Button
-                    data-remove-thumbnail-btn
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => removeThumbnail(scene.id)}
-                  >
-                    <X class="size-3.5" />
-                    Remove
-                  </Button>
-                {/if}
-              </div>
-            </section>
-
-            <!-- Colour: any colour, picked freely, or none. The header follows the drag
-                 and the scene saves when the GM lets go. -->
-            <section class="flex flex-col gap-1.5">
-              <h3 class="text-xs font-semibold text-muted-foreground">Color</h3>
-              <ColorPicker
-                value={storedColorHex(scene.thumbnail_color)}
-                oninput={(hex) => (draftColor = hex)}
-                onchange={applyColor}
-              />
-            </section>
-
-            <!-- Icon -->
-            <section class="flex flex-col gap-1.5">
-              <h3 class="text-xs font-semibold text-muted-foreground">Icon</h3>
-              <div data-icon-picker class="grid grid-cols-6 gap-1">
-                <button
-                  type="button"
-                  data-icon-btn="default"
-                  aria-label="Default (music note)"
-                  aria-pressed={!scene.thumbnail_icon}
-                  title="Default"
-                  class="flex size-9 items-center justify-center rounded-md transition-colors
-                         {!scene.thumbnail_icon
-                    ? 'bg-primary/12 text-foreground ring-1 ring-primary'
-                    : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
-                  onclick={() => applyIcon(null)}
-                >
-                  <DEFAULT_SCENE_ICON class="size-4" />
-                </button>
-                {#each ICON_OPTIONS as { name, label, icon: Icon } (name)}
-                  {@const chosen = scene.thumbnail_icon === name}
-                  <button
-                    type="button"
-                    data-icon-btn={name}
-                    aria-label={label}
-                    aria-pressed={chosen}
-                    title={label}
-                    class="flex size-9 items-center justify-center rounded-md transition-colors
-                           {chosen
-                      ? 'bg-primary/12 text-foreground ring-1 ring-primary'
-                      : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'}"
-                    onclick={() => applyIcon(name)}
-                  >
-                    <Icon class="size-4" />
-                  </button>
-                {/each}
-              </div>
-            </section>
+            <SceneAppearance
+              {scene}
+              oncolorinput={(hex) => (draftColor = hex)}
+              oncolorsaved={(color) => {
+                // Hand the header back to the stored colour — unless the GM has already
+                // moved on to another one while this save was in flight.
+                if (draftColor === color || color === null) draftColor = null;
+              }}
+            />
           </Popover.Content>
         </Popover.Root>
       </div>
@@ -881,9 +789,22 @@
             {@const playlist = isPlaylistSlot(slot)}
             <ContextMenu.Root>
               <ContextMenu.Trigger>
+                <!-- F2 and Delete work from anywhere on the row, as both its menus say;
+                     they used to work only from the "⋯". -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   data-slot-row
                   class="flex items-center gap-2 rounded-lg bg-card/50 py-2 pr-2 pl-1.5 transition-colors hover:bg-card"
+                  onkeydown={(e) => {
+                    if (isTypingIn(e.target)) return;
+                    if (e.key === "F2") {
+                      e.preventDefault();
+                      startSlotRename(slot);
+                    } else if (e.key === "Delete") {
+                      e.preventDefault();
+                      deleteSlot(slot);
+                    }
+                  }}
                 >
                   <!-- Play this track. While the scene is stopped it previews the track on
                        its own; while the scene is active it brings the track in or out. It
@@ -1024,15 +945,6 @@
                       class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors
                              hover:bg-surface-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       aria-label="More for {slot.label}"
-                      onkeydown={(e: KeyboardEvent) => {
-                        if (e.key === "F2") {
-                          e.preventDefault();
-                          startSlotRename(slot);
-                        } else if (e.key === "Delete") {
-                          e.preventDefault();
-                          deleteSlot(slot);
-                        }
-                      }}
                     >
                       <Ellipsis class="size-4" />
                     </DropdownMenu.Trigger>
@@ -1056,11 +968,13 @@
                 <ContextMenu.Item onclick={() => startSlotRename(slot)}>
                   <Pencil class="size-4" />
                   Rename
+                  <ContextMenu.Shortcut>F2</ContextMenu.Shortcut>
                 </ContextMenu.Item>
                 <ContextMenu.Separator />
                 <ContextMenu.Item variant="destructive" onclick={() => deleteSlot(slot)}>
                   <Trash2 class="size-4" />
                   Remove from scene
+                  <ContextMenu.Shortcut>Del</ContextMenu.Shortcut>
                 </ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>

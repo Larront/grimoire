@@ -176,7 +176,7 @@
     {/if}
   </DetailSection>
 
-  <DetailSection label="Outbound Links" sectionKey="outbound">
+  <DetailSection label="Outbound links" sectionKey="outbound">
     {#if outboundLinks.length === 0}
       <p class="font-mono text-[11px] text-foreground-faint italic">No outbound links</p>
     {:else}

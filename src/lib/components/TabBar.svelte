@@ -13,9 +13,16 @@
     NotebookPen,
     LayoutTemplate,
     BookOpen,
+    CopyX,
+    ListX,
+    PanelLeftOpen,
+    PanelRightOpen,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { tabKey, type TabType } from "$lib/stores/tabs.svelte";
+  import { shortcut } from "$lib/utils/keyboard";
+  import { tick } from "svelte";
 
   interface Props {
     pane: "left" | "right";
@@ -28,7 +35,7 @@
   const activeIndex = $derived(tabPane?.activeIndex ?? 0);
 
   let hasOverflow = $state(false);
-  let dropdownOpen = $state(false);
+  let stripEl = $state<HTMLElement | null>(null);
 
   // ── Pointer-based drag ────────────────────────────────────────────────────
   // Using pointer events + setPointerCapture instead of HTML5 DnD, which does
@@ -160,32 +167,42 @@
     };
   }
 
-  function clickOutside(node: HTMLElement) {
-    function handleClick(e: MouseEvent) {
-      if (!node.contains(e.target as Node)) dropdownOpen = false;
+  // ← and → move along the tabs, as a tab strip's arrows do, taking focus with them.
+  async function onTabKeydown(e: KeyboardEvent, i: number) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      tabs.activateTab(pane, i);
+      return;
     }
-    document.addEventListener("click", handleClick, true);
-    return {
-      destroy() {
-        document.removeEventListener("click", handleClick, true);
-      },
-    };
+    const to = e.key === "ArrowLeft" ? i - 1 : e.key === "ArrowRight" ? i + 1 : null;
+    if (to === null || to < 0 || to >= tabList.length) return;
+    e.preventDefault();
+    tabs.activateTab(pane, to);
+    await tick();
+    stripEl?.querySelector<HTMLElement>(`[data-tab-index="${to}"] [role="tab"]`)?.focus();
   }
 </script>
 
 <div
   class="flex h-(--tab-bar-h) shrink-0 items-center border-b border-sidebar-border bg-background overflow-hidden"
 >
-  <div use:observeOverflow class="flex flex-1 overflow-hidden min-w-0 h-full">
+  <div
+    bind:this={stripEl}
+    use:observeOverflow
+    role="tablist"
+    aria-label={pane === "left" ? "Tabs" : "Right pane tabs"}
+    class="flex flex-1 overflow-hidden min-w-0 h-full"
+  >
     {#each tabList as tab, i (tabKey(tab))}
       {@const isActive = i === activeIndex}
       {@const isSource = isDragging && dragSrcIdx === i}
       {@const isTarget = isDragging && dropIdx === i}
       {@const Icon = getIcon(tab.type)}
+      <!-- The chip is layout and drag; the tab itself is the menu's trigger, so the
+           keyboard's menu key (Shift+F10, ≣) lands where the menu listens. It used to be
+           this outer element, and the key reached nothing (2026-10 design review). -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        role="tab"
-        aria-selected={isActive}
-        tabindex={isActive ? 0 : -1}
         data-tab-chip
         data-tab-pane={pane}
         data-tab-index={i.toString()}
@@ -195,13 +212,6 @@
           isSource ? "opacity-50" : "",
           isTarget ? "ring-inset ring-1 ring-primary/60" : "",
         ].join(" ")}
-        onclick={() => tabs.activateTab(pane, i)}
-        onkeydown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            tabs.activateTab(pane, i);
-          }
-        }}
         onpointerdown={(e) => onChipPointerDown(e, i)}
         onpointermove={(e) => onChipPointerMove(e, i)}
         onpointerup={(e) => onChipPointerUp(e, i)}
@@ -209,6 +219,11 @@
       >
         <ContextMenu.Root>
           <ContextMenu.Trigger
+            role="tab"
+            aria-selected={isActive}
+            tabindex={isActive ? 0 : -1}
+            onclick={() => tabs.activateTab(pane, i)}
+            onkeydown={(e: KeyboardEvent) => onTabKeydown(e, i)}
             class={[
               "flex items-center gap-1.5 px-3 h-full w-full cursor-pointer select-none group",
               isActive
@@ -245,20 +260,31 @@
             </button>
           </ContextMenu.Trigger>
           <ContextMenu.Content>
-            <ContextMenu.Item onSelect={() => tabs.closeTab(pane, i)}>Close</ContextMenu.Item>
-            <ContextMenu.Item onSelect={() => tabs.closeOthers(pane, i)}
-              >Close Others</ContextMenu.Item
-            >
-            <ContextMenu.Item onSelect={() => tabs.closeAll(pane)}>Close All</ContextMenu.Item>
+            <ContextMenu.Item onSelect={() => tabs.closeTab(pane, i)}>
+              <X />
+              Close
+              <!-- The key closes the active tab, so it is only this row's key on that one. -->
+              {#if isActive}<ContextMenu.Shortcut>{shortcut(["W"])}</ContextMenu.Shortcut>{/if}
+            </ContextMenu.Item>
+            <ContextMenu.Item onSelect={() => tabs.closeOthers(pane, i)}>
+              <CopyX />
+              Close others
+            </ContextMenu.Item>
+            <ContextMenu.Item onSelect={() => tabs.closeAll(pane)}>
+              <ListX />
+              Close all
+            </ContextMenu.Item>
             <ContextMenu.Separator />
             {#if pane === "left"}
-              <ContextMenu.Item onSelect={() => tabs.moveToOtherPane("left", i)}
-                >Move to Right Pane</ContextMenu.Item
-              >
+              <ContextMenu.Item onSelect={() => tabs.moveToOtherPane("left", i)}>
+                <PanelRightOpen />
+                Move to right pane
+              </ContextMenu.Item>
             {:else}
-              <ContextMenu.Item onSelect={() => tabs.moveToOtherPane("right", i)}
-                >Move to Left Pane</ContextMenu.Item
-              >
+              <ContextMenu.Item onSelect={() => tabs.moveToOtherPane("right", i)}>
+                <PanelLeftOpen />
+                Move to left pane
+              </ContextMenu.Item>
             {/if}
           </ContextMenu.Content>
         </ContextMenu.Root>
@@ -276,43 +302,30 @@
     <Plus class="size-3.5" />
   </button>
 
-  <!-- Chevron overflow button -->
+  <!-- Every tab, when they no longer fit: a menu like any other (it was a list of
+       its own, with no menu roles and hover in the card colour). -->
   {#if hasOverflow}
-    <div use:clickOutside class="relative shrink-0">
-      <button
-        type="button"
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
         class="flex items-center justify-center h-(--tab-bar-h) w-8 border-l border-sidebar-border bg-background text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors shrink-0"
-        onclick={() => (dropdownOpen = !dropdownOpen)}
         aria-label="Show all tabs"
       >
         <ChevronRight class="size-4" />
-      </button>
-      {#if dropdownOpen}
-        <div
-          class="absolute right-0 top-full z-50 min-w-[180px] rounded-lg border border-sidebar-border bg-popover text-popover-foreground p-1"
-        >
-          {#each tabList as tab, i (tabKey(tab))}
-            {@const Icon = getIcon(tab.type)}
-            <button
-              type="button"
-              class={[
-                "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer",
-                i === activeIndex
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent hover:text-accent-foreground text-popover-foreground",
-              ].join(" ")}
-              onclick={() => {
-                tabs.activateTab(pane, i);
-                dropdownOpen = false;
-              }}
-            >
-              <Icon class="size-3.5 shrink-0" />
-              <span class="truncate flex-1 text-left">{tab.title}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" class="min-w-[180px] max-w-72">
+        {#each tabList as tab, i (tabKey(tab))}
+          {@const Icon = getIcon(tab.type)}
+          <DropdownMenu.Item
+            aria-current={i === activeIndex ? "page" : undefined}
+            class={i === activeIndex ? "bg-surface-selected text-foreground" : ""}
+            onSelect={() => tabs.activateTab(pane, i)}
+          >
+            <Icon />
+            <span class="truncate">{tab.title}</span>
+          </DropdownMenu.Item>
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
   {/if}
 </div>
 

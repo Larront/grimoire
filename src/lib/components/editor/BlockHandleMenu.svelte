@@ -23,6 +23,7 @@
   import { ArrowLeftRight, Check, ChevronRight } from "@lucide/svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import { placeMenu } from "$lib/utils/anchored-menu";
+  import { menuItem } from "$lib/components/ui/menu-styles";
   import type {
     BlockHandleCommand,
     BlockHandleMenuItem,
@@ -192,9 +193,9 @@
     }
   }
 
-  // The slash menu's rows, so the two menus a GM meets in a note are one design.
-  const row =
-    "group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left font-sans text-[0.8125rem] outline-none";
+  // Every menu's row (`menuItem`), so this one and a right-click are one design; it
+  // was this menu's own until the 2026-10 review moved it into the shared primitives.
+  const row = menuItem;
 </script>
 
 {#snippet itemIcon(item: BlockHandleMenuItem)}
@@ -231,8 +232,7 @@
       aria-controls={subOpen ? "block-handle-submenu" : undefined}
       tabindex={active === 0 ? 0 : -1}
       data-command="turn-into"
-      class="{row} text-muted-foreground focus:bg-surface-selected focus:text-foreground
-             {subOpen ? 'bg-surface-selected text-foreground' : ''}"
+      class="{row} {subOpen ? 'bg-surface-selected text-foreground' : ''}"
       onclick={() => (subOpen ? closeSub() : openSub())}
       onmousemove={() => {
         active = 0;
@@ -260,10 +260,8 @@
         tabindex={index === active ? 0 : -1}
         data-command={commandKey(item.command)}
         aria-label={item.label}
-        class="{row}
-               {destructive
-          ? 'text-destructive focus:bg-destructive/10'
-          : 'text-muted-foreground focus:bg-surface-selected focus:text-foreground'}"
+        data-variant={destructive ? "destructive" : undefined}
+        class={row}
         onclick={() => onSelect(item.command)}
         onmousemove={() => {
           if (subOpen) subOpen = false;
@@ -297,8 +295,7 @@
         tabindex={i === subActive ? 0 : -1}
         data-command={commandKey(item.command)}
         aria-label={item.label}
-        class="{row} focus:bg-surface-selected focus:text-foreground
-               {item.current ? 'text-foreground' : 'text-muted-foreground'}"
+        class="{row} {item.current ? 'text-foreground' : ''}"
         onclick={() => onSelect(item.command)}
         onmousemove={() => (subActive = i)}
       >
