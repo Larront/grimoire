@@ -36,13 +36,25 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
   notes go beside the open note (CONTEXT.md, Note Placement — this reversed #227's
   "root, always"); one name check for files and folders (`names.rs`, `file-name.ts`);
   sidebar and tab hover take the Hover Overlay; Ember Error is `#dc6e64`.
-- **Splash Screen** (on `feature/splash-review`, awaiting merge): chosen by the owner
+- **Splash Screen** (merged): chosen by the owner
   from three layouts tried in the running app. Two columns — what Grimoire is and the
   ways to start; the last world as the subject with Continue focused, the others
   beneath. "World" throughout. The example world continues as left, or starts over
   on request (`existing_sample_ledger`, `ledger.continueSample`). Launch opens on
   Iron, not white. The crimson wordmark is the Signal Rule's one named exception.
   DESIGN.md §5 Splash has the whole spec.
+- **Ledger home → World Home** (on `feature/ledger-home-review`, awaiting merge): the
+  Splash's right-hand column carried into the world, in every empty pane (not only at
+  zero notes; "No tab open" is gone): name, contents, New note focused on arrival,
+  Note from template…, recently edited notes. Found and fixed on the way:
+  - **A note name with `?` or `:` froze the app** (an endless loop in
+    `resolve_note_filename` holding the world's lock; reachable by clicking an
+    unresolved link). Note names now follow `names.rs`; the owner chose refusal with a
+    toast over saving under a cleaned file name.
+  - **The note pane remounted its editor on every notes reload** (`{#if
+    notes.isLoading}`), so a rename lost the caret and undo history.
+  - A note's `modified_at` was only its creation time; saves now move it.
+  - Enter in a note's or template's title goes into its text.
 
 ## Already decided — do not reopen
 
@@ -92,11 +104,8 @@ before fixing anything.
 
 ### 1. Remaining dialogs and secondary screens
 
-1. **Ledger home**: `panes/LedgerHome.svelte` (the empty-ledger home inside the app).
-   It is where "New world" on the Splash lands, so it should feel like the next page of
-   the Splash: same voice, same words ("world").
-2. **SampleBanner**.
-3. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
+1. **SampleBanner**.
+2. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
    `panes/ScenesDashboard.svelte`. The scenes dashboard's card menu has 8 actions, still
    opens the old colour and icon windows, and deletes a scene through a modal. The file
    tree has no "New from template" on a folder yet; a GM in a folder's note gets it
@@ -140,6 +149,10 @@ apply it.
 
 Not fixed yet; pick them up when they fit a pass above:
 
+- **World Home**: a note made from a template is still called "Untitled". The app
+  shell nests one `<main>` inside another. A link whose text has `?` or `:` can't
+  become a note (refused, by the owner's choice); if GMs trip on it, the alternative
+  is a file name cleaned of those characters with the title kept as written.
 - **Splash**: a world whose folder moved offers Look again and ✕, but no "Find it…"
   to point the recent entry at its new folder (needs a backend re-point of the recent
   entry). The default window is 1280×832; whether a smaller launch window suits the
