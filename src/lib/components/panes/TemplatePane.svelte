@@ -121,7 +121,10 @@
   function handleTitleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
-      (e.target as HTMLInputElement).blur();
+      const input = e.target as HTMLInputElement;
+      input.blur();
+      // On into the text, as a note's title does.
+      input.closest("[data-note-column]")?.querySelector<HTMLElement>(".ProseMirror")?.focus();
     }
     if (e.key === "Escape") {
       draftTitle = templateTitle;

@@ -14,7 +14,8 @@
   import { Button } from "$lib/components/ui/button";
   import { ArrowRight, FolderOpen, LoaderCircle, Plus } from "@lucide/svelte";
   import WorldRow from "./WorldRow.svelte";
-  import { lastOpened, worldContents, type SplashProps } from "./splash";
+  import { timeAgo, worldContents } from "$lib/utils/world-words";
+  import type { SplashProps } from "./splash";
 
   let p: SplashProps & {
     /** The create form, drawn in the right-hand column in place of the worlds. */
@@ -93,7 +94,7 @@
           {last.name}
         </h2>
         <p class="mt-3 text-(length:--font-body) text-foreground-muted">
-          {worldContents(last)} · last opened {lastOpened(last.last_opened)}
+          {worldContents(last)} · last opened {timeAgo(last.last_opened)}
         </p>
         <Button
           size="lg"

@@ -328,6 +328,16 @@ What a GM sees whenever no world is open. Two columns over Iron Dark, the conten
 - **Words:** "world" throughout; "ledger" is the code's word.
 - **Launch** opens on Iron, not white: the window's own background is set (`tauri.conf.json`), and the page carries Iron Dark (or Parchment, under `.light`) before any stylesheet arrives (`app.html`).
 
+### World Home
+
+What an empty pane shows in an open world — the Splash's right-hand column carried into it, so making a world on the Splash lands on the same page shape (2026-10 design review). One column, 34rem, starting a sixth of the way down the pane, scrolling with the pane scrollbar.
+
+- **The world's name** in Metamorphous at Title size (three lines at most, whole on hover), then one muted line: what is in it ("14 notes · 2 scenes · 1 map", the Splash's words), or, while it has no notes, _"Every world begins with its first note."_
+- **New note** — the primary button, 40px with an arrow, like Continue; it keeps its width while it reads "Creating…". It takes focus once, when a world opens onto this page, so Enter writes the first note; showing the page again later doesn't pull focus. Beside it, _Note from template…_ as a quiet underlined line.
+- **Recently edited**: the five notes last written in, under that field label, as list rows (Nunito, the note icon, how long ago). A row opens the note in this pane.
+- **No error line.** A failed New note is said by the toast the call raises.
+- **The sidebar's empty Files group** is one muted line, "Your notes will be listed here." It had a crimson icon tile and a second New Note button beside this page's.
+
 ### New world fields
 
 Name and location for a new world, one part (`NewLedgerFields`) in both places a world is made: the Splash's create form and the Adopt dialog.

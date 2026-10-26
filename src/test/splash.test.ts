@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import HomePage from "../routes/+page.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
-import { lastOpened, worldContents } from "../lib/components/splash/splash";
+import { timeAgo, worldContents } from "../lib/utils/world-words";
 
 const SANDBOX = "/app-data/sample-world";
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -167,13 +167,13 @@ describe("Splash — words", () => {
   const at = (ms: number) => new Date(now - ms).toISOString();
 
   it("says when a world was last opened in words", () => {
-    expect(lastOpened(at(20_000), now)).toBe("just now");
-    expect(lastOpened(at(5 * 6e4), now)).toBe("5 minutes ago");
-    expect(lastOpened(at(3 * 36e5), now)).toBe("3 hours ago");
-    expect(lastOpened(at(DAY), now)).toBe("yesterday");
-    expect(lastOpened(at(7 * DAY), now)).toBe("a week ago");
-    expect(lastOpened(at(60 * DAY), now)).toBe("2 months ago");
-    expect(lastOpened(at(400 * DAY), now)).toBe("over a year ago");
+    expect(timeAgo(at(20_000), now)).toBe("just now");
+    expect(timeAgo(at(5 * 6e4), now)).toBe("5 minutes ago");
+    expect(timeAgo(at(3 * 36e5), now)).toBe("3 hours ago");
+    expect(timeAgo(at(DAY), now)).toBe("yesterday");
+    expect(timeAgo(at(7 * DAY), now)).toBe("a week ago");
+    expect(timeAgo(at(60 * DAY), now)).toBe("2 months ago");
+    expect(timeAgo(at(400 * DAY), now)).toBe("over a year ago");
   });
 
   it("says what is in a world, and when nothing is", () => {

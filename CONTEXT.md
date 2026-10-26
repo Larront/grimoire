@@ -328,8 +328,13 @@ _Avoid_: "admonition" (the Sphinx/MkDocs term; the ledger's word is callout, mat
 
 ### Splash
 
-The full-window arrival screen shown whenever no ledger is open (`src/routes/+page.svelte`). Three states: **first-time** (no recent ledgers — the example world is the invitation), **returning** (the ledger last opened as the subject, with **Continue** focused, and the other recent ledgers beneath), and **creating** (the new-world form, in place of the worlds). Its copy says "world", never "ledger". Distinct from the empty-ledger home (_"Every world begins with its first note"_), which shows when a ledger is open but holds no notes.
-_Avoid_: "welcome screen," "start page," "home" (the empty-ledger home is a separate surface).
+The full-window arrival screen shown whenever no ledger is open (`src/routes/+page.svelte`). Three states: **first-time** (no recent ledgers — the example world is the invitation), **returning** (the ledger last opened as the subject, with **Continue** focused, and the other recent ledgers beneath), and **creating** (the new-world form, in place of the worlds). Its copy says "world", never "ledger". Distinct from the [[World Home]], which shows inside an open ledger.
+_Avoid_: "welcome screen," "start page," "home" (the World Home is a separate surface).
+
+### World Home
+
+What an empty pane shows in an open ledger (`panes/LedgerHome.svelte`): the world's name at Title size, what is in it ("14 notes · 2 scenes · 1 map"), **New note** and _Note from template…_, and its five most recently edited notes to go back to. A brand-new world says _"Every world begins with its first note"_ instead of its contents, and has no list yet. New note takes focus once, when a world opens onto this page, so Enter writes the first note. It is the Splash's right-hand column carried into the world. Until the 2026-10 design review it showed only while a ledger had no notes, and an empty pane after that said "No tab open". "Recently edited" reads a note's modified time, which every save from Grimoire now moves.
+_Avoid_: "empty-ledger home" (it shows in any empty pane), "dashboard" (it is a page about one world, not an overview of the app), "No tab open".
 
 ### Sample Ledger
 

@@ -11,7 +11,7 @@
   import type { RecentLedger } from "$lib/stores/ledger.svelte";
   import { LoaderCircle, RotateCw, X } from "@lucide/svelte";
   import { shortPath } from "$lib/utils/ledger-name";
-  import { lastOpened, worldContents } from "./splash";
+  import { timeAgo, worldContents } from "$lib/utils/world-words";
 
   let {
     world,
@@ -75,7 +75,7 @@
         </span>
       </span>
       <span class="shrink-0 text-(length:--font-ui) text-foreground-muted">
-        {lastOpened(world.last_opened)}
+        {timeAgo(world.last_opened)}
       </span>
     </button>
   {/if}
