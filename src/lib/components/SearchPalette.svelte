@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { shortcut } from "$lib/utils/keyboard";
   import { setMode, userPrefersMode } from "mode-watcher";
   import { toastSuccess } from "$lib/toast";
   import {
@@ -198,12 +199,7 @@
   // same flag the keystroke does: one surface, two ways in.
   // A command with a key says so, in Meta: the palette is where a GM looks for a
   // thing whose key they have not learned, so it is where the key gets taught.
-  const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
-  function shortcut(keys: string[]): string {
-    return isMac
-      ? "⌘" + keys.map((k) => (k === "Shift" ? "⇧" : k)).join("")
-      : ["Ctrl", ...keys].join("+");
-  }
+  // Spelled by `shortcut`, as the menus spell it.
 
   function cmdCaptureQuickNote() {
     searchPalette.open = false;

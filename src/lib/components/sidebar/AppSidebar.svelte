@@ -5,6 +5,7 @@
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { shortcut } from "$lib/utils/keyboard";
   import { onMount, setContext, type ComponentProps } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
   import AppSearch from "../AppSearch.svelte";
@@ -343,7 +344,7 @@
                 >
                   <FilePlus strokeWidth={1.5} />
                   Note
-                  <DropdownMenu.Shortcut>Ctrl+N</DropdownMenu.Shortcut>
+                  <DropdownMenu.Shortcut>{shortcut(["N"])}</DropdownMenu.Shortcut>
                 </DropdownMenu.Item>
                 <DropdownMenu.Item data-testid="sidebar-new-from-template" onSelect={shell.openTemplatePicker}>
                   <LayoutTemplate strokeWidth={1.5} />

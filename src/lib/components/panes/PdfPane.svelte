@@ -30,6 +30,7 @@
   import { pdfSceneLinks } from "$lib/stores/pdf-scene-links.svelte";
   import type { PdfSceneLink } from "$lib/bindings.gen";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { shortcut } from "$lib/utils/keyboard";
   import { SvelteSet } from "svelte/reactivity";
   import { toastError, toastUndo } from "$lib/toast";
 
@@ -650,7 +651,7 @@
           {#each ZOOM_STEPS as step (step)}
             <DropdownMenu.Item onclick={() => setScale(step)}>
               {Math.round(step * 100)}%
-              {#if step === 1}<DropdownMenu.Shortcut>Ctrl 0</DropdownMenu.Shortcut>{/if}
+              {#if step === 1}<DropdownMenu.Shortcut>{shortcut(["0"])}</DropdownMenu.Shortcut>{/if}
             </DropdownMenu.Item>
           {/each}
         </DropdownMenu.Content>
