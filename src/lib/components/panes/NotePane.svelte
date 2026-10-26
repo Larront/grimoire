@@ -297,7 +297,11 @@
   function handleTitleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
-      (e.target as HTMLInputElement).blur();
+      const input = e.target as HTMLInputElement;
+      input.blur();
+      // On into the text, as a title's Enter does in any editor. It used to leave the
+      // caret nowhere, so a GM naming their first note typed into nothing.
+      input.closest("[data-note-column]")?.querySelector<HTMLElement>(".ProseMirror")?.focus();
     }
     if (e.key === "Escape") {
       if (note) draftTitle = note.title;
@@ -423,7 +427,11 @@
 <div bind:this={containerEl} class="relative flex flex-1 min-h-0">
   <!-- Note content area -->
   <div class="flex-1 min-w-0">
-    {#if notes.isLoading}
+    <!-- Wait only while the note isn't there yet. Every reload of the notes list —
+         this note's own rename, a note made elsewhere — used to swap the open note
+         for a spinner and back, tearing down its editor: the caret went nowhere and
+         its undo history with it (2026-10 design review). -->
+    {#if notes.isLoading && !note}
       <div class="flex flex-1 items-center justify-center">
         <LoaderCircle class="size-5 animate-spin text-muted-foreground" />
       </div>
