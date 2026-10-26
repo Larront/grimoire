@@ -49,21 +49,33 @@ pub(crate) fn validate_parent_path(ledger_root: &Path, relative: &str) -> Result
     Ok(joined) // parent is validated; return the full (not yet existing) file path
 }
 
-pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Path) -> (String, std::path::PathBuf) {
+/// How many "Untitled 2", "Untitled 3"… to try before giving up rather than looping.
+const MAX_NAME_ATTEMPTS: u32 = 10_000;
+
+pub(crate) fn resolve_note_filename(
+    base_title: &str,
+    parent_dir: &std::path::Path,
+) -> Result<(String, std::path::PathBuf), String> {
     let mut resolved_title = base_title.to_string();
-    let mut counter = 2u32;
-    loop {
+    for counter in 2..=MAX_NAME_ATTEMPTS + 1 {
         let filename = format!("{}.md", resolved_title);
         let full_path = parent_dir.join(&filename);
         // Free only when the file is known *not* to be there. `exists()` answered
         // false for a file it couldn't check — a cloud-only file, one another program
         // had locked — and a new note of the same name was written over it.
-        if matches!(full_path.try_exists(), Ok(false)) {
-            return (resolved_title, full_path);
+        match full_path.try_exists() {
+            Ok(false) => return Ok((resolved_title, full_path)),
+            Ok(true) => {}
+            // A name the filesystem can't check is one it can't hold either, and it
+            // answers the same for every numbered try: this used to loop forever while
+            // holding the world's lock, so a link like [[Who rang the bell?]] froze the
+            // app (2026-10 design review). Callers check the name first; this is the
+            // backstop.
+            Err(e) => return Err(format!("ERR_BAD_NAME: '{resolved_title}' can't be a file name: {e}")),
         }
         resolved_title = format!("{} {}", base_title, counter);
-        counter += 1;
     }
+    Err(format!("No free name for '{base_title}' after {MAX_NAME_ATTEMPTS} tries"))
 }
 
 #[tauri::command]
@@ -95,6 +107,10 @@ fn create_note_inner(
 ) -> Result<Note, String> {
     let OpenLedger { path: ledger_path, conn, index } = l;
 
+    // A note's name becomes its file's name, so it follows the file-name rule —
+    // a link's text can name something a file can't be called (`?`, `:`).
+    let note_title = crate::commands::names::check_file_name(note_title, "note")?;
+
     // Determine the parent directory and resolve any filename conflicts
     // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
     let initial_full_path = validate_parent_path(ledger_path, note_path)?;
@@ -102,7 +118,7 @@ fn create_note_inner(
         .parent()
         .ok_or("Cannot determine parent directory")?;
 
-    let (resolved_title, full_path) = resolve_note_filename(note_title, parent_dir);
+    let (resolved_title, full_path) = resolve_note_filename(note_title, parent_dir)?;
 
     // Convert the resolved absolute path back to a ledger-relative forward-slash path
     let resolved_path = full_path
@@ -161,7 +177,7 @@ fn create_note_from_template_inner(
         .parent()
         .ok_or("Cannot determine parent directory")?;
 
-    let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir);
+    let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir)?;
 
     let resolved_path = full_path
         .strip_prefix(ledger_path)
@@ -244,6 +260,10 @@ fn rename_note_inner(
     rewrite_backlinks: bool,
 ) -> Result<RenameNoteResult, String> {
     let OpenLedger { path: ledger_path, conn, index } = l;
+
+    // The new name becomes the file's: refuse what a file can't be called before
+    // anything moves.
+    crate::commands::names::check_file_name(&note.title, "note")?;
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
@@ -640,7 +660,7 @@ mod tests {
     #[test]
     fn test_no_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("My Note", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("My Note", dir.path()).unwrap();
         assert_eq!(resolved_title, "My Note");
         assert_eq!(full_path, dir.path().join("My Note.md"));
     }
@@ -649,7 +669,7 @@ mod tests {
     fn test_one_conflict() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Untitled.md"), "").unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path()).unwrap();
         assert_eq!(resolved_title, "Untitled 2");
         assert_eq!(full_path, dir.path().join("Untitled 2.md"));
     }
@@ -659,8 +679,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Untitled.md"), "").unwrap();
         fs::write(dir.path().join("Untitled 2.md"), "").unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path()).unwrap();
         assert_eq!(resolved_title, "Untitled 3");
         assert_eq!(full_path, dir.path().join("Untitled 3.md"));
+    }
+
+    // A name the filesystem can't check gave the same error for every numbered try,
+    // and the loop never ended — a link like [[Who rang the bell?]] froze the app on
+    // Windows. A NUL byte fails the check on every platform, so it stands in here.
+    #[test]
+    fn a_name_the_filesystem_cannot_check_is_refused_rather_than_looped_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = resolve_note_filename("Who rang\0the bell", dir.path()).unwrap_err();
+        assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
     }
 }
