@@ -11,6 +11,7 @@ export const searchPalette = $state({
   open: false,
   activeQuery: "",
   openToTemplatePicker: false,
-  /** `null`: beside the open note, as every other new note goes (`newNoteFolder`). */
+  /** `null`: beside the open note, as every other new note goes (`newNoteFolder`);
+      `""`: the world's root. */
   templateFolder: null as string | null,
 });

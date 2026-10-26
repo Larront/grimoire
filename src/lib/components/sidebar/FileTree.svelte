@@ -32,7 +32,7 @@
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
   import { useSidebar } from "$lib/components/ui/sidebar";
   import { slide } from "svelte/transition";
-  import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
     TREE_DRAG_MIME,
     canDrop,
@@ -47,8 +47,6 @@
   import { shell } from "$lib/utils/shell-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
   import { recycleBin } from "$lib/utils/platform";
-  import { open } from "@tauri-apps/plugin-dialog";
-  import { readFile } from "@tauri-apps/plugin-fs";
   import { onDestroy } from "svelte";
 
   const sidebar = useSidebar();
@@ -286,24 +284,10 @@
     cancelHoverExpand();
   }
 
-  // The explicit affordance for PDF import (drag-and-drop is the implicit one):
-  // pick one or more PDFs via the OS dialog and import them into this folder. The
-  // dialog yields paths, so bytes are read here and handed to the same backend
-  // command the drop path uses (savePdfBytes; ADR-0011).
+  // The explicit way to import PDFs, beside dropping them on the folder.
   async function importPdfToFolder(target: FileNode) {
     if (!target.is_dir) return;
-    const picked = await open({
-      title: "Import PDF",
-      multiple: true,
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-    });
-    const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
-    if (!paths.length) return;
-    for (const p of paths) {
-      const bytes: number[] = Array.from(await readFile(p));
-      const name = p.replace(/\\/g, "/").split("/").pop() ?? "document.pdf";
-      await api.savePdfBytes(bytes, name, target.path);
-    }
+    if ((await pickPdfsInto(target.path)) === 0) return;
     treeExpansion.reveal(target.path);
     await refresh();
   }

@@ -23,7 +23,9 @@
     Files,
     LayoutTemplate,
     SquarePen,
+    FileUp,
   } from "@lucide/svelte";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
   import { buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
   import { ledger } from "$lib/stores/ledger.svelte";
@@ -35,7 +37,7 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { toastExternalMoveLinks, toastSuccess } from "$lib/toast";
   import { slide } from "svelte/transition";
-  import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
     canDrop,
     dropIntoFolder,
@@ -258,12 +260,19 @@
     }
   }
 
+  async function importPdfToRoot() {
+    if ((await pickPdfsInto("")) > 0) await refresh();
+  }
+
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
       // A free name, because making a folder that already exists does nothing: a
       // second New folder used to leave the first one where it was and add nothing.
       const siblings = (parentNode ?? tree)?.children ?? [];
-      const name = freeName("New folder", siblings.map((n) => n.name));
+      const name = freeName(
+        "New folder",
+        siblings.map((n) => n.name),
+      );
       const path = parentNode ? `${parentNode.path}/${name}` : name;
       await api.createFolder(path);
       if (parentNode) treeExpansion.reveal(parentNode.path);
@@ -371,7 +380,10 @@
                   Note
                   <DropdownMenu.Shortcut>{shortcut(["N"])}</DropdownMenu.Shortcut>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item data-testid="sidebar-new-from-template" onSelect={shell.openTemplatePicker}>
+                <DropdownMenu.Item
+                  data-testid="sidebar-new-from-template"
+                  onSelect={shell.openTemplatePicker}
+                >
                   <LayoutTemplate strokeWidth={1.5} />
                   Note from template…
                 </DropdownMenu.Item>
@@ -388,7 +400,10 @@
                   Scene
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator />
-                <DropdownMenu.Item data-testid="sidebar-manage-templates" onSelect={shell.openTemplates}>
+                <DropdownMenu.Item
+                  data-testid="sidebar-manage-templates"
+                  onSelect={shell.openTemplates}
+                >
                   <SquarePen strokeWidth={1.5} />
                   Templates…
                 </DropdownMenu.Item>
@@ -475,45 +490,81 @@
               {#if open}
                 <div {...props} transition:slide>
                   <Sidebar.GroupContent>
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <div
-                      ondragover={handleRootDragOver}
-                      ondragleave={() => (isRootDropTarget = false)}
-                      ondrop={handleRootDrop}
-                      class="rounded-md {isRootDropTarget ? 'ring-1 ring-primary/40' : ''}"
-                    >
-                      {#if treeLoading && !tree}
-                        <div class="space-y-1 px-2">
-                          <Sidebar.MenuSkeleton showIcon />
-                          <Sidebar.MenuSkeleton showIcon />
-                          <Sidebar.MenuSkeleton showIcon />
-                        </div>
-                      {:else if tree && tree.children.length > 0}
-                        <Sidebar.Menu>
-                          {#each tree.children as treeNode (treeNode.path)}
-                            <FileTree
-                              node={treeNode}
-                              {noteMap}
-                              {refresh}
-                              {handleNewNote}
-                              {handleNewFolder}
-                              {handleNewMap}
-                            />
-                          {/each}
-                        </Sidebar.Menu>
-                      {:else if tree}
-                        <!-- One quiet line, not a second "make your first note" beside
+                    <!-- The world's root, as a folder's row is that folder: its own
+                         menu for making things there, and room under the last row to
+                         right-click or drop on. A right-click there used to fall through
+                         to the webview's own menu (2026-10 design review). -->
+                    <ContextMenu.Root>
+                      <ContextMenu.Trigger>
+                        {#snippet child({ props })}
+                          <!-- svelte-ignore a11y_no_static_element_interactions -->
+                          <div
+                            {...props}
+                            data-testid="files-root"
+                            ondragover={handleRootDragOver}
+                            ondragleave={() => (isRootDropTarget = false)}
+                            ondrop={handleRootDrop}
+                            class="rounded-md pb-6 {isRootDropTarget
+                              ? 'ring-1 ring-primary/40'
+                              : ''}"
+                          >
+                            {#if treeLoading && !tree}
+                              <div class="space-y-1 px-2">
+                                <Sidebar.MenuSkeleton showIcon />
+                                <Sidebar.MenuSkeleton showIcon />
+                                <Sidebar.MenuSkeleton showIcon />
+                              </div>
+                            {:else if tree && tree.children.length > 0}
+                              <Sidebar.Menu>
+                                {#each tree.children as treeNode (treeNode.path)}
+                                  <FileTree
+                                    node={treeNode}
+                                    {noteMap}
+                                    {refresh}
+                                    {handleNewNote}
+                                    {handleNewFolder}
+                                    {handleNewMap}
+                                  />
+                                {/each}
+                              </Sidebar.Menu>
+                            {:else if tree}
+                              <!-- One quiet line, not a second "make your first note" beside
                              the world's home, which already offers it (as does New ▾
                              above). It had a crimson tile and a button of its own
                              (2026-10 design review). -->
-                        <p
-                          class="px-2 py-1.5 text-(length:--font-ui) text-muted-foreground"
-                          data-testid="files-empty"
-                        >
-                          Your notes will be listed here.
-                        </p>
-                      {/if}
-                    </div>
+                              <p
+                                class="px-2 py-1.5 text-(length:--font-ui) text-muted-foreground"
+                                data-testid="files-empty"
+                              >
+                                Your notes will be listed here.
+                              </p>
+                            {/if}
+                          </div>
+                        {/snippet}
+                      </ContextMenu.Trigger>
+                      <ContextMenu.Content>
+                        <ContextMenu.Item onSelect={() => handleNewNote(null)}>
+                          <FilePlus />
+                          New note
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => shell.openTemplatePickerIn("")}>
+                          <LayoutTemplate />
+                          New note from template…
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => handleNewFolder(null)}>
+                          <FolderPlus />
+                          New folder
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => handleNewMap(null)}>
+                          <MapPinPlus />
+                          New map
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={importPdfToRoot}>
+                          <FileUp />
+                          Import PDF…
+                        </ContextMenu.Item>
+                      </ContextMenu.Content>
+                    </ContextMenu.Root>
                   </Sidebar.GroupContent>
                 </div>
               {/if}
@@ -522,7 +573,6 @@
         </Sidebar.Group>
       </Collapsible.Root>
     </div>
-
   </Sidebar.Content>
 
   <Sidebar.Footer>

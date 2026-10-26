@@ -62,6 +62,6 @@ export async function createNoteFromTemplate(
   templatePath: string,
   folder: string | null = newNoteFolder(),
 ): Promise<void> {
-  const newNote = await api.createNoteFromTemplate(templatePath, folder);
-  await openNew(newNote, folder);
+  const newNote = await api.createNoteFromTemplate(templatePath, folder || null);
+  await openNew(newNote, folder || null);
 }
