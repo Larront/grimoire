@@ -278,6 +278,7 @@ Components respond with precision and without hurry. State transitions are 150ms
 - **Border:** Iron Border
 - **Internal Padding:** 16px
 - **Behaviour:** The picture is the card's main target and plays / pauses the scene; an always-visible play control sits on it. A labelled Edit button in the footer opens the editor.
+- **Menu:** Play (Stop while the scene sounds) and Open; Rename `F2`, Appearance… and Favourite; then Delete by name `Del`, which takes the card away at once behind an Undo toast. Appearance… opens the Scene Editor's own popover beside the card — picture, colour and icon together, the current icon marked — and hands focus back to the card's play control. Until the 2026-10 review it was eight rows with a Customise submenu of three separate windows, and a modal that said the delete could not be undone.
 - **States:** Default, Hover (border lifts), Playing (Crimson border + filled play control), No image (Iron Raised + the scene's icon, muted — or the GM's chosen colour; never an app-assigned hue)
 
 ### Inputs / Fields
@@ -299,9 +300,23 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
+A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus (out of the Tab order — every row would be two stops). F2 and Delete work from the row itself. A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus.
+
 ### Command Palette (Signature Component)
 
 560px wide, horizontally centred over the content area, its top a third of the way down. A modal-level surface (§4): Iron Raised, 8px radius, `shadow-float` over a dim scrim. Never blurred — the app remains legible behind it. Input auto-focused on open; Esc returns focus to the triggering element. A command with its own key shows it on the row, right-aligned in Meta (`Ctrl+Shift+N`, `⌘⇧N` on a Mac) — the palette is where a GM looks for a key they have not learned. Results are list rows, so every result — note, map or scene — renders in Nunito (the Two Voices Rule on lists). Results group by type (Notes, Maps, Scenes) under a Field label.
+
+### Menus
+
+Every menu is one design — a right-click, a "⋯", the New menu, the tab bar's, the block grip's — from one set of styles (`ui/menu-styles.ts`). Until the 2026-10 review the context and dropdown menus drew the library's rows and the Block Handle its own, and no two menus agreed on case, keys or how to delete.
+
+- **Surface:** the Floating level (§4): Iron Raised, Iron Border, `shadow-float`, 8px radius, 4px in.
+- **Rows:** Nunito 13px in sentence case, Ember Muted at rest, each with a 14px icon at 70%. The highlighted row — pointer or keyboard alike — takes Crimson Tint and Ember Ash, its icon at full strength. Arrows stop at the ends rather than wrapping from the first row onto Delete.
+- **Keys:** a key that does the same thing from the row the menu was opened on sits at the row's end in Meta, spelled by `shortcut()` (`Ctrl+W`, `⌘W` on a Mac) — and only where it is true: Close shows `Ctrl+W` on the tab that key closes.
+- **Order:** what the GM came for first (Play on a scene card), then what makes or opens, then what edits, then Delete — last, alone after a rule, naming what it deletes ("Delete “Boss Battle”"). Ember Error with its bin icon; highlighted, the words go Ember Ash on a red tint and the icon stays red, because any tint behind Ember Error takes it under 4.5:1.
+- **Findable:** a right-click menu always has a visible way in too (a "⋯", or the item's own button), and opens from the keyboard on the focused thing with Shift+F10 or the menu key.
+- **Focus:** an item that opens something elsewhere — a note to rename, a popover — hands focus there; otherwise the menu returns it to what opened it.
+- **Deleting:** an Undo toast that commits when it closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it.
 
 ### Slash Menu
 
@@ -459,7 +474,7 @@ One grip for the whole note, beside whichever block the pointer or caret is on: 
 
 - **Where:** in one column out in the gutter, level with the block's first line, never over a word. The floor is the pane's edge, not the column's, so a block that breaks out past the column — an encounter of tiled creatures — still gets its grip outside it. A block floated beside the text (an Infobox, an image) takes its grip at its own left edge instead.
 - **Which block:** while the GM is on the grip or in its menu, the block is outlined with a neutral rule — crimson stays for *selected*. A bullet's grip holds the whole list item. The grip and its menu name the block by its own name where it has one (a creature, a callout's title, an infobox's), so "Delete Kobold B", not "Delete statblock".
-- **Menu:** the slash menu's rows, 240px — Turn into (text blocks only; its types open in a submenu beside the row, focused on the kind the block already is), then Duplicate, Copy as Markdown, Delete in full-strength destructive. Focus opens on the first row and arrows stop at the ends rather than wrapping onto Delete.
+- **Menu:** every menu's rows (Menus, above), 240px — Turn into (text blocks only; its types open in a submenu beside the row, focused on the kind the block already is), then Duplicate, Copy as Markdown, Delete in full-strength destructive. Focus opens on the first row and arrows stop at the ends rather than wrapping onto Delete.
 - **Feedback:** Delete shows "Deleted … · Undo"; Copy confirms. Keyboard moves are announced. Undo works from the grip. Escape from a menu opened by mouse returns to the text; from one opened by keyboard, to the grip.
 
 ### Scene Player (Signature Component)
@@ -573,6 +588,7 @@ One component (`VolumeSlider`) for every level in the app: the scene editor, the
 - **Do** give every icon-only button an `aria-label` — icon rail, toolbar buttons, close buttons, mute toggles.
 - **Do** return focus to the triggering element when overlays, dialogs, and command palette close.
 - **Do** make empty states purposeful: a Metamorphous headline, one Nunito orienting line, one CTA.
+- **Do** spell what the GM reads the British way — colour, favourite, centre, customise (2026-10 design review; the menus had "Customise" beside "Favorite" and "Change color"). Identifiers in the code keep whatever spelling their library uses.
 - **Do** use `prefers-reduced-motion` to snap all transitions to instant and replace animated elements (waveform visualizer → static level bar, now-playing bars → still bars).
 
 ### Don't:
