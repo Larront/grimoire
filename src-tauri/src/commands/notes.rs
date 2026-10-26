@@ -394,13 +394,17 @@ fn write_note_content_inner(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
+    let before = fs::read_to_string(&full_path).ok();
     note_mutation::commit_or_write(conn, index, &full_path, maybe_note.as_ref(), &content)?;
 
-    // The row's modified time follows the writes made here. It was set once, when the
+    // The row's modified time follows what the GM changed. It was set once, when the
     // row was made, so a note's Details said "Modified" with its creation time and the
     // world's home listed notes by when they were made, not written in (2026-10
-    // design review).
-    if maybe_note.is_some() {
+    // design review). Not for a save that only changes trailing whitespace: the editor
+    // re-saves some notes as they open, ending them with a blank line, and opening a
+    // note is not editing it.
+    let changed = before.as_deref().map(str::trim_end) != Some(content.trim_end());
+    if maybe_note.is_some() && changed {
         diesel::update(notes.filter(path.eq(note_path)))
             .set(modified_at.eq(chrono::Utc::now().to_rfc3339()))
             .execute(conn)
@@ -615,6 +619,27 @@ mod tests {
 
         let after: Note = notes.find(note.id).first(&mut conn).unwrap();
         assert!(after.modified_at.as_str() > "2026", "got {}", after.modified_at);
+    }
+
+    #[test]
+    fn a_save_that_only_adds_a_trailing_blank_line_is_not_an_edit() {
+        let (dir, mut conn) = open_ledger_fixture();
+        fs::write(dir.path().join("Start Here.md"), "# Welcome\n").unwrap();
+        let note = seed_note(&mut conn, "Start Here.md", "Start Here");
+        diesel::update(notes.filter(id.eq(note.id)))
+            .set(modified_at.eq("2020-01-01T00:00:00+00:00"))
+            .execute(&mut conn)
+            .unwrap();
+
+        write_note_content_inner(
+            OpenLedger { path: dir.path(), conn: &mut conn, index: None },
+            "Start Here.md",
+            "# Welcome\n\n",
+        )
+        .unwrap();
+
+        let after: Note = notes.find(note.id).first(&mut conn).unwrap();
+        assert_eq!(after.modified_at, "2020-01-01T00:00:00+00:00");
     }
 
     #[test]

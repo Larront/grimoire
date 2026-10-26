@@ -31,11 +31,12 @@
   // Keep the OS window title on the open ledger (issue #118): taskbar and
   // alt-tab identify the world, not just the app.
   $effect(() => {
-    const name = ledger.isSample
-      ? "Example World"
-      : ledger.isOpen && ledger.path
-        ? (ledger.path.split(/[\\/]/).pop() ?? null)
-        : null;
+    // The example by its own name, marked as one (2026-10 design review).
+    const name = !ledger.isOpen
+      ? null
+      : ledger.isSample
+        ? `${ledger.worldName} (example)`
+        : ledger.worldName || null;
     const title = name ? `${name} — Grimoire` : "Grimoire";
     if ("__TAURI_INTERNALS__" in window) {
       import("@tauri-apps/api/window")

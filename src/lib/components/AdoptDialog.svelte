@@ -102,14 +102,14 @@
         <Dialog.Title>Make this world mine</Dialog.Title>
         <Dialog.Description>
           Grimoire copies this world, with everything you've changed, into a new folder and opens it
-          as yours. The example stays, to explore fresh any time.
+          as yours. The example stays as it is, to come back to from the Splash or start over.
         </Dialog.Description>
       </Dialog.Header>
 
       <NewLedgerFields
         bind:name
         bind:parent
-        placeholder="My World"
+        placeholder="Name your world"
         disabled={copying}
         {attempted}
         nameRefused={refused}

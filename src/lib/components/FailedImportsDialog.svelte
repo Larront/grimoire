@@ -23,12 +23,8 @@
   let outcome = $state<string | null>(null);
 
   const one = $derived(unreadableNotes.count === 1);
-  // The world as the sidebar names it — the Example World's folder is "sample-world".
-  const worldName = $derived(
-    ledger.isSample
-      ? "Example World"
-      : (ledger.path?.split(/[\\/]/).filter(Boolean).pop() ?? "World"),
-  );
+  // The world as the sidebar names it — the example's folder is "sample-world".
+  const worldName = $derived(ledger.worldName || "World");
 
   $effect(() => {
     if (!unreadableNotes.open) outcome = null;

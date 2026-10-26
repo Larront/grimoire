@@ -28,6 +28,7 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { dialogs } from "$lib/stores/overlay.svelte";
   import { shell } from "$lib/utils/shell-actions";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { timeAgo, worldContents } from "$lib/utils/world-words";
@@ -40,9 +41,7 @@
   let creating = $state(false);
   let newNote = $state<HTMLButtonElement | null>(null);
 
-  const worldName = $derived(
-    ledger.isSample ? "The Ashfen Vale" : (ledger.path?.split(/[\\/]/).pop() ?? ""),
-  );
+  const worldName = $derived(ledger.worldName);
   const written = $derived(notes.notes.filter((n) => !n.archived));
   const contents = $derived(
     worldContents({
@@ -108,9 +107,22 @@
     >
       {worldName}
     </h2>
-    <p class="mt-3 text-(length:--font-body) text-foreground-muted">
-      {written.length ? contents : "Every world begins with its first note."}
-    </p>
+    {#if ledger.isSample}
+      <!-- The example says what it is here, where a GM lands, rather than in a strip
+           over every pane: that it is an example, that what they change is kept (it
+           continues, and only "Start it over" on the Splash resets it), and how to keep
+           it as theirs. -->
+      <p class="mt-3 text-(length:--font-body) text-foreground-muted" data-testid="home-example">
+        An example world · {contents}
+      </p>
+      <p class="mt-1 text-(length:--font-body) text-foreground-muted">
+        What you change here is kept for next time.
+      </p>
+    {:else}
+      <p class="mt-3 text-(length:--font-body) text-foreground-muted">
+        {written.length ? contents : "Every world begins with its first note."}
+      </p>
+    {/if}
 
     <div class="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
       <Button
@@ -129,14 +141,25 @@
           <ArrowRight data-icon="inline-end" />
         {/if}
       </Button>
-      <button
-        type="button"
-        data-testid="start-from-template"
-        class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
-        onclick={shell.openTemplatePicker}
-      >
-        Note from template…
-      </button>
+      {#if ledger.isSample}
+        <button
+          type="button"
+          data-testid="home-make-mine"
+          class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
+          onclick={() => (dialogs.adoptOpen = true)}
+        >
+          Make this world mine
+        </button>
+      {:else}
+        <button
+          type="button"
+          data-testid="start-from-template"
+          class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
+          onclick={shell.openTemplatePicker}
+        >
+          Note from template…
+        </button>
+      {/if}
     </div>
 
     {#if recent.length}

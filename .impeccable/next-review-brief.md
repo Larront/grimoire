@@ -43,7 +43,14 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
   on request (`existing_sample_ledger`, `ledger.continueSample`). Launch opens on
   Iron, not white. The crimson wordmark is the Signal Rule's one named exception.
   DESIGN.md §5 Splash has the whole spec.
-- **Ledger home → World Home** (on `feature/ledger-home-review`, awaiting merge): the
+- **SampleBanner** (on `feature/sample-banner-review`, awaiting merge): removed, with
+  its "dismissed" pref. The example is named as itself ("The Ashfen Vale", marked
+  "example" in the world menu and the window title, through `ledger.worldName`); it
+  keeps the usual world menu (recent worlds — the way back) with Make this world mine
+  added; its World Home says it's an example and that changes are kept. The Adopt
+  dialog no longer promises a "fresh" example. A save that only changes trailing
+  whitespace no longer counts as an edit.
+- **Ledger home → World Home** (merged): the
   Splash's right-hand column carried into the world, in every empty pane (not only at
   zero notes; "No tab open" is gone): name, contents, New note focused on arrival,
   Note from template…, recently edited notes. Found and fixed on the way:
@@ -104,8 +111,7 @@ before fixing anything.
 
 ### 1. Remaining dialogs and secondary screens
 
-1. **SampleBanner**.
-2. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
+1. **Context menus**: `sidebar/FileTree.svelte`, `TabBar.svelte` and
    `panes/ScenesDashboard.svelte`. The scenes dashboard's card menu has 8 actions, still
    opens the old colour and icon windows, and deletes a scene through a modal. The file
    tree has no "New from template" on a folder yet; a GM in a folder's note gets it
@@ -149,6 +155,12 @@ apply it.
 
 Not fixed yet; pick them up when they fit a pass above:
 
+- **The editor re-saves some notes as they open**, rewriting the file with a trailing
+  blank line (the example's Start Here). A whitespace-only save no longer moves a
+  note's modified time, but the write itself shouldn't happen on open: a GM's file
+  changes on disk without their edit.
+- **"Ledger" in GM-facing copy** still: the sidebar search ("Search ledger…"), the
+  palette's "Switch ledger…" and "Open new ledger" commands.
 - **World Home**: a note made from a template is still called "Untitled". The app
   shell nests one `<main>` inside another. A link whose text has `?` or `:` can't
   become a note (refused, by the owner's choice); if GMs trip on it, the alternative

@@ -12,20 +12,19 @@ describe("appPrefs — Rust persistence", () => {
   });
 
   it("setters persist the full snapshot via save_app_prefs", () => {
-    appPrefs.setSampleBannerDismissed(true);
+    appPrefs.setConfirmRenameLinks(true);
 
     const call = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "save_app_prefs");
     expect(call).toBeDefined();
     expect(call![1]).toEqual({
       prefs: {
         reduceMotion: false,
-        confirmRenameLinks: false,
-        sampleBannerDismissed: true,
+        confirmRenameLinks: true,
         density: null,
       },
     });
 
-    appPrefs.setSampleBannerDismissed(false);
+    appPrefs.setConfirmRenameLinks(false);
   });
 
   it("setters do not write to webview localStorage", () => {
@@ -35,13 +34,14 @@ describe("appPrefs — Rust persistence", () => {
   });
 
   it("load() applies persisted values and migrates legacy localStorage keys", async () => {
+    localStorage.setItem("grimoire-confirm-rename-links", "true");
+    // The example banner's key: retired with the banner, so only cleared away.
     localStorage.setItem("grimoire-sample-banner-dismissed", "true");
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       if (cmd === "get_app_prefs")
         return {
           reduceMotion: true,
           confirmRenameLinks: false,
-          sampleBannerDismissed: false,
         };
       return null;
     });
@@ -50,7 +50,8 @@ describe("appPrefs — Rust persistence", () => {
 
     expect(appPrefs.reduceMotion).toBe(true);
     // Migrated from the legacy webview key, which is then removed
-    expect(appPrefs.sampleBannerDismissed).toBe(true);
+    expect(appPrefs.confirmRenameLinks).toBe(true);
+    expect(localStorage.getItem("grimoire-confirm-rename-links")).toBeNull();
     expect(localStorage.getItem("grimoire-sample-banner-dismissed")).toBeNull();
 
     // Migration re-persists the merged snapshot
@@ -58,7 +59,7 @@ describe("appPrefs — Rust persistence", () => {
     expect(saved.length).toBeGreaterThan(0);
 
     appPrefs.setReduceMotion(false);
-    appPrefs.setSampleBannerDismissed(false);
+    appPrefs.setConfirmRenameLinks(false);
   });
 
   it("load() is a one-shot — repeat calls do not re-fetch", async () => {
@@ -128,7 +129,6 @@ describe("appPrefs — reduced motion seeding", () => {
     const prefs = await freshStore({
       reduceMotion: false,
       confirmRenameLinks: false,
-      sampleBannerDismissed: false,
     });
     expect(prefs.reduceMotion).toBe(false);
   });
