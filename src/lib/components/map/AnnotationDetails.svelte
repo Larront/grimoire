@@ -141,7 +141,7 @@
 {/if}
 
 <!-- Fill / text color -->
-<DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
+<DetailSection label={annotation.kind === "text" ? "Text Colour" : "Fill Colour"} sectionKey="color">
   <ColorPicker
     value={annotation.color}
     defaultValue={DEFAULT_ANNOTATION_COLOR}

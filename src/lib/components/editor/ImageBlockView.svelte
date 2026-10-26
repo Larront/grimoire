@@ -193,7 +193,7 @@
         <button
           type="button"
           class="{control} {image.align === 'center' ? 'text-primary' : ''}"
-          aria-label="Align center"
+          aria-label="Align centre"
           title="Centre"
           aria-pressed={image.align === "center"}
           onmousedown={(e) => e.preventDefault()}

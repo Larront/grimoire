@@ -303,7 +303,7 @@
 <DetailSection label="Appearance" sectionKey="appearance">
   <Collapsible bind:open={appearanceOpen}>
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
-      <span class="text-xs text-foreground-muted">Shape, icon, color</span>
+      <span class="text-xs text-foreground-muted">Shape, icon, colour</span>
       <ChevronDown
         class="w-3.5 h-3.5 text-foreground-muted transition-transform duration-200 {appearanceOpen
           ? 'rotate-180'
@@ -359,9 +359,9 @@
           </div>
         </div>
 
-        <!-- Color -->
+        <!-- Colour -->
         <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="text-xs font-semibold text-foreground-muted">Color</span>
+          <span class="text-xs font-semibold text-foreground-muted">Colour</span>
           <!-- The same picker as a scene's. Default clears the pin's own colour, so it
                wears what it would without one — its category's, if it has one. -->
           <ColorPicker
