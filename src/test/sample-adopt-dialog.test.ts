@@ -65,7 +65,7 @@ describe("adopt dialog", () => {
   }
 
   async function fill(view: Awaited<ReturnType<typeof openDialog>>, name = ADOPT_NAME) {
-    await fireEvent.input(view.getByPlaceholderText("My World"), { target: { value: name } });
+    await fireEvent.input(view.getByPlaceholderText("Name your world"), { target: { value: name } });
     vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
     await fireEvent.click(view.getByTestId("new-ledger-location"));
     await flush();
@@ -74,13 +74,16 @@ describe("adopt dialog", () => {
   it("'Make this world mine' in the sidebar opens the shell's dialog", async () => {
     const { getByTestId } = render(LedgerSelector);
     await flush();
-    fireEvent.click(getByTestId("make-mine-btn"));
+    // It sits in the world menu, with the GM's recent worlds (2026-10 design review).
+    await fireEvent.click(getByTestId("sample-world-marker"));
+    await flush();
+    await fireEvent.click(getByTestId("make-mine-btn"));
     expect(dialogs.adoptOpen).toBe(true);
   });
 
   it("starts with an empty name", async () => {
     const view = await openDialog();
-    expect((view.getByPlaceholderText("My World") as HTMLInputElement).value).toBe("");
+    expect((view.getByPlaceholderText("Name your world") as HTMLInputElement).value).toBe("");
   });
 
   it("keeps Make it mine pressable, and says what is missing beside each field", async () => {
@@ -91,14 +94,14 @@ describe("adopt dialog", () => {
     await fireEvent.click(confirm);
     expect(view.getByText("Give it a name.")).toBeTruthy();
     expect(view.getByText("Choose where to save it.")).toBeTruthy();
-    expect(view.getByPlaceholderText("My World")).toHaveAttribute("aria-invalid", "true");
+    expect(view.getByPlaceholderText("Name your world")).toHaveAttribute("aria-invalid", "true");
     expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).not.toContain("adopt_sample_ledger");
   });
 
   it("follows the typing once shown — a fixed name loses its message", async () => {
     const view = await openDialog();
     await fireEvent.click(view.getByTestId("adopt-confirm-btn"));
-    const input = view.getByPlaceholderText("My World");
+    const input = view.getByPlaceholderText("Name your world");
 
     await fireEvent.input(input, { target: { value: "Ash/fen" } });
     expect(view.getByText(/can't contain/)).toBeTruthy();
@@ -148,7 +151,7 @@ describe("adopt dialog", () => {
     expect(ledger.isSample).toBe(true);
 
     // A different name is a different question.
-    await fireEvent.input(view.getByPlaceholderText("My World"), {
+    await fireEvent.input(view.getByPlaceholderText("Name your world"), {
       target: { value: "Ashfen Chronicles 2" },
     });
     expect(view.queryByText(/already a folder/)).toBeNull();

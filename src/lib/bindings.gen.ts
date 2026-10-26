@@ -102,7 +102,6 @@ export const commands = {
 	getAppPrefs: () => __TAURI_INVOKE<{
 	reduceMotion?: boolean,
 	confirmRenameLinks?: boolean,
-	sampleBannerDismissed?: boolean,
 	/**
 	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
 	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
@@ -344,7 +343,6 @@ export type AliasCollision = {
 export type AppPrefs = {
 	reduceMotion?: boolean,
 	confirmRenameLinks?: boolean,
-	sampleBannerDismissed?: boolean,
 	/**
 	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
 	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so

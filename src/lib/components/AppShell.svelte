@@ -10,7 +10,6 @@
   import AdoptDialog from "./AdoptDialog.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
-  import SampleBanner from "./SampleBanner.svelte";
   import SampleEffects from "./SampleEffects.svelte";
   import * as Sidebar from "./ui/sidebar";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
@@ -136,7 +135,6 @@
           <div class="flex flex-1 min-h-0 overflow-hidden">
             <!-- Left pane (always present) -->
             <div class="relative flex flex-col flex-1 min-w-0 min-h-0" role="none">
-              <SampleBanner />
               <div class="flex items-center border-b border-sidebar-border">
                 <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />

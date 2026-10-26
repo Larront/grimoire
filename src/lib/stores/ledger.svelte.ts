@@ -54,8 +54,23 @@ interface OpenLedgerResult {
   rebuilt?: { maps_recovered: number } | null;
 }
 
-/** A world's name as the GM sees it: its folder's. */
+/** The example world's own name, as its Start Here note gives it. */
+export const EXAMPLE_WORLD_NAME = "The Ashfen Vale";
+
+/** Where the example's copy lives, once known — its folder is "sample-world". */
+let examplePath: string | null = null;
+const samePath = (a: string, b: string) =>
+  a.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() ===
+  b.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+
+/**
+ * A world's name as the GM sees it: its folder's — or, for the example, its own name.
+ * It was "Example World" in the sidebar and the window title and "The Ashfen Vale" on
+ * its pages; one name now, marked as an example where that matters (2026-10 design
+ * review).
+ */
 export function worldNameOf(path: string): string {
+  if (examplePath && samePath(path, examplePath)) return EXAMPLE_WORLD_NAME;
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
@@ -364,6 +379,7 @@ function createLedgerStore() {
       // freshly reset copy.
       await pendingSaves.flushAll();
       const sandboxPath = await api.exploreSampleLedger();
+      examplePath = sandboxPath;
       // The backend just replaced the sandbox, so the tabs saved for it name notes,
       // maps and scenes of a copy that is gone — some made while exploring.
       new LocalStorageTabPersistence(sandboxPath).clear();
@@ -382,7 +398,9 @@ function createLedgerStore() {
   /** Where an earlier exploration of the example left it, or null when there is none. */
   async function existingSample(): Promise<string | null> {
     try {
-      return (await api.silent.existingSampleLedger()) ?? null;
+      const found = (await api.silent.existingSampleLedger()) ?? null;
+      if (found) examplePath = found;
+      return found;
     } catch {
       return null;
     }
@@ -494,6 +512,10 @@ function createLedgerStore() {
     },
     get isSample() {
       return isSample;
+    },
+    /** The open world's name as the GM sees it (`worldNameOf`), or "" with none open. */
+    get worldName() {
+      return path ? worldNameOf(path) : "";
     },
     get pendingStartHere() {
       return pendingStartHere;

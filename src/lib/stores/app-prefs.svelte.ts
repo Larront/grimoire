@@ -9,7 +9,6 @@ const asDensity = (value: unknown): DensityLevel | null =>
 interface AppPrefsData {
   reduceMotion: boolean;
   confirmRenameLinks: boolean;
-  sampleBannerDismissed: boolean;
   density: DensityLevel | null;
 }
 
@@ -18,8 +17,11 @@ interface AppPrefsData {
 const LEGACY_KEYS: Record<Exclude<keyof AppPrefsData, "density">, string> = {
   reduceMotion: "grimoire-reduce-motion",
   confirmRenameLinks: "grimoire-confirm-rename-links",
-  sampleBannerDismissed: "grimoire-sample-banner-dismissed",
 };
+
+/** The example world's banner went in the 2026-10 design review; its old key is
+ *  only cleared away. */
+const RETIRED_KEYS = ["grimoire-sample-banner-dismissed"];
 
 /**
  * The operating system's own reduced-motion setting, read once at load.
@@ -38,7 +40,6 @@ function systemPrefersReducedMotion(): boolean {
 function createAppPrefs() {
   let reduceMotion = $state(false);
   let confirmRenameLinks = $state(false);
-  let sampleBannerDismissed = $state(false);
   /**
    * How tight the app is drawn, everywhere. It was saved per world, so each world opened
    * at whatever density it had been left in (2026-10 design review: density is about the
@@ -49,7 +50,7 @@ function createAppPrefs() {
   let loaded = false;
 
   function snapshot(): AppPrefsData {
-    return { reduceMotion, confirmRenameLinks, sampleBannerDismissed, density };
+    return { reduceMotion, confirmRenameLinks, density };
   }
 
   /** Persist the full prefs snapshot to the Rust-side app-prefs file (fire-and-forget). */
@@ -71,10 +72,10 @@ function createAppPrefs() {
       if (value === "true") {
         if (pref === "reduceMotion") reduceMotion = true;
         if (pref === "confirmRenameLinks") confirmRenameLinks = true;
-        if (pref === "sampleBannerDismissed") sampleBannerDismissed = true;
       }
       window.localStorage.removeItem(key);
     }
+    for (const key of RETIRED_KEYS) window.localStorage.removeItem(key);
     return migrated;
   }
 
@@ -99,7 +100,6 @@ function createAppPrefs() {
       if (saved) {
         reduceMotion = saved.reduceMotion ?? false;
         confirmRenameLinks = saved.confirmRenameLinks ?? false;
-        sampleBannerDismissed = saved.sampleBannerDismissed ?? false;
         density = asDensity(saved.density) ?? density;
       }
       const migrated = migrateLegacyKeys();
@@ -124,11 +124,6 @@ function createAppPrefs() {
 
   function setConfirmRenameLinks(value: boolean) {
     confirmRenameLinks = value;
-    persist();
-  }
-
-  function setSampleBannerDismissed(value: boolean) {
-    sampleBannerDismissed = value;
     persist();
   }
 
@@ -157,10 +152,6 @@ function createAppPrefs() {
       return confirmRenameLinks;
     },
     setConfirmRenameLinks,
-    get sampleBannerDismissed() {
-      return sampleBannerDismissed;
-    },
-    setSampleBannerDismissed,
     /** The app's density; Balanced until one is chosen. */
     get density(): DensityLevel {
       return density ?? "balanced";

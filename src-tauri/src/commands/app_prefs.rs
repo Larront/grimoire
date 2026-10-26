@@ -13,7 +13,6 @@ const APP_PREFS_FILE: &str = "app-prefs.json";
 pub struct AppPrefs {
     pub reduce_motion: bool,
     pub confirm_rename_links: bool,
-    pub sample_banner_dismissed: bool,
     /// How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
     /// the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
     /// each world opened at whatever density it happened to have been left in. None until
@@ -81,7 +80,6 @@ mod tests {
         let prefs = AppPrefs {
             reduce_motion: true,
             confirm_rename_links: false,
-            sample_banner_dismissed: true,
             density: Some("dense".into()),
         };
         write_prefs_file(&path, &prefs).unwrap();
@@ -108,6 +106,17 @@ mod tests {
         let prefs = read_prefs_file(&path).unwrap().expect("file exists");
         assert!(prefs.reduce_motion);
         assert!(!prefs.confirm_rename_links);
-        assert!(!prefs.sample_banner_dismissed);
+    }
+
+    /// The example world's banner, and its "dismissed" pref, went in the 2026-10 design
+    /// review; a GM's prefs file written before still carries the key, and must load.
+    #[test]
+    fn a_file_with_the_retired_banner_pref_still_loads() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(APP_PREFS_FILE);
+        fs::write(&path, r#"{ "reduceMotion": true, "sampleBannerDismissed": true }"#).unwrap();
+
+        let prefs = read_prefs_file(&path).unwrap().expect("file exists");
+        assert!(prefs.reduce_motion);
     }
 }
