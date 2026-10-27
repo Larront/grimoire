@@ -98,6 +98,31 @@ describe("createLedgerCollection", () => {
     expect(collection.items).toEqual(["two's note"]);
   });
 
+  // Until the new world's list lands, the old one's rows answered for it: a restored
+  // tab found the left world's note under its own id and reported it unreadable.
+  it("empties the list the moment another ledger opens, before its fetch lands", async () => {
+    let release!: (rows: string[]) => void;
+    const fetch = vi
+      .fn<() => Promise<string[]>>()
+      .mockResolvedValueOnce(["one's note"])
+      .mockImplementationOnce(() => new Promise((r) => (release = r)));
+    const collection = mount({ fetch });
+
+    mockLedgerOpen = true;
+    flushSync();
+    await flush();
+    expect(collection.items).toEqual(["one's note"]);
+
+    mockLedgerPath = "/ledgers/two";
+    mockOpenGeneration++;
+    flushSync();
+    expect(collection.items).toEqual([]);
+
+    release(["two's note"]);
+    await flush();
+    expect(collection.items).toEqual(["two's note"]);
+  });
+
   it("refetches when the open ledger is opened again at the same path", async () => {
     // Re-exploring the Example World from inside itself: the sandbox is reset and
     // reopened at the path it already had, so neither the flag nor the path moves —

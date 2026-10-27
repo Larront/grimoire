@@ -81,7 +81,14 @@
   let conflictBody = $state<string | null>(null);
 
   $effect(() => {
-    if (note && note.id !== lastFetchedId) {
+    // No note — a world switching under this tab — means the next one is read afresh,
+    // even with the same id: ids are per world, and the one that comes back is a
+    // different note.
+    if (!note) {
+      lastFetchedId = null;
+      return;
+    }
+    if (note.id !== lastFetchedId) {
       const targetId = note.id;
       lastFetchedId = targetId;
       body = null;
