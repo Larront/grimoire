@@ -28,12 +28,12 @@
   data-state={checked ? "checked" : "unchecked"}
   onclick={() => onCheckedChange(!checked)}
   class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition-colors
-         motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
+         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
          {checked ? 'border-foreground bg-foreground' : 'border-foreground-muted/70 bg-transparent'}
          {className}"
 >
   <span
-    class="pointer-events-none inline-block size-3.5 rounded-full transition-transform motion-reduce:transition-none
+    class="pointer-events-none inline-block size-3.5 rounded-full transition-transform
            {checked ? 'translate-x-[18px] bg-background' : 'translate-x-[2px] bg-foreground-muted'}"
   ></span>
 </button>

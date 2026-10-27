@@ -731,7 +731,7 @@
     font-size: 12px;
     padding: 4px 8px;
     white-space: nowrap;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-base) var(--ease-out);
   }
   :global(.grimoire-tooltip::before) {
     display: none;

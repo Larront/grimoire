@@ -222,15 +222,15 @@
     >
       <span
         class="pointer-events-none absolute right-0 top-1/2 border-t border-dashed border-primary/70
-               opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-hover/gap:opacity-100"
+               opacity-0 transition-opacity duration-(--motion-base) group-hover/gap:opacity-100"
         style="left: var(--row-insert-x, 0px)"
       ></span>
       <button
         type="button"
         tabindex="-1"
         class="absolute top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full
-               bg-popover text-primary opacity-0 shadow-float ring-1 ring-primary/50 transition-opacity duration-150
-               motion-reduce:transition-none group-hover/gap:opacity-100 cursor-pointer"
+               bg-popover text-primary opacity-0 shadow-float ring-1 ring-primary/50 transition-opacity duration-(--motion-base)
+               group-hover/gap:opacity-100 cursor-pointer"
         style="left: calc(var(--row-insert-x, 0px) - 0.5rem)"
         onclick={() => insert(index)}
         aria-label={`Insert ${noun} here`}
@@ -271,7 +271,7 @@
               <button
                 {...props}
                 type="button"
-                class="{control} size-6 shrink-0 opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+                class="{control} size-6 shrink-0 opacity-0 transition-opacity duration-(--motion-base)
                        group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100
                        data-[state=open]:opacity-100"
                 data-row-action="menu"
@@ -305,7 +305,7 @@
         </DropdownMenu.Root>
       {:else}
         <div
-          class="flex shrink-0 items-center opacity-0 transition-opacity duration-150 motion-reduce:transition-none
+          class="flex shrink-0 items-center opacity-0 transition-opacity duration-(--motion-base)
                  group-hover:opacity-100 group-focus-within:opacity-100"
         >
           <button
@@ -354,7 +354,7 @@
         type="button"
         data-row-add
         class="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground
-             transition-[opacity,color] duration-150 motion-reduce:transition-none
+             transition-[opacity,color] duration-(--motion-base)
              hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100
              focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
              {rows.length === 0 ? '' : 'row-list-add-quiet'}"

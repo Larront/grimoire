@@ -20,6 +20,7 @@
   import { tagsTick } from "$lib/stores/tags-tick.svelte";
   import { Switch } from "$lib/components/ui/switch";
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
+  import { ARRIVE, ms } from "$lib/motion";
 
   /*
     Tags are told apart by COLOUR ALONE, and that is a decision rather than an oversight.
@@ -212,7 +213,7 @@
         style: {
           "transition-property": "opacity",
           // Bare numbers are milliseconds (cytoscape's implicit time unit).
-          "transition-duration": DIM_FADE_MS,
+          "transition-duration": ms(DIM_FADE_MS),
         },
       },
       {
@@ -390,7 +391,7 @@
     const cyAny = cy as any;
     const matched = cyAny.getElementById(firstMatchId);
     if (matched && matched.length > 0) {
-      cyAny.animate({ fit: { eles: matched, padding: 80 }, duration: 400 });
+      cyAny.animate({ fit: { eles: matched, padding: 80 }, duration: ms(ARRIVE) });
     }
   }
 
@@ -646,11 +647,12 @@
 
       // Re-apply styles when the user switches accent preset or theme (light/dark).
       // ThemeWatcher sets inline style properties in dark mode and class names in light
-      // mode, so we observe both the style attribute and the class attribute.
+      // mode, so we observe both the style attribute and the class attribute — and
+      // Reduce Motion's attribute, which the hover dim's fade reads.
       observer = new MutationObserver(reapplyStyles);
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["class", "style"],
+        attributeFilter: ["class", "style", "data-reduce-motion"],
       });
     } catch (e) {
       error = String(e);
