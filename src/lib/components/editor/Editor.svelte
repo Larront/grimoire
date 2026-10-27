@@ -44,6 +44,9 @@
   // debounced write is suspended.
   let autosavePaused = false;
   let inFlightSave: Promise<void> | null = null;
+  // The note's text as it was opened or last written. A save of the same text is no
+  // save: opening a note is not editing it (see `save`).
+  let savedBody = "";
   let unregisterFlush: (() => void) | undefined;
   // Bumped on every doc edit so the broken-link resolver re-runs when links change.
   let docVersion = $state(0);
@@ -124,6 +127,8 @@
       },
     });
 
+    savedBody = bodyOf(editor);
+
     // Ledger switches and window close flush through this registry; the
     // editor's own unmount flushes in onDestroy below.
     unregisterFlush = pendingSaves.register(flush);
@@ -151,10 +156,32 @@
     editor?.destroy();
   });
 
-  async function save() {
+  /**
+   * The note's text as it goes to disk: the editor's markdown, ending in one newline.
+   *
+   * Tiptap keeps an empty paragraph after a note's last block, so the caret can always
+   * get below it, and adds it with the first transaction after a note opens — marking
+   * its broken links is enough. That paragraph is never content, and it serialised as a
+   * blank line at the end of the file, so the note looked edited and was saved as it
+   * opened (2026-10 design review). Trailing blank lines are dropped for the same reason.
+   */
+  function bodyOf(ed: Editor): string {
+    const markdown = ed.getMarkdown().trimEnd();
+    return markdown ? markdown + "\n" : "";
+  }
+
+  /**
+   * Write the buffer, unless it says what was opened or last written. `force` writes it
+   * anyway: "Keep my version" puts the GM's text back over a change made on disk, which
+   * this buffer can match while the file no longer does.
+   */
+  async function save(force = false) {
     if (!editor) return;
     dirty = false;
-    const run: Promise<void> = onSave(editor.getMarkdown()).finally(() => {
+    const body = bodyOf(editor);
+    if (!force && body === savedBody) return;
+    savedBody = body;
+    const run: Promise<void> = onSave(body).finally(() => {
       if (inFlightSave === run) inFlightSave = null;
     });
     inFlightSave = run;
@@ -184,7 +211,7 @@
    * including edits made after the file vanished — back to the original path.
    */
   export function getMarkdown(): string {
-    return editor?.getMarkdown() ?? initialContent;
+    return editor ? bodyOf(editor) : initialContent;
   }
 
   /**
@@ -205,7 +232,7 @@
    */
   export function resumeAutosave(): void {
     autosavePaused = false;
-    if (dirty) void save();
+    if (dirty) void save(true);
   }
 
   /**
