@@ -250,7 +250,7 @@
 {#snippet drawn()}
   {#if value}
     {#each segments as segment, i (i)}
-      {#if segment.kind === "text"}{segment.text}{:else}<span
+      {#if segment.kind === "text"}{segment.text}{:else}<!-- svelte-ignore a11y_no_noninteractive_tabindex: it is a `link` whenever it is a Tab stop --><span
           data-wiki-link
           data-path={segment.path}
           data-title={segment.title}
