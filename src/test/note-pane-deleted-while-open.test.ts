@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import AppShell from "../lib/components/AppShell.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
-import { editorClean, editorCalls } from "./mocks/editor-clean";
+import { editorClean, editorCalls, editorBuffer } from "./mocks/editor-clean";
 import type { Note } from "../lib/types/ledger";
 
 vi.mock("svelte-sonner", () => ({
@@ -57,6 +57,8 @@ let diskContent = "Original body";
 beforeEach(() => {
   editorClean.value = true;
   editorCalls.pause = 0;
+  editorCalls.resume = 0;
+  editorCalls.discard = 0;
   storeNotes = [{ ...testNote }];
   diskContent = "Original body";
   for (const k of Object.keys(listeners)) delete listeners[k];
@@ -228,5 +230,85 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     // changed, so the pane wasn't torn down or reloaded).
     expect(queryByTestId("deleted-banner")).toBeNull();
     expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
+  });
+});
+
+// The file comes back as a new row with a new id, the way the watcher sees a file moved
+// back into the world or restored from the Recycle Bin.
+async function deleteThenReturn(returned: string) {
+  storeNotes = [];
+  await emit("note:removed", { path: "Aldric.md" });
+  await syncStore();
+  diskContent = returned;
+  storeNotes = [{ ...testNote, id: 7 }];
+  await syncStore();
+}
+
+describe("NotePane — the deleted file comes back (2026-10 design review)", () => {
+  afterEach(() => {
+    editorBuffer.value = null;
+  });
+
+  it("drops the banner and follows the returned note when nothing differs", async () => {
+    const { queryByTestId, getByTestId } = await openNote();
+    await deleteThenReturn("Original body");
+
+    await waitFor(() => expect(queryByTestId("deleted-banner")).toBeNull());
+    expect(queryByTestId("conflict-banner")).toBeNull();
+    expect(tabs.leftActiveTab?.id).toBe(7);
+    // The open buffer stayed; nothing re-read it.
+    expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
+  });
+
+  it("asks, as a conflict, when the open copy says something the file doesn't", async () => {
+    const { queryByTestId, getByTestId } = await openNote();
+    editorBuffer.value = "Original body, with what I wrote while it was gone";
+    await deleteThenReturn("Original body");
+
+    await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
+    expect(queryByTestId("deleted-banner")).toBeNull();
+    expect(editorCalls.pause).toBeGreaterThan(0);
+    // The tab waits for the choice: moving it would read the file over the buffer.
+    expect(tabs.leftActiveTab?.id).toBe(1);
+  });
+
+  it("keeping the open copy writes it, then follows the returned note", async () => {
+    const { getByTestId } = await openNote();
+    editorBuffer.value = "Original body, with what I wrote while it was gone";
+    await deleteThenReturn("Original body");
+    await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
+
+    await act(() => getByTestId("conflict-keep").click());
+
+    await waitFor(() => expect(tabs.leftActiveTab?.id).toBe(7));
+    expect(editorCalls.resume).toBe(1);
+  });
+
+  it("reloading takes the returned file, without writing", async () => {
+    const { getByTestId } = await openNote();
+    editorBuffer.value = "Original body, with what I wrote while it was gone";
+    await deleteThenReturn("Original body");
+    await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
+
+    await act(() => getByTestId("conflict-reload").click());
+
+    await waitFor(() => expect(tabs.leftActiveTab?.id).toBe(7));
+    expect(editorCalls.resume).toBe(0);
+    expect(editorCalls.discard).toBe(1);
+  });
+
+  it("never shows both banners: a delete ends a waiting conflict", async () => {
+    const { queryByTestId, getByTestId } = await openNote();
+    editorClean.value = false;
+    diskContent = "Changed elsewhere";
+    await emit("note:content-changed", { path: "Aldric.md" });
+    await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
+
+    storeNotes = [];
+    await emit("note:removed", { path: "Aldric.md" });
+    await syncStore();
+
+    await waitFor(() => expect(getByTestId("deleted-banner")).toBeTruthy());
+    expect(queryByTestId("conflict-banner")).toBeNull();
   });
 });

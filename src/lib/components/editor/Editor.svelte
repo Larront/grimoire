@@ -228,11 +228,13 @@
   /**
    * Unfreeze autosave and persist the kept buffer now ("Keep my version"): the
    * GM chose their edits, so write them to disk immediately rather than leaving
-   * the editor and disk silently diverged until the next keystroke.
+   * the editor and disk silently diverged until the next keystroke. Whether or not
+   * an edit is pending: a note whose file came back after a delete has edits that
+   * were never saved, with nothing left waiting to save them.
    */
-  export function resumeAutosave(): void {
+  export function resumeAutosave(): Promise<void> {
     autosavePaused = false;
-    if (dirty) void save(true);
+    return save(true);
   }
 
   /**
