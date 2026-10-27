@@ -81,7 +81,7 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
   - **The webview's own menu** (with a Refresh that reloads the app) showed on any
     right-click the app didn't handle.
 
-- **States, not screens** (on `feature/states-review`, awaiting merge): toasts,
+- **States, not screens** (merged): toasts,
   the note banners, empty states, edge cases, keyboard tasks and the rail, reviewed as
   one critique. The owner chose a "needs attention" place over problem toasts, a Compare
   in the conflict banner, tabs that shrink then scroll, and a "Create note" when search
@@ -94,6 +94,17 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
     the tab bar grew past its pane, taking the open tab off screen; the tree sorted
     "Annal 1, 10, 100"; opening from the palette or closing a tab left focus nowhere;
     PDFs weren't in the palette; the tree was a Tab stop per row.
+- **Animation consistency** (on `feature/animation-review`, awaiting merge): four
+  motion tokens and one ease-out curve (DESIGN.md §5 Motion). Every section opens with
+  the shared `Disclosure`; menus, dialogs, sheets, toasts, the docked panel, the rail
+  and the Splash take the tokens; hover changes colour only. Reduce Motion became
+  Match my computer / On / Off and everything asks it. Found and fixed on the way:
+  - **Reduce Motion didn't reach Svelte's slides** (the sidebar, the tree): they run
+    outside CSS, so they played at full length with it on. A few parts asked the
+    computer's setting instead of the app's.
+  - **The search "pulse" had never shown**: it animated `::selection`, which can't
+    animate. A search hit is now tinted, held, then faded.
+  - Toasts arrived in 400ms and were cut off as they left (sonner removes one 200ms in).
 
 ## Already decided — do not reopen
 
@@ -153,12 +164,11 @@ Done (`feature/states-review`; see "Done in the second round").
 
 ### 3. Animation consistency, last (added by the owner)
 
-Expand and collapse should animate the same way everywhere. Today: the statblock's
-collapse has no animation (only its chevron rotates); callouts have one; the scene
-block's mixer slides with a grid-rows transition; the sidebar and file tree use Svelte
-`slide`; shadcn popovers, menus and dialogs use `animate-in` fade and zoom. Survey every
-collapsible and transition, pick one motion vocabulary (respecting reduced motion), and
-apply it.
+Done (`feature/animation-review`). The owner's calls: a section opens with one quick
+glide (150ms, its arrow turning with it), the docked panel and rail ease rather than
+crawl, the Splash keeps its rise but quicker, and Reduce Motion is "Match my computer"
+(the default) / On / Off, which everything asks. DESIGN.md §5 Motion has the four
+tokens and the rules.
 
 ## Leftovers from surfaces already reviewed
 
@@ -203,6 +213,10 @@ Not fixed yet; pick them up when they fit a pass above:
   tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
   Scene"); a "⋯" isn't in the Tab order (Shift+F10 reaches the same menu); a folder
   deleted to the Recycle Bin doesn't say how many notes went with it.
+- **Animation**: in a narrow window, Settings opened from the sidebar's sheet opens
+  under the sheet rather than closing it (`shell.openSettings` only opens the dialog).
+  Sonner's own reduced-motion rule follows the computer, so with Reduce Motion Off on a
+  computer that reduces motion, toasts still snap.
 
 ## Known open items
 
