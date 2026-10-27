@@ -73,3 +73,27 @@ describe("the tab bar", () => {
     expect(tabs.left.activeIndex).toBe(0);
   });
 });
+
+// Keys to change tab, which there were none of (2026-10 design review). Bound by the
+// shell, which owns the window's keys.
+describe("changing tab from the keyboard", () => {
+  it("steps with Ctrl+Tab and Ctrl+Shift+Tab, round from the end, and jumps with Ctrl+digit", async () => {
+    const { default: AppShell } = await import("../lib/components/AppShell.svelte");
+    render(AppShell);
+    expect(tabs.left.activeIndex).toBe(0);
+
+    await fireEvent.keyDown(window, { key: "Tab", ctrlKey: true });
+    expect(tabs.left.activeIndex).toBe(1);
+    await fireEvent.keyDown(window, { key: "Tab", ctrlKey: true, shiftKey: true });
+    await fireEvent.keyDown(window, { key: "Tab", ctrlKey: true, shiftKey: true });
+    expect(tabs.left.activeIndex).toBe(2);
+
+    await fireEvent.keyDown(window, { key: "1", ctrlKey: true });
+    expect(tabs.left.activeIndex).toBe(0);
+    await fireEvent.keyDown(window, { key: "9", ctrlKey: true });
+    expect(tabs.left.activeIndex).toBe(2);
+    // No fifth tab: Ctrl+5 does nothing.
+    await fireEvent.keyDown(window, { key: "5", ctrlKey: true });
+    expect(tabs.left.activeIndex).toBe(2);
+  });
+});

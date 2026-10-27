@@ -155,17 +155,44 @@
     }
   }
 
+  // ── More tabs than fit ──────────────────────────────────────────────────
+  // Tabs narrow to a minimum, then the strip scrolls, with the open tab kept in view;
+  // the + and the list of every tab stay at the end. The bar used to grow past its pane
+  // instead, and with a dozen tabs the open one, the + and the Details toggle were all
+  // off screen with no way to reach them (2026-10 design review).
+  function measureOverflow() {
+    if (stripEl) hasOverflow = stripEl.scrollWidth > stripEl.clientWidth + 1;
+  }
+
   function observeOverflow(node: HTMLElement) {
-    const observer = new ResizeObserver(() => {
-      hasOverflow = node.scrollWidth > node.clientWidth;
-    });
+    const observer = new ResizeObserver(measureOverflow);
     observer.observe(node);
+    // A vertical wheel scrolls the strip sideways: a mouse has no other way along it.
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || node.scrollWidth <= node.clientWidth) return;
+      e.preventDefault();
+      node.scrollLeft += e.deltaY;
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
     return {
       destroy() {
         observer.disconnect();
+        node.removeEventListener("wheel", onWheel);
       },
     };
   }
+
+  // Opening, closing or switching tabs changes what fits and which one must be seen.
+  $effect(() => {
+    const at = activeIndex;
+    void tabList.length;
+    tick().then(() => {
+      measureOverflow();
+      stripEl
+        ?.querySelector<HTMLElement>(`[data-tab-index="${at}"]`)
+        ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    });
+  });
 
   // ← and → move along the tabs, as a tab strip's arrows do, taking focus with them.
   async function onTabKeydown(e: KeyboardEvent, i: number) {
@@ -184,14 +211,14 @@
 </script>
 
 <div
-  class="flex h-(--tab-bar-h) shrink-0 items-center border-b border-sidebar-border bg-background overflow-hidden"
+  class="flex h-(--tab-bar-h) min-w-0 flex-1 items-center border-b border-sidebar-border bg-background overflow-hidden"
 >
   <div
     bind:this={stripEl}
     use:observeOverflow
     role="tablist"
     aria-label={pane === "left" ? "Tabs" : "Right pane tabs"}
-    class="flex flex-1 overflow-hidden min-w-0 h-full"
+    class="flex flex-1 overflow-x-auto overflow-y-hidden min-w-0 h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
   >
     {#each tabList as tab, i (tabKey(tab))}
       {@const isActive = i === activeIndex}
@@ -207,7 +234,7 @@
         data-tab-pane={pane}
         data-tab-index={i.toString()}
         class={[
-          "min-w-[80px] max-w-[200px] flex-1 flex h-full relative border-r border-sidebar-border/40 touch-none",
+          "min-w-36 max-w-[12.5rem] flex-1 flex h-full relative border-r border-sidebar-border/40 touch-none",
           isActive ? "-mb-px" : "",
           isSource ? "opacity-50" : "",
           isTarget ? "ring-inset ring-1 ring-primary/60" : "",
@@ -221,6 +248,7 @@
           <ContextMenu.Trigger
             role="tab"
             aria-selected={isActive}
+            title={tab.type === "template" ? `${tab.title} (template)` : tab.title}
             tabindex={isActive ? 0 : -1}
             onclick={() => tabs.activateTab(pane, i)}
             onkeydown={(e: KeyboardEvent) => onTabKeydown(e, i)}
@@ -236,17 +264,10 @@
             }}
           >
             <Icon class="size-3.5 shrink-0" />
-            <span class="truncate text-sm flex-1" title={tab.title}>{tab.title}</span>
-            <!-- Read from the type, not stored on the tab: a stored badge was dropped by
-                 persistence, so a template tab forgot what it was on reload. Neutral — a
-                 kind of tab is not a signal (DESIGN.md §2). -->
-            {#if tab.type === "template"}
-              <span
-                data-testid="tab-badge"
-                class="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] leading-tight text-muted-foreground"
-                >Template</span
-              >
-            {/if}
+            <!-- A template says so by its icon and its full name on hover. A "Template"
+                 label beside the name left a narrow tab room for three letters of it. -->
+            <span class="truncate text-sm flex-1">{tab.title}</span>
+            {#if tab.type === "template"}<span class="sr-only">, template</span>{/if}
             <button
               type="button"
               class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ml-auto shrink-0 size-4 flex items-center justify-center rounded text-muted-foreground hover:bg-hover-overlay hover:text-foreground transition-opacity"
