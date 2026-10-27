@@ -195,7 +195,6 @@ Not fixed yet; pick them up when they fit a pass above:
     pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one
     shows Leaflet's white tooltip.
   - The rail has no Quick Notes, New or Templates (the palette reaches all three).
-  - Obsidian's `![[image.png]]` embed shows as raw text.
   - With the mini player up in a 560px window, the Files tree has almost no room.
   - Long names still truncate at the end in lists (a middle cut would keep "Volume 13"
     visible); the tab and title now show the full name on hover.

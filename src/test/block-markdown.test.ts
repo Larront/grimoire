@@ -741,11 +741,12 @@ describe("Image declares its alignment suffix", () => {
     expect(roundTrip(md)).toBe(md);
   });
 
-  it("keeps an image transclusion as text, not an image", () => {
-    // `![[...]]` is Obsidian's embed syntax, which Grimoire does not render.
+  it("reads an image transclusion as an image, and writes it back as it was", () => {
+    // `![[...]]` is Obsidian's embed syntax. Shown as text until the 2026-10 design
+    // review; drawn as the image it names now, and never a link to a note.
     const md = "![[ImagePlaceholder.png|cover hsmall]]";
 
-    expect(nodesOfType(read(md), "image")).toHaveLength(0);
+    expect(nodesOfType(read(md), "image")).toHaveLength(1);
     expect(nodesOfType(read(md), "wikiLink")).toHaveLength(0);
     expect(roundTrip(md)).toBe(md);
   });

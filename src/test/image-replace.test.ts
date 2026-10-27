@@ -13,6 +13,7 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     width: "75%",
     // TipTap's own attribute, part of the record and read by nothing here.
     title: null,
+    embed: null,
     selected: false,
     onUpdate: vi.fn(),
     onCaptionUpdate: vi.fn(),

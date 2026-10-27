@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ledgerImage, pickLedgerImage } from "$lib/editor/ledger-image.svelte";
+  import { api } from "$lib/api";
   import type { ImageAttrs } from "$lib/editor/image-block";
   import { oneLine } from "$lib/editor/labelled-row";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
@@ -41,9 +42,45 @@
   let _selected = $state(selected);
   let viewerOpen = $state(false);
 
+  // An Obsidian embed (`![[map.png]]`) names its file rather than giving a path, so it is
+  // found by name in the world, as Obsidian finds it. It showed as the raw text until the
+  // 2026-10 design review.
+  let embedPath = $state<string | null>(null);
+  let embedMissing = $state(false);
+  $effect(() => {
+    const target = image.embed;
+    embedPath = null;
+    embedMissing = false;
+    if (!target) return;
+    let live = true;
+    api.silent
+      .resolveImageEmbed(target)
+      .then((found) => {
+        if (!live) return;
+        if (found) embedPath = found;
+        else embedMissing = true;
+      })
+      .catch(() => {
+        if (live) embedMissing = true;
+      });
+    return () => {
+      live = false;
+    };
+  });
+
   // The src's resolution, loading and not-found states included — the same helper the
   // Infobox's thumbnail uses, which is what keeps one race fixed in one place.
-  const file = ledgerImage(() => image.src);
+  const file = ledgerImage(() => (image.embed ? (embedPath ?? "") : image.src));
+  const missing = $derived(file.missing || embedMissing);
+
+  /**
+   * A change the GM makes to an embed writes the image Grimoire's way, `![alt](path)` at
+   * the path it was found at — Obsidian reads that too. Until then the note keeps the
+   * embed as it was written: opening a note is not editing it.
+   */
+  function asEdit(partial: Partial<ImageAttrs>): Partial<ImageAttrs> {
+    return image.embed && embedPath ? { ...partial, src: embedPath, embed: null } : partial;
+  }
   let rootEl: HTMLDivElement | undefined = $state();
   let containerEl: HTMLElement | undefined = $state();
 
@@ -59,11 +96,18 @@
   // (app.css, "Note images"); the node view's own element is what floats, so it carries
   // the alignment and the width. "Align right" used to slide the image to the right of a
   // full-width row and leave the text below it, beside a hole.
+  // An embed's `|300` is Obsidian's width in pixels; it is drawn at that, never past the
+  // column, without being written as a width of Grimoire's own.
+  const embedWidth = $derived(image.embed?.match(/\|\s*(\d+)(?:x\d+)?\s*$/)?.[1] ?? null);
+
   $effect(() => {
     const host = rootEl?.closest<HTMLElement>("[data-image-block]");
     if (!host) return;
     host.setAttribute("data-align", image.align);
-    host.style.setProperty("--image-width", image.width);
+    host.style.setProperty(
+      "--image-width",
+      embedWidth ? `min(100%, ${embedWidth}px)` : image.width,
+    );
   });
 
   // ── The viewer ───────────────────────────────────────────────────────────────
@@ -88,7 +132,7 @@
 
   function setAlign(align: ImageAttrs["align"]) {
     image.align = align;
-    onUpdate({ align, width: image.width });
+    onUpdate(asEdit({ align, width: image.width }));
   }
 
   // The caption is the image's alt text, and lives inside `![…](…)`: square brackets
@@ -120,7 +164,7 @@
     next = Math.round(Math.min(100, Math.max(MIN_WIDTH_PCT, next)));
     if (next === current) return;
     image.width = `${next}%`;
-    onUpdate({ align: image.align, width: image.width });
+    onUpdate(asEdit({ align: image.align, width: image.width }));
   }
 
   // The handle sits on the side the image grows toward: the right for a left or centred
@@ -156,7 +200,7 @@
       host?.removeAttribute("data-resizing");
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      onUpdate({ align: image.align, width: image.width });
+      onUpdate(asEdit({ align: image.align, width: image.width }));
     }
 
     window.addEventListener("mousemove", onMove);
@@ -258,8 +302,11 @@
           onerror={file.markMissing}
           ondblclick={openViewer}
         />
-      {:else if file.missing}
-        <MissingImage path={image.src} onReplace={replaceImage} />
+      {:else if missing}
+        <MissingImage
+          path={image.embed ? image.embed.split(/[|#]/)[0] : image.src}
+          onReplace={replaceImage}
+        />
       {:else}
         <div class="aspect-[4/3] w-full animate-pulse rounded bg-card"></div>
       {/if}
@@ -310,7 +357,8 @@
           value={image.alt}
           onCommit={(alt) => {
             image.alt = alt;
-            onCaptionUpdate(alt);
+            if (image.embed) onUpdate(asEdit({ alt }));
+            else onCaptionUpdate(alt);
           }}
           restrict={captionText}
           ariaLabel="Image caption"
