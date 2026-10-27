@@ -339,7 +339,7 @@ pub fn get_tag_usage_counts_from_conn(
             pin_count: pin_counts.get(lower).copied().unwrap_or(0),
         })
         .collect();
-    result.sort_by(|a, b| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()));
+    result.sort_by(|a, b| crate::commands::names::compare_names(&a.tag, &b.tag));
     Ok(result)
 }
 

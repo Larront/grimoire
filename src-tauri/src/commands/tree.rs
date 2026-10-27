@@ -1,6 +1,7 @@
 use crate::db::models::{Map, Note};
 use crate::db::schema::maps;
 use crate::db::schema::notes::dsl::*; // used in get_file_tree (Task 2) + delete_folder (Task 3)
+use crate::commands::names::compare_names;
 use crate::ledger::{ledger_path, with_open_ledger, AppLedger};
 use diesel::prelude::*;
 use diesel::sql_query;                // used in rename_folder (Task 4)
@@ -106,8 +107,8 @@ pub fn build_file_tree(
         }
     }
 
-    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    dirs.sort_by(|a, b| compare_names(&a.name, &b.name));
+    files.sort_by(|a, b| compare_names(&a.name, &b.name));
 
     let mut children = dirs;
     children.extend(files);

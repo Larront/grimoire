@@ -506,7 +506,11 @@ pub fn search_all(query: String, ledger: State<AppLedger>) -> Result<SearchAllRe
             .filter(|(lower, _)| !active_tag_filters.iter().any(|f| f == lower.as_str()))
             .map(|(_, (name, cnt))| TagFacet { name, note_count: cnt })
             .collect();
-        tag_facets.sort_by(|a, b| b.note_count.cmp(&a.note_count).then(a.name.cmp(&b.name)));
+        tag_facets.sort_by(|a, b| {
+            b.note_count
+                .cmp(&a.note_count)
+                .then_with(|| crate::commands::names::compare_names(&a.name, &b.name))
+        });
         tag_facets.truncate(5);
 
         match l.index {
