@@ -46,13 +46,14 @@
   // Nothing here knows what an entry *is*, and nothing knows what a mark *means*. A
   // section heading, an entry name and a condition label are all text the GM typed.
   import { Bookmark, Check, FoldHorizontal, Pencil, UnfoldHorizontal } from "@lucide/svelte";
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import Disclosure from "$lib/components/Disclosure.svelte";
   import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import { linkedPlainText } from "$lib/editor/linked-text";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
   import { serializeStatblock } from "$lib/editor/statblock-block";
+  import { statblockEditing } from "$lib/editor/statblock-editing.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { settleRowChange, type RowChange } from "$lib/editor/row-list";
   import { blankLabelledRow, oneLine, type LabelledRow } from "$lib/editor/labelled-row";
@@ -99,7 +100,10 @@
    * both alone — a statblock the GM collapsed stays collapsed when an undo elsewhere in
    * the note redraws it, and a fence read on another device opens playable.
    */
-  let editing = $state(false);
+  // Editing is one block at a time across the app: opening this one closes any other.
+  const editToken = Symbol("statblock");
+  const editing = $derived(statblockEditing.is(editToken));
+  onDestroy(() => statblockEditing.close(editToken));
   let collapsed = $state(false);
 
   /**
@@ -144,7 +148,7 @@
 
   function startEditing() {
     collapsed = false;
-    editing = true;
+    statblockEditing.open(editToken);
   }
 
   let pencil = $state<HTMLButtonElement | null>(null);
@@ -152,7 +156,7 @@
   // Leaving the mode puts focus on the pencil that reopens it. The Done button it was
   // pressed on leaves the page with the mode, and focus used to go to the document body.
   async function stopEditing() {
-    editing = false;
+    statblockEditing.close(editToken);
     await tick();
     pencil?.focus();
   }
@@ -167,7 +171,7 @@
   // leave no way back to them, so it closes the mode on the way past.
   function toggleCollapsed() {
     collapsed = !collapsed;
-    if (collapsed) editing = false;
+    if (collapsed) statblockEditing.close(editToken);
   }
 
   // ── The header ──────────────────────────────────────────────────────────────
@@ -373,7 +377,7 @@
    * because an empty statblock has nothing to play on and everything to author.
    */
   export function focusRow(index: number) {
-    editing = true;
+    statblockEditing.open(editToken);
     collapsed = false;
     focus = { level: "row", index };
   }
