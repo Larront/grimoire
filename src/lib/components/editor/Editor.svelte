@@ -5,6 +5,7 @@
   import { noteExtensions } from "$lib/editor/note-extensions";
   import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
   import { wikiBrokenLinkKey, stripWikiFragment } from "$lib/editor/wiki-link";
+  import { showSearchHit } from "$lib/editor/search-hit";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -88,11 +89,7 @@
 
     editorInstance.commands.setTextSelection(found);
     editorInstance.commands.scrollIntoView();
-
-    // Brief pulse on the editor element to draw attention to the selection
-    const el = editorInstance.view.dom as HTMLElement;
-    el.dataset.searchPulse = "1";
-    setTimeout(() => delete el.dataset.searchPulse, 600);
+    showSearchHit(editorInstance.view, found);
   }
 
   onMount(() => {
