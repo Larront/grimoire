@@ -37,6 +37,14 @@
   // separately rather than silently retiring this banner.
   let deletedNote = $state<Note | null>(null);
   let note = $derived(liveNote ?? deletedNote);
+  // What a recreate needs beyond the text, taken as the file vanished: the editor's
+  // buffer is the body alone, and the save restores the rest from a file that is no
+  // longer there — so recreating used to drop every tag and alias (2026-10 design
+  // review). The tags and aliases come from Details, which has this session's edits.
+  let deletedMeta: { tags: string[]; aliases: string[] } = { tags: [], aliases: [] };
+  // The frontmatter block as the file was last read, for the keys Details doesn't
+  // edit (another tool's, the portability contract's).
+  let loadedHead = "";
 
   // ── Content loading ──────────────────────────────────────────────────────
   let body = $state<string | null>(null);
@@ -88,6 +96,7 @@
           if (lastFetchedId !== targetId) return;
           const parsed = parseFrontmatter(c);
           editorNoteId = targetId;
+          loadedHead = c.slice(0, c.length - parsed.body.length);
           body = parsed.body;
         })
         .catch(() => {
@@ -115,6 +124,7 @@
       // The pane may have navigated away during the read.
       if (!note || note.path !== changedPath) return;
       externalBody = parseFrontmatter(c).body;
+      loadedHead = c.slice(0, c.length - externalBody.length);
     } catch {
       // Unreadable (mid-write, deleted) — leave the current buffer untouched.
       return;
@@ -159,6 +169,7 @@
     // Read `note` synchronously, before the concurrent notes.load() drops the row.
     const current = note;
     if (!current || current.path !== removedPath) return;
+    deletedMeta = { tags: [...details.tags], aliases: [...details.aliases] };
     deletedNote = { ...current };
   }
 
@@ -169,13 +180,20 @@
     const snap = deletedNote;
     if (!snap) return;
     const markdown = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
+    const { tags, aliases } = deletedMeta;
     try {
       const created = await api.createNote(snap.title, snap.path, snap.parent_path);
-      await api.writeNoteContent(created.path, markdown);
+      // The new file is empty, so the save writes the block as given.
+      await api.writeNoteContent(created.path, loadedHead + markdown);
+      // Only where there is something to say: no tags, and none before, adds no key.
+      if (tags.length || /^tags:/m.test(loadedHead)) await api.writeNoteTags(created.path, tags);
+      if (aliases.length) await api.setNoteAliases(created.id, aliases);
       await notes.load();
       deletedNote = null;
       tabs.repointNoteTab(snap.id, created.id, created.title);
+      toastSuccess(`“${created.title}” is saved again`);
     } catch (e) {
+      // The api's toast has said why; the copy stays open, behind its banner.
       console.error("recreate note failed:", e);
     }
   }
