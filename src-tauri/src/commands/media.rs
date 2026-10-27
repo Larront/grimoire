@@ -130,6 +130,65 @@ pub fn get_image_absolute_path(
         .ok_or("Path contains invalid UTF-8".to_string())
 }
 
+/// The image an Obsidian embed (`![[map.png]]`, `![[Art/map.png|300]]`) names, as a
+/// ledger-relative path, or `None` when the world holds no such file.
+///
+/// Obsidian's own rule, so a vault reads the same in both: a path from the vault's root
+/// if there is one, else the file of that name anywhere in the vault — the shortest path
+/// when several share it, as Obsidian's "shortest path" links assume. What follows `|`
+/// (a size or alt text) and `#` is not part of the name. Hidden folders (`.grimoire`,
+/// `.obsidian`, `.git`) are not looked in, as the file tree doesn't show them.
+pub fn find_embedded_image(ledger_root: &Path, target: &str) -> Option<String> {
+    let name = target.split(['|', '#']).next()?.trim().replace('\\', "/");
+    let name = name.trim_start_matches("./").trim_start_matches('/');
+    if name.is_empty() {
+        return None;
+    }
+    if validate_path(ledger_root, name).is_ok_and(|p| p.is_file()) {
+        return Some(name.to_string());
+    }
+
+    // By name, anywhere: the embed may give a folder or two of the path, so a match is a
+    // path that ends with what it gave, at a folder boundary.
+    let wanted = name.to_lowercase();
+    let mut found: Vec<String> = Vec::new();
+    let mut stack = vec![PathBuf::new()];
+    while let Some(rel) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(ledger_root.join(&rel)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if file_name.starts_with('.') {
+                continue;
+            }
+            let child = rel.join(&file_name);
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() {
+                stack.push(child);
+            } else if kind.is_file() {
+                let path = child.to_string_lossy().replace('\\', "/");
+                let lower = path.to_lowercase();
+                if lower == wanted || lower.ends_with(&format!("/{wanted}")) {
+                    found.push(path);
+                }
+            }
+        }
+    }
+    found.sort_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)));
+    found.into_iter().next()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn resolve_image_embed(
+    target: String,
+    ledger: State<AppLedger>,
+) -> Result<Option<String>, String> {
+    let ledger_path = ledger_path(&ledger)?;
+    Ok(find_embedded_image(&ledger_path, &target))
+}
+
 /// Resolve a ledger-relative PDF path to a validated absolute path for the
 /// frontend to feed through `convertFileSrc` into PDF.js. Reuses `validate_path`
 /// so path-traversal attempts are rejected exactly as for images. PDFs are
@@ -460,6 +519,59 @@ pub fn delete_pdf(pdf_path: String, ledger: State<AppLedger>) -> Result<(), Stri
 mod tests {
     use super::*;
     use std::fs;
+
+    // ── find_embedded_image — Obsidian's `![[…]]` ────────────────────────────
+
+    fn vault(files: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for f in files {
+            let p = dir.path().join(f);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, b"img").unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn embed_finds_a_file_by_name_anywhere() {
+        let v = vault(&["Attachments/map.png"]);
+        assert_eq!(find_embedded_image(v.path(), "map.png").as_deref(), Some("Attachments/map.png"));
+    }
+
+    #[test]
+    fn embed_takes_a_path_from_the_root_first() {
+        let v = vault(&["Art/map.png", "map.png"]);
+        assert_eq!(find_embedded_image(v.path(), "Art/map.png").as_deref(), Some("Art/map.png"));
+    }
+
+    #[test]
+    fn embed_prefers_the_shortest_path_when_names_repeat() {
+        let v = vault(&["Deep/Er/map.png", "Art/map.png"]);
+        assert_eq!(find_embedded_image(v.path(), "map.png").as_deref(), Some("Art/map.png"));
+    }
+
+    #[test]
+    fn embed_reads_past_a_size_or_alt_and_ignores_case() {
+        let v = vault(&["Attachments/Ashfen Map.PNG"]);
+        assert_eq!(
+            find_embedded_image(v.path(), "ashfen map.png|300").as_deref(),
+            Some("Attachments/Ashfen Map.PNG")
+        );
+    }
+
+    #[test]
+    fn embed_matches_a_partial_path_only_at_a_folder_boundary() {
+        let v = vault(&["Maps/oldmap.png"]);
+        assert_eq!(find_embedded_image(v.path(), "map.png"), None);
+        assert_eq!(find_embedded_image(v.path(), "Maps/oldmap.png").as_deref(), Some("Maps/oldmap.png"));
+    }
+
+    #[test]
+    fn embed_never_looks_in_hidden_folders_or_out_of_the_world() {
+        let v = vault(&[".obsidian/map.png", ".grimoire/images/map.png"]);
+        assert_eq!(find_embedded_image(v.path(), "map.png"), None);
+        assert_eq!(find_embedded_image(v.path(), "../map.png"), None);
+    }
 
     #[test]
     fn test_no_conflict() {

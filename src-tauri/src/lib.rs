@@ -1,4 +1,4 @@
-﻿mod commands;
+mod commands;
 mod db;
 mod fence_scan;
 mod format_migration;
@@ -98,6 +98,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_file_tree,
             get_graph_data,
             get_image_absolute_path,
+            resolve_image_embed,
             get_ledger_path,
             get_map_image_data_url,
             get_maps,
@@ -348,6 +349,7 @@ pub fn run() {
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
+            resolve_image_embed,
             get_pdf_absolute_path,
             rename_pdf,
             move_pdf,
