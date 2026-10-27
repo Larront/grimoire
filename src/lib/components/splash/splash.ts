@@ -13,6 +13,8 @@ export interface SplashProps {
   onOpen: (path: string) => void;
   onRemove: (path: string) => void;
   onLookAgain: () => void;
+  /** A world whose folder can't be found: the GM chooses where it is now. */
+  onFind: (path: string, name: string) => void;
   onOpenFolder: () => void;
   onNewWorld: () => void;
   onExplore: () => void;

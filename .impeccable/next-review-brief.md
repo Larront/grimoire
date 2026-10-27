@@ -184,10 +184,10 @@ Not fixed yet; pick them up when they fit a pass above:
   shell nests one `<main>` inside another. A link whose text has `?` or `:` can't
   become a note (refused, by the owner's choice); if GMs trip on it, the alternative
   is a file name cleaned of those characters with the title kept as written.
-- **Splash**: a world whose folder moved offers Look again and ✕, but no "Find it…"
-  to point the recent entry at its new folder (needs a backend re-point of the recent
-  entry). The default window is 1280×832; whether a smaller launch window suits the
-  Splash better was raised and not decided.
+- **Splash**: the default window is 1280×832; whether a smaller launch window suits the
+  Splash better was raised and not decided. (A world whose folder moved has Find it…
+  now: it opens from where the GM says it is, a folder that isn't a world yet opening
+  as one, by the owner's choice.)
 - **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
   tool is planned as the escape hatch.
 - **States, not screens**:

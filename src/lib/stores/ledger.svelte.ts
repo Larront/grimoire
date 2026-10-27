@@ -246,6 +246,23 @@ function createLedgerStore() {
     }
   }
 
+  /**
+   * A recent world whose folder can't be found, looked for by the GM: they choose where it
+   * is now, it opens from there, and the entry that pointed at the old folder goes — only
+   * once it has opened, so a failed open leaves the list as it was. A folder that isn't a
+   * world yet opens as one, as "Open a world folder…" does (the owner's call, 2026-10
+   * design review: a moved world could only be taken off the list and found by hand).
+   */
+  async function findWorld(missingPath: string, name: string): Promise<boolean> {
+    const picked = await open({ directory: true, title: `Where is ${name} now?` });
+    if (!picked || typeof picked !== "string") return false;
+    const opened = await openLedger(picked);
+    if (opened && picked !== missingPath) {
+      await api.silent.removeRecentLedger(missingPath).catch(() => {});
+    }
+    return opened;
+  }
+
   // The Splash's counts are written as a world opens, and again as the GM leaves it —
   // by closing it or opening another — so a world given its first note no longer says
   // "Nothing in it yet" (2026-10 design review).
@@ -574,6 +591,7 @@ function createLedgerStore() {
     migrateLedgerFormat,
     dismissFormatMigration,
     openLedger,
+    findWorld,
     adopt,
     exploreSample,
     existingSample,

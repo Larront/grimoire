@@ -1,6 +1,7 @@
 import { render, cleanup, act, fireEvent } from "@testing-library/svelte";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import HomePage from "../routes/+page.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 
@@ -90,5 +91,85 @@ describe("Splash — missing recent ledgers (issue #111)", () => {
     await flush();
 
     expect(queryByTestId("recent-missing")).toBeNull();
+  });
+});
+
+// Find it (2026-10 design review): a moved world could only be taken off the list.
+describe("Splash — finding a world whose folder moved", () => {
+  const MOVED_TO = "/mnt/backup/lost-world";
+
+  function mockFind(opens: "ok" | "refused") {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_recent_ledgers") return [PRESENT, MISSING];
+      if (cmd === "open_ledger") {
+        if (opens === "refused") throw new Error("could not open");
+        return {
+          path: (args as { path: string }).path,
+          note_count: 12,
+          scene_count: 2,
+          map_count: 1,
+          failed_imports: [],
+          unlinked_pins: [],
+        };
+      }
+      if (cmd.startsWith("get_") || cmd.startsWith("list_")) return [];
+      return null;
+    });
+  }
+
+  const calls = (cmd: string) => vi.mocked(invoke).mock.calls.filter(([c]) => c === cmd);
+
+  beforeEach(async () => {
+    await ledger.closeLedger();
+    vi.mocked(invoke).mockClear();
+    vi.mocked(dialogOpen).mockReset();
+  });
+
+  afterEach(async () => {
+    cleanup();
+    await ledger.closeLedger();
+    vi.mocked(invoke).mockResolvedValue(null);
+  });
+
+  it("opens the world from where the GM says it is, and drops the entry for the old folder", async () => {
+    mockFind("ok");
+    vi.mocked(dialogOpen).mockResolvedValue(MOVED_TO);
+    const { getByLabelText } = render(HomePage);
+    await flush();
+
+    await fireEvent.click(getByLabelText("Find Lost World…"));
+    await flush();
+
+    expect(vi.mocked(dialogOpen)).toHaveBeenCalledWith(
+      expect.objectContaining({ directory: true, title: "Where is Lost World now?" }),
+    );
+    expect(calls("open_ledger")[0]?.[1]).toMatchObject({ path: MOVED_TO });
+    expect(calls("remove_recent_ledger")[0]?.[1]).toMatchObject({ path: MISSING.path });
+  });
+
+  it("leaves the list alone when the GM backs out of choosing", async () => {
+    mockFind("ok");
+    vi.mocked(dialogOpen).mockResolvedValue(null);
+    const { getByLabelText } = render(HomePage);
+    await flush();
+
+    await fireEvent.click(getByLabelText("Find Lost World…"));
+    await flush();
+
+    expect(calls("open_ledger")).toHaveLength(0);
+    expect(calls("remove_recent_ledger")).toHaveLength(0);
+  });
+
+  it("keeps the old entry when the chosen folder won't open", async () => {
+    mockFind("refused");
+    vi.mocked(dialogOpen).mockResolvedValue(MOVED_TO);
+    const { getByLabelText } = render(HomePage);
+    await flush();
+
+    await fireEvent.click(getByLabelText("Find Lost World…"));
+    await flush();
+
+    expect(calls("open_ledger")).toHaveLength(1);
+    expect(calls("remove_recent_ledger")).toHaveLength(0);
   });
 });

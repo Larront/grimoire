@@ -160,6 +160,7 @@
               onOpen={p.onOpen}
               onRemove={p.onRemove}
               onLookAgain={p.onLookAgain}
+              onFind={p.onFind}
               nameClass="text-(length:--font-body)"
             />
           {/each}
