@@ -779,7 +779,7 @@
           </p>
           <Button size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
             <Plus class="size-3.5" />
-            Add Track
+            Add track
           </Button>
         </div>
       {:else}
@@ -988,7 +988,7 @@
                  hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <Plus class="size-4" />
-          Add Track
+          Add track
         </button>
       {/if}
     </div>
@@ -1004,7 +1004,7 @@
 >
   <Dialog.Content style="max-width: 28rem">
     <Dialog.Header>
-      <Dialog.Title>Add Track</Dialog.Title>
+      <Dialog.Title>Add track</Dialog.Title>
     </Dialog.Header>
 
     <!-- Source. The shared tabs primitive rather than hand-built buttons: it is a real

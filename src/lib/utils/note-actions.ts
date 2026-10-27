@@ -23,12 +23,24 @@ export function newNoteFolder(): string | null {
   return path && slash > 0 ? path.slice(0, slash) : null;
 }
 
-/** Open a just-made note, named, with its folder shown. */
-async function openNew(note: Note, folder: string | null) {
+/** Open a just-made note, with its folder shown — its name selected to type over,
+ *  unless the GM already gave it one. */
+async function openNew(note: Note, folder: string | null, rename = true) {
   // Before the reload, so the rebuilt tree comes back already open (#164).
   if (folder) treeExpansion.reveal(folder);
   await notes.load();
-  tabs.openTab({ type: "note", id: note.id, title: note.title, rename: true });
+  tabs.openTab({ type: "note", id: note.id, title: note.title, rename });
+}
+
+/**
+ * A note called `title`, beside the open note — what a palette search that found
+ * nothing offers to make (2026-10 design review). A name the file system refuses is
+ * said by the toast the call raises.
+ */
+export async function createNamedNote(title: string): Promise<void> {
+  const folder = newNoteFolder();
+  const newNote = await api.createNote(title, folder ? `${folder}/${title}.md` : `${title}.md`, folder);
+  await openNew(newNote, folder, false);
 }
 
 /**

@@ -255,31 +255,42 @@
 
 <div data-scenes-dashboard class="flex flex-1 flex-col overflow-y-auto">
   <div class="mx-auto w-full max-w-5xl px-8 pt-8 pb-20">
+    <!-- 28px, the type scale's first heading step (it was 30, off the scale); the
+         header's New scene only once there are scenes — when there are none the empty
+         state's is the one way on, rather than one of two crimson buttons. -->
     <div class="flex items-center justify-between">
-      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">All Scenes</h1>
-      <Button size="sm" onclick={createScene}>
-        <Plus class="size-3.5" />
-        New Scene
-      </Button>
+      <h1 class="font-sans text-[1.75rem] leading-tight font-semibold tracking-tight text-foreground">
+        All Scenes
+      </h1>
+      {#if scenes.scenes.length > 0}
+        <Button size="sm" onclick={createScene}>
+          <Plus class="size-3.5" />
+          New scene
+        </Button>
+      {/if}
     </div>
     <div class="mt-3 h-px bg-border"></div>
 
     {#if scenes.scenes.length === 0}
       <div
         data-empty-state
-        class="mt-16 flex flex-col items-center justify-center py-20 text-center"
+        class="mt-8 flex flex-col items-center justify-center py-16 text-center"
       >
-        <div class="flex size-20 items-center justify-center rounded-lg bg-primary-subtle">
-          <DefaultSceneIcon class="size-10 text-primary" strokeWidth={1.5} />
+        <!-- The scene editor's empty state, the house one: a neutral tile, a heading,
+             one line, one way on. This one had a crimson tile, which is none of the
+             things the accent means (2026-10 design review). -->
+        <div class="flex size-12 items-center justify-center rounded-lg bg-muted">
+          <DefaultSceneIcon class="size-6 text-muted-foreground" strokeWidth={1.5} />
         </div>
-        <p class="mt-6 font-heading text-xl text-foreground">Set the mood</p>
+        <h2 class="mt-5 font-heading text-[1.375rem] leading-tight font-normal text-foreground">
+          Set the mood
+        </h2>
         <p class="mt-2 max-w-sm text-sm text-muted-foreground">
-          Create your first scene to get started. Layer ambient sounds, music, and effects into a
-          soundscape.
+          A scene layers rain, a crowd and music, and plays them together at the table.
         </p>
-        <Button class="mt-6" onclick={createScene}>
+        <Button size="sm" class="mt-5" onclick={createScene}>
           <Plus class="size-3.5" />
-          New Scene
+          New scene
         </Button>
       </div>
     {:else}

@@ -150,7 +150,9 @@
   <!-- Pinned above the list, so the box a GM types into never scrolls away. -->
   <div class="shrink-0 border-b border-border px-8 pt-8 pb-5">
     <div class="mx-auto w-full max-w-3xl">
-      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">Quick Notes</h1>
+      <h1 class="font-sans text-[1.75rem] leading-tight font-semibold tracking-tight text-foreground">
+        Quick Notes
+      </h1>
       <div class="mt-3 h-px bg-border"></div>
       <div class="relative mt-5">
         <WikiCaptureBox

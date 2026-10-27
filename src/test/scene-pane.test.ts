@@ -542,7 +542,7 @@ describe("ScenePane — Add Track dialog", () => {
 
   it("says why Add is disabled instead of leaving it to guess", async () => {
     const { findByText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
-    await fireEvent.click(await findByText("Add Track"));
+    await fireEvent.click(await findByText("Add track"));
     expect(await findByText("Choose a file to add.")).toBeTruthy();
     const add = [...document.body.querySelectorAll("button")].find(
       (b) => b.textContent?.trim() === "Add",
@@ -552,7 +552,7 @@ describe("ScenePane — Add Track dialog", () => {
 
   it("has one Cancel, not a button nested in a button", async () => {
     const { findByText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
-    await fireEvent.click(await findByText("Add Track"));
+    await fireEvent.click(await findByText("Add track"));
     await findByText("Choose a file to add.");
     const cancels = [...document.body.querySelectorAll("button")].filter(
       (b) => b.textContent?.trim() === "Cancel",

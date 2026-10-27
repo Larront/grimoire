@@ -159,7 +159,7 @@ describe("ScenesDashboard", () => {
   it("shows + New Scene button in the header", () => {
     const { getAllByRole } = render(ScenesDashboard);
     const buttons = getAllByRole("button");
-    const newSceneBtn = buttons.find((b) => b.textContent?.includes("New Scene"));
+    const newSceneBtn = buttons.find((b) => b.textContent?.includes("New scene"));
     expect(newSceneBtn).toBeTruthy();
   });
 
@@ -167,7 +167,7 @@ describe("ScenesDashboard", () => {
     const { container, getAllByRole } = render(ScenesDashboard);
     expect(container.querySelector("[data-empty-state]")).toBeTruthy();
     const buttons = getAllByRole("button");
-    const ctaBtn = buttons.find((b) => b.textContent?.includes("New Scene"));
+    const ctaBtn = buttons.find((b) => b.textContent?.includes("New scene"));
     expect(ctaBtn).toBeTruthy();
   });
 

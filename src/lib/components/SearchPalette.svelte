@@ -42,7 +42,12 @@
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
-  import { createNoteFromTemplate, createUntitledNote, newNoteFolder } from "$lib/utils/note-actions";
+  import {
+    createNamedNote,
+    createNoteFromTemplate,
+    createUntitledNote,
+    newNoteFolder,
+  } from "$lib/utils/note-actions";
   import type { Note, Map as LedgerMap } from "$lib/types/ledger";
 
   interface NoteSearchResult {
@@ -89,6 +94,8 @@
   let searchQuery = $state("");
   let templatePickerMode = $state(false);
   let noteResults = $state<NoteSearchResult[]>([]);
+  /** The query the results on screen answer — the last search back, not the typing. */
+  let searchedFor = $state("");
   let mapResults = $state<MapSearchResult[]>([]);
   let sceneResults = $state<SceneSearchResult[]>([]);
   let tagResults = $state<TagFacet[]>([]);
@@ -562,6 +569,30 @@
     expandedGroups = new Set([...expandedGroups, group]);
   }
 
+  // A search that came back with nothing offers to make the note it was looking for —
+  // a dead end, "No results found.", until the 2026-10 design review. Only once the
+  // search for exactly what is typed is back, so it doesn't flicker in mid-word; and
+  // not for a tag filter, which names a tag rather than a note.
+  const offerCreate = $derived(
+    !templatePickerMode &&
+      searchQuery.trim().length >= 2 &&
+      searchedFor === searchQuery &&
+      activeTagFilters.length === 0 &&
+      noteResults.length + mapResults.length + sceneResults.length + visibleTagResults.length === 0 &&
+      allMatchedCommands.length === 0,
+  );
+
+  async function cmdCreateNamedNote() {
+    const title = searchQuery.trim();
+    searchPalette.open = false;
+    try {
+      await createNamedNote(title);
+    } catch (e) {
+      // Said by the toast the call raised.
+      console.error("create note failed:", e);
+    }
+  }
+
   const activeGroupCount = $derived(
     (visibleTagResults.length > 0 ? 1 : 0) +
       (noteResults.length > 0 ? 1 : 0) +
@@ -704,6 +735,7 @@
         sceneResults = [];
         tagResults = [];
       }
+      searchedFor = q;
     }, 80);
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -812,7 +844,20 @@
     bind:value={searchQuery}
   />
   <Command.List>
-    <Command.Empty>No results found.</Command.Empty>
+    <Command.Empty class="text-muted-foreground">Nothing matches.</Command.Empty>
+    {#if offerCreate}
+      <Command.Group heading="No notes match">
+        <Command.Item
+          data-testid="cmd-create-named-note"
+          value="__create-named-note__"
+          onSelect={cmdCreateNamedNote}
+          class="flex items-center gap-2"
+        >
+          <FilePlus class="size-4 shrink-0 text-muted-foreground" />
+          <span class="min-w-0 truncate">Create note “{searchQuery.trim()}”</span>
+        </Command.Item>
+      </Command.Group>
+    {/if}
     {#if templatePickerMode}
       <!-- Typing narrows the list by name or tag; it used to filter nothing. Each row
            says what the note will be tagged, the half of a template that isn't text. -->
