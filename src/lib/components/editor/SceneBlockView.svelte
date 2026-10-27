@@ -360,7 +360,7 @@
 
       <!-- The mixer opens as every section does (`Disclosure`: inert while shut, so its
            controls aren't invisible Tab stops). -->
-      <Disclosure open={expanded} keepMounted>
+      <Disclosure open={expanded} keepMounted holdsPlace>
         <div class="border-t border-border px-1 py-1">
           {#if slotsLoading}
             <div class="space-y-1 px-1 py-1" aria-hidden="true">

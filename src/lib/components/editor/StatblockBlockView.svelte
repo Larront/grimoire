@@ -737,7 +737,7 @@
     </div>
   </Disclosure>
 
-  <Disclosure open={!collapsed}>
+  <Disclosure open={!collapsed} holdsPlace>
     {#if block.rows.length === 0}
       <div class="font-sans text-xs italic text-muted-foreground mb-1">No header rows yet</div>
     {/if}

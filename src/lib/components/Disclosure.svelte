@@ -12,18 +12,28 @@
 
     `keepMounted` for content that must outlive being closed — a ProseMirror node's
     editable body; otherwise a closed section's content is dropped once it has shut.
+    `holdsPlace` for a section in a note: closing it near the end keeps the page where
+    it is (`$lib/utils/hold-place`).
   */
   import { untrack, type Snippet } from "svelte";
   import { cn } from "$lib/utils";
+  import { holdPlace } from "$lib/utils/hold-place";
 
   interface Props {
     open: boolean;
     keepMounted?: boolean;
+    holdsPlace?: boolean;
     class?: string;
     children: Snippet;
   }
 
-  let { open, keepMounted = false, class: className, children }: Props = $props();
+  let {
+    open,
+    keepMounted = false,
+    holdsPlace = false,
+    class: className,
+    children,
+  }: Props = $props();
 
   // Mounted while open or shutting; expanded drives the row; settled lets it overflow.
   // Seeded from where it starts — already open draws open, with nothing to glide.
@@ -50,6 +60,7 @@
       });
       return () => cancelAnimationFrame(frame);
     }
+    if (holdsPlace && el && untrack(() => expanded)) holdPlace(el);
     expanded = false;
     settled = false;
     if (!glides() && !keepMounted) mounted = false;
