@@ -365,7 +365,9 @@ describe("collapsing the group and collapsing one creature", () => {
     const editor = note(AMBUSH);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
+    // Shut is `inert` on the section around it (jsdom keeps it as a property).
+    const body = dom(editor).querySelector("[data-node-view-content]")!;
+    expect(body.closest<HTMLElement>(".grid")?.inert).toBe(true);
     // Hidden, not deleted: the fences are real document content, and a collapse that
     // removed them would be a collapse that edited the note.
     expect(statblocks(editor)).toHaveLength(2);

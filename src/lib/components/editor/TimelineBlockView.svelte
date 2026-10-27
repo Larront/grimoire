@@ -27,7 +27,9 @@
   import { oneLine } from "$lib/editor/labelled-row";
   import { linkedPlainText } from "$lib/editor/linked-text";
   import { tick } from "svelte";
-  import { ChevronDown, Plus } from "@lucide/svelte";
+  import { Plus } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
 
   // The block's record, taken as one prop bag rather than field by field: the connector
   // mounts a block with its record spread over the props, so the rest element *is* the
@@ -193,19 +195,14 @@
           <button
             type="button"
             class="flex size-7 shrink-0 -my-1 items-center justify-center rounded-md text-muted-foreground
-                 transition-colors motion-reduce:transition-none hover:bg-surface-hover hover:text-foreground
+                 transition-colors hover:bg-surface-hover hover:text-foreground
                  focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             onclick={() => toggleExpand(i)}
             aria-label={expanded ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
             aria-expanded={expanded}
             title={expanded ? "Hide description" : "Show description"}
           >
-            <ChevronDown
-              size={14}
-              class="transition-transform duration-150 motion-reduce:transition-none {expanded
-                ? 'rotate-180'
-                : ''}"
-            />
+            <DisclosureChevron open={expanded} class="size-3.5" />
           </button>
         {/if}
       </div>
@@ -213,50 +210,48 @@
       <!-- Collapsed, an event with a description shows its first line, so the chevron
          means "more" rather than "maybe something"; it opens the rest. An event without
          one shows nothing at rest and offers "Add description" on hover or focus. -->
-      {#if hasDescription && !expanded}
-        <button
-          type="button"
-          class="mt-0.5 block w-full truncate rounded-sm text-left font-sans text-sm leading-relaxed text-muted-foreground
+      <!-- The first line and the full description glide past each other, one shutting
+           as the other opens. The first line used to come back at once while the full
+           text was still shrinking, so for a moment the event said it twice (2026-10
+           design review). -->
+      <Disclosure open={!expanded}>
+        {#if hasDescription}
+          <button
+            type="button"
+            class="mt-0.5 block w-full truncate rounded-sm text-left font-sans text-sm leading-relaxed text-muted-foreground
                hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-          onclick={() => toggleExpand(i)}
-          aria-label={`Show the description of event ${i + 1}`}
-        >
-          {linkedPlainText(event.description).split("\n")[0]}
-        </button>
-      {:else if !hasDescription && !expanded}
-        <button
-          type="button"
-          class="timeline-add-description mt-0.5 inline-flex h-6 items-center gap-1 rounded-md px-1 -mx-1 text-xs
+            onclick={() => toggleExpand(i)}
+            aria-label={`Show the description of event ${i + 1}`}
+          >
+            {linkedPlainText(event.description).split("\n")[0]}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="timeline-add-description mt-0.5 inline-flex h-6 items-center gap-1 rounded-md px-1 -mx-1 text-xs
                text-muted-foreground hover:bg-surface-hover hover:text-foreground
                focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-          onclick={() => addDescription(i)}
-        >
-          <Plus size={12} aria-hidden="true" />
-          Add description
-        </button>
-      {/if}
+            onclick={() => addDescription(i)}
+          >
+            <Plus size={12} aria-hidden="true" />
+            Add description
+          </button>
+        {/if}
+      </Disclosure>
 
       <!-- The full description, in reading size: it used to be 12px with a tight line, in
-         a note whose prose is 16px. `inert` as well as `aria-hidden` while closed, and
-         kept mounted, so the height it animates to is a height it has. -->
-      <div
-        class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-        style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
-        aria-hidden={!expanded}
-        inert={!expanded}
-      >
-        <div class="min-h-0">
-          <LinkedTextField
-            value={event.description}
-            onCommit={(description) => setEvent(i, { description })}
-            multiline
-            focused={focusedDescription === i}
-            ariaLabel={`Event ${i + 1} description`}
-            placeholder="Description"
-            class="font-sans text-sm leading-relaxed text-foreground pt-1"
-          />
-        </div>
-      </div>
+         a note whose prose is 16px. Kept mounted, so the field's focus survives a close. -->
+      <Disclosure open={expanded} keepMounted class="desc-panel">
+        <LinkedTextField
+          value={event.description}
+          onCommit={(description) => setEvent(i, { description })}
+          multiline
+          focused={focusedDescription === i}
+          ariaLabel={`Event ${i + 1} description`}
+          placeholder="Description"
+          class="font-sans text-sm leading-relaxed text-foreground pt-1"
+        />
+      </Disclosure>
     </div>
   </div>
 {/snippet}
@@ -291,12 +286,6 @@
 </div>
 
 <style>
-  @media (prefers-reduced-motion: reduce) {
-    .desc-panel {
-      transition: none;
-    }
-  }
-
   /* An event: the date in a 7rem margin, the spine, then the title and description. One
      date field, placed by the grid — in a narrow pane (28rem, where the margin starts to
      cost the title more than the date gains) it moves above the title. */

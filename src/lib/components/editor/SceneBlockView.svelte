@@ -5,14 +5,14 @@
   import {
     Play,
     Square,
-    ChevronDown,
-    ChevronUp,
     Pause,
     LoaderCircle,
     ArrowLeftRight,
     Columns2,
     CircleAlert,
   } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
   import ScenePicker from "$lib/components/panes/ScenePicker.svelte";
@@ -208,7 +208,10 @@
       />
     </div>
   {:else if !thisScene && scenes.isLoading}
-    <div class="h-11 animate-pulse rounded-lg border border-border bg-card/40" aria-hidden="true"></div>
+    <div
+      class="h-11 animate-pulse rounded-lg border border-border bg-card/40"
+      aria-hidden="true"
+    ></div>
   {:else if !thisScene}
     <!-- ── The scene was deleted. Its own state, not a player whose every control does
          nothing. The name the fence remembers is not shown: a stale copy lies (#185). -->
@@ -223,7 +226,7 @@
   {:else}
     <!-- ── Compact strip + expandable mixer ─────────────────────────────────────── -->
     <div
-      class="overflow-hidden rounded-lg border bg-card/40 select-none transition-colors duration-200
+      class="overflow-hidden rounded-lg border bg-card/40 select-none transition-colors duration-(--motion-base)
              {isThisScenePlaying ? 'border-primary/60' : 'border-border'}"
     >
       <div class="flex items-center gap-1 px-1.5 py-1.5">
@@ -351,54 +354,36 @@
           aria-label={expanded ? "Collapse mixer" : "Expand mixer"}
           aria-expanded={expanded}
         >
-          {#if expanded}
-            <ChevronUp class="size-4 text-muted-foreground" />
-          {:else}
-            <ChevronDown class="size-4 text-muted-foreground" />
-          {/if}
+          <DisclosureChevron open={expanded} class="size-4 text-muted-foreground" />
         </button>
       </div>
 
-      <!-- Expandable mixer panel — grid-rows slide (snaps under reduced-motion) -->
-      <div
-        class="mixer-panel grid transition-[grid-template-rows] duration-200 ease-out overflow-hidden"
-        style="grid-template-rows: {expanded ? '1fr' : '0fr'}"
-      >
-        <!-- `inert` while collapsed: a closed mixer's controls were still Tab stops,
-             invisible ones, and arrow keys changed a volume nobody could see. -->
-        <div class="min-h-0" inert={!expanded}>
-          <div class="border-t border-border px-1 py-1">
-            {#if slotsLoading}
-              <div class="space-y-1 px-1 py-1" aria-hidden="true">
-                {#each { length: 2 } as _, i (i)}
-                  <div class="h-8 animate-pulse rounded-md bg-muted/50"></div>
-                {/each}
-              </div>
-            {:else if activeSlots.length === 0}
-              <p class="px-2 py-2 text-xs text-muted-foreground">
-                No tracks yet. <button
-                  class="rounded-sm text-foreground underline underline-offset-2
-                         focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-                  onclick={openBeside}>Add tracks</button
-                > in the scene editor.
-              </p>
-            {:else}
-              {#each activeSlots as slot (slot.id)}
-                <!-- One row per track, shared with the mini player's track list. -->
-                <SceneTrackRow {slot} />
+      <!-- The mixer opens as every section does (`Disclosure`: inert while shut, so its
+           controls aren't invisible Tab stops). -->
+      <Disclosure open={expanded} keepMounted>
+        <div class="border-t border-border px-1 py-1">
+          {#if slotsLoading}
+            <div class="space-y-1 px-1 py-1" aria-hidden="true">
+              {#each { length: 2 } as _, i (i)}
+                <div class="h-8 animate-pulse rounded-md bg-muted/50"></div>
               {/each}
-            {/if}
-          </div>
+            </div>
+          {:else if activeSlots.length === 0}
+            <p class="px-2 py-2 text-xs text-muted-foreground">
+              No tracks yet. <button
+                class="rounded-sm text-foreground underline underline-offset-2
+                         focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+                onclick={openBeside}>Add tracks</button
+              > in the scene editor.
+            </p>
+          {:else}
+            {#each activeSlots as slot (slot.id)}
+              <!-- One row per track, shared with the mini player's track list. -->
+              <SceneTrackRow {slot} />
+            {/each}
+          {/if}
         </div>
-      </div>
+      </Disclosure>
     </div>
   {/if}
 </div>
-
-<style>
-  @media (prefers-reduced-motion: reduce) {
-    .mixer-panel {
-      transition: none;
-    }
-  }
-</style>

@@ -190,12 +190,10 @@ describe("editing an event's values", () => {
     const { getByLabelText, container } = timeline();
     const panel = container.querySelector<HTMLElement>(".desc-panel")!;
 
-    expect(panel).toHaveAttribute("aria-hidden", "true");
     expect(panel.inert).toBe(true);
 
     await fireEvent.click(getByLabelText("Expand event 1"));
 
-    expect(panel).toHaveAttribute("aria-hidden", "false");
     expect(panel.inert).toBe(false);
   });
 

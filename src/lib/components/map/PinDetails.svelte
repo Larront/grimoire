@@ -3,7 +3,9 @@
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
-  import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
+  import { ExternalLink, Lock, LockOpen, Trash2 } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import {
     Collapsible,
     CollapsibleContent,
@@ -304,87 +306,90 @@
   <Collapsible bind:open={appearanceOpen}>
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
       <span class="text-xs text-foreground-muted">Shape, icon, colour</span>
-      <ChevronDown
-        class="w-3.5 h-3.5 text-foreground-muted transition-transform duration-200 {appearanceOpen
-          ? 'rotate-180'
-          : ''}"
-      />
+      <DisclosureChevron open={appearanceOpen} class="size-3.5 text-foreground-muted" />
     </CollapsibleTrigger>
 
-    <CollapsibleContent>
-      <div class="flex flex-col gap-3 pt-3">
-        <!-- Shape -->
-        <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="text-xs font-semibold text-foreground-muted">Shape</span>
-          <div class="flex gap-1">
-            {#each PIN_SHAPES as shape (shape)}
-              <button
-                type="button"
-                onclick={() => save({ shape })}
-                title={shape}
-                aria-label="Shape: {shape}"
-                aria-pressed={pin.shape === shape}
-                class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
+    <!-- Opens as every section does; it used to appear at once. -->
+    <CollapsibleContent forceMount>
+      {#snippet child({ props, open })}
+        <div {...props}>
+          <Disclosure {open} keepMounted>
+            <div class="flex flex-col gap-3 pt-3">
+              <!-- Shape -->
+              <div class="flex flex-col gap-1.5" data-slot="shape-section">
+                <span class="text-xs font-semibold text-foreground-muted">Shape</span>
+                <div class="flex gap-1">
+                  {#each PIN_SHAPES as shape (shape)}
+                    <button
+                      type="button"
+                      onclick={() => save({ shape })}
+                      title={shape}
+                      aria-label="Shape: {shape}"
+                      aria-pressed={pin.shape === shape}
+                      class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
                        {pin.shape === shape
-                  ? 'border-primary bg-primary-subtle'
-                  : 'border-background-border hover:bg-surface-hover'}"
-                style="color:{pin.shape === shape
-                  ? resolvedColor
-                  : 'var(--color-foreground-muted)'}"
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16">
-                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                  {@html SHAPE_PREVIEWS[shape]}
-                </svg>
-              </button>
-            {/each}
-          </div>
-        </div>
+                        ? 'border-primary bg-primary-subtle'
+                        : 'border-background-border hover:bg-surface-hover'}"
+                      style="color:{pin.shape === shape
+                        ? resolvedColor
+                        : 'var(--color-foreground-muted)'}"
+                    >
+                      <svg viewBox="0 0 16 16" width="16" height="16">
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html SHAPE_PREVIEWS[shape]}
+                      </svg>
+                    </button>
+                  {/each}
+                </div>
+              </div>
 
-        <!-- Icon -->
-        <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="text-xs font-semibold text-foreground-muted">Icon</span>
-          <div class="grid grid-cols-4 gap-1">
-            {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
+              <!-- Icon -->
+              <div class="flex flex-col gap-1.5" data-slot="icon-section">
+                <span class="text-xs font-semibold text-foreground-muted">Icon</span>
+                <div class="grid grid-cols-4 gap-1">
+                  {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
+                    <button
+                      type="button"
+                      onclick={() => save({ icon: key })}
+                      title={key}
+                      class="h-8 flex items-center justify-center rounded-md border transition-colors cursor-pointer
+                       {pin.icon === key
+                        ? 'border-primary bg-primary-subtle text-primary'
+                        : 'border-transparent hover:border-background-border hover:bg-primary-subtle/50 text-foreground-muted'}"
+                    >
+                      <Component size={14} />
+                    </button>
+                  {/each}
+                </div>
+              </div>
+
+              <!-- Colour -->
+              <div class="flex flex-col gap-1.5" data-slot="color-section">
+                <span class="text-xs font-semibold text-foreground-muted">Colour</span>
+                <!-- The same picker as a scene's. Default clears the pin's own colour, so it
+               wears what it would without one — its category's, if it has one. -->
+                <ColorPicker
+                  value={pin.color}
+                  fallback={resolvedColor}
+                  noneSwatch={resolvedColor}
+                  defaultLabel={pinCategory ? "Category" : "Default"}
+                  onchange={(color) => save({ color })}
+                />
+              </div>
+
+              <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
+             directly above it and nothing else, so its scope is the section it sits in. -->
               <button
                 type="button"
-                onclick={() => save({ icon: key })}
-                title={key}
-                class="h-8 flex items-center justify-center rounded-md border transition-colors cursor-pointer
-                       {pin.icon === key
-                  ? 'border-primary bg-primary-subtle text-primary'
-                  : 'border-transparent hover:border-background-border hover:bg-primary-subtle/50 text-foreground-muted'}"
+                onclick={() => save({ shape: null, icon: null, color: null })}
+                class="text-xs text-foreground-muted hover:text-error transition-colors cursor-pointer self-start"
               >
-                <Component size={14} />
+                Reset to default
               </button>
-            {/each}
-          </div>
+            </div>
+          </Disclosure>
         </div>
-
-        <!-- Colour -->
-        <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="text-xs font-semibold text-foreground-muted">Colour</span>
-          <!-- The same picker as a scene's. Default clears the pin's own colour, so it
-               wears what it would without one — its category's, if it has one. -->
-          <ColorPicker
-            value={pin.color}
-            fallback={resolvedColor}
-            noneSwatch={resolvedColor}
-            defaultLabel={pinCategory ? "Category" : "Default"}
-            onchange={(color) => save({ color })}
-          />
-        </div>
-
-        <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
-             directly above it and nothing else, so its scope is the section it sits in. -->
-        <button
-          type="button"
-          onclick={() => save({ shape: null, icon: null, color: null })}
-          class="text-xs text-foreground-muted hover:text-error transition-colors cursor-pointer self-start"
-        >
-          Reset to default
-        </button>
-      </div>
+      {/snippet}
     </CollapsibleContent>
   </Collapsible>
 </DetailSection>
