@@ -16,6 +16,12 @@ class OverlayState {
   release(panel: OverlayPanel) {
     if (this.active === panel) this.active = null;
   }
+
+  /** Close whichever sheet is open: a shell dialog is opening, and goes on top of
+   *  the page rather than under a sheet (2026-10 design review). */
+  dismiss() {
+    this.active = null;
+  }
 }
 
 export const overlay = new OverlayState();

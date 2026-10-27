@@ -34,9 +34,10 @@ export type SidebarStateProps = {
 class SidebarState {
   readonly props: SidebarStateProps;
   open = $derived.by(() => this.props.open());
-  // openMobile is false when another overlay panel is active (mutual exclusion)
-  #openMobileInternal = $state(false);
-  openMobile = $derived.by(() => this.#openMobileInternal && overlay.active === "sidebar");
+  // Open while the overlay token is the sidebar's, and nowhere else: a second boolean
+  // stayed true when another sheet or a shell dialog took the token, and the next
+  // press closed a sheet that was already shut (as the details sheet did, #200).
+  openMobile = $derived(overlay.active === "sidebar");
   setOpen: SidebarStateProps["setOpen"];
   #isMobile: IsMobile;
   state = $derived.by(() => (this.open ? "expanded" : "collapsed"));
@@ -100,15 +101,12 @@ class SidebarState {
   };
 
   setOpenMobile = (value: boolean) => {
-    this.#openMobileInternal = value;
     if (value) overlay.request("sidebar");
     else overlay.release("sidebar");
   };
 
   toggle = () => {
-    return this.#isMobile.current
-      ? this.setOpenMobile(!this.#openMobileInternal)
-      : this.setOpen(!this.open);
+    return this.#isMobile.current ? this.setOpenMobile(!this.openMobile) : this.setOpen(!this.open);
   };
 }
 

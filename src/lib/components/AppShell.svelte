@@ -15,7 +15,11 @@
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
-  import { dialogs } from "$lib/stores/overlay.svelte";
+  import { untrack } from "svelte";
+  import { dialogs, overlay } from "$lib/stores/overlay.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
+  import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
@@ -37,6 +41,23 @@
   // reads the width, so the strip is painted in its remembered state rather than
   // settling into it (#226).
   let sidebarOpen = $state(readSidebarOpen());
+
+  // A shell dialog opening closes the sheet it may have been opened from. In a narrow
+  // window Settings, from the sidebar's sheet, opened under it, dimmed by the sheet's
+  // scrim (2026-10 design review). Only the dialogs mounted here, which outlive the
+  // sheet: one whose root is inside a sheet would close along with it.
+  $effect(() => {
+    const opening =
+      dialogs.settingsOpen ||
+      dialogs.tagManagerOpen ||
+      dialogs.templatesOpen ||
+      dialogs.quickNoteOpen ||
+      dialogs.adoptOpen ||
+      unreadableNotes.open ||
+      unlinkedPins.open ||
+      searchPalette.open;
+    if (opening) untrack(() => overlay.dismiss());
+  });
 
   // The palette's _Create note_ path, unchanged (#227). The GM has been told by
   // the toast the write already raised; this is the shell, with nowhere of its
