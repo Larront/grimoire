@@ -241,7 +241,7 @@
 
       <!-- The full description, in reading size: it used to be 12px with a tight line, in
          a note whose prose is 16px. Kept mounted, so the field's focus survives a close. -->
-      <Disclosure open={expanded} keepMounted class="desc-panel">
+      <Disclosure open={expanded} keepMounted holdsPlace class="desc-panel">
         <LinkedTextField
           value={event.description}
           onCommit={(description) => setEvent(i, { description })}

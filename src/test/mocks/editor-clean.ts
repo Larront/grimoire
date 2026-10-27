@@ -6,3 +6,6 @@
 // a queued autosave from clobbering the external edit.
 export const editorClean = { value: true };
 export const editorCalls = { pause: 0, resume: 0, discard: 0 };
+// What the mocked editor's buffer says, when a test has "typed" into it; null echoes
+// the content it was seeded with.
+export const editorBuffer = { value: null as string | null };

@@ -246,6 +246,15 @@ describe("the structure-scoped mode works on a nested statblock", () => {
     expect(statblocks(editor)[1].className).not.toContain("statblock-editing");
   });
 
+  it("opening a second creature's structure closes the first's (2026-10 design review)", async () => {
+    const editor = note(ambush(2));
+    await fireEvent.click(control(editor, 0, "Edit statblock structure"));
+    await fireEvent.click(control(editor, 1, "Edit statblock structure"));
+
+    expect(statblocks(editor)[0].className).not.toContain("statblock-editing");
+    expect(statblocks(editor)[1].className).toContain("statblock-editing");
+  });
+
   it("never writes the mode to the file", async () => {
     const editor = note(ONE_KOBOLD);
     await fireEvent.click(control(editor, 0, "Edit statblock structure"));

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { editorClean, editorCalls } from "./editor-clean";
+  import { editorClean, editorCalls, editorBuffer } from "./editor-clean";
 
   // Mirror the real Editor's prop surface so NotePane binds/renders it the same.
   let { initialContent }: { initialContent: string; onSave?: unknown; highlightQuery?: string } =
@@ -22,9 +22,10 @@
   }
 
   // The live buffer, read by the deleted-while-open banner's "Save to recreate".
-  // The stub has no editing surface, so it echoes the content it was seeded with.
+  // The stub has no editing surface, so it echoes the content it was seeded with, or
+  // what a test says the GM has typed (`editorBuffer`).
   export function getMarkdown(): string {
-    return initialContent;
+    return editorBuffer.value ?? initialContent;
   }
 </script>
 

@@ -589,15 +589,15 @@ A compact panel of facts about the note's subject — a wiki infobox — floated
 - **Rows:** one label column for the whole panel, as wide as its longest label (up to 45%), labels in Ember Muted and values in the text colour, both Nunito 12px; values take the rest and wrap. Rows sit 4px apart, so a label that wraps reads as one label. Fields stay wrapped while edited.
 - **Title:** optional, Metamorphous. An untitled panel draws no title line.
 - **Adding:** "Add a title", Add image and Add row float above the panel's top-right corner on hover or focus, at the floating level — nothing inside the panel is kept for controls it is not showing.
-- **Row controls:** each row's moves and delete sit behind one "⋯" (the Row List's menu form); a gutter of three took 29% of a floated panel.
+- **Row controls:** each row's moves and delete sit behind one "⋯" (the Row List's menu form), floating 2px outside the panel's right edge beside its row; a gutter of three took 29% of a floated panel, and a column kept inside it for the "⋯" another 32px.
 - **Portrait:** View full size, Replace and Remove float on the thumbnail on hover or focus. After Remove, focus goes to Add image and "Image removed. Ctrl+Z to undo" is announced.
 
 ### Row List
 
 The rows of a timeline, an infobox and a statblock's edit mode.
 
-- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. The gap is real space (`--row-gap`, the block's to set) and the hover zone is that space alone, never over a row's words or links. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty; a block with its own Add may leave it out.
-- **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus. A narrow block takes them as one "⋯" menu per row instead, which also offers Insert below.
+- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. The gap is real space (`--row-gap`, the block's to set) and the hover zone is that space alone, never over a row's words or links. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty or drawn only for authoring (a statblock's structure); a block with its own Add may leave it out.
+- **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus. A narrow block takes them as one "⋯" menu per row instead, which also offers Insert below; it floats just past the block's edge, beside its row, so the row keeps the block's whole width.
 - **Focus and speech:** focus follows the row through a move and goes into the next row after a delete; moves and deletes are announced, and rows are named by their content.
 
 ### Statblock

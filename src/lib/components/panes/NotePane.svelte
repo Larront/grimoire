@@ -38,7 +38,10 @@
   // the tab. An externally restored file lands as a *new* note id, so it opens
   // separately rather than silently retiring this banner.
   let deletedNote = $state<Note | null>(null);
-  let note = $derived(liveNote ?? deletedNote);
+  // The returned note, for the moment between the deleted banner going and the tab's
+  // move to the new id reaching this pane (see `adoptReturned`).
+  let returningNote = $state<Note | null>(null);
+  let note = $derived(liveNote ?? deletedNote ?? returningNote);
   // What a recreate needs beyond the text, taken as the file vanished: the editor's
   // buffer is the body alone, and the save restores the rest from a file that is no
   // longer there — so recreating used to drop every tag and alias (2026-10 design
@@ -66,7 +69,7 @@
     | {
         isClean: () => boolean;
         pauseAutosave: () => void;
-        resumeAutosave: () => void;
+        resumeAutosave: () => void | Promise<void>;
         discardPendingEdit: () => void;
         getMarkdown: () => string;
       }
@@ -154,21 +157,30 @@
   // stops the outgoing editor's teardown flush from writing the stale buffer;
   // remounting (reloadTick) reseeds a clean buffer from disk content.
   function reloadFromDisk() {
-    if (conflictBody === null) return;
+    const external = conflictBody;
+    if (external === null) return;
     editorApi?.discardPendingEdit();
-    body = conflictBody;
     conflictBody = null;
     comparing = null;
+    // A returned file: moving the tab onto it reads it, as a remount.
+    if (afterConflict()) return;
+    body = external;
     reloadTick++;
     void focusEditor();
   }
 
   // Keep the unsaved buffer; resumeAutosave writes it to disk now, so the kept
   // version wins the conflict instead of lingering diverged from disk.
-  function keepMyVersion() {
-    editorApi?.resumeAutosave();
+  async function keepMyVersion() {
+    const write = editorApi?.resumeAutosave();
     conflictBody = null;
     comparing = null;
+    // A returned file: the tab moves onto it once the buffer is written there.
+    if (pendingMove) {
+      await write;
+      afterConflict();
+      return;
+    }
     void focusEditor();
   }
 
@@ -214,6 +226,63 @@
     if (!current || current.path !== removedPath) return;
     deletedMeta = { tags: [...details.tags], aliases: [...details.aliases] };
     deletedNote = { ...current };
+    // A conflict waiting on the GM is over: the other version was the file, and it is
+    // gone. Both banners used to show, one asking to reload a file that wasn't there.
+    conflictBody = null;
+    comparing = null;
+  }
+
+  // The file came back — moved back, or restored from the Recycle Bin. It returns as a
+  // new note (a new id), so the banner used to stay over a note that was there again
+  // (2026-10 design review). The tab moves onto it. If what is open here says something
+  // the file doesn't, the two are a conflict first, the GM choosing as for any change
+  // made on disk: moving the tab remounts this pane from the file, so it moves only
+  // once they have (`afterConflict`).
+  let recreating = false;
+  let pendingMove: { from: number; to: Note } | null = null;
+  $effect(() => {
+    const gone = deletedNote;
+    if (!gone || recreating) return;
+    // Not its own row, which the store holds a moment longer than the file.
+    const back = notes.notes.find((n) => n.path === gone.path && n.id !== gone.id);
+    if (back) untrack(() => void adoptReturned(gone, back));
+  });
+
+  async function adoptReturned(gone: Note, back: Note) {
+    let raw: string;
+    try {
+      raw = await api.silent.readNoteContent(back.path);
+    } catch {
+      return;
+    }
+    if (deletedNote !== gone) return;
+    const restored = parseFrontmatter(raw).body;
+    const mine = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
+    confirmingClose = false;
+    if (mine.trimEnd() === restored.trimEnd()) {
+      deletedNote = null;
+      tabs.repointNoteTab(gone.id, back.id, back.title);
+      return;
+    }
+    // Until the GM chooses, this pane stays on the buffer and stands on the returned
+    // note: saves go to it, and the pane doesn't read it afresh over the buffer.
+    lastFetchedId = back.id;
+    editorNoteId = back.id;
+    loadedHead = raw.slice(0, raw.length - restored.length);
+    returningNote = back;
+    deletedNote = null;
+    pendingMove = { from: gone.id, to: back };
+    conflictBody = restored;
+    editorApi?.pauseAutosave();
+  }
+
+  /** A conflict over a returned file is settled: the tab can move onto it now. */
+  function afterConflict() {
+    const move = pendingMove;
+    if (!move) return false;
+    pendingMove = null;
+    tabs.repointNoteTab(move.from, move.to.id, move.to.title);
+    return true;
   }
 
   // "Save to recreate": write the live buffer back to the original path. The row
@@ -224,6 +293,8 @@
     if (!snap) return;
     const markdown = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
     const { tags, aliases } = deletedMeta;
+    // The note made here is not one coming back: the effect above leaves it alone.
+    recreating = true;
     try {
       const created = await api.createNote(snap.title, snap.path, snap.parent_path);
       // The new file is empty, so the save writes the block as given.
@@ -238,6 +309,8 @@
     } catch (e) {
       // The api's toast has said why; the copy stays open, behind its banner.
       console.error("recreate note failed:", e);
+    } finally {
+      recreating = false;
     }
   }
 

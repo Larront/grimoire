@@ -400,9 +400,8 @@ fn write_note_content_inner(
     // The row's modified time follows what the GM changed. It was set once, when the
     // row was made, so a note's Details said "Modified" with its creation time and the
     // world's home listed notes by when they were made, not written in (2026-10
-    // design review). Not for a save that only changes trailing whitespace: the editor
-    // re-saves some notes as they open, ending them with a blank line, and opening a
-    // note is not editing it.
+    // design review). Not for a save that only changes trailing whitespace: that is how
+    // a file's ending settles to the editor's one newline, which is not the GM's edit.
     let changed = before.as_deref().map(str::trim_end) != Some(content.trim_end());
     if maybe_note.is_some() && changed {
         diesel::update(notes.filter(path.eq(note_path)))

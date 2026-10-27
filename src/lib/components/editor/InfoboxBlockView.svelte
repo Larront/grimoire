@@ -298,7 +298,8 @@
   contenteditable="false"
   role="group"
   aria-label={linkedPlainText(panel.title).trim() || "Infobox"}
-  style="--infobox-label-w: {labelWidth ? `${labelWidth + 2}px` : '30%'}"
+  style="--infobox-label-w: {labelWidth ? `${labelWidth + 2}px` : '30%'};
+         --row-menu-offset: calc(0.75rem + 3px)"
 >
   <!-- The panel's own offers — a title, an image, a row — float above it on hover or
        focus, rather than keeping lines inside it for buttons that are hidden. -->
@@ -371,7 +372,9 @@
   {/if}
 
   <!-- Rows offer their moves and delete through one menu each: the panel is ~300px when
-       it floats, and a strip of three controls on every row took 80px of it. -->
+       it floats, and a strip of three controls on every row took 80px of it. The menu
+       sits just past the panel's right edge (`--row-menu-offset`: its padding, its
+       border, and 2px), so a row keeps the panel's whole width. -->
   <RowList
     rows={panel.rows}
     row={infoboxRow}

@@ -142,7 +142,7 @@
        content, and a collapse that removed them from the DOM would be a collapse that
        edited the note. It glides shut like every section (it used to snap), and is inert
        while shut. -->
-  <Disclosure open={!collapsed} keepMounted>
+  <Disclosure open={!collapsed} keepMounted holdsPlace>
     <div class="callout-body" data-node-view-content></div>
   </Disclosure>
 </blockquote>

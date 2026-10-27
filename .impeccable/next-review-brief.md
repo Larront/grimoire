@@ -172,14 +172,14 @@ tokens and the rules.
 
 ## Leftovers from surfaces already reviewed
 
+The bugs among them were fixed in one pass (`feature/leftovers-bug-pass`): a note
+re-saved as it opened, a deleted note's banner that stayed when its file came back,
+the Infobox's rows short of the panel, and the statblock's four (one open for editing
+at a time, the page held still as a block closes, entry links as Tab stops, every Add
+shown while authoring). What is left is features and polish.
+
 Not fixed yet; pick them up when they fit a pass above:
 
-- **The editor re-saves some notes as they open**, rewriting the file with a trailing
-  blank line (the example's Start Here). A whitespace-only save no longer moves a
-  note's modified time, but the write itself shouldn't happen on open: a GM's file
-  changes on disk without their edit.
-- **"Ledger" in GM-facing copy** still: the sidebar search ("Search ledger…"), the
-  palette's "Switch ledger…" and "Open new ledger" commands.
 - **World Home**: a note made from a template is still called "Untitled". The app
   shell nests one `<main>` inside another. A link whose text has `?` or `:` can't
   become a note (refused, by the owner's choice); if GMs trip on it, the alternative
@@ -187,14 +187,7 @@ Not fixed yet; pick them up when they fit a pass above:
 - **Splash**: a world whose folder moved offers Look again and ✕, but no "Find it…"
   to point the recent entry at its new folder (needs a backend re-point of the recent
   entry). The default window is 1280×832; whether a smaller launch window suits the
-  Splash better was raised and not decided. "Ledger" still appears in other GM-facing
-  copy (the sidebar's ledger selector, the palette's "Switch ledger…").
-
-- **Statblock**: several blocks can be in edit mode at once; collapsing near a note's end
-  scrolls the block away; links inside entries aren't Tab stops; a fresh block's visible
-  "+" adds a section, not a row.
-- **Infobox**: its narrow panel lost about 16px to the row-controls gutter when Row List
-  was rebuilt.
+  Splash better was raised and not decided.
 - **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
   tool is planned as the escape hatch.
 - **States, not screens**:
@@ -204,8 +197,6 @@ Not fixed yet; pick them up when they fit a pass above:
   - The rail has no Quick Notes, New or Templates (the palette reaches all three).
   - Obsidian's `![[image.png]]` embed shows as raw text.
   - With the mini player up in a 560px window, the Files tree has almost no room.
-  - A deleted note's banner stays after its file is moved back (it returns as a new
-    note); both note banners can show at once.
   - Long names still truncate at the end in lists (a middle cut would keep "Volume 13"
     visible); the tab and title now show the full name on hover.
 - **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the

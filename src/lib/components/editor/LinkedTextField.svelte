@@ -224,6 +224,13 @@
     link.click();
   }
 
+  function followFocusedLink(e: KeyboardEvent) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).click();
+  }
+
   // A click that landed on a link is the link's: it bubbles to the host surface's
   // delegated navigation handler instead of opening this field for editing.
   function handleClick(e: MouseEvent) {
@@ -234,15 +241,23 @@
 
 <!-- The value as the GM sees it, drawn identically whether it is a button they can
      click into or a read-only span. One snippet, so the two can never disagree about
-     how a link or an empty value looks. -->
+     how a link or an empty value looks.
+
+     A read-only value's links are Tab stops, and Enter follows one by the same click the
+     pointer gives it (2026-10 design review: a statblock in play had links the keyboard
+     could not reach). In an editable value they sit inside its button, which Ctrl+Enter
+     follows instead. -->
 {#snippet drawn()}
   {#if value}
     {#each segments as segment, i (i)}
-      {#if segment.kind === "text"}{segment.text}{:else}<span
+      {#if segment.kind === "text"}{segment.text}{:else}<!-- svelte-ignore a11y_no_noninteractive_tabindex: it is a `link` whenever it is a Tab stop --><span
           data-wiki-link
           data-path={segment.path}
           data-title={segment.title}
-          data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
+          data-broken={broken(segment.path) ? "" : undefined}
+          role={readonly ? "link" : undefined}
+          tabindex={readonly ? 0 : undefined}
+          onkeydown={readonly ? followFocusedLink : undefined}>{segment.title}</span
         >{/if}
     {/each}
   {:else}
