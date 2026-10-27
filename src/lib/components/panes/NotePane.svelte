@@ -649,8 +649,9 @@
           <input
             bind:this={titleInput}
             bind:value={draftTitle}
+            title={draftTitle}
             class="w-full bg-transparent border-none outline-none p-0
-                   font-heading text-[2.75rem] leading-[1.15] tracking-tight
+                   font-heading text-[2.75rem] leading-[1.15] tracking-tight text-ellipsis
                    text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             placeholder="Untitled"
             onblur={commitTitle}

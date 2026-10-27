@@ -59,15 +59,15 @@ describe("Command Wrapper — api.* (toast surface)", () => {
       ["ERR_SPOTIFY_AUTH: State mismatch", "Couldn't connect to Spotify — please try again."],
       [
         "ERR_FORMAT_AHEAD: vault notes are on format 2, this Grimoire only reads 1",
-        "This ledger's notes were written by a newer Grimoire — update Grimoire to open it.",
+        "This world's notes were written by a newer Grimoire — update Grimoire to open it.",
       ],
       [
         "ERR_FORMAT_MIGRATION_REQUIRED: vault notes are on format 0, this Grimoire writes 1",
-        "This ledger's notes need updating before it can be opened.",
+        "This world's notes need updating before it can be opened.",
       ],
       [
         "ERR_FORMAT_STAMP_UNREADABLE: does not hold a format version",
-        "Grimoire couldn't tell what format this ledger's notes are in — check .grimoire/format-version.",
+        "Grimoire couldn't tell what format this world's notes are in — check .grimoire/format-version.",
       ],
     ];
     for (const [raw, friendly] of cases) {

@@ -14,9 +14,11 @@
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { Music2, Pause, Play } from "@lucide/svelte";
-  import { STRIP_ICON } from "./strip-classes";
+  import { STRIP_ICON, RAIL_BUTTON } from "./strip-classes";
+  import { cn } from "$lib/utils";
 
-  let { onReveal }: { onReveal: () => void } = $props();
+  /** `active`: a scene, or All Scenes, is the open tab — marked as the rail marks it. */
+  let { onReveal, active = false }: { onReveal: () => void; active?: boolean } = $props();
 
   const sceneId = $derived(audioEngine.loadingSceneId ?? audioEngine.activeSceneId);
   const sceneName = $derived(scenes.scenes.find((s) => s.id === sceneId)?.name ?? "scene");
@@ -29,11 +31,13 @@
   <Sidebar.GroupContent>
     <Sidebar.Menu>
       <Sidebar.MenuItem>
-        <Sidebar.MenuButton>
+        <Sidebar.MenuButton isActive={active}>
           {#snippet child({ props })}
             <button
               type="button"
               {...props}
+              class={cn(String(props.class ?? ""), RAIL_BUTTON)}
+              aria-current={active ? "true" : undefined}
               data-testid="sidebar-scenes-standin"
               aria-label={isSounding ? `Scenes — ${sceneName} playing` : "Scenes"}
               title={isSounding ? `Scenes — ${sceneName} playing` : "Scenes"}

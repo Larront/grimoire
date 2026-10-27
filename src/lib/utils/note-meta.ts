@@ -1,9 +1,14 @@
-export function formatBreadcrumb(path: string): string {
-  const parts = path.split("/");
-  if (parts.length <= 3) {
-    return parts.join(" / ");
-  }
-  return `${parts[0]} / … / ${parts[parts.length - 1]}`;
+/**
+ * The folder a note sits in, for Details' "Folder": the folders only, with a long
+ * trail shortened in the middle. It used to end with the note's own file, so a note
+ * at the top of the world showed its file name as if that were its folder (2026-10
+ * design review).
+ */
+export function formatFolder(path: string): string {
+  const folders = path.split("/").slice(0, -1);
+  if (folders.length === 0) return "Top level";
+  if (folders.length <= 3) return folders.join(" / ");
+  return `${folders[0]} / … / ${folders[folders.length - 2]} / ${folders[folders.length - 1]}`;
 }
 
 export function formatRelativeTime(isoString: string, now = new Date()): string {

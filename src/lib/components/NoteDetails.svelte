@@ -22,7 +22,7 @@
 <script lang="ts">
   import { TriangleAlert } from "@lucide/svelte";
   import type { Note } from "$lib/types/ledger";
-  import { formatBreadcrumb, formatRelativeTime } from "$lib/utils/note-meta";
+  import { formatFolder, formatRelativeTime } from "$lib/utils/note-meta";
   import TagChipEditor from "./TagChipEditor.svelte";
   import AliasChipEditor from "./AliasChipEditor.svelte";
   import DetailSection from "./DetailSection.svelte";
@@ -149,7 +149,7 @@
           <button
             data-slot="backlink-row"
             onclick={() => onNavigateNote?.(link.id, link.title)}
-            class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
+            class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
           >
             <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
               {link.title}
@@ -187,7 +187,7 @@
             <button
               data-slot="outbound-row"
               onclick={() => onNavigateNote?.(link.resolved_id!, link.resolved_title!)}
-              class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
+              class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
             >
               <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.resolved_title}
@@ -231,7 +231,7 @@
       class="font-mono text-[11px] leading-[1.4] text-foreground-muted truncate"
       title={note.path}
     >
-      {formatBreadcrumb(note.path)}
+      {formatFolder(note.path)}
     </div>
   </DetailSection>
 

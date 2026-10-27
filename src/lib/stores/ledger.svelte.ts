@@ -226,7 +226,7 @@ function createLedgerStore() {
         selectedPath ??
         (await open({
           directory: true,
-          title: "Open Ledger Folder",
+          title: "Open a world folder",
         }));
 
       if (!ledgerPath || typeof ledgerPath !== "string") {
@@ -234,6 +234,7 @@ function createLedgerStore() {
         return false;
       }
 
+      if (path && path !== ledgerPath) await rememberCounts();
       const result = await openAtPath(ledgerPath);
       recordRecent(result);
       return true;
@@ -242,6 +243,32 @@ function createLedgerStore() {
       throw e;
     } finally {
       isLoading = false;
+    }
+  }
+
+  // The Splash's counts are written as a world opens, and again as the GM leaves it —
+  // by closing it or opening another — so a world given its first note no longer says
+  // "Nothing in it yet" (2026-10 design review).
+  async function rememberCounts(): Promise<void> {
+    const at = path;
+    if (!at || isSample) return;
+    try {
+      const [notesNow, mapsNow, scenesNow, recents] = await Promise.all([
+        api.silent.getNotes(),
+        api.silent.getMaps(),
+        api.silent.getScenes(),
+        api.silent.getRecentLedgers(),
+      ]);
+      const entry = recents.find((r) => r.path === at);
+      if (!entry) return;
+      await api.silent.addRecentLedger({
+        ...entry,
+        note_count: notesNow.length,
+        map_count: mapsNow.length,
+        scene_count: scenesNow.length,
+      });
+    } catch {
+      // The counts stay as they were; nothing the GM did is at stake.
     }
   }
 
@@ -453,6 +480,7 @@ function createLedgerStore() {
 
   async function closeLedger(): Promise<void> {
     await pendingSaves.flushAll();
+    await rememberCounts();
     try {
       await api.closeLedger();
     } catch (e) {

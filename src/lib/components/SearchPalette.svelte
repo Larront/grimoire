@@ -337,6 +337,8 @@
     keys?: string[];
     /** Offered only while this holds. */
     when?: () => boolean;
+    /** Other words a GM might search for it by. */
+    also?: string[];
   }
 
   const ALL_COMMANDS: PaletteCommand[] = [
@@ -466,8 +468,9 @@
       action: cmdToggleTheme,
     },
     {
-      label: "Switch ledger…",
+      label: "Open a world folder…",
       testid: "cmd-switch-ledger",
+      also: ["switch world", "open world"],
       noteOnly: false,
       icon: FolderOpen,
       action: cmdSwitchLedger,
@@ -555,7 +558,12 @@
     const eligible = ([...audioCommands, ...ALL_COMMANDS] as PaletteCommand[]).filter(
       (c) => (!c.noteOnly || activeTabIsNote) && (c.when?.() ?? true),
     );
-    return q ? eligible.filter((c) => c.label.toLowerCase().includes(q)) : eligible;
+    return q
+      ? eligible.filter(
+          (c) =>
+            c.label.toLowerCase().includes(q) || (c.also ?? []).some((w) => w.includes(q)),
+        )
+      : eligible;
   });
 
   const DEFAULT_CAPS = { commands: 3, tags: 5, notes: 6, maps: 3, scenes: 3 } as const;
@@ -1053,9 +1061,12 @@
                     data-testid="note-excerpt"
                     class="mt-0.5 truncate text-xs text-muted-foreground"
                   >
-                    {#each splitExcerpt(result.excerpt, freeSearchText) as part}
+                    <!-- The match in the text's own colour, at weight: crimson is for a
+                         signal, and a found word is none (2026-10 design review). A
+                         heading's "#" is the Markdown's, not the GM's words. -->
+                    {#each splitExcerpt(result.excerpt.replace(/(^|\s)#{1,6}\s+/g, "$1"), freeSearchText) as part}
                       {#if part.isMatch}
-                        <span class="font-medium text-primary">{part.text}</span>
+                        <span class="font-semibold text-foreground">{part.text}</span>
                       {:else}
                         {part.text}
                       {/if}

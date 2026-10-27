@@ -486,7 +486,7 @@ describe("command palette – excerpt and match chip", () => {
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
     // The matched word should be inside a styled span
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
   });
@@ -577,11 +577,11 @@ describe("command palette – excerpt and match chip", () => {
 
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
     // tag:npc must never appear as a highlighted span
-    const allSpans = excerpt?.querySelectorAll("span.text-primary") ?? [];
+    const allSpans = excerpt?.querySelectorAll("span.font-semibold") ?? [];
     const spanTexts = Array.from(allSpans).map((s) => s.textContent);
     expect(spanTexts.every((t) => t !== "tag:npc")).toBe(true);
   });
@@ -1200,7 +1200,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Switch ledger closes palette and calls ledger.openLedger", async () => {
+  it("Open a world folder… closes palette and calls ledger.openLedger", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();

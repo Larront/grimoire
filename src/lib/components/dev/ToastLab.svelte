@@ -136,7 +136,9 @@
   }
 </script>
 
-<div class="fixed bottom-4 left-4 z-[9998] font-sans">
+<!-- Clear of the 48px rail, whose Settings it covered, and under dialogs and their scrim
+     (z 50) rather than over them; it is a dev tool, not part of the app. -->
+<div class="fixed bottom-4 left-16 z-40 font-sans">
   {#if open}
     <div
       class="w-64 rounded-lg border border-dashed border-background-border bg-background-elevated p-3"
