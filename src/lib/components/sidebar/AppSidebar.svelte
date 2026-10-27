@@ -60,6 +60,15 @@
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
+
+  // The row holding the tree's one Tab stop may go — deleted, moved, another world
+  // opened — and with it every way into the tree by Tab. The first row takes it back.
+  $effect(() => {
+    const stop = treeRename.tabStop;
+    if (stop === null || !tree) return;
+    const has = (n: FileNode): boolean => n.path === stop || (n.children ?? []).some(has);
+    if (!tree.children.some(has)) treeRename.tabStop = null;
+  });
   let treeLoading = $state(false);
   let noteMap = $state(new Map<number, Note>());
 
@@ -507,9 +516,10 @@
                               </div>
                             {:else if tree && tree.children.length > 0}
                               <Sidebar.Menu>
-                                {#each tree.children as treeNode (treeNode.path)}
+                                {#each tree.children as treeNode, i (treeNode.path)}
                                   <FileTree
                                     node={treeNode}
+                                    first={i === 0}
                                     {noteMap}
                                     {refresh}
                                     {handleNewNote}

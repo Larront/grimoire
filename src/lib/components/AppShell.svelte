@@ -19,6 +19,7 @@
   import { ledger } from "$lib/stores/ledger.svelte";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { focusPane } from "$lib/utils/pane-focus";
   import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
@@ -113,7 +114,10 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
+      const pane = tabs.focusedPane;
       tabs.closeActiveTab();
+      // Focus goes on with what the pane shows now; it fell to the page.
+      void focusPane(pane, tabs.activeTab?.type === "note");
     }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
       // `Ctrl+N` without a modifier is emacs-style "next line" in a native text

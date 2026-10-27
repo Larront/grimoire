@@ -48,7 +48,9 @@
     createUntitledNote,
     newNoteFolder,
   } from "$lib/utils/note-actions";
-  import type { Note, Map as LedgerMap } from "$lib/types/ledger";
+  import type { Note, Map as LedgerMap, FileNode } from "$lib/types/ledger";
+  import { compareNames } from "$lib/utils/file-name";
+  import { focusPane } from "$lib/utils/pane-focus";
 
   interface NoteSearchResult {
     id: number;
@@ -569,6 +571,37 @@
     expandedGroups = new Set([...expandedGroups, group]);
   }
 
+  // PDFs aren't in the search index (a PDF is read-only, and its text isn't the
+  // world's), so the palette found none (2026-10 design review). It matches them by
+  // name, from the file tree read as it opens.
+  let pdfs = $state<{ name: string; path: string }[]>([]);
+  $effect(() => {
+    if (!searchPalette.open) return;
+    api.silent
+      .getFileTree()
+      .then((tree) => {
+        const found: { name: string; path: string }[] = [];
+        const walk = (node: FileNode) => {
+          for (const child of node.children ?? []) {
+            if (child.is_dir) walk(child);
+            else if (child.path.toLowerCase().endsWith(".pdf"))
+              found.push({ name: child.name, path: child.path });
+          }
+        };
+        walk(tree);
+        pdfs = found;
+      })
+      .catch(() => (pdfs = []));
+  });
+  const pdfResults = $derived.by(() => {
+    const q = freeSearchText.trim().toLowerCase();
+    if (q.length < 2 || templatePickerMode) return [];
+    return pdfs
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .sort((a, b) => compareNames(a.name, b.name))
+      .slice(0, 5);
+  });
+
   // A search that came back with nothing offers to make the note it was looking for —
   // a dead end, "No results found.", until the 2026-10 design review. Only once the
   // search for exactly what is typed is back, so it doesn't flicker in mid-word; and
@@ -578,7 +611,12 @@
       searchQuery.trim().length >= 2 &&
       searchedFor === searchQuery &&
       activeTagFilters.length === 0 &&
-      noteResults.length + mapResults.length + sceneResults.length + visibleTagResults.length === 0 &&
+      noteResults.length +
+        mapResults.length +
+        sceneResults.length +
+        visibleTagResults.length +
+        pdfResults.length ===
+        0 &&
       allMatchedCommands.length === 0,
   );
 
@@ -624,12 +662,36 @@
   const visibleScenes = $derived(sceneResults.slice(0, scenesCap));
   const scenesShowMore = $derived(sceneResults.length - visibleScenes.length);
 
+  // What the palette opened takes focus as it closes; it used to be left nowhere, so
+  // the next key went to the page (2026-10 design review). Escape, opening nothing,
+  // still returns focus to where it was.
+  let handOff: { note: boolean } | null = null;
+  function onCloseAutoFocus(e: Event) {
+    if (!handOff) return;
+    e.preventDefault();
+    const { note } = handOff;
+    handOff = null;
+    void focusPane(tabs.focusedPane, note);
+  }
+
+  function openPdf(pdf: { name: string; path: string }) {
+    const mod = pendingModifier;
+    pendingModifier = null;
+    searchPalette.open = false;
+    handOff = { note: false };
+    const tab = { type: "pdf" as const, id: 0, title: pdf.name, pdfPath: pdf.path };
+    if (mod === "ctrl") tabs.openTabForceNew(tab);
+    else if (mod === "shift") tabs.openTabOpposite(tab);
+    else tabs.openTab(tab);
+  }
+
   function openNote(result: NoteSearchResult) {
     const mod = pendingModifier;
     pendingModifier = null;
     api.silent.recordRecent("note", result.id, result.title).catch(() => {});
     searchPalette.activeQuery = searchQuery;
     searchPalette.open = false;
+    handOff = { note: true };
     const tab = { type: "note" as const, id: result.id, title: result.title };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
     else if (mod === "shift") tabs.openTabOpposite(tab);
@@ -641,6 +703,7 @@
     pendingModifier = null;
     api.silent.recordRecent("map", result.id, result.title).catch(() => {});
     searchPalette.open = false;
+    handOff = { note: false };
     const tab = { type: "map" as const, id: result.id, title: result.title };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
     else if (mod === "shift") tabs.openTabOpposite(tab);
@@ -652,6 +715,7 @@
     pendingModifier = null;
     api.silent.recordRecent("scene", result.id, result.name).catch(() => {});
     searchPalette.open = false;
+    handOff = { note: false };
     const tab = { type: "scene" as const, id: result.id, title: result.name };
     if (mod === "ctrl") tabs.openTabForceNew(tab);
     else if (mod === "shift") tabs.openTabOpposite(tab);
@@ -663,6 +727,7 @@
     pendingModifier = null;
     api.silent.recordRecent(entity.entity_kind, entity.entity_id, entity.title).catch(() => {});
     searchPalette.open = false;
+    handOff = { note: entity.entity_kind === "note" };
     const tab = {
       type: entity.entity_kind as "note" | "map" | "scene",
       id: entity.entity_id,
@@ -838,7 +903,12 @@
 
 <!-- 560px, as DESIGN.md §5 says — it had drifted to the dialog default (384px), and the
      Quick Notes Dialog takes this width and place too. -->
-<Command.Dialog bind:open={searchPalette.open} shouldFilter={false} class="sm:max-w-[560px]">
+<Command.Dialog
+  bind:open={searchPalette.open}
+  shouldFilter={false}
+  class="sm:max-w-[560px]"
+  {onCloseAutoFocus}
+>
   <Command.Input
     placeholder={templatePickerMode ? "Choose a template…" : "Type a command or search..."}
     bind:value={searchQuery}
@@ -1036,6 +1106,21 @@
             </Command.Item>
           {/each}
           {@render showMoreRow("scenes", scenesShowMore)}
+        </Command.Group>
+      {/if}
+      {#if pdfResults.length > 0}
+        <Command.Group heading="PDFs">
+          {#each pdfResults as pdf (pdf.path)}
+            <Command.Item
+              data-testid="cmd-pdf-result"
+              value={pdf.path}
+              onSelect={() => openPdf(pdf)}
+              class="flex items-center gap-2"
+            >
+              <BookOpen class="size-4 shrink-0 text-muted-foreground" />
+              <span class="text-sm font-medium">{pdf.name}</span>
+            </Command.Item>
+          {/each}
         </Command.Group>
       {/if}
     {/if}

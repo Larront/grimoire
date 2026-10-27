@@ -10,6 +10,12 @@ export const treeRename = $state({
   path: null as string | null,
   /** Take focus: after a rename, focus fell from the replaced row to the search box. */
   focus: null as string | null,
+  /**
+   * The one row Tab lands on — the last one focused, or the first while none has been.
+   * Every row was its own Tab stop, 146 of them in a big world; the arrow keys move
+   * between rows now (2026-10 design review).
+   */
+  tabStop: null as string | null,
 });
 
 /** The first of `base`, `base 2`, `base 3`… that no sibling is already called. */
