@@ -1,7 +1,16 @@
 # ADR-0014 — The external-move backlink prompt may pin a persistent toast
 
-**Status:** Accepted
+**Status:** Accepted; its surface superseded (see Amendment, 2026-10)
 **Date:** 2026-07-17
+
+> **Amendment, 2026-10 design review.** The prompt is no longer a toast. The owner moved
+> every world-level problem — this one, pins that lost their note, notes that couldn't be
+> opened — into one "needs attention" place: the world menu, with a quiet mark on its
+> button, and the World Home (`needs-attention.svelte.ts`, `stale-links.svelte.ts`).
+> Three lasting toasts had stacked, hidden one another and outlived their world. What this
+> ADR decided about the prompt itself stands: it never rewrites without consent, _Update
+> links_ recomputes the set at apply time, _Leave them_ makes no backend call, and the
+> bulk path raises nothing.
 
 ## Context
 

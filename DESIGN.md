@@ -294,11 +294,11 @@ Components respond with precision and without hurry. State transitions are 150ms
 
 ### Navigation — Icon Rail
 
-Always-visible 48px column on the left edge. Brand mark at top (re-expands sidebar to last active section). Settings icon at bottom — subdued, smaller than primary rail items, pinned to footer. All icon-only elements carry `aria-label`. Active icon: Crimson. Inactive: Ember Muted. Hover: Ember Ash + Hover Overlay.
+Always-visible 48px column on the left edge. Brand mark at top (re-expands sidebar to last active section). Settings icon at bottom — subdued, smaller than primary rail items, pinned to footer. All icon-only elements carry `aria-label`. Active icon: the one standing for the open tab (Files for a note, map or PDF; Scenes; Graph), marked as an active row is. Inactive: Ember Muted, every one alike. Hover: Ember Ash + Hover Overlay.
 
 ### Navigation — Sidebar
 
-Iron Deep background. File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
+Iron Deep background. The tree is one Tab stop — the row last focused — and the arrow keys move through it: ↑ ↓, Home and End, → to open a folder and step in, ← to close it or step out. Names sort as a person reads them, numbers by value ("Annal 2" before "Annal 10"). File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
 A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus (out of the Tab order — every row would be two stops). F2 and Delete work from the row itself. A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus. The empty space under the last row is the world's root: right-click it for the folder menu's making items, or drop on it.
 
@@ -318,6 +318,21 @@ Every menu is one design — a right-click, a "⋯", the New menu, the tab bar's
 - **Focus:** an item that opens something elsewhere — a note to rename, a popover — hands focus there; otherwise the menu returns it to what opened it.
 - **Deleting:** a note, folder or PDF — the GM's own files — goes to the Recycle Bin (the Trash on a Mac) at once, and a toast says so; restored from there, it comes back into the world. Everything else is an Undo toast that hides the thing at once and commits when the toast closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it. A map is one of those: its pins live in the database, which no bin gives back. Focus goes to what takes the deleted thing's place.
 - **Nowhere else:** the webview's own menu (Back, Refresh) never shows; a right-click keeps the native menu only in text the GM can edit or has selected.
+
+### Toasts
+
+What the app did, said once and then gone: a success with circle-check, a failure with circle-x and a close button, an Undo. They stack **expanded, up to five** — collapsed, sonner hid every toast past the third and tucked the rest behind the front one, so an Undo could run out of sight (2026-10 review). A toast takes clicks over a dialog or the sidebar's sheet without closing it. What a *world* needs is not a toast (Needs attention); the lasting toasts left are a world's own news — a recovery, a note-format update — and go when it closes.
+
+### Note banners
+
+The two bars across the top of an open note (ADR-0013), sticky, never modal, neutral, with the app's own focus ring. Neither choice is dressed as the default, and focus goes back into the note once one is made.
+
+- **Changed elsewhere while being edited:** "“Name” was changed by another program while you were editing it." **Compare** lists the lines that differ, each marked Yours or Theirs, kept in view with the bar; then **Use theirs** or **Keep mine**.
+- **Deleted elsewhere while open:** "“Name” was deleted outside Grimoire. What's here is only open, not saved anywhere." **Save it again** brings back the text with its tags, aliases and the rest of its frontmatter; **Close without saving** asks once, in the bar, because what's open is the only copy.
+
+### Empty states
+
+One shape everywhere (the scene editor's): a neutral 48px tile with the muted icon, a 22px heading (Metamorphous when it is the GM's name, as an empty map's), one Nunito line, one primary button. No crimson tile. A search that finds nothing offers to create the note it was looking for.
 
 ### Slash Menu
 
@@ -372,11 +387,20 @@ _The example has no banner_ (2026-10 design review). It is named as itself, mark
 - **Can't be closed while copying** ("Copying…"); a failure says what to do, not the raw error.
 - **On success,** the world opens and a toast names it: "“The Ashfen Vale” is yours. It's saved in …\Campaigns."
 
+### Needs attention
+
+What a world needs from the GM, in one quiet place rather than a toast each (the owner's call in the 2026-10 review: three lasting toasts stacked, hid one another, and stayed on the Splash after their world closed). Three things live here: pins that lost their note, notes Grimoire couldn't open, and notes moved outside Grimoire whose links still point where they were.
+
+- **The world menu** lists them first, under a "Needs attention" field label, each with its one action as a second line ("Show pins", "Show notes", "Update links"); its button carries a small neutral dot while anything waits, and says "needs attention" to a screen reader. Neutral throughout: needing attention is none of the things the accent means, and it isn't a failure.
+- **The World Home** lists them with their actions as quiet links, and a moved note's links can be left there too (**Leave them** — safe: they stay visible and can be healed later, ADR-0014).
+- **They belong to their world.** Each list is cleared as a world opens or closes; nothing waits on the Splash or in the next world.
+- One wording, in `needs-attention.svelte.ts`, for both places.
+
 ### Pins to re-link
 
-What a repair leaves behind: pins whose note row was re-created (usually a folder reorganised outside Grimoire), so they open nothing. A permanent toast, "N pins lost their note", and a list behind its **Show pins**.
+What a repair leaves behind: pins whose note row was re-created (usually a folder reorganised outside Grimoire), so they open nothing. "N pins lost their note" waits in Needs attention, with the list behind its **Show pins**.
 
-- **The list lasts until the work is done.** Show pins leaves the toast up; the toast counts down as pins are linked again or deleted ("1 pin still needs its note") and goes at zero. The palette's "Show pins to re-link" reopens the list while any remain. A mid-session repair adds to it.
+- **The list lasts until the work is done.** It counts down as pins are linked again or deleted, and leaves Needs attention at zero. The palette's "Show pins to re-link" reopens the list while any remain. A mid-session repair adds to it.
 - **The list:** 448px, a heading per map, a row per pin — its name, then "was" and the note it used to open, both truncating rather than squeezing each other.
 - **Choosing a pin** opens its map with the pin selected, its Linked Note search filled with the old note's name and holding the caret: Enter links the first match. Nothing re-links itself — a note with the same name may not be the same note.
 
@@ -402,9 +426,9 @@ When a world's notes are written in an older format, it asks before rewriting th
 
 ### Notes Grimoire couldn't open
 
-What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: a neutral permanent toast, "N notes couldn't be opened", saying they're safe, and **Show notes** behind it.
+What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: "N notes couldn't be opened" waits in Needs attention, with **Show notes** behind it, and the list says they're safe.
 
-- **Lasting, like Pins to re-link:** Show notes leaves the toast up; it counts down as notes come good and goes at zero. The palette ("Show notes that couldn't open") and the file tree reopen the list. A world that opens cleanly takes the last one's list down.
+- **Lasting, like Pins to re-link:** it counts down as notes come good and leaves at zero. The palette ("Show notes that couldn't open") and the file tree reopen the list. A world that opens cleanly takes the last one's list down.
 - **The list:** 448px, a heading per folder, a row per note — its name (not its path), why it wouldn't read in the GM's words (never the OS's text, which is logged), and a **Show in folder** button. A folder that wouldn't list is a row of its own.
 - **Try again** reads the world's notes again without reopening it, and says how many open now.
 - **In the file tree,** such a note is muted with a warning icon and says so on hover; clicking it opens the list.
@@ -589,6 +613,7 @@ One component (`VolumeSlider`) for every level in the app: the scene editor, the
 - **Do** give every icon-only button an `aria-label` — icon rail, toolbar buttons, close buttons, mute toggles.
 - **Do** return focus to the triggering element when overlays, dialogs, and command palette close.
 - **Do** make empty states purposeful: a Metamorphous headline, one Nunito orienting line, one CTA.
+- **Do** put buttons and menu items in sentence case — "New scene", "Add track", "Close others".
 - **Do** spell what the GM reads the British way — colour, favourite, centre, customise (2026-10 design review; the menus had "Customise" beside "Favorite" and "Change color"). Identifiers in the code keep whatever spelling their library uses.
 - **Do** use `prefers-reduced-motion` to snap all transitions to instant and replace animated elements (waveform visualizer → static level bar, now-playing bars → still bars).
 
