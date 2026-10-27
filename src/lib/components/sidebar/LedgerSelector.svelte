@@ -100,7 +100,7 @@
     {/if}
     <ChevronDown
       class={cn(
-        "size-3 shrink-0 text-muted-foreground transition-transform duration-150",
+        "size-3 shrink-0 text-muted-foreground transition-transform duration-(--motion-base)",
         open && "rotate-180",
       )}
     />

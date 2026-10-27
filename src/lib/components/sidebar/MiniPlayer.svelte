@@ -82,7 +82,7 @@
   <section
     aria-label="Now playing"
     data-mini-player
-    class="mb-2 rounded-lg border bg-card/40 px-1.5 pt-1 pb-1.5 transition-colors duration-200 group-data-[collapsible=icon]:hidden
+    class="mb-2 rounded-lg border bg-card/40 px-1.5 pt-1 pb-1.5 transition-colors duration-(--motion-base) group-data-[collapsible=icon]:hidden
            {sceneState === 'playing' ? 'border-primary/60' : 'border-border'}"
   >
     <!-- The scene: what it is doing, its name (which opens it), and its tracks. -->

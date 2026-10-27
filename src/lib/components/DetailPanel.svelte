@@ -39,7 +39,7 @@
     {/if}
     <button
       onclick={onclose}
-      class="ml-auto flex size-7 items-center justify-center rounded-md text-foreground-muted transition-colors duration-150 ease-out hover:bg-primary-subtle hover:text-foreground"
+      class="ml-auto flex size-7 items-center justify-center rounded-md text-foreground-muted transition-colors duration-(--motion-base) ease-out hover:bg-primary-subtle hover:text-foreground"
       aria-label="Close details panel"
     >
       <PanelRight class="size-4" />

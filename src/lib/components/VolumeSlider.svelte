@@ -72,12 +72,12 @@
     aria-hidden="true"
   >
     <div
-      class="absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-75
+      class="absolute inset-y-0 left-0 rounded-full transition-colors
              {active ? 'bg-primary' : 'bg-foreground/35'}"
       style="width: {value * 100}%"
     ></div>
     <div
-      class="absolute top-1/2 size-3 -translate-y-1/2 rounded-full transition-[left,background-color] duration-75
+      class="absolute top-1/2 size-3 -translate-y-1/2 rounded-full transition-colors
              {active ? 'bg-primary' : 'bg-foreground/80'}"
       style="left: calc({value * 100}% - 6px)"
     ></div>
