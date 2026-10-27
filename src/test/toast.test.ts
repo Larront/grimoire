@@ -9,7 +9,7 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { toast as sonner } from "svelte-sonner";
-import { toastError, toastSuccess, toastUndo, toastUnreadableNotes } from "../lib/toast";
+import { toastError, toastSuccess, toastUndo } from "../lib/toast";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,47 +41,6 @@ describe("toastSuccess", () => {
       "Saved",
       expect.objectContaining({ duration: 3000 }),
     );
-  });
-});
-
-describe("toastUnreadableNotes", () => {
-  type Opts = {
-    duration: number;
-    description: string;
-    action: { label: string; onClick: (e: Event) => void };
-  };
-  const last = () => vi.mocked(sonner).mock.calls.at(-1) as unknown as [string, Opts];
-
-  it("takes the toast down when nothing is left unread", () => {
-    toastUnreadableNotes(0, false, vi.fn());
-    expect(sonner).not.toHaveBeenCalled();
-    expect(sonner.dismiss).toHaveBeenCalledWith("import-failures");
-  });
-
-  it("is calm, not an error, and stays: nothing was lost", () => {
-    toastUnreadableNotes(2, false, vi.fn());
-    expect(sonner.error).not.toHaveBeenCalled();
-    const [title, opts] = last();
-    expect(title).toBe("2 notes couldn't be opened");
-    expect(opts.description).toMatch(/safe in your world's folder, untouched/);
-    expect(opts.duration).toBeGreaterThan(24 * 60 * 60 * 1000);
-    expect(opts.action.label).toBe("Show notes");
-  });
-
-  it("counts down in the singular", () => {
-    toastUnreadableNotes(1, true, vi.fn());
-    const [title, opts] = last();
-    expect(title).toBe("1 note still can't be opened");
-    expect(opts.description).toMatch(/^It's safe/);
-  });
-
-  it("opens the list and stays up", () => {
-    const onShow = vi.fn();
-    toastUnreadableNotes(1, false, onShow);
-    const event = new Event("click", { cancelable: true });
-    last()[1].action.onClick(event);
-    expect(onShow).toHaveBeenCalledOnce();
-    expect(event.defaultPrevented).toBe(true);
   });
 });
 

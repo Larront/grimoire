@@ -509,7 +509,7 @@ pub fn get_backlinks_on_conn(
         .into_iter()
         .map(|(id, path, title)| BacklinkNote { id, path, title })
         .collect();
-    result.sort_by(|a, b| a.title.cmp(&b.title));
+    result.sort_by(|a, b| crate::commands::names::compare_names(&a.title, &b.title));
     Ok(result)
 }
 

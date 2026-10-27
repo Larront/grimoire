@@ -19,6 +19,7 @@
   import { ledger } from "$lib/stores/ledger.svelte";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { focusPane } from "$lib/utils/pane-focus";
   import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
@@ -54,7 +55,7 @@
     <button
       onclick={() => tabs.navigateBack(pane)}
       disabled={!tabs.canGoBack(pane)}
-      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
       aria-label="Go back"
     >
       <ArrowLeftIcon class="size-3.5" />
@@ -62,7 +63,7 @@
     <button
       onclick={() => tabs.navigateForward(pane)}
       disabled={!tabs.canGoForward(pane)}
-      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
       aria-label="Go forward"
     >
       <ArrowRightIcon class="size-3.5" />
@@ -90,9 +91,33 @@
       dialogs.settingsOpen = true;
       return;
     }
+    // Along the focused pane's tabs, as a browser's: Ctrl+Tab and Ctrl+Shift+Tab step
+    // (round from the end), Ctrl+1–8 go to that tab and Ctrl+9 to the last. There was no
+    // key to change tab at all (2026-10 design review).
+    if (e.ctrlKey && !e.altKey && e.key === "Tab") {
+      const pane = tabs.focusedPane;
+      const strip = pane === "left" ? tabs.left : tabs.right;
+      if (!strip || strip.tabs.length < 2) return;
+      e.preventDefault();
+      const n = strip.tabs.length;
+      tabs.activateTab(pane, (strip.activeIndex + (e.shiftKey ? n - 1 : 1)) % n);
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+      const pane = tabs.focusedPane;
+      const strip = pane === "left" ? tabs.left : tabs.right;
+      const at = e.key === "9" ? (strip?.tabs.length ?? 0) - 1 : Number(e.key) - 1;
+      if (!strip || at < 0 || at >= strip.tabs.length) return;
+      e.preventDefault();
+      tabs.activateTab(pane, at);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
+      const pane = tabs.focusedPane;
       tabs.closeActiveTab();
+      // Focus goes on with what the pane shows now; it fell to the page.
+      void focusPane(pane, tabs.activeTab?.type === "note");
     }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
       // `Ctrl+N` without a modifier is emacs-style "next line" in a native text
@@ -146,7 +171,7 @@
                     <button
                       data-testid="left-rail-trigger"
                       onclick={leftSurface.toggle}
-                      class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                       aria-label="Toggle details panel"
                     >
                       <PanelRightIcon class="size-4" />
@@ -192,7 +217,7 @@
                       <button
                         data-testid="right-rail-trigger"
                         onclick={rightSurface.toggle}
-                        class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                         aria-label="Toggle details panel"
                       >
                         <PanelRightIcon class="size-4" />

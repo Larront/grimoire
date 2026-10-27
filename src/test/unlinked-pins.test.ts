@@ -15,6 +15,7 @@ import { toast as sonner } from "svelte-sonner";
 import UnlinkedPinsDialog from "../lib/components/UnlinkedPinsDialog.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { unlinkedPins } from "../lib/stores/unlinked-pins.svelte";
+import { needsAttention } from "../lib/stores/needs-attention.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import type { UnlinkedPin } from "../lib/bindings.gen";
 
@@ -55,24 +56,22 @@ function openResult(unlinked_pins: UnlinkedPin[]) {
   };
 }
 
-/** The last toast raised: its title and options. */
-function lastToast() {
-  const calls = vi.mocked(sonner).mock.calls;
-  return calls[calls.length - 1] as unknown as [
-    string,
-    { description: string; action: { label: string; onClick: (e: Event) => void } },
-  ];
+/** The pins entry in the world's "needs attention" list, if any. */
+function pinsItem() {
+  return needsAttention.items.find((i) => i.kind === "pins");
 }
 
 // ── What the GM is told ───────────────────────────────────────────
+//
+// In the world's "needs attention" place (the world menu, the World Home), not a
+// toast: three lasting toasts stacked, hid one another and outlived their world
+// (2026-10 design review).
 
 describe("a ledger repair that re-created notes", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockResolvedValue(null);
   });
 
-  // The common case, and the whole reason this can be a permanent toast without
-  // becoming corner-noise: almost every open finds nothing to repair.
   it("says nothing when the repair changed nothing", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "open_ledger" ? openResult([]) : null,
@@ -80,85 +79,77 @@ describe("a ledger repair that re-created notes", () => {
 
     await ledger.openLedger("/vault");
     expect(vi.mocked(sonner)).not.toHaveBeenCalled();
+    expect(pinsItem()).toBeUndefined();
   });
 
-  // The message is permanent, so it belongs to the ledger that raised it.
-  it("takes the message down when the next ledger has nothing to repair", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "open_ledger" ? openResult([]) : null,
-    );
-
-    await ledger.openLedger("/other-vault");
-    expect(vi.mocked(sonner.dismiss)).toHaveBeenCalledWith("unlinked-pins");
-  });
-
-  it("tells the GM when pins were left pointing at nothing", async () => {
+  it("is listed as needing attention, and never as a toast", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "open_ledger" ? openResult(samplePins) : null,
     );
 
     await ledger.openLedger("/vault");
 
-    const [message, opts] = lastToast();
-    expect(message).toBe("3 pins lost their note");
-    // No paths, no ids, no counts of database rows — and not "when it opened",
-    // since the same repair runs mid-session.
-    expect(opts.description).toMatch(/notes are intact/i);
-    expect(opts.description).toMatch(/these pins need linking to their note again/i);
-    expect(opts.description).not.toMatch(/opened/);
-    expect(opts.action.label).toBe("Show pins");
+    expect(pinsItem()?.label).toBe("3 pins lost their note");
+    expect(pinsItem()?.action.label).toBe("Show pins");
+    expect(vi.mocked(sonner)).not.toHaveBeenCalled();
   });
 
-  it("names one pin in the singular, all the way through", async () => {
+  it("names one pin in the singular", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "open_ledger" ? openResult([samplePins[0]]) : null,
     );
 
     await ledger.openLedger("/vault");
-    const [message, opts] = lastToast();
-    expect(message).toBe("1 pin lost its note");
-    expect(opts.description).toMatch(/this pin needs linking to its note again/);
+    expect(pinsItem()?.label).toBe("1 pin lost its note");
   });
 
-  it("opens the list from the toast, and the toast stays", async () => {
+  it("opens the list from there", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "open_ledger" ? openResult(samplePins) : null,
     );
 
     await ledger.openLedger("/vault");
-    expect(unlinkedPins.pins).toEqual(samplePins);
     expect(unlinkedPins.open).toBe(false);
-
-    const event = new Event("click", { cancelable: true });
-    flushSync(() => lastToast()[1].action.onClick(event));
+    flushSync(() => void pinsItem()!.action.run());
     expect(unlinkedPins.open).toBe(true);
-    // Sonner dismisses on an action unless it is prevented: the toast is the way
-    // back to the list after fixing one pin.
-    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // It belongs to its world: the Splash, and the next world, don't carry it.
+  it("goes with its world when the world closes, and when another opens", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult(samplePins) : null,
+    );
+    await ledger.openLedger("/vault");
+    await ledger.closeLedger();
+    expect(pinsItem()).toBeUndefined();
+
+    unlinkedPins.replace(samplePins);
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "open_ledger" ? openResult([]) : null,
+    );
+    await ledger.openLedger("/other-vault");
+    expect(pinsItem()).toBeUndefined();
   });
 });
 
 // ── The list as pins are fixed ─────────────────────────────────────
 
 describe("working through the list", () => {
-  it("drops a fixed pin and counts the toast down", () => {
+  it("drops a fixed pin and counts down", () => {
     unlinkedPins.replace(samplePins);
     unlinkedPins.resolve(1);
 
     expect(unlinkedPins.pins.map((p) => p.pin_id)).toEqual([2, 3]);
-    expect(lastToast()[0]).toBe("2 pins still need their note");
-
-    unlinkedPins.resolve(2);
-    expect(lastToast()[0]).toBe("1 pin still needs its note");
+    expect(pinsItem()?.label).toBe("2 pins lost their note");
   });
 
-  it("takes the toast down and closes the list when the last pin is fixed", () => {
+  it("leaves the list and closes it when the last pin is fixed", () => {
     unlinkedPins.replace([samplePins[0]]);
     unlinkedPins.show();
     unlinkedPins.resolve(1);
 
     expect(unlinkedPins.open).toBe(false);
-    expect(vi.mocked(sonner.dismiss)).toHaveBeenCalledWith("unlinked-pins");
+    expect(pinsItem()).toBeUndefined();
   });
 
   it("adds a mid-session batch to the pins not yet fixed, rather than replacing them", () => {

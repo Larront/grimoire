@@ -19,6 +19,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import FailedImportsDialog from "../lib/components/FailedImportsDialog.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
 import { unreadableNotes } from "../lib/stores/unreadable-notes.svelte";
+import { needsAttention } from "../lib/stores/needs-attention.svelte";
 
 afterEach(async () => {
   cleanup();
@@ -68,22 +69,20 @@ describe("a world with notes it couldn't read", () => {
     expect(vi.mocked(sonner.error)).not.toHaveBeenCalled();
   });
 
-  it("says so calmly, keeps the list, and the toast opens it and stays", async () => {
+  // Listed where the world says what needs attention, not raised as a toast that
+  // outlived its world (2026-10 design review).
+  it("keeps the list and says so where the world needs attention, not in a toast", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "open_ledger" ? openResult(sampleFailures) : null,
     );
     await ledger.openLedger("/worlds/Ashfen");
 
     expect(unreadableNotes.items).toEqual(sampleFailures);
-    const [title, opts] = vi.mocked(sonner).mock.calls[0] as unknown as [
-      string,
-      { action: { onClick: (e: Event) => void } },
-    ];
-    expect(title).toBe("3 notes couldn't be opened");
-    const event = new Event("click", { cancelable: true });
-    flushSync(() => opts.action.onClick(event));
+    expect(vi.mocked(sonner)).not.toHaveBeenCalled();
+    const item = needsAttention.items.find((i) => i.kind === "notes")!;
+    expect(item.label).toBe("3 notes couldn't be opened");
+    flushSync(() => void item.action.run());
     expect(unreadableNotes.open).toBe(true);
-    expect(event.defaultPrevented).toBe(true);
   });
 
   it("takes the last world's list down when the next opens cleanly", async () => {
@@ -93,7 +92,13 @@ describe("a world with notes it couldn't read", () => {
     );
     await ledger.openLedger("/worlds/Other");
     expect(unreadableNotes.count).toBe(0);
-    expect(vi.mocked(sonner.dismiss)).toHaveBeenCalledWith("import-failures");
+    expect(needsAttention.items.some((i) => i.kind === "notes")).toBe(false);
+  });
+
+  it("takes the list down when the world closes", async () => {
+    unreadableNotes.replace(sampleFailures);
+    await ledger.closeLedger();
+    expect(unreadableNotes.count).toBe(0);
   });
 });
 

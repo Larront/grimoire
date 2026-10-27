@@ -209,3 +209,44 @@ describe("FileTree row menu", () => {
     expect(getByRole("button", { name: "More for Test Note" })).toBeTruthy();
   });
 });
+
+// ── Moving through the tree (2026-10 design review) ──────────────────────────
+
+describe("FileTree keys", () => {
+  const nested: FileNode = {
+    ...folderNode,
+    children: [
+      { ...noteNode, path: "My Folder/Inside.md", name: "Inside", note_id: 43 },
+    ],
+  };
+
+  it("is one Tab stop, held by the first row until another is focused", async () => {
+    const { treeRename } = await import("$lib/stores/tree-rename.svelte");
+    treeRename.tabStop = null;
+    const { getByRole } = render(FileTree, { props: { node: noteNode, first: true, ...defaultProps } });
+    expect(getByRole("button", { name: /^Test Note$/ })).toHaveAttribute("tabindex", "0");
+    treeRename.tabStop = "Elsewhere.md";
+    await waitFor(() =>
+      expect(getByRole("button", { name: /^Test Note$/ })).toHaveAttribute("tabindex", "-1"),
+    );
+    treeRename.tabStop = null;
+  });
+
+  it("opens a folder with →, steps into it with → again, and back out with ←", async () => {
+    const { treeExpansion } = await import("$lib/stores/tree-expansion.svelte");
+    treeExpansion.set("My Folder", false);
+    const { getByRole, findByRole } = render(FileTree, { props: { node: nested, ...defaultProps } });
+    const folder = getByRole("button", { name: /^My Folder$/ });
+    folder.focus();
+
+    await fireEvent.keyDown(folder, { key: "ArrowRight" });
+    const inside = await findByRole("button", { name: /^Inside$/ });
+    await fireEvent.keyDown(folder, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(inside);
+
+    await fireEvent.keyDown(inside, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(folder);
+    await fireEvent.keyDown(folder, { key: "ArrowLeft" });
+    expect(treeExpansion.isExpanded("My Folder")).toBe(false);
+  });
+});

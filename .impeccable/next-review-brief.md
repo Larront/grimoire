@@ -62,7 +62,7 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
     notes.isLoading}`), so a rename lost the caret and undo history.
   - A note's `modified_at` was only its creation time; saves now move it.
   - Enter in a note's or template's title goes into its text.
-- **Context menus** (on `feature/context-menus-review`, awaiting merge): every menu is
+- **Context menus** (merged): every menu is
   one design (`ui/menu-styles.ts`, DESIGN.md §5 Menus) — the Block Handle's rows,
   icons, sentence case, keys in Meta through `shortcut()`, arrows that stop at the
   ends, Delete last and by name. Tree rows get a "⋯", F2 and Delete; a folder makes
@@ -80,6 +80,20 @@ Each is merged into `next` unless noted. DESIGN.md has an entry for most of them
     keep Undo, as their database rows can't come back from a bin.
   - **The webview's own menu** (with a Refresh that reloads the app) showed on any
     right-click the app didn't handle.
+
+- **States, not screens** (on `feature/states-review`, awaiting merge): toasts,
+  the note banners, empty states, edge cases, keyboard tasks and the rail, reviewed as
+  one critique. The owner chose a "needs attention" place over problem toasts, a Compare
+  in the conflict banner, tabs that shrink then scroll, and a "Create note" when search
+  finds nothing. Found and fixed on the way:
+  - **"Save to recreate" lost a note's tags and aliases** (it wrote the body alone over
+    a file that was gone). It brings the frontmatter back now.
+  - **Switching worlds called a good note unreadable**: the notes list kept the old
+    world's rows until the new list arrived, and a tab found one under its own id.
+  - Problem toasts outlived their world; collapsed toasts hid an Undo as it ran out;
+    the tab bar grew past its pane, taking the open tab off screen; the tree sorted
+    "Annal 1, 10, 100"; opening from the palette or closing a tab left focus nowhere;
+    PDFs weren't in the palette; the tree was a Tab stop per row.
 
 ## Already decided — do not reopen
 
@@ -112,12 +126,14 @@ reason one fails.
   cursor.
 - **Note format updates** follow ADR-0017: the GM consents, a decline opens nothing,
   there is no compatibility mode.
-- **Repair surfaces share one pattern** (unlinked pins, notes that couldn't open,
-  database recovery, note format updates). They name the world; say it once (no toast
-  repeating a dialog); use a calm, lasting, closable toast that counts down and belongs
-  to its world (opening or closing a world takes it down); offer a way back to the list
-  from the command palette (and the file tree, where it fits); and give reasons in the
-  GM's words, never the OS's. Follow it for anything similar.
+- **What a world needs from the GM is in one place** (the owner's call, 2026-10): pins
+  that lost their note, notes that couldn't open and links to a note moved outside
+  Grimoire wait in **Needs attention** — the world menu (a quiet mark on its button) and
+  the World Home — never in a toast. Each belongs to its world (cleared as one opens or
+  closes), is said in the GM's words, and keeps a way back from the palette (and the
+  file tree, where it fits). Database recovery and note format updates stay calm,
+  closable toasts that name the world and go when it closes. Follow it for anything
+  similar. (DESIGN.md §5 Needs attention; ADR-0014 amended.)
 - **Focus** uses the app's global 2px outline with a 2px offset; components don't add
   their own rings.
 
@@ -133,26 +149,7 @@ None left: the context menus were the last.
 
 ### 2. States, not screens
 
-These come up across everything above:
-
-- **Toasts.** Every kind can be fired from the dev-only "Toasts" pill (bottom left in dev
-  builds). `toastUndo` commits when its toast closes now (the context menus pass);
-  the rest haven't been looked at as a family.
-- **Banners**: the conflict banner and the deleted-note banner in `panes/NotePane.svelte`.
-- **Empty states**: an empty ledger, no scenes, no quick notes, a note with no backlinks.
-- **Edge cases**: long names, a large ledger (hundreds of notes, many scenes and tags), a
-  missing image file, load errors. Lists sort names as text, not by number ("Annal 1,
-  Annal 10, Annal 11"), everywhere including the file tree; templates now sort
-  naturally through `compareNames` (`utils/file-name.ts`), which the rest can reuse. A
-  long note or template name is cut at the edge of its 44px title field (an `<input>`),
-  so it reads as if that were the whole name. In a tab, the _Template_ badge leaves
-  little room for the name ("Facti…").
-- **Keyboard-only use** of a whole task, such as opening a note, playing a scene and
-  dropping a pin. Keyboard use of the map was spun off as a separate task; check whether
-  it has landed.
-- **The collapsed sidebar rail**: it has no active-state marker, and Quick Notes and
-  Templates aren't reachable from it (Templates are in the New menu, which collapses
-  with it, and in the palette).
+Done (`feature/states-review`; see "Done in the second round").
 
 ### 3. Animation consistency, last (added by the owner)
 
@@ -190,6 +187,17 @@ Not fixed yet; pick them up when they fit a pass above:
   was rebuilt.
 - **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
   tool is planned as the escape hatch.
+- **States, not screens**:
+  - Map keyboard use hasn't landed: `MapCanvas.svelte` still has `keyboard: false`;
+    pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one
+    shows Leaflet's white tooltip.
+  - The rail has no Quick Notes, New or Templates (the palette reaches all three).
+  - Obsidian's `![[image.png]]` embed shows as raw text.
+  - With the mini player up in a 560px window, the Files tree has almost no room.
+  - A deleted note's banner stays after its file is moved back (it returns as a new
+    note); both note banners can show at once.
+  - Long names still truncate at the end in lists (a middle cut would keep "Volume 13"
+    visible); the tab and title now show the full name on hover.
 - **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
   map badge, the colour picker's empty state, sentence-case panel labels, a menu for the
   tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
@@ -240,7 +248,9 @@ Cautions:
   (Dark, Crimson) afterwards.
 - Pause any audio you start.
 - svelte-sonner: a toast with `duration: Infinity` that is later updated closes at once;
-  lasting toasts use `2 ** 31 - 1`. A toast under an open dialog can't be clicked.
+  lasting toasts use `2 ** 31 - 1`. A toast takes clicks over a dialog only because
+  `app.css` gives the toaster `pointer-events: auto` and the modal primitives pass a click
+  on a toast (`isOnToast`).
 
 ## Working agreements
 

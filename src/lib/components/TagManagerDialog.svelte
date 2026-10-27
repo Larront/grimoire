@@ -236,7 +236,7 @@
           class="p-3 text-(length:--font-ui) text-foreground-muted"
           data-testid="tag-manager-empty"
         >
-          No tags in this world yet.
+          No tags in this world yet. Give a note one under Tags, in its Details.
         </p>
       {:else}
         <ul class="flex flex-col" data-testid="tag-manager-list">

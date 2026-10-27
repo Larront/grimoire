@@ -7,23 +7,19 @@
 // Revised in the 2026-10 design review: the list used to be lost after one step. The
 // toast's "Show pins" dismissed the toast, choosing a pin closed the dialog, and
 // nothing could open it again, so a GM with five pins to fix could fix one. Now the
-// list is the state, not the dialog's: it shrinks as pins are fixed, the toast stays
-// and counts down, and the palette reopens it while any remain.
-import { toastUnlinkedPins } from "$lib/toast";
+// list is the state, not the dialog's: it shrinks as pins are fixed, and the palette
+// reopens it while any remain. It is said in the world's "needs attention" place (the
+// world menu and the World Home, `needs-attention.svelte.ts`), not a toast that could
+// outlive its world.
 import type { UnlinkedPin } from "$lib/bindings.gen";
 
 let pins = $state<UnlinkedPin[]>([]);
 let open = $state(false);
-/** How many have been fixed since the list began — "still" in the toast. */
-let fixed = $state(0);
+
 /** A pin the GM chose in the list: its map pane selects it on arrival. */
 let goTo = $state<{ mapId: number; pinId: number } | null>(null);
 /** The pin whose note search should take the caret when its panel appears. */
 let focusFor = $state<number | null>(null);
-
-function announce() {
-  toastUnlinkedPins(pins.length, fixed > 0, () => (open = true));
-}
 
 export const unlinkedPins = {
   get pins() {
@@ -42,11 +38,9 @@ export const unlinkedPins = {
   /** A world opened: its repair's list, in place of any other world's. */
   replace(next: UnlinkedPin[]) {
     pins = next;
-    fixed = 0;
     open = false;
     goTo = null;
     focusFor = null;
-    announce();
   },
 
   /**
@@ -56,16 +50,13 @@ export const unlinkedPins = {
   add(more: UnlinkedPin[]) {
     const known = new Set(pins.map((p) => p.pin_id));
     pins = [...pins, ...more.filter((p) => !known.has(p.pin_id))];
-    announce();
   },
 
-  /** A pin was linked again, or deleted: it leaves the list, and the toast counts down. */
+  /** A pin was linked again, or deleted: it leaves the list. */
   resolve(pinId: number) {
     if (!pins.some((p) => p.pin_id === pinId)) return;
     pins = pins.filter((p) => p.pin_id !== pinId);
-    fixed++;
     if (pins.length === 0) open = false;
-    announce();
   },
 
   show() {

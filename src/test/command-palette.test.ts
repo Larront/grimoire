@@ -486,7 +486,7 @@ describe("command palette – excerpt and match chip", () => {
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
     // The matched word should be inside a styled span
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
   });
@@ -577,11 +577,11 @@ describe("command palette – excerpt and match chip", () => {
 
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
     // tag:npc must never appear as a highlighted span
-    const allSpans = excerpt?.querySelectorAll("span.text-primary") ?? [];
+    const allSpans = excerpt?.querySelectorAll("span.font-semibold") ?? [];
     const spanTexts = Array.from(allSpans).map((s) => s.textContent);
     expect(spanTexts.every((t) => t !== "tag:npc")).toBe(true);
   });
@@ -1200,7 +1200,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Switch ledger closes palette and calls ledger.openLedger", async () => {
+  it("Open a world folder… closes palette and calls ledger.openLedger", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -2385,5 +2385,59 @@ describe("command palette – Open Quick Notes", () => {
       (t) => t.type === "quickNotes",
     );
     expect(panes.length).toBe(1);
+  });
+});
+
+// A search that finds nothing offers to make the note it was looking for (2026-10
+// design review); it was a dead end, "No results found.".
+describe("command palette – a search that finds nothing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  const offer = () =>
+    document.body.querySelector('[data-testid="cmd-create-named-note"]') as HTMLElement | null;
+
+  it("offers to create a note with that name, and creating it opens it", async () => {
+    searchReturns(NO_RESULTS);
+    await searchFor("zzqx dragon");
+
+    expect(offer()?.textContent).toContain("Create note “zzqx dragon”");
+
+    vi.mocked(invoke).mockImplementation((cmd: string) =>
+      Promise.resolve(
+        cmd === "create_note"
+          ? { ...testNote, id: 9, title: "zzqx dragon", path: "zzqx dragon.md" }
+          : cmd === "get_notes"
+            ? []
+            : null,
+      ),
+    );
+    await fireEvent.click(offer()!);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("create_note", {
+      noteTitle: "zzqx dragon",
+      notePath: "zzqx dragon.md",
+      noteParentPath: null,
+    });
+  });
+
+  it("offers nothing while there are results, or before the search is back", async () => {
+    searchReturns({ notes: [RESULT_KINDS[0].hit(1)], maps: [], scenes: [] });
+    await searchFor("note");
+    expect(offer()).toBeNull();
+
+    cleanup();
+    searchReturns(NO_RESULTS);
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("zzqx dragon");
+    // The debounce hasn't fired: the search for this text isn't back yet.
+    expect(offer()).toBeNull();
   });
 });

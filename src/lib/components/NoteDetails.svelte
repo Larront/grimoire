@@ -22,7 +22,7 @@
 <script lang="ts">
   import { TriangleAlert } from "@lucide/svelte";
   import type { Note } from "$lib/types/ledger";
-  import { formatBreadcrumb, formatRelativeTime } from "$lib/utils/note-meta";
+  import { formatFolder, formatRelativeTime } from "$lib/utils/note-meta";
   import TagChipEditor from "./TagChipEditor.svelte";
   import AliasChipEditor from "./AliasChipEditor.svelte";
   import DetailSection from "./DetailSection.svelte";
@@ -107,7 +107,7 @@
     {:else}
       <TagChipEditor bind:tags suggestions={allTags} onchange={onTagsChange} />
       {#if tags.length === 0}
-        <p class="font-mono text-[11px] text-foreground-faint">
+        <p class="font-mono text-[11px] text-muted-foreground">
           Enter to add · Backspace to remove
         </p>
       {/if}
@@ -120,7 +120,7 @@
     {:else}
       <AliasChipEditor bind:aliases onchange={onAliasesChange} />
       {#if aliases.length === 0}
-        <p class="font-mono text-[11px] text-foreground-faint">
+        <p class="font-mono text-[11px] text-muted-foreground">
           Enter or comma to add · Backspace to remove
         </p>
       {/if}
@@ -141,7 +141,7 @@
 
   <DetailSection label="Backlinks" sectionKey="backlinks">
     {#if backlinks.length === 0}
-      <p class="font-mono text-[11px] text-foreground-faint italic">No backlinks yet</p>
+      <p class="text-(length:--font-ui) text-muted-foreground">No backlinks yet</p>
     {:else}
       <div class="space-y-0.5">
         {#each displayedBacklinks as link (link.id)}
@@ -149,7 +149,7 @@
           <button
             data-slot="backlink-row"
             onclick={() => onNavigateNote?.(link.id, link.title)}
-            class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
+            class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
           >
             <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
               {link.title}
@@ -178,7 +178,7 @@
 
   <DetailSection label="Outbound links" sectionKey="outbound">
     {#if outboundLinks.length === 0}
-      <p class="font-mono text-[11px] text-foreground-faint italic">No outbound links</p>
+      <p class="text-(length:--font-ui) text-muted-foreground">No outbound links</p>
     {:else}
       <div class="space-y-0.5">
         {#each displayedOutbound as link (link.target_path)}
@@ -187,7 +187,7 @@
             <button
               data-slot="outbound-row"
               onclick={() => onNavigateNote?.(link.resolved_id!, link.resolved_title!)}
-              class="w-full text-left rounded px-1 py-0.5 hover:bg-primary-subtle transition-colors duration-100"
+              class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
             >
               <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.resolved_title}
@@ -210,7 +210,7 @@
               <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.target_path}
               </div>
-              <div class="font-mono text-[11px] text-foreground-faint italic">Not yet created</div>
+              <div class="font-mono text-[11px] text-muted-foreground">Not yet created</div>
             </button>
           {/if}
         {/each}
@@ -231,7 +231,7 @@
       class="font-mono text-[11px] leading-[1.4] text-foreground-muted truncate"
       title={note.path}
     >
-      {formatBreadcrumb(note.path)}
+      {formatFolder(note.path)}
     </div>
   </DetailSection>
 

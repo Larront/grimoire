@@ -58,9 +58,19 @@
     handleNewNote: (parentNode: FileNode | null) => Promise<void>;
     handleNewFolder: (parentNode: FileNode | null) => Promise<void>;
     handleNewMap: (parentNode: FileNode | null) => Promise<void>;
+    /** The tree's first row: Tab's stop until a row has been focused. */
+    first?: boolean;
   }
 
-  let { node, noteMap, refresh, handleNewNote, handleNewFolder, handleNewMap }: Props = $props();
+  let {
+    node,
+    noteMap,
+    refresh,
+    handleNewNote,
+    handleNewFolder,
+    handleNewMap,
+    first = false,
+  }: Props = $props();
 
   // A PDF node is path-addressed (ADR-0011): no id, detected by extension.
   const isPdf = $derived(!node.is_dir && node.path.toLowerCase().endsWith(".pdf"));
@@ -413,8 +423,44 @@
     ];
   });
 
+  // ── Moving through the tree ─────────────────────────────────────────────
+  // ↑ ↓ along the rows shown, Home and End to the ends, → opens a folder (then steps
+  // into it), ← closes it (or steps out to the folder holding the row) — a tree's
+  // keys. The tree is one Tab stop, the row last focused.
+  const tabStop = $derived(
+    treeRename.tabStop === node.path || (treeRename.tabStop === null && first) ? 0 : -1,
+  );
+
+  function rows(): HTMLElement[] {
+    return [...document.querySelectorAll<HTMLElement>("[data-tree-row]")];
+  }
+
+  function moveFocus(e: KeyboardEvent): boolean {
+    const all = rows();
+    const at = all.findIndex((r) => r.dataset.treeRow === node.path);
+    let to: HTMLElement | undefined;
+    if (e.key === "ArrowDown") to = all[at + 1];
+    else if (e.key === "ArrowUp") to = all[at - 1];
+    else if (e.key === "Home") to = all[0];
+    else if (e.key === "End") to = all[all.length - 1];
+    else if (e.key === "ArrowRight" && node.is_dir) {
+      if (!expanded) treeExpansion.set(node.path, true);
+      else to = all[at + 1]?.dataset.treeRow?.startsWith(`${node.path}/`) ? all[at + 1] : undefined;
+    } else if (e.key === "ArrowLeft") {
+      if (node.is_dir && expanded) treeExpansion.set(node.path, false);
+      else {
+        const slash = node.path.lastIndexOf("/");
+        if (slash > 0) to = all.find((r) => r.dataset.treeRow === node.path.slice(0, slash));
+      }
+    } else return false;
+    e.preventDefault();
+    to?.focus();
+    return true;
+  }
+
   function onRowKeydown(e: KeyboardEvent) {
     if (isTypingIn(e.target) || renamingPath === node.path) return;
+    if (moveFocus(e)) return;
     if (e.key === "F2") {
       e.preventDefault();
       rename();
@@ -506,6 +552,8 @@
           class="group-hover/tree-row:pr-8 group-focus-within/tree-row:pr-8"
           bind:ref={rowEl}
           data-tree-row={node.path}
+          tabindex={tabStop}
+          onfocus={() => (treeRename.tabStop = node.path)}
           onkeydown={onRowKeydown}
           {isActive}
           title={unreadable ? `Grimoire couldn't open ${node.name}` : node.name}
@@ -588,6 +636,8 @@
                       ondragend={handleDragEnd}
                       bind:ref={rowEl}
                       data-tree-row={node.path}
+                      tabindex={tabStop}
+                      onfocus={() => (treeRename.tabStop = node.path)}
                       onkeydown={onRowKeydown}
                       class="group-hover/tree-row:pr-8 group-focus-within/tree-row:pr-8 {isDropTarget
                         ? 'ring-1 ring-primary/50'

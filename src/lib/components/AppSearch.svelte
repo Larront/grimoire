@@ -18,7 +18,7 @@
 >
   <span class="flex items-center gap-1.5 min-w-0">
     <Search class="w-3.5 h-3.5 shrink-0" />
-    <span class="truncate">Search ledger…</span>
+    <span class="truncate">Search…</span>
   </span>
   <kbd
     class="pointer-events-none inline-flex h-4 shrink-0 select-none items-center gap-0.5

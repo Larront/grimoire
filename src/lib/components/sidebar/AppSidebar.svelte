@@ -35,7 +35,7 @@
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { toastExternalMoveLinks, toastSuccess } from "$lib/toast";
+  import { staleLinks } from "$lib/stores/stale-links.svelte";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
@@ -49,7 +49,7 @@
   import { treeRename, freeName } from "$lib/stores/tree-rename.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { shell } from "$lib/utils/shell-actions";
-  import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY } from "./strip-classes";
+  import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY, RAIL_BUTTON } from "./strip-classes";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -60,6 +60,27 @@
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
+
+  // What the open tab is, as the rail says it: the icon standing for it is marked as
+  // the current one, as a row is in the expanded sidebar. The rail marked nothing,
+  // and drew some of its icons full-strength and some muted for no reason a GM could
+  // see (2026-10 design review).
+  const showing = $derived.by(() => {
+    const type = tabs.activeTab?.type;
+    if (type === "note" || type === "map" || type === "pdf" || type === "template") return "files";
+    if (type === "scene" || type === "scenes") return "scenes";
+    if (type === "graph") return "graph";
+    return null;
+  });
+
+  // The row holding the tree's one Tab stop may go — deleted, moved, another world
+  // opened — and with it every way into the tree by Tab. The first row takes it back.
+  $effect(() => {
+    const stop = treeRename.tabStop;
+    if (stop === null || !tree) return;
+    const has = (n: FileNode): boolean => n.path === stop || (n.children ?? []).some(has);
+    if (!tree.children.some(has)) treeRename.tabStop = null;
+  });
   let treeLoading = $state(false);
   let noteMap = $state(new Map<number, Note>());
 
@@ -121,18 +142,9 @@
       // ride on, so it arrives as its own event.
       "pins:unlinked": (pins) => unlinkedPins.add(pins),
       // A targeted external move left other notes linking to the old path. Offer
-      // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
-      // The count is display-only; the command recomputes the real set on Update.
-      "note:external-move-links-stale": ({ from, to, count }) => {
-        const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
-        toastExternalMoveLinks(oldName, count, () => {
-          void api.applyBacklinkRewrite(from, to).then((n) => {
-            if (n > 0) {
-              toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
-            }
-          });
-        });
-      },
+      // a non-destructive heal — never silent (ADR-0014): it waits in the world's
+      // "needs attention" place until the GM updates the links or leaves them.
+      "note:external-move-links-stale": ({ from, to, count }) => staleLinks.add(from, to, count),
     }),
   );
 
@@ -290,14 +302,28 @@
   alike, and its own button. Rendered only when collapsed —
   these stand in for surfaces the expanded sidebar draws in full.
 -->
-{#snippet strip(testid: string, label: string, Icon: typeof Search, onclick: () => void)}
+{#snippet strip(
+  testid: string,
+  label: string,
+  Icon: typeof Search,
+  onclick: () => void,
+  active = false,
+)}
   <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
     <Sidebar.GroupContent>
       <Sidebar.Menu>
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton>
+          <Sidebar.MenuButton isActive={active}>
             {#snippet child({ props })}
-              <button type="button" {...props} data-testid={testid} aria-label={label} {onclick}>
+              <button
+                type="button"
+                {...props}
+                class={cn(String(props.class ?? ""), RAIL_BUTTON)}
+                data-testid={testid}
+                aria-label={label}
+                aria-current={active ? "true" : undefined}
+                {onclick}
+              >
                 <Icon class={STRIP_ICON} strokeWidth={1.5} />
               </button>
             {/snippet}
@@ -429,10 +455,16 @@
       to the All Scenes tab, which is still a row away once expanded.
     -->
     {@render strip("sidebar-search-icon", "Search", Search, shell.openSearch)}
-    {@render strip("sidebar-files-standin", "Files", Files, () => reveal("sidebar-files-section"))}
+    {@render strip(
+      "sidebar-files-standin",
+      "Files",
+      Files,
+      () => reveal("sidebar-files-section"),
+      showing === "files",
+    )}
     <!-- Scenes is its own component: while a scene plays it carries the playing bars
          and, under it, that scene's pause — the mini player cannot be 48px wide. -->
-    <RailScenes onReveal={() => reveal("sidebar-scenes-section")} />
+    <RailScenes onReveal={() => reveal("sidebar-scenes-section")} active={showing === "scenes"} />
 
     <!-- Quick Notes directly under search: the inbox a GM empties between
          sessions, with a count worth seeing at a glance. Expanded-only — see #233
@@ -516,9 +548,10 @@
                               </div>
                             {:else if tree && tree.children.length > 0}
                               <Sidebar.Menu>
-                                {#each tree.children as treeNode (treeNode.path)}
+                                {#each tree.children as treeNode, i (treeNode.path)}
                                   <FileTree
                                     node={treeNode}
+                                    first={i === 0}
                                     {noteMap}
                                     {refresh}
                                     {handleNewNote}
@@ -589,17 +622,15 @@
          rows among the groups. -->
     <Sidebar.Menu>
       <Sidebar.MenuItem>
-        <Sidebar.MenuButton>
+        <Sidebar.MenuButton isActive={showing === "graph"}>
           {#snippet child({ props })}
             <button
               type="button"
               {...props}
               data-testid="sidebar-graph"
               aria-label="Graph"
-              class={cn(
-                String(props.class ?? ""),
-                "text-muted-foreground hover:text-sidebar-foreground",
-              )}
+              aria-current={showing === "graph" ? "true" : undefined}
+              class={cn(String(props.class ?? ""), RAIL_BUTTON)}
               onclick={shell.openGraph}
             >
               <Network class={ROW_ICON} strokeWidth={1.5} />
@@ -621,10 +652,7 @@
               {...props}
               data-testid="sidebar-settings"
               aria-label="Settings"
-              class={cn(
-                String(props.class ?? ""),
-                "text-muted-foreground hover:text-sidebar-foreground",
-              )}
+              class={cn(String(props.class ?? ""), RAIL_BUTTON)}
               onclick={shell.openSettings}
             >
               <Settings class={ROW_ICON} strokeWidth={1.5} />

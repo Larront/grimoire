@@ -52,6 +52,10 @@ export function createLedgerCollection<T>({ fetch, onClose }: LedgerCollectionOp
       // watching the path would keep serving rows that no longer exist.
       ledger.openGeneration;
       if (ledger.isOpen && ledger.path) {
+        // Emptied first: until the new world's list lands, the old one's rows would
+        // answer for it — a restored tab found the left world's note with its own id
+        // and reported its file unreadable (2026-10 design review).
+        items = [];
         load();
       } else {
         generation++;

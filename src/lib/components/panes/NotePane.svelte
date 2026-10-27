@@ -8,6 +8,8 @@
   import { appPrefs } from "$lib/stores/app-prefs.svelte";
   import { toastSuccess } from "$lib/toast";
   import { LoaderCircle, FileWarning } from "@lucide/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { diffHunks, diffLines, type DiffHunk } from "$lib/utils/line-diff";
   import { parseFrontmatter, serializeFrontmatter } from "$lib/utils";
   import { parseWikiTarget } from "$lib/editor/wiki-link";
   import Editor from "$lib/components/editor/Editor.svelte";
@@ -37,6 +39,14 @@
   // separately rather than silently retiring this banner.
   let deletedNote = $state<Note | null>(null);
   let note = $derived(liveNote ?? deletedNote);
+  // What a recreate needs beyond the text, taken as the file vanished: the editor's
+  // buffer is the body alone, and the save restores the rest from a file that is no
+  // longer there — so recreating used to drop every tag and alias (2026-10 design
+  // review). The tags and aliases come from Details, which has this session's edits.
+  let deletedMeta: { tags: string[]; aliases: string[] } = { tags: [], aliases: [] };
+  // The frontmatter block as the file was last read, for the keys Details doesn't
+  // edit (another tool's, the portability contract's).
+  let loadedHead = "";
 
   // ── Content loading ──────────────────────────────────────────────────────
   let body = $state<string | null>(null);
@@ -73,7 +83,14 @@
   let conflictBody = $state<string | null>(null);
 
   $effect(() => {
-    if (note && note.id !== lastFetchedId) {
+    // No note — a world switching under this tab — means the next one is read afresh,
+    // even with the same id: ids are per world, and the one that comes back is a
+    // different note.
+    if (!note) {
+      lastFetchedId = null;
+      return;
+    }
+    if (note.id !== lastFetchedId) {
       const targetId = note.id;
       lastFetchedId = targetId;
       body = null;
@@ -88,6 +105,7 @@
           if (lastFetchedId !== targetId) return;
           const parsed = parseFrontmatter(c);
           editorNoteId = targetId;
+          loadedHead = c.slice(0, c.length - parsed.body.length);
           body = parsed.body;
         })
         .catch(() => {
@@ -115,6 +133,7 @@
       // The pane may have navigated away during the read.
       if (!note || note.path !== changedPath) return;
       externalBody = parseFrontmatter(c).body;
+      loadedHead = c.slice(0, c.length - externalBody.length);
     } catch {
       // Unreadable (mid-write, deleted) — leave the current buffer untouched.
       return;
@@ -139,7 +158,9 @@
     editorApi?.discardPendingEdit();
     body = conflictBody;
     conflictBody = null;
+    comparing = null;
     reloadTick++;
+    void focusEditor();
   }
 
   // Keep the unsaved buffer; resumeAutosave writes it to disk now, so the kept
@@ -147,7 +168,39 @@
   function keepMyVersion() {
     editorApi?.resumeAutosave();
     conflictBody = null;
+    comparing = null;
+    void focusEditor();
   }
+
+  // Compare: the lines the two versions don't share, each said to be the GM's or the
+  // other program's, so the choice above isn't made blind (2026-10 design review).
+  // Taken when asked for — the GM's side is the live buffer, and may still be moving.
+  let comparing = $state<DiffHunk[] | null>(null);
+  function toggleCompare() {
+    if (comparing || conflictBody === null) {
+      comparing = null;
+      return;
+    }
+    const mine = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
+    // Blank lines say nothing a GM can weigh: a changed one drew a row reading "Theirs"
+    // beside nothing, and a shared one an empty row of context.
+    const meaningful = diffLines(mine, conflictBody).filter(
+      (l) => l.text.trim() !== "",
+    );
+    comparing = diffHunks(meaningful);
+  }
+
+  // After a choice, the GM goes on writing: focus goes back into the note, which it
+  // used to drop to the page.
+  let scrollEl = $state<HTMLElement | null>(null);
+  async function focusEditor() {
+    await tick();
+    scrollEl?.querySelector<HTMLElement>(".ProseMirror")?.focus();
+  }
+
+  // "Close without saving" asks once, in the banner: the copy open here is the only
+  // one there is.
+  let confirmingClose = $state(false);
 
   // ── Deleted while open (ADR-0013 Stage 4) ──────────────────────────────────
   // The open note's file was deleted (or moved away, with no move correlated) on
@@ -159,6 +212,7 @@
     // Read `note` synchronously, before the concurrent notes.load() drops the row.
     const current = note;
     if (!current || current.path !== removedPath) return;
+    deletedMeta = { tags: [...details.tags], aliases: [...details.aliases] };
     deletedNote = { ...current };
   }
 
@@ -169,13 +223,20 @@
     const snap = deletedNote;
     if (!snap) return;
     const markdown = editorApi?.getMarkdown() ?? lastMarkdown ?? "";
+    const { tags, aliases } = deletedMeta;
     try {
       const created = await api.createNote(snap.title, snap.path, snap.parent_path);
-      await api.writeNoteContent(created.path, markdown);
+      // The new file is empty, so the save writes the block as given.
+      await api.writeNoteContent(created.path, loadedHead + markdown);
+      // Only where there is something to say: no tags, and none before, adds no key.
+      if (tags.length || /^tags:/m.test(loadedHead)) await api.writeNoteTags(created.path, tags);
+      if (aliases.length) await api.setNoteAliases(created.id, aliases);
       await notes.load();
       deletedNote = null;
       tabs.repointNoteTab(snap.id, created.id, created.title);
+      toastSuccess(`“${created.title}” is saved again`);
     } catch (e) {
+      // The api's toast has said why; the copy stays open, behind its banner.
       console.error("recreate note failed:", e);
     }
   }
@@ -444,83 +505,140 @@
            @container lets the inner content respond to the pane's own width, so split panes
            get tighter margins than the wide single-pane layout. -->
       <div
+        bind:this={scrollEl}
         data-note-scroll
         class="@container h-[calc(100svh_-_var(--tab-bar-h)_-_1px)] overflow-y-auto"
       >
+        <!-- The two in-pane bars (ADR-0013 Stage 4). Sticky, not modal: they flag what
+             happened outside Grimoire without blocking the rest of the app. Neutral — a
+             file changing elsewhere is not one of the things the accent means — with the
+             app's own focus ring, and neither choice dressed as the default (2026-10
+             design review: they had a crimson icon, their own ring, which vanished on the
+             crimson button, and "Keep my version" as the primary). -->
         {#if conflictBody !== null}
-          <!-- In-pane conflict bar (ADR-0013). Sticky, not modal: it flags
-               external divergence without blocking the rest of the app. -->
-          <div
-            data-testid="conflict-banner"
-            data-note-inset
-            role="alert"
-            class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
+          <!-- The bar and its comparison stick together: a GM is usually far down the
+               note when this happens, where a list at the top would be out of sight. -->
+          <div class="sticky top-0 z-20">
+            <div
+              data-testid="conflict-banner"
+              data-note-inset
+              role="alert"
+              class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2
                    border-b border-border bg-background-elevated py-2.5"
-          >
-            <div class="flex items-center gap-2 min-w-0">
-              <FileWarning class="size-4 shrink-0 text-primary" />
-              <p class="text-xs text-muted-foreground">
-                This note changed on disk while you had unsaved edits.
-              </p>
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <FileWarning class="size-4 shrink-0 text-muted-foreground" />
+                <p class="text-(length:--font-ui) text-foreground">
+                  “{note.title}” was changed by another program while you were editing it.
+                </p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="conflict-compare"
+                  aria-expanded={comparing !== null}
+                  onclick={toggleCompare}>{comparing ? "Hide changes" : "Compare"}</Button
+                >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="conflict-reload"
+                  onclick={reloadFromDisk}>Use theirs</Button
+                >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="conflict-keep"
+                  onclick={keepMyVersion}>Keep mine</Button
+                >
+              </div>
             </div>
-            <div class="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                data-testid="conflict-reload"
-                onclick={reloadFromDisk}
-                class="inline-flex h-7 items-center rounded-md border border-border bg-background
-                       px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
-                       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >Reload from disk</button
+            {#if comparing}
+              <section
+                data-testid="conflict-compare-list"
+                data-note-inset
+                aria-label="What differs between your version and theirs"
+                class="max-h-72 overflow-y-auto border-b border-border bg-background-elevated py-3"
               >
-              <button
-                type="button"
-                data-testid="conflict-keep"
-                onclick={keepMyVersion}
-                class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
-                       text-primary-foreground hover:bg-primary/90 transition-colors
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >Keep my version</button
-              >
-            </div>
+                {#if comparing.length === 0}
+                  <p class="text-(length:--font-ui) text-muted-foreground">
+                    The text is the same; only its spacing differs.
+                  </p>
+                {/if}
+                {#each comparing as hunk, h (h)}
+                  {#if h > 0}<div class="my-2 text-center text-xs text-muted-foreground">
+                      ⋯
+                    </div>{/if}
+                  <ul class="flex flex-col">
+                    {#each hunk as line, l (l)}
+                      <li
+                        class="flex gap-3 rounded-sm px-2 py-0.5 text-(length:--font-ui)
+                             {line.kind === 'theirs' ? 'bg-surface-hover' : ''}"
+                      >
+                        <span class="w-12 shrink-0 text-xs leading-5 text-muted-foreground">
+                          {line.kind === "mine" ? "Yours" : line.kind === "theirs" ? "Theirs" : ""}
+                        </span>
+                        <span
+                          class="min-w-0 whitespace-pre-wrap break-words
+                               {line.kind === 'same' ? 'text-muted-foreground' : 'text-foreground'}"
+                          >{line.text || " "}</span
+                        >
+                      </li>
+                    {/each}
+                  </ul>
+                {/each}
+              </section>
+            {/if}
           </div>
         {/if}
         {#if deletedNote !== null}
-          <!-- Deleted-while-open bar (ADR-0013 Stage 4). The file vanished on
-               disk; the buffer is kept as an unsaved copy so nothing the GM was
-               viewing is lost. Sticky, not modal. -->
           <div
             data-testid="deleted-banner"
             data-note-inset
             role="alert"
-            class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3
+            class="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-4 gap-y-2
                    border-b border-border bg-background-elevated py-2.5"
           >
-            <div class="flex items-center gap-2 min-w-0">
-              <FileWarning class="size-4 shrink-0 text-primary" />
-              <p class="text-xs text-muted-foreground">
-                This note's file was deleted outside Grimoire. Your unsaved copy is still here.
+            <div class="flex min-w-0 items-center gap-2">
+              <FileWarning class="size-4 shrink-0 text-muted-foreground" />
+              <p class="text-(length:--font-ui) text-foreground">
+                {#if confirmingClose}
+                  Close without saving? What's here is the only copy.
+                {:else}
+                  “{note.title}” was deleted outside Grimoire. What's here is only open, not saved
+                  anywhere.
+                {/if}
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                data-testid="deleted-close"
-                onclick={closeThisTab}
-                class="inline-flex h-7 items-center rounded-md border border-border bg-background
-                       px-2.5 text-xs font-medium hover:bg-accent hover:text-accent-foreground
-                       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >Close</button
-              >
-              <button
-                type="button"
-                data-testid="deleted-recreate"
-                onclick={saveToRecreate}
-                class="inline-flex h-7 items-center rounded-md bg-primary px-2.5 text-xs font-medium
-                       text-primary-foreground hover:bg-primary/90 transition-colors
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >Save to recreate</button
-              >
+              {#if confirmingClose}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="deleted-close-cancel"
+                  onclick={() => (confirmingClose = false)}>Cancel</Button
+                >
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  data-testid="deleted-close-confirm"
+                  onclick={closeThisTab}>Close without saving</Button
+                >
+              {:else}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="deleted-close"
+                  onclick={() => (confirmingClose = true)}>Close without saving</Button
+                >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="deleted-recreate"
+                  onclick={saveToRecreate}>Save it again</Button
+                >
+              {/if}
             </div>
           </div>
         {/if}
@@ -531,8 +649,9 @@
           <input
             bind:this={titleInput}
             bind:value={draftTitle}
+            title={draftTitle}
             class="w-full bg-transparent border-none outline-none p-0
-                   font-heading text-[2.75rem] leading-[1.15] tracking-tight
+                   font-heading text-[2.75rem] leading-[1.15] tracking-tight text-ellipsis
                    text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             placeholder="Untitled"
             onblur={commitTitle}
@@ -550,13 +669,11 @@
                 This note couldn't be read — its file may have been moved or deleted outside
                 Grimoire.
               </p>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 data-testid="note-load-error-close"
-                onclick={closeThisTab}
-                class="text-sm text-primary underline-offset-2 hover:underline
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-                >Close tab</button
+                onclick={closeThisTab}>Close tab</Button
               >
             </div>
           {:else if body !== null}

@@ -4,6 +4,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { maps } from "$lib/stores/maps.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
+  import { Button } from "$lib/components/ui/button";
   import {
     FileXCorner,
     LoaderCircle,
@@ -559,29 +560,22 @@
 {:else if !mapData.image_path}
   <!-- Empty state: no image assigned yet -->
   <div class="flex h-full items-center justify-center">
-    <div class="flex flex-col items-center gap-6 text-center max-w-xs">
-      <div
-        class="flex size-14 items-center justify-center rounded-2xl bg-primary-subtle border border-primary-muted"
-      >
-        <ImagePlus class="size-7 text-primary" strokeWidth={1.5} />
+    <!-- The house empty state (the scene editor's): a neutral tile, the map's name, one
+         line, one way on. It had a crimson tile, and called the picture a "background
+         image" where Appearance calls it a picture (2026-10 design review). -->
+    <div class="flex flex-col items-center text-center max-w-xs">
+      <div class="flex size-12 items-center justify-center rounded-lg bg-muted">
+        <ImagePlus class="size-6 text-muted-foreground" strokeWidth={1.5} />
       </div>
-      <div class="space-y-1.5">
-        <!-- The GM's name for this map, so it speaks in the world's voice — Metamorphous
-             at 400, never bolded (DESIGN.md §3). It was asking for `font-display`, which
-             is not a class Tailwind compiles, so it has been rendering in Nunito. -->
-        <p class="font-heading text-xl">{mapData.title}</p>
-        <p class="text-sm text-muted-foreground leading-relaxed">
-          Add a background image to start placing pins.
-        </p>
-      </div>
-      <button
-        onclick={handleAssignImage}
-        disabled={isAssigningImage}
-        class="px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium
-               hover:bg-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-      >
-        {isAssigningImage ? "Copying image…" : "Choose background image"}
-      </button>
+      <!-- The GM's name for this map, so it speaks in the world's voice — Metamorphous
+           at 400, never bolded (DESIGN.md §3). -->
+      <h2 class="mt-5 font-heading text-[1.375rem] leading-tight font-normal">{mapData.title}</h2>
+      <p class="mt-2 text-sm text-muted-foreground leading-relaxed">
+        Choose a picture of the map to start placing pins on it.
+      </p>
+      <Button size="sm" class="mt-5" onclick={handleAssignImage} disabled={isAssigningImage}>
+        {isAssigningImage ? "Copying the picture…" : "Choose a picture"}
+      </Button>
     </div>
   </div>
 {:else}

@@ -15,6 +15,7 @@
 
 <script lang="ts">
   import { X } from "@lucide/svelte";
+  import { compareNames } from "$lib/utils/file-name";
 
   interface Props {
     tags: string[];
@@ -45,7 +46,7 @@
         const nk = normalizeTag(s);
         return nk.includes(key) && !attachedKeys.has(nk);
       })
-      .sort((a, b) => normalizeTag(a).localeCompare(normalizeTag(b)));
+      .sort((a, b) => compareNames(normalizeTag(a), normalizeTag(b)));
   });
 
   // Show "Create new tag: X" only when the draft is a valid tag value AND

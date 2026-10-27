@@ -12,6 +12,7 @@ import {
 } from "$lib/toast";
 import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+import { staleLinks } from "$lib/stores/stale-links.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
@@ -131,6 +132,7 @@ function createLedgerStore() {
     // Every open, empty or not: a world that reads cleanly takes the last one's
     // list, and its toast, down.
     unreadableNotes.replace(result.failed_imports);
+    staleLinks.clear();
 
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are
@@ -224,7 +226,7 @@ function createLedgerStore() {
         selectedPath ??
         (await open({
           directory: true,
-          title: "Open Ledger Folder",
+          title: "Open a world folder",
         }));
 
       if (!ledgerPath || typeof ledgerPath !== "string") {
@@ -232,6 +234,7 @@ function createLedgerStore() {
         return false;
       }
 
+      if (path && path !== ledgerPath) await rememberCounts();
       const result = await openAtPath(ledgerPath);
       recordRecent(result);
       return true;
@@ -240,6 +243,32 @@ function createLedgerStore() {
       throw e;
     } finally {
       isLoading = false;
+    }
+  }
+
+  // The Splash's counts are written as a world opens, and again as the GM leaves it —
+  // by closing it or opening another — so a world given its first note no longer says
+  // "Nothing in it yet" (2026-10 design review).
+  async function rememberCounts(): Promise<void> {
+    const at = path;
+    if (!at || isSample) return;
+    try {
+      const [notesNow, mapsNow, scenesNow, recents] = await Promise.all([
+        api.silent.getNotes(),
+        api.silent.getMaps(),
+        api.silent.getScenes(),
+        api.silent.getRecentLedgers(),
+      ]);
+      const entry = recents.find((r) => r.path === at);
+      if (!entry) return;
+      await api.silent.addRecentLedger({
+        ...entry,
+        note_count: notesNow.length,
+        map_count: mapsNow.length,
+        scene_count: scenesNow.length,
+      });
+    } catch {
+      // The counts stay as they were; nothing the GM did is at stake.
     }
   }
 
@@ -451,6 +480,7 @@ function createLedgerStore() {
 
   async function closeLedger(): Promise<void> {
     await pendingSaves.flushAll();
+    await rememberCounts();
     try {
       await api.closeLedger();
     } catch (e) {
@@ -464,9 +494,13 @@ function createLedgerStore() {
     accent = "accent-crimson";
     error = null;
     // A world's own news goes with it: the restore or rebuild toast, and the note-
-    // format update's, used to sit on over the Splash and the next world.
+    // format update's, used to sit on over the Splash and the next world. So does
+    // what needed its attention — pins, unreadable notes, links to moved notes.
     dismissDbRecovery();
     dismissFormatUpdate();
+    unreadableNotes.replace([]);
+    unlinkedPins.replace([]);
+    staleLinks.clear();
   }
 
   async function checkExistingLedger(): Promise<void> {

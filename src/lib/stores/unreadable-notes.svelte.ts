@@ -7,23 +7,18 @@
 // they read. This is the list of them until they do.
 //
 // The pattern is `unlinked-pins.svelte.ts`'s (2026-10 design review): the list is the
-// state, not the dialog's. Its toast is calm and stays, and counts down; the palette
-// and the file tree reopen it; Try again reads the world's notes again without
-// reopening it. It used to be a red ten-second toast whose list was gone once read.
+// state, not the dialog's, said in the world's "needs attention" place; the palette and
+// the file tree reopen it; Try again reads the world's notes again without reopening
+// it. It used to be a red ten-second toast whose list was gone once read, then a
+// lasting one that outlived its world.
 import { api } from "$lib/api";
-import { toastSuccess, toastUnreadableNotes } from "$lib/toast";
+import { toastSuccess } from "$lib/toast";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import type { FailedImport } from "$lib/bindings.gen";
 
 let items = $state<FailedImport[]>([]);
 let open = $state(false);
-/** How many have come good since the list began — "still" in the toast. */
-let fixed = $state(0);
 let retrying = $state(false);
-
-function announce() {
-  toastUnreadableNotes(items.length, fixed > 0, () => (open = true));
-}
 
 export const unreadableNotes = {
   get items() {
@@ -45,9 +40,7 @@ export const unreadableNotes = {
   /** A world opened: what its open couldn't read, in place of any other world's. */
   replace(next: FailedImport[]) {
     items = next;
-    fixed = 0;
     open = false;
-    announce();
   },
 
   show() {
@@ -72,12 +65,10 @@ export const unreadableNotes = {
       const before = items.length;
       items = report.failed_imports;
       const opened = Math.max(0, before - items.length);
-      fixed += opened;
       if (items.length === 0) {
         open = false;
         if (before > 0) toastSuccess("Every note opens again");
       }
-      announce();
       if (report.unlinked_pins.length) unlinkedPins.add(report.unlinked_pins);
       return opened;
     } finally {

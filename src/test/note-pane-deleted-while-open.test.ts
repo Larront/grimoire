@@ -160,7 +160,44 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
   });
 
-  it("'Close' closes the tab", async () => {
+  // The editor's buffer is the body alone, and the save restores the rest from a file
+  // that is gone — so recreating used to drop every tag and alias (2026-10 review).
+  it("'Save to recreate' brings back the tags, aliases and the rest of the frontmatter", async () => {
+    diskContent = "---\ntags: [npc]\naliases: [Mira]\nsource: obsidian\n---\nOriginal body";
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "get_notes") return storeNotes;
+      if (cmd === "read_note_content") return diskContent;
+      if (cmd === "read_note_tags") return ["npc"];
+      if (cmd === "get_note_aliases") return ["Mira"];
+      if (cmd === "create_note") {
+        const a = args as { noteTitle: string; notePath: string };
+        const created: Note = { ...testNote, id: 2, title: a.noteTitle, path: a.notePath };
+        storeNotes = [created];
+        return created;
+      }
+      return [];
+    });
+    const { getByTestId } = await openNote();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("get_note_aliases", { noteId: 1 }));
+    storeNotes = [];
+    await emit("note:removed", { path: "Aldric.md" });
+    await syncStore();
+    await waitFor(() => expect(getByTestId("deleted-banner")).toBeTruthy());
+
+    await act(() => getByTestId("deleted-recreate").click());
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_note_aliases", { noteId: 2, aliases: ["Mira"] }),
+    );
+    const write = vi.mocked(invoke).mock.calls.findLast((c) => c[0] === "write_note_content");
+    expect((write?.[1] as { content: string }).content).toBe(
+      "---\ntags: [npc]\naliases: [Mira]\nsource: obsidian\n---\nOriginal body",
+    );
+    expect(invoke).toHaveBeenCalledWith("write_note_tags", { notePath: "Aldric.md", tags: ["npc"] });
+  });
+
+  // What's open is the only copy there is, so closing asks once, in the banner.
+  it("'Close without saving' asks first, and closes the tab only when confirmed", async () => {
     const { getByTestId, queryByTestId } = await openNote();
     storeNotes = [];
     await emit("note:removed", { path: "Aldric.md" });
@@ -168,6 +205,12 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     await waitFor(() => expect(getByTestId("deleted-banner")).toBeTruthy());
 
     await act(() => getByTestId("deleted-close").click());
+    expect(getByTestId("mock-editor")).toBeTruthy();
+    await act(() => getByTestId("deleted-close-cancel").click());
+    expect(getByTestId("deleted-recreate")).toBeTruthy();
+
+    await act(() => getByTestId("deleted-close").click());
+    await act(() => getByTestId("deleted-close-confirm").click());
 
     expect(queryByTestId("mock-editor")).toBeNull();
     expect(queryByTestId("deleted-banner")).toBeNull();
