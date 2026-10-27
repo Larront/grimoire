@@ -93,8 +93,21 @@
      are the pair DESIGN.md §6 names for confirmation and failure, and they are
      what makes the status legible without relying on the hue (red and green are
      invisible to ~8% of male users). Sonner's own error glyph is an
-     exclamation, not an x. Toast colours and geometry are in src/app.css. -->
-<Toaster richColors successIcon={circleCheckIcon} errorIcon={circleXIcon} {closeIcon} />
+     exclamation, not an x. Toast colours and geometry are in src/app.css.
+
+     Expanded, up to five: collapsed, sonner hid every toast past the third and
+     tucked the rest behind the front one, so an Undo raised before an error sat out
+     of sight while its window ran out, and a lasting one could vanish entirely
+     (2026-10 design review). What a world needs no longer comes as toasts, so few
+     are ever up at once, and each one is meant to be read. -->
+<Toaster
+  richColors
+  expand
+  visibleToasts={5}
+  successIcon={circleCheckIcon}
+  errorIcon={circleXIcon}
+  {closeIcon}
+/>
 
 {#snippet circleCheckIcon()}
   <CircleCheck size={16} strokeWidth={2} aria-hidden="true" />
