@@ -7,13 +7,14 @@ import type { SalvageSummary } from "$lib/bindings.gen";
 // disappears"). Longer than success — error copy is denser and higher-stakes —
 // but still finite.
 //
-// Two sanctioned exceptions, both Conflict-Banner-class: a state that outlives
-// the session, that the GM has to act on, and that is non-destructive to ignore.
-// `toastExternalMoveLinks` is an unresolved *external* change (ADR-0014);
-// `toastMigrationReport`'s failure branch is notes a [[Format Migration]] left on
-// a format nothing reads (#184). Neither licenses permanent toasts for work the
-// app has finished — that still auto-expires, including a migration that swept
-// the whole vault cleanly.
+// The sanctioned exceptions are Conflict-Banner-class: a state that outlives the
+// session, that the GM has to act on, and that is non-destructive to ignore —
+// `toastMigrationReport`'s failure branch (notes a [[Format Migration]] left on a
+// format nothing reads, #184) and the database recovery notices. None licenses
+// permanent toasts for work the app has finished. What a *world* needs from the
+// GM — pins that lost their note, notes that couldn't be opened, links to a note
+// moved outside Grimoire — is not a toast at all (2026-10 design review): it waits
+// in the world menu and on the World Home (`needs-attention.svelte.ts`).
 const ERROR_DURATION = 8000;
 
 export function toastError(message: string) {
@@ -33,76 +34,20 @@ export function toastSuccess(message: string, action?: { label: string; onClick:
 }
 
 /**
- * Notes Grimoire couldn't read when the world opened (2026-10 design review).
- *
- * Calm and lasting, on the terms the unlinked-pins toast sets: nothing was lost —
- * the files are untouched and keep their records — so this is not an alarm, but the
- * state outlives a glance (a cloud-only file stays unreadable until the sync app
- * runs) and only the GM can resolve it. It used to be a red ten-second error whose
- * list was gone once read. Counts down in place as notes come good; goes at zero.
- */
-export function toastUnreadableNotes(count: number, someFixed: boolean, onShow: () => void) {
-  if (count === 0) {
-    toast.dismiss("import-failures");
-    return;
-  }
-  const one = count === 1;
-  toast(
-    someFixed
-      ? `${count} note${one ? "" : "s"} still can't be opened`
-      : `${count} note${one ? "" : "s"} couldn't be opened`,
-    {
-      id: "import-failures",
-      // Not `Infinity` — see `toastUnlinkedPins`.
-      duration: 2 ** 31 - 1,
-      closeButton: true,
-      description: `${one ? "It's" : "They're"} safe in your world's folder, untouched. Grimoire couldn't read ${
-        one ? "it" : "them"
-      } this time.`,
-      action: {
-        label: "Show notes",
-        onClick: (e) => {
-          e.preventDefault();
-          onShow();
-        },
-      },
-    },
-  );
-}
-
-/**
- * Prompt to heal inbound backlinks after a note was moved/renamed *outside*
- * Grimoire (issue #135). Unlike every other toast this one is **persistent**
- * (`duration: Infinity`) and never auto-dismisses: it is a Conflict-Banner-class
- * response to an unresolved external change, not tool-generated corner-noise,
- * and ignoring it is non-destructive — the broken backlinks simply stay visible
- * and recoverable (ADR-0014). It rewrites nothing without consent: *Update* runs
- * `onUpdate`; *Leave as-is* just dismisses.
- */
-export function toastExternalMoveLinks(oldName: string, count: number, onUpdate: () => void) {
-  toast(`'${oldName}' moved externally. Update ${count} backlink${count === 1 ? "" : "s"}?`, {
-    duration: Infinity,
-    action: { label: "Update", onClick: onUpdate },
-    // Clicking cancel dismisses the toast; there is no backend call — leaving
-    // the backlinks as they are on disk is a safe, non-destructive choice.
-    cancel: { label: "Leave as-is", onClick: () => {} },
-  });
-}
-
-/**
  * What a completed [[Format Migration]] leaves on screen (#184).
  *
  * The report is the record — a markdown file beside the backup, which outlives
  * the session — so this only **points at it**. A clean sweep is news rather than
  * an unresolved state, so it fades like everything else.
  *
- * **A partial failure is the second sanctioned permanent toast**, alongside
- * `toastExternalMoveLinks` above. ADR-0014's rule was "a persistent toast is for
- * an unresolved *external* change", and this one is Grimoire's own doing, so the
- * rule as written does not cover it — #184 widens it on the property that
- * actually earned the exception: notes are left on a format nothing reads, the
- * state outlives the session, and ignoring it is non-destructive. It is not
- * corner-noise about something the app already finished.
+ * **A partial failure is a sanctioned permanent toast.** ADR-0014's rule was "a
+ * persistent toast is for an unresolved *external* change", and this one is
+ * Grimoire's own doing, so the rule as written does not cover it — #184 widens it on
+ * the property that actually earned the exception: notes are left on a format
+ * nothing reads, the state outlives the session, and ignoring it is non-destructive.
+ * It is not corner-noise about something the app already finished. (The external
+ * move's toast it once stood beside is gone: links to a moved note now wait in the
+ * world's "needs attention" place, with pins and unreadable notes — 2026-10 review.)
  *
  * Nothing at all when nothing was rewritten: the plan is recomputed at migrate
  * time, so a vault whose work vanished in between just opens (and an earlier
@@ -224,65 +169,6 @@ export function toastMigrationReport(
 }
 
 /**
- * What a ledger repair that re-created notes leaves on screen (#224).
- *
- * Opening a vault brings the ledger's bookkeeping back into agreement with the
- * files on disk. Almost always it finds nothing to do. When it does act — after a
- * crash mid-operation, or a folder reorganised outside Grimoire — the notes come
- * through untouched, but pins the GM placed on their maps lose hold of them and
- * stop opening anything. Nothing else in the app connects that symptom to its
- * cause, so this is the only place the GM can learn it happened.
- *
- * **The third sanctioned permanent toast**, on the terms `toastMigrationReport`
- * set: the state outlives the session (a pin stays unlinked until someone
- * re-links it), the GM is the only one who can resolve it, and ignoring it is
- * non-destructive. It is also why *Show pins* is not optional decoration — a
- * message about "some pins" the GM cannot act on would be worse than silence.
- *
- * No paths, no ids, no counts of database rows: what happened, and what they may
- * want to do about it.
- */
-export function toastUnlinkedPins(count: number, someFixed: boolean, onShowPins: () => void) {
-  // A permanent toast belongs to the ledger that raised it. Opening another one
-  // with nothing to repair has to take it down, or a message about vault A's pins
-  // hangs over vault B and its "Show pins" opens an empty list. And it goes when
-  // the last pin is fixed.
-  if (count === 0) {
-    toast.dismiss("unlinked-pins");
-    return;
-  }
-  const one = count === 1;
-  const pins = `${count} pin${one ? "" : "s"}`;
-  // Raised again under the same id as pins are fixed, so it counts down in place.
-  toast(
-    someFixed
-      ? `${pins} still need${one ? "s" : ""} ${one ? "its" : "their"} note`
-      : `${pins} lost ${one ? "its" : "their"} note`,
-    {
-      id: "unlinked-pins",
-      // Permanent, but not `Infinity`: svelte-sonner restarts an updated toast's timer
-      // with its duration, and `setTimeout(fn, Infinity)` fires at once — so counting
-      // this toast down closed it. The longest delay a timer takes (~24 days) is the
-      // same promise and survives the update.
-      duration: 2 ** 31 - 1,
-      closeButton: true,
-      // Not "when it opened": the same repair runs mid-session too.
-      description: `Grimoire repaired this world's records. Your notes are intact, but ${
-        one ? "this pin needs" : "these pins need"
-      } linking to ${one ? "its" : "their"} note again.`,
-      action: {
-        label: "Show pins",
-        // The toast stays: it is how the GM gets back to the list after fixing one.
-        onClick: (e) => {
-          e.preventDefault();
-          onShowPins();
-        },
-      },
-    },
-  );
-}
-
-/**
  * Show an undo toast. `onConfirm` runs when the toast closes, unless Undo was clicked.
  *
  * NOTHING IS DELETED WHILE THE TOAST IS UP — the destructive call is what gets deferred,
@@ -389,8 +275,7 @@ export function toastDbSalvaged(
     salvaged.pins && count(salvaged.pins, "pin"),
     salvaged.quick_notes && count(salvaged.quick_notes, "Quick Note"),
   ].filter((p): p is string => !!p);
-  const list =
-    parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
   const m = salvaged.maps_from_images;
   const fromImages =
     m > 0

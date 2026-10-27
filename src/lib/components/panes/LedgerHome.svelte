@@ -32,7 +32,23 @@
   import { shell } from "$lib/utils/shell-actions";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { timeAgo, worldContents } from "$lib/utils/world-words";
-  import { ArrowRight, FileText, LoaderCircle } from "@lucide/svelte";
+  import { needsAttention, type AttentionKind } from "$lib/stores/needs-attention.svelte";
+  import {
+    ArrowRight,
+    FileText,
+    FileWarning,
+    Link2Off,
+    LoaderCircle,
+    MapPinOff,
+  } from "@lucide/svelte";
+
+  const ATTENTION_ICONS: Record<AttentionKind, typeof FileText> = {
+    pins: MapPinOff,
+    notes: FileWarning,
+    links: Link2Off,
+  };
+  const quietLink =
+    "rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground";
 
   let { pane }: { pane: "left" | "right" } = $props();
 
@@ -145,7 +161,7 @@
         <button
           type="button"
           data-testid="home-make-mine"
-          class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
+          class={quietLink}
           onclick={() => (dialogs.adoptOpen = true)}
         >
           Make this world mine
@@ -154,13 +170,42 @@
         <button
           type="button"
           data-testid="start-from-template"
-          class="rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground"
+          class={quietLink}
           onclick={shell.openTemplatePicker}
         >
           Note from template…
         </button>
       {/if}
     </div>
+
+    <!-- What the world needs from the GM, here as in the world menu, each with the one
+         thing to do about it. It replaced three lasting toasts (2026-10 design review). -->
+    {#if needsAttention.items.length}
+      <section class="mt-12" aria-labelledby="home-attention-{pane}" data-testid="home-attention">
+        <h3 id="home-attention-{pane}" class="text-xs font-semibold text-foreground-muted">
+          Needs attention
+        </h3>
+        <ul class="mt-2 flex flex-col gap-2.5">
+          {#each needsAttention.items as item (item.key)}
+            {@const Icon = ATTENTION_ICONS[item.kind]}
+            <li class="flex items-start gap-3">
+              <Icon class="mt-0.5 size-4 shrink-0 text-foreground-muted" strokeWidth={1.5} />
+              <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-(length:--font-body) text-foreground">{item.label}</span>
+                <button type="button" class={quietLink} onclick={() => void item.action.run()}>
+                  {item.action.label}
+                </button>
+                {#if item.dismiss}
+                  <button type="button" class={quietLink} onclick={item.dismiss.run}>
+                    {item.dismiss.label}
+                  </button>
+                {/if}
+              </div>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
 
     {#if recent.length}
       <section class="mt-14" aria-labelledby="home-recent-{pane}">

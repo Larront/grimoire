@@ -35,7 +35,7 @@
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { toastExternalMoveLinks, toastSuccess } from "$lib/toast";
+  import { staleLinks } from "$lib/stores/stale-links.svelte";
   import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
@@ -121,18 +121,9 @@
       // ride on, so it arrives as its own event.
       "pins:unlinked": (pins) => unlinkedPins.add(pins),
       // A targeted external move left other notes linking to the old path. Offer
-      // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
-      // The count is display-only; the command recomputes the real set on Update.
-      "note:external-move-links-stale": ({ from, to, count }) => {
-        const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
-        toastExternalMoveLinks(oldName, count, () => {
-          void api.applyBacklinkRewrite(from, to).then((n) => {
-            if (n > 0) {
-              toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
-            }
-          });
-        });
-      },
+      // a non-destructive heal — never silent (ADR-0014): it waits in the world's
+      // "needs attention" place until the GM updates the links or leaves them.
+      "note:external-move-links-stale": ({ from, to, count }) => staleLinks.add(from, to, count),
     }),
   );
 

@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "svelte-sonner";
 import AppShell from "../lib/components/AppShell.svelte";
+import { needsAttention } from "../lib/stores/needs-attention.svelte";
+import { staleLinks } from "../lib/stores/stale-links.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 
 // Same style as the Conflict-Banner suite: mock svelte-sonner so we can inspect
@@ -77,8 +79,16 @@ async function mount() {
   return utils;
 }
 
+// Waits in the world's "needs attention" place — the world menu and the World Home —
+// rather than the lasting toast it was, which outlived its world (2026-10 design review).
+function linksItem() {
+  return needsAttention.items.find((i) => i.kind === "links");
+}
+
 describe("External-move backlink prompt (issue #135)", () => {
-  it("shows a persistent Update / Leave as-is toast when an external move leaves backlinks stale", async () => {
+  afterEach(() => staleLinks.clear());
+
+  it("lists the moved note as needing attention, not as a toast", async () => {
     await mount();
 
     await emit("note:external-move-links-stale", {
@@ -87,44 +97,24 @@ describe("External-move backlink prompt (issue #135)", () => {
       count: 2,
     });
 
-    const { message, opts } = lastActionToast();
-    // Copy names the note (its stem) and the count, not the raw path.
-    expect(message).toBe("'Aldric' moved externally. Update 2 backlinks?");
-    // Persistent: it must not auto-dismiss.
-    expect(opts.duration).toBe(Infinity);
-    expect(opts.action?.label).toBe("Update");
-    expect(opts.cancel?.label).toBe("Leave as-is");
+    // Names the note (its stem) and the count, not the raw path.
+    expect(linksItem()?.label).toBe(
+      "“Aldric” moved outside Grimoire; 2 links still point to where it was",
+    );
+    expect(linksItem()?.action.label).toBe("Update links");
+    expect(linksItem()?.dismiss?.label).toBe("Leave them");
+    expect(lastActionToast().message).toBeUndefined();
   });
 
-  it("singularises the copy for a single backlink", async () => {
+  it("singularises the copy for a single link", async () => {
     await mount();
-    await emit("note:external-move-links-stale", {
-      from: "Aldric.md",
-      to: "Renamed.md",
-      count: 1,
-    });
-    expect(lastActionToast().message).toBe("'Aldric' moved externally. Update 1 backlink?");
-  });
-
-  it("'Update' invokes apply_backlink_rewrite with the from/to paths", async () => {
-    await mount();
-    await emit("note:external-move-links-stale", {
-      from: "People/Aldric.md",
-      to: "People/Aldric the Bold.md",
-      count: 2,
-    });
-
-    await act(async () => lastActionToast().opts.action?.onClick());
-
-    await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith("apply_backlink_rewrite", {
-        fromPath: "People/Aldric.md",
-        toPath: "People/Aldric the Bold.md",
-      }),
+    await emit("note:external-move-links-stale", { from: "Aldric.md", to: "Renamed.md", count: 1 });
+    expect(linksItem()?.label).toBe(
+      "“Aldric” moved outside Grimoire; 1 link still points to where it was",
     );
   });
 
-  it("'Leave as-is' makes no backend call", async () => {
+  it("'Update links' invokes apply_backlink_rewrite with the from/to paths, and leaves the list", async () => {
     await mount();
     await emit("note:external-move-links-stale", {
       from: "People/Aldric.md",
@@ -132,8 +122,26 @@ describe("External-move backlink prompt (issue #135)", () => {
       count: 2,
     });
 
-    await act(async () => lastActionToast().opts.cancel?.onClick());
+    await act(async () => linksItem()!.action.run());
+
+    expect(invoke).toHaveBeenCalledWith("apply_backlink_rewrite", {
+      fromPath: "People/Aldric.md",
+      toPath: "People/Aldric the Bold.md",
+    });
+    expect(linksItem()).toBeUndefined();
+  });
+
+  it("'Leave them' makes no backend call, and leaves the list", async () => {
+    await mount();
+    await emit("note:external-move-links-stale", {
+      from: "People/Aldric.md",
+      to: "People/Aldric the Bold.md",
+      count: 2,
+    });
+
+    await act(async () => linksItem()!.dismiss!.run());
 
     expect(invoke).not.toHaveBeenCalledWith("apply_backlink_rewrite", expect.anything());
+    expect(linksItem()).toBeUndefined();
   });
 });

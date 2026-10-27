@@ -12,6 +12,7 @@ import {
 } from "$lib/toast";
 import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+import { staleLinks } from "$lib/stores/stale-links.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
@@ -131,6 +132,7 @@ function createLedgerStore() {
     // Every open, empty or not: a world that reads cleanly takes the last one's
     // list, and its toast, down.
     unreadableNotes.replace(result.failed_imports);
+    staleLinks.clear();
 
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are
@@ -464,9 +466,13 @@ function createLedgerStore() {
     accent = "accent-crimson";
     error = null;
     // A world's own news goes with it: the restore or rebuild toast, and the note-
-    // format update's, used to sit on over the Splash and the next world.
+    // format update's, used to sit on over the Splash and the next world. So does
+    // what needed its attention — pins, unreadable notes, links to moved notes.
     dismissDbRecovery();
     dismissFormatUpdate();
+    unreadableNotes.replace([]);
+    unlinkedPins.replace([]);
+    staleLinks.clear();
   }
 
   async function checkExistingLedger(): Promise<void> {

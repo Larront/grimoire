@@ -21,9 +21,8 @@
     toastError,
     toastSuccess,
     toastUndo,
-    toastUnreadableNotes,
-    toastExternalMoveLinks,
     toastMigrationReport,
+    toastDbRestored,
   } from "$lib/toast";
 
   let open = $state(false);
@@ -52,16 +51,15 @@
       fire: () =>
         toastUndo("Deleted 'Harbour Watch'", () => console.log("[toast lab] undo window elapsed")),
     },
+    // Pins that lost their note, notes that couldn't open and links to moved notes
+    // aren't toasts any more: they wait in the world menu and on the World Home.
     {
-      label: "Notes that couldn't open",
-      hint: "persistent, neutral, one action",
-      fire: () => toastUnreadableNotes(3, false, () => toastSuccess("Show notes clicked")),
-    },
-    {
-      label: "External move",
-      hint: "persistent, cancel + action on their own row",
+      label: "World restored from backup",
+      hint: "persistent, closable, one action",
       fire: () =>
-        toastExternalMoveLinks("Harbour Watch", 4, () => toastSuccess("Backlinks updated")),
+        toastDbRestored("Ashfen", new Date().toISOString(), () =>
+          toastSuccess("Show damaged clicked"),
+        ),
     },
     {
       label: "Migration, clean",
@@ -120,7 +118,7 @@
   function fireAll() {
     toastError("Couldn't save 'Harbour Watch'");
     toastSuccess("Scene saved");
-    toastExternalMoveLinks("Harbour Watch", 4, () => {});
+    toastUndo("Deleted “Harbour Watch”", () => {});
   }
 
   // Dismissed one at a time, with a gap. svelte-sonner corrupts its own height
