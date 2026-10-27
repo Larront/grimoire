@@ -5,11 +5,11 @@
     world, not only one whose folder has gone.
 
     A world whose folder can't be found can't be opened. It says so, with the end of
-    its path — the folder that matters, not "C:/Users/…" — and offers Look again, for
-    a drive that has just been plugged back in.
+    its path — the folder that matters, not "C:/Users/…" — and offers Find it, for a
+    folder that has moved, and Look again, for a drive that has just been plugged back in.
   */
   import type { RecentLedger } from "$lib/stores/ledger.svelte";
-  import { LoaderCircle, RotateCw, X } from "@lucide/svelte";
+  import { FolderSearch, LoaderCircle, RotateCw, X } from "@lucide/svelte";
   import { shortPath } from "$lib/utils/ledger-name";
   import { timeAgo, worldContents } from "$lib/utils/world-words";
 
@@ -19,6 +19,7 @@
     onOpen,
     onRemove,
     onLookAgain,
+    onFind,
     nameClass = "font-heading text-base",
     primary = false,
   }: {
@@ -27,6 +28,7 @@
     onOpen: (path: string) => void;
     onRemove: (path: string) => void;
     onLookAgain: () => void;
+    onFind: (path: string, name: string) => void;
     /** How the name is set, which each layout decides. */
     nameClass?: string;
     /** The row a launch focuses, so Enter opens it. */
@@ -44,6 +46,21 @@
         Folder not found · {shortPath(world.path)}
       </div>
     </div>
+    {#if opening}
+      <LoaderCircle class="me-2 size-3.5 shrink-0 animate-spin text-foreground-muted" />
+    {/if}
+    <button
+      type="button"
+      class="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground-muted
+             hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+      aria-label="Find {world.name}…"
+      title="Find it… — choose where its folder is now"
+      data-testid="recent-find-btn"
+      disabled={busy !== null}
+      onclick={() => onFind(world.path, world.name)}
+    >
+      <FolderSearch class="size-4" strokeWidth={1.5} />
+    </button>
     <button
       type="button"
       class="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground-muted

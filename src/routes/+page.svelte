@@ -89,6 +89,7 @@
       }
     },
     onLookAgain: () => void load(),
+    onFind: (path, name) => void run(path, () => ledger.findWorld(path, name)),
     onOpenFolder: () => void run("__folder__", () => ledger.openLedger()),
     onNewWorld: () => {
       creating = true;

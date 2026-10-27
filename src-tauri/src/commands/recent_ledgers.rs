@@ -1,11 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::AppHandle;
 use tauri::Manager;
 
 const MAX_RECENT_LEDGERS: usize = 10;
 const RECENT_LEDGERS_FILE: &str = "recent-ledgers.json";
+
+/// Held across every read-modify-write of the file. Commands run in parallel, and the
+/// Splash's Find it records the world it opened while taking the old entry off: two
+/// changes made at once each wrote the list they had read, and one was lost.
+static RECENTS_WRITE: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Serialize, specta::Type, Deserialize, Clone)]
 pub struct RecentLedger {
@@ -75,6 +81,7 @@ pub fn get_recent_ledgers(app: AppHandle) -> Result<Vec<RecentLedger>, String> {
 #[tauri::command]
 #[specta::specta]
 pub fn add_recent_ledger(app: AppHandle, entry: RecentLedger) -> Result<(), String> {
+    let _held = RECENTS_WRITE.lock().unwrap_or_else(|e| e.into_inner());
     let mut data = read_recent_ledgers_file(&app)?;
     // Remove existing entry for this path (if any) so we can re-insert at front
     data.ledgers.retain(|v| v.path != entry.path);
@@ -88,6 +95,7 @@ pub fn add_recent_ledger(app: AppHandle, entry: RecentLedger) -> Result<(), Stri
 #[tauri::command]
 #[specta::specta]
 pub fn remove_recent_ledger(app: AppHandle, path: String) -> Result<(), String> {
+    let _held = RECENTS_WRITE.lock().unwrap_or_else(|e| e.into_inner());
     let mut data = read_recent_ledgers_file(&app)?;
     data.ledgers.retain(|v| v.path != path);
     write_recent_ledgers_file(&app, &data)
