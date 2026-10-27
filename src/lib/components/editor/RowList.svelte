@@ -16,6 +16,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import type { RowChange } from "$lib/editor/row-list";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { cn } from "$lib/utils";
 
   let {
     rows,
@@ -265,44 +266,58 @@
       </div>
 
       {#if controls === "menu"}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <button
-                {...props}
-                type="button"
-                class="{control} size-6 shrink-0 opacity-0 transition-opacity duration-(--motion-base)
-                       group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100
-                       data-[state=open]:opacity-100"
-                data-row-action="menu"
-                aria-label={rowName?.(item, i)?.trim()
-                  ? `${groupNoun} actions: ${rowName(item, i).trim()}`
-                  : `${groupNoun} ${i + 1} actions`}
-                title="Move or delete (Alt+↑ / Alt+↓ to move)"
+        <!-- Outside the row, past its block's edge (`--row-menu-offset`, the block's to
+             set), at the floating level: a column kept for a menu that is hidden took
+             32px of a 300px Infobox, and its values wrapped to match (2026-10 design
+             review). The transparent run back to the row keeps the pointer on the row
+             on its way out to the button. -->
+        <div
+          class="pointer-events-none absolute top-0 left-full flex ps-(--row-menu-offset,0.25rem)
+                 group-hover:pointer-events-auto group-focus-within:pointer-events-auto"
+        >
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <button
+                  {...props}
+                  type="button"
+                  class={cn(
+                    control,
+                    "size-5 shrink-0 bg-popover shadow-float ring-1 ring-foreground/10",
+                    "opacity-0 transition-[opacity,color,background-color] duration-(--motion-base)",
+                    "group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
+                    "data-[state=open]:opacity-100",
+                  )}
+                  data-row-action="menu"
+                  aria-label={rowName?.(item, i)?.trim()
+                    ? `${groupNoun} actions: ${rowName(item, i).trim()}`
+                    : `${groupNoun} ${i + 1} actions`}
+                  title="Move or delete (Alt+↑ / Alt+↓ to move)"
+                >
+                  <Ellipsis size={14} />
+                </button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" class="min-w-40">
+              <DropdownMenu.Item disabled={i === 0} onclick={() => move(i, i - 1, "menu")}>
+                <ArrowUp size={14} /> Move up
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={i === rows.length - 1}
+                onclick={() => move(i, i + 1, "menu")}
               >
-                <Ellipsis size={14} />
-              </button>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="min-w-40">
-            <DropdownMenu.Item disabled={i === 0} onclick={() => move(i, i - 1, "menu")}>
-              <ArrowUp size={14} /> Move up
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              disabled={i === rows.length - 1}
-              onclick={() => move(i, i + 1, "menu")}
-            >
-              <ArrowDown size={14} /> Move down
-            </DropdownMenu.Item>
-            <DropdownMenu.Item onclick={() => insert(i + 1)}>
-              <Plus size={14} /> Insert {noun} below
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item variant="destructive" onclick={() => remove(i)}>
-              <Trash2 size={14} /> Delete {noun}
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+                <ArrowDown size={14} /> Move down
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onclick={() => insert(i + 1)}>
+                <Plus size={14} /> Insert {noun} below
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item variant="destructive" onclick={() => remove(i)}>
+                <Trash2 size={14} /> Delete {noun}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </div>
       {:else}
         <div
           class="flex shrink-0 items-center opacity-0 transition-opacity duration-(--motion-base)
