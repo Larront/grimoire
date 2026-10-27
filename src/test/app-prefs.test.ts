@@ -19,6 +19,7 @@ describe("appPrefs — Rust persistence", () => {
     expect(call![1]).toEqual({
       prefs: {
         reduceMotion: false,
+        reduceMotionChoice: "system",
         confirmRenameLinks: true,
         density: null,
       },
@@ -30,7 +31,7 @@ describe("appPrefs — Rust persistence", () => {
   it("setters do not write to webview localStorage", () => {
     appPrefs.setReduceMotion(true);
     expect(localStorage.setItem).not.toHaveBeenCalledWith("grimoire-reduce-motion", "true");
-    appPrefs.setReduceMotion(false);
+    appPrefs.setMotionChoice("system");
   });
 
   it("load() applies persisted values and migrates legacy localStorage keys", async () => {
@@ -58,7 +59,7 @@ describe("appPrefs — Rust persistence", () => {
     const saved = vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "save_app_prefs");
     expect(saved.length).toBeGreaterThan(0);
 
-    appPrefs.setReduceMotion(false);
+    appPrefs.setMotionChoice("system");
     appPrefs.setConfirmRenameLinks(false);
   });
 
@@ -69,18 +70,16 @@ describe("appPrefs — Rust persistence", () => {
   });
 });
 
-// ── appPrefs — first run seeds reduced motion from the OS ────────────────────
+// ── appPrefs — Reduce Motion follows the computer unless the GM chooses ──────
 /*
-  `appPrefs` is a module singleton whose `load()` is a one-shot, so every case here has
-  to reset the module registry and re-import to get an unloaded store. That is also why
-  these live in their own describe: the block above has already consumed the one load.
+  `appPrefs` is a module singleton whose `load()` is a one-shot, so every case here
+  resets the module registry and re-imports to get an unloaded store.
 
-  What is being pinned down is the boundary. The platform's setting decides ONLY when
-  nobody has decided — no prefs file and no pre-migration localStorage — and never again
-  after that, because a stored `false` is a GM saying "no, I want the motion" and
-  following the system on each launch would quietly overrule them every time.
+  Reduce Motion is a choice of three since the 2026-10 design review: follow the
+  computer (the default, live), on, or off. It used to be a switch the computer seeded
+  on the first run only, after which the two could disagree.
 */
-describe("appPrefs — reduced motion seeding", () => {
+describe("appPrefs — Reduce Motion", () => {
   function mockSystemReducedMotion(reduce: boolean) {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -112,31 +111,40 @@ describe("appPrefs — reduced motion seeding", () => {
 
   beforeEach(() => localStorage.clear());
 
-  it("takes reduced motion from the OS when no prefs file exists", async () => {
+  it("follows the computer when nobody has chosen", async () => {
     mockSystemReducedMotion(true);
-    const prefs = await freshStore(null);
-    expect(prefs.reduceMotion).toBe(true);
-  });
+    const reduced = await freshStore(null);
+    expect(reduced.motionChoice).toBe("system");
+    expect(reduced.reduceMotion).toBe(true);
 
-  it("stays off when the OS has no preference and no prefs file exists", async () => {
     mockSystemReducedMotion(false);
-    const prefs = await freshStore(null);
-    expect(prefs.reduceMotion).toBe(false);
+    const full = await freshStore(null);
+    expect(full.reduceMotion).toBe(false);
   });
 
-  it("a stored false outranks the OS — an explicit no is not overruled", async () => {
+  it("On and Off outrank the computer", async () => {
     mockSystemReducedMotion(true);
-    const prefs = await freshStore({
-      reduceMotion: false,
-      confirmRenameLinks: false,
-    });
-    expect(prefs.reduceMotion).toBe(false);
+    const off = await freshStore({ reduceMotion: false, reduceMotionChoice: "off" });
+    expect(off.reduceMotion).toBe(false);
+
+    mockSystemReducedMotion(false);
+    const on = await freshStore({ reduceMotion: true, reduceMotionChoice: "on" });
+    expect(on.reduceMotion).toBe(true);
   });
 
-  it("a legacy localStorage answer also outranks the OS", async () => {
+  it("reads a file from before the choice: on stays on, off follows the computer", async () => {
     mockSystemReducedMotion(true);
-    localStorage.setItem("grimoire-reduce-motion", "false");
+    const wasOn = await freshStore({ reduceMotion: true, confirmRenameLinks: false });
+    expect(wasOn.motionChoice).toBe("on");
+    const wasOff = await freshStore({ reduceMotion: false, confirmRenameLinks: false });
+    expect(wasOff.motionChoice).toBe("system");
+    expect(wasOff.reduceMotion).toBe(true);
+  });
+
+  it("a legacy localStorage yes becomes On", async () => {
+    mockSystemReducedMotion(false);
+    localStorage.setItem("grimoire-reduce-motion", "true");
     const prefs = await freshStore(null);
-    expect(prefs.reduceMotion).toBe(false);
+    expect(prefs.motionChoice).toBe("on");
   });
 });

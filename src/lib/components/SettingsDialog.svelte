@@ -8,7 +8,7 @@
   import { Tabs } from "bits-ui";
   import { ledger, type AccentPreset } from "$lib/stores/ledger.svelte";
   import { ACCENT_PRESETS } from "$lib/entity-colors";
-  import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
+  import { appPrefs, type DensityLevel, type MotionChoice } from "$lib/stores/app-prefs.svelte";
   import { templates } from "$lib/stores/templates.svelte";
   import { toastSuccess, toastError } from "$lib/toast";
   import { dialogs } from "$lib/stores/overlay.svelte";
@@ -147,6 +147,14 @@
     { value: "dark", label: "Dark" },
     { value: "light", label: "Light" },
     { value: "system", label: "System" },
+  ];
+
+  // Reduce Motion follows the computer unless the GM says otherwise (2026-10 design
+  // review: it was a switch the computer seeded once, after which the two could differ).
+  const MOTION_CHOICES: { value: MotionChoice; label: string }[] = [
+    { value: "system", label: "Match my computer" },
+    { value: "on", label: "On" },
+    { value: "off", label: "Off" },
   ];
 
   const DENSITY_LEVELS: { value: DensityLevel; label: string }[] = [
@@ -288,12 +296,17 @@
 
             <!-- Reduce Motion -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Reduce Motion", "Turn off animations and transitions. Every world.")}
-              <Switch
-                checked={appPrefs.reduceMotion}
-                onCheckedChange={(v) => appPrefs.setReduceMotion(v)}
-                aria-label="Reduce Motion"
-                data-testid="reduce-motion-toggle"
+              {@render field(
+                "Reduce Motion",
+                "Animations and transitions, stilled. Match my computer follows its own setting. Every world.",
+              )}
+              <ChoiceGroup
+                label="Reduce Motion"
+                options={MOTION_CHOICES}
+                value={appPrefs.motionChoice}
+                onChange={(choice) => appPrefs.setMotionChoice(choice)}
+                class="flex shrink-0 overflow-hidden rounded-md border border-border divide-x divide-border"
+                optionClass={segment}
               />
             </div>
           </div>
