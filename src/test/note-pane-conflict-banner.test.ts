@@ -120,7 +120,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
     expect(editorCalls.pause).toBeGreaterThanOrEqual(1);
   });
 
-  it("'Reload from disk' replaces the buffer with the external version and clears the banner", async () => {
+  it("'Use theirs' replaces the buffer with the external version and clears the banner", async () => {
     const { getByTestId, queryByTestId } = await openNote();
     editorClean.value = false;
     diskContent = "External edit";
@@ -139,7 +139,7 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
     expect(editorCalls.discard).toBeGreaterThanOrEqual(1);
   });
 
-  it("'Keep my version' dismisses the banner and preserves the buffer", async () => {
+  it("'Keep mine' dismisses the banner and preserves the buffer", async () => {
     const { getByTestId, queryByTestId } = await openNote();
     editorClean.value = false;
     diskContent = "External edit";
@@ -153,5 +153,26 @@ describe("NotePane — external change conflict banner (issue #129)", () => {
     expect(getByTestId("mock-editor").getAttribute("data-content")).toBe("Original body");
     // Autosave resumes so the kept buffer is written to disk (not left frozen).
     expect(editorCalls.resume).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// The choice used to be made blind: nothing showed what the other program changed.
+describe("NotePane — comparing before choosing (2026-10 design review)", () => {
+  it("'Compare' lists the lines that differ, each said to be yours or theirs", async () => {
+    const { getByTestId, queryByTestId } = await openNote();
+    editorClean.value = false;
+    diskContent = "Original body\nA line they added";
+    await emitContentChanged("Aldric.md");
+    await waitFor(() => expect(getByTestId("conflict-banner")).toBeTruthy());
+
+    await act(() => getByTestId("conflict-compare").click());
+
+    const list = getByTestId("conflict-compare-list");
+    expect(list.textContent).toContain("Theirs");
+    expect(list.textContent).toContain("A line they added");
+    expect(getByTestId("conflict-compare").textContent).toBe("Hide changes");
+
+    await act(() => getByTestId("conflict-compare").click());
+    expect(queryByTestId("conflict-compare-list")).toBeNull();
   });
 });

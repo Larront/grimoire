@@ -196,7 +196,8 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     expect(invoke).toHaveBeenCalledWith("write_note_tags", { notePath: "Aldric.md", tags: ["npc"] });
   });
 
-  it("'Close' closes the tab", async () => {
+  // What's open is the only copy there is, so closing asks once, in the banner.
+  it("'Close without saving' asks first, and closes the tab only when confirmed", async () => {
     const { getByTestId, queryByTestId } = await openNote();
     storeNotes = [];
     await emit("note:removed", { path: "Aldric.md" });
@@ -204,6 +205,12 @@ describe("NotePane — deleted / moved while open (issue #130)", () => {
     await waitFor(() => expect(getByTestId("deleted-banner")).toBeTruthy());
 
     await act(() => getByTestId("deleted-close").click());
+    expect(getByTestId("mock-editor")).toBeTruthy();
+    await act(() => getByTestId("deleted-close-cancel").click());
+    expect(getByTestId("deleted-recreate")).toBeTruthy();
+
+    await act(() => getByTestId("deleted-close").click());
+    await act(() => getByTestId("deleted-close-confirm").click());
 
     expect(queryByTestId("mock-editor")).toBeNull();
     expect(queryByTestId("deleted-banner")).toBeNull();
