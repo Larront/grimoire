@@ -395,4 +395,28 @@ describe("a link in a Linked Text Field from the keyboard", () => {
     await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter", ctrlKey: true });
     expect(getByLabelText("Value").tagName).toBe("BUTTON");
   });
+
+  it("makes a read-only value's links Tab stops that Enter follows (2026-10 design review)", async () => {
+    // A statblock in play draws its entries read-only; their links had no keyboard route.
+    const { getByRole, container } = field({
+      value: "Bites, as [[Kobold]] do",
+      readonly: true,
+    });
+    const followed = vi.fn();
+    container.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("[data-wiki-link]");
+      if (link) followed(link.getAttribute("data-path"));
+    });
+
+    const link = getByRole("link", { name: "Kobold" });
+    expect(link).toHaveAttribute("tabindex", "0");
+    await fireEvent.keyDown(link, { key: "Enter" });
+
+    expect(followed).toHaveBeenCalledWith("Kobold");
+  });
+
+  it("keeps an editable value's links out of the Tab order: its button is the stop", () => {
+    const { container } = field({ value: "Bites, as [[Kobold]] do" });
+    expect(container.querySelector("[data-wiki-link]")).not.toHaveAttribute("tabindex");
+  });
 });

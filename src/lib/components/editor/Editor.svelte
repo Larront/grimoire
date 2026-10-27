@@ -338,9 +338,13 @@
     if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== "p") return false;
     // A block field's value is a button holding its links; the note's own text is the
     // editor, which holds every link in the note, so it is asked by caret instead.
+    // A read-only block value's link takes focus itself.
     const focused = document.activeElement as HTMLElement | null;
-    let link =
-      focused?.tagName === "BUTTON" ? focused.querySelector<HTMLElement>("[data-wiki-link]") : null;
+    let link = focused?.hasAttribute("data-wiki-link")
+      ? focused
+      : focused?.tagName === "BUTTON"
+        ? focused.querySelector<HTMLElement>("[data-wiki-link]")
+        : null;
     if (!link && editor) {
       const caret = editor.state.selection.$from;
       const at =
