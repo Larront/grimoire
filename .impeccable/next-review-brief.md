@@ -213,10 +213,8 @@ Not fixed yet; pick them up when they fit a pass above:
   tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
   Scene"); a "⋯" isn't in the Tab order (Shift+F10 reaches the same menu); a folder
   deleted to the Recycle Bin doesn't say how many notes went with it.
-- **Animation**: in a narrow window, Settings opened from the sidebar's sheet opens
-  under the sheet rather than closing it (`shell.openSettings` only opens the dialog).
-  Sonner's own reduced-motion rule follows the computer, so with Reduce Motion Off on a
-  computer that reduces motion, toasts still snap.
+- **Animation**: both leftovers were fixed after the merge (a shell dialog closes the
+  narrow window's sheet; toasts follow the app's Reduce Motion, not only the computer's).
 
 ## Known open items
 
