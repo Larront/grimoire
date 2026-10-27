@@ -235,8 +235,8 @@
          (DESIGN.md §4), at the 28px every block's controls use. -->
     <div
       class="absolute top-1 right-1 flex items-center gap-px rounded-md bg-popover p-0.5 shadow-float
-             ring-1 ring-foreground/10 opacity-0 transition-opacity duration-150
-             motion-reduce:transition-none group-hover/thumb:opacity-100
+             ring-1 ring-foreground/10 opacity-0 transition-opacity duration-(--motion-base)
+             group-hover/thumb:opacity-100
              group-focus-within/thumb:opacity-100"
     >
       {#if thumbnailImage.url}
@@ -304,8 +304,8 @@
        focus, rather than keeping lines inside it for buttons that are hidden. -->
   <div
     class="absolute right-1 bottom-full z-10 mb-1 flex items-center gap-px rounded-md bg-popover p-0.5
-           shadow-float ring-1 ring-foreground/10 opacity-0 transition-opacity duration-150
-           motion-reduce:transition-none pointer-events-none group-hover/panel:pointer-events-auto
+           shadow-float ring-1 ring-foreground/10 opacity-0 transition-opacity duration-(--motion-base)
+           pointer-events-none group-hover/panel:pointer-events-auto
            group-hover/panel:opacity-100 group-focus-within/panel:pointer-events-auto
            group-focus-within/panel:opacity-100"
   >

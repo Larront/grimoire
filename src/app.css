@@ -180,6 +180,16 @@
   --primary-muted: rgba(160, 122, 32, 0.2);
 }
 
+/* ── Motion tokens ────────────────────────────────────────────── */
+/* The app's durations (DESIGN.md §5 Motion), mirrored for script in `$lib/motion`.
+   Easings are in the theme block below, as Tailwind's `ease-out` / `ease-in`. */
+:root {
+  --motion-quick: 100ms;
+  --motion-base: 150ms;
+  --motion-arrive: 300ms;
+  --motion-attention: 600ms;
+}
+
 /* ── Reduce Motion ────────────────────────────────────────────── */
 /*
   Reduced motion removes MOVEMENT, not FEEDBACK, and the difference is the whole reason
@@ -210,14 +220,23 @@
   `animate-pulse` is deliberately NOT exempt. A skeleton communicates "content pending"
   by its shape and position, which survive being held still; the spinner has nothing
   left when it stops.
+
+  Delays go too: a staged entrance kept its wait, so the Splash's second column sat
+  invisible and then popped in. And this rule reaches only CSS — what moves from script
+  (Svelte transitions, the graph, the map, a smooth scroll) asks `$lib/motion` instead,
+  which reads the same setting; it is set here from `appPrefs.reduceMotion`, the GM's
+  choice or their computer's (2026-10 design review: Svelte's slides ran at full length
+  with the setting on).
 */
 
 [data-reduce-motion="true"] *,
 [data-reduce-motion="true"] *::before,
 [data-reduce-motion="true"] *::after {
   animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
 
@@ -441,6 +460,15 @@
   --shadow-float: var(--elevation-float);
   --color-scrim: var(--scrim);
 
+  /* Motion — DESIGN.md §5 Motion. Before the 2026-10 review there were no tokens and
+     five durations and five easings in use. Every Tailwind transition now defaults to
+     `base` easing out; floating surfaces use `quick`; `attention` is for a search hit.
+     The easing utilities (`ease-out`, `ease-in`) take these curves, not Tailwind's. */
+  --default-transition-duration: var(--motion-base);
+  --default-transition-timing-function: var(--ease-out);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);
@@ -643,7 +671,7 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  transition: scrollbar-color 150ms ease;
+  transition: scrollbar-color var(--motion-base) var(--ease-out);
 }
 
 [data-note-scroll]:hover,
@@ -673,7 +701,7 @@
 [data-pane-scroll]::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 4px;
-  transition: background 150ms ease;
+  transition: background var(--motion-base) var(--ease-out);
 }
 
 [data-note-scroll]:hover::-webkit-scrollbar-thumb,
@@ -1177,7 +1205,7 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
   text-decoration-color: var(--primary);
-  transition: text-decoration-thickness 0.15s;
+  transition: text-decoration-thickness var(--motion-base) var(--ease-out);
 }
 
 .tiptap a:hover {
@@ -1210,7 +1238,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--primary);
   cursor: pointer;
   border: none;
-  transition: transform 0.1s ease;
+  transition: transform var(--motion-quick) var(--ease-out);
 }
 
 input[type="range"]:hover::-webkit-slider-thumb {
@@ -1363,6 +1391,18 @@ input[type="range"].hue-slider:focus-visible {
 [data-sonner-toaster] [data-sonner-toast][data-type="error"] {
   --toast-hue: var(--error);
   --toast-on-hue: var(--background);
+}
+
+/* A toast arrives and leaves in 200ms, easing out (DESIGN.md §5 Motion). Sonner's own
+   400ms on the browser's `ease` drifted in slower than anything else in the app, and
+   left by being cut off: it unmounts a removed toast 200ms after it starts to go.
+   The second selector outranks sonner's rule for a toast leaving from behind the front
+   one (five attributes); neither is `!important`, so Reduce Motion still stills them. */
+[data-sonner-toaster] [data-sonner-toast],
+[data-sonner-toaster]
+  [data-sonner-toast][data-removed][data-front][data-swipe-out][data-expanded] {
+  transition-duration: 200ms;
+  transition-timing-function: var(--ease-out);
 }
 
 /*
@@ -1573,7 +1613,7 @@ input[type="range"].hue-slider:focus-visible {
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
   text-decoration-color: var(--primary);
-  transition: text-decoration-thickness 0.15s;
+  transition: text-decoration-thickness var(--motion-base) var(--ease-out);
 }
 
 [data-wiki-link]:hover {
@@ -1592,10 +1632,15 @@ input[type="range"].hue-slider:focus-visible {
   text-decoration-thickness: 1px;
 }
 
-/* ── Search-match pulse ───────────────────────────────────────── */
+/* ── Search hit ───────────────────────────────────────────────── */
+/* The words a search landed on, tinted and fading (`$lib/editor/search-hit`). With
+   Reduce Motion the tint holds still for the same moment and goes, rather than the
+   stilled animation jumping straight to its end and showing nothing. */
 
-@keyframes search-match-pulse {
-  0% {
+/* Held for the first part, so the tint is still there when the eye arrives. */
+@keyframes search-hit-fade {
+  0%,
+  40% {
     background-color: var(--primary-subtle);
   }
   100% {
@@ -1603,9 +1648,13 @@ input[type="range"].hue-slider:focus-visible {
   }
 }
 
-[data-search-pulse="1"] ::selection {
-  background-color: var(--primary);
-  animation: search-match-pulse 600ms ease-out forwards;
+.search-hit {
+  animation: search-hit-fade var(--motion-attention) var(--ease-out) forwards;
+}
+
+[data-reduce-motion="true"] .search-hit {
+  animation: none !important;
+  background-color: var(--primary-subtle);
 }
 
 /* ── Splash screen animations ─────────────────────────────────── */
@@ -1621,14 +1670,16 @@ input[type="range"].hue-slider:focus-visible {
   }
 }
 
+/* Staged 75ms apart, so the whole rise is done in under half a second — it was 600ms
+   from first to last, a wait at the door of an app opened many times a day. */
 .splash-fade {
-  animation: splash-fade-in 300ms ease-out both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) both;
 }
 
 .splash-fade-delay-1 {
-  animation: splash-fade-in 300ms ease-out 150ms both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) 75ms both;
 }
 
 .splash-fade-delay-2 {
-  animation: splash-fade-in 300ms ease-out 300ms both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) 150ms both;
 }

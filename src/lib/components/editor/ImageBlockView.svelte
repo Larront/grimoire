@@ -14,6 +14,7 @@
     MoveDiagonal2,
   } from "@lucide/svelte";
   import { fade } from "svelte/transition";
+  import { BASE, ms } from "$lib/motion";
 
   // The image's record, taken as one prop bag rather than field by field: the connector
   // mounts a block with its record spread over the props, so the rest element *is* the
@@ -177,7 +178,7 @@
       <div
         class="absolute bottom-full left-1/2 z-10 mb-1.5 flex -translate-x-1/2 items-center gap-px
                rounded-md bg-popover p-0.5 shadow-float ring-1 ring-foreground/10"
-        transition:fade={{ duration: 150 }}
+        transition:fade={{ duration: ms(BASE) }}
       >
         <button
           type="button"

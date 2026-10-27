@@ -15,17 +15,20 @@
 <script lang="ts">
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Sidebar from "$lib/components/ui/sidebar";
-  import { ChevronDown, LayoutList, Music2, Pause, Play, Volume2 } from "@lucide/svelte";
+  import { LayoutList, Music2, Pause, Play, Volume2 } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { audioEngine } from "$lib/stores/audio-engine.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { shell } from "$lib/utils/shell-actions";
-  import { slide } from "svelte/transition";
   import { EXPANDED_ONLY } from "./strip-classes";
   import { cn } from "$lib/utils";
   import type { SceneWithCount } from "$lib/types/ledger";
 
   const RECENT_FALLBACK = 3;
+
+  let groupOpen = $state(true);
 
   // Both read straight off the global stores, so this component takes no props.
   const favoriteScenes = $derived(scenes.scenes.filter((s) => s.favorited));
@@ -50,22 +53,20 @@
 </script>
 
 <div id="sidebar-scenes-section" class={EXPANDED_ONLY}>
-  <Collapsible.Root open class="group/collapsible">
+  <Collapsible.Root bind:open={groupOpen} class="group/collapsible">
     <Sidebar.Group>
       <Sidebar.GroupLabel>
         {#snippet child({ props })}
           <Collapsible.Trigger {...props}>
             Scenes
-            <ChevronDown
-              class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-            />
+            <DisclosureChevron open={groupOpen} class="ms-auto" />
           </Collapsible.Trigger>
         {/snippet}
       </Sidebar.GroupLabel>
       <Collapsible.Content forceMount>
         {#snippet child({ props, open })}
-          {#if open}
-            <div {...props} transition:slide>
+          <div {...props}>
+            <Disclosure {open}>
               <Sidebar.GroupContent>
                 <Sidebar.Menu>
                   {#each listedScenes as scene (scene.id)}
@@ -143,8 +144,8 @@
                   </Sidebar.MenuItem>
                 </Sidebar.Menu>
               </Sidebar.GroupContent>
-            </div>
-          {/if}
+            </Disclosure>
+          </div>
         {/snippet}
       </Collapsible.Content>
     </Sidebar.Group>

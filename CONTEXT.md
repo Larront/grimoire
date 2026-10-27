@@ -34,7 +34,7 @@ Five named presets drive `--primary`. All are evocative, never generic — no ne
 | `ice`     | `#5b9ec9` | `#3a7fa8` |
 | `amber`   | `#c49a3c` | `#a07a20` |
 
-The accent is chosen **per world**, in its `.grimoire/prefs.json` — a world's colour is part of it. Density, theme and Reduce Motion are **app-wide**, in the app's own prefs: they are about the GM's screen. (2026-10 design review: density was per world too, and a world opened at whatever density it had been left in; the open world's old density is adopted once.)
+The accent is chosen **per world**, in its `.grimoire/prefs.json` — a world's colour is part of it. Density, theme and Reduce Motion are **app-wide**, in the app's own prefs: they are about the GM's screen. Reduce Motion follows the computer's own setting unless the GM chooses On or Off. (2026-10 design review: density was per world too, and a world opened at whatever density it had been left in; the open world's old density is adopted once.)
 
 `--primary-subtle` (12% opacity) and `--primary-muted` (24% opacity) are derived from `--primary`. There is no separate `--accent` token — `--primary` is the single accent family.
 

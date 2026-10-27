@@ -25,7 +25,7 @@ afterEach(async () => {
   cleanup();
   ledger.setAccent("accent-crimson");
   ledger.setDensity("balanced");
-  appPrefs.setReduceMotion(false);
+  appPrefs.setMotionChoice("system");
   delete document.documentElement.dataset.reduceMotion;
   document.documentElement.style.cssText = "";
   document.documentElement.className = "";
@@ -167,22 +167,25 @@ describe("settings dialog — what it says", () => {
 // ── Reduce motion ─────────────────────────────────────────────────
 
 describe("settings dialog — reduce motion", () => {
-  it("renders the reduce motion toggle", async () => {
+  const choice = (dialog: HTMLElement, name: string) =>
+    within(within(dialog).getByRole("radiogroup", { name: "Reduce Motion" })).getByRole("radio", {
+      name,
+    });
+
+  it("offers Match my computer, On and Off, and starts on Match my computer", async () => {
     const { dialog } = await openSettingsDialog();
-    expect(within(dialog).getByTestId("reduce-motion-toggle")).toBeTruthy();
+    expect(choice(dialog, "Match my computer")).toHaveAttribute("aria-checked", "true");
+    expect(choice(dialog, "On")).toBeTruthy();
+    expect(choice(dialog, "Off")).toBeTruthy();
   });
 
-  it("toggling reduce motion on updates appPrefs.reduceMotion", async () => {
+  it("On reduces motion, Off doesn't", async () => {
     const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByTestId("reduce-motion-toggle"));
+    await fireEvent.click(choice(dialog, "On"));
     expect(appPrefs.reduceMotion).toBe(true);
-  });
-
-  it("toggling reduce motion off updates appPrefs.reduceMotion", async () => {
-    appPrefs.setReduceMotion(true);
-    const { dialog } = await openSettingsDialog();
-    await fireEvent.click(within(dialog).getByTestId("reduce-motion-toggle"));
+    await fireEvent.click(choice(dialog, "Off"));
     expect(appPrefs.reduceMotion).toBe(false);
+    expect(appPrefs.motionChoice).toBe("off");
   });
 });
 

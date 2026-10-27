@@ -11,7 +11,6 @@
   import { maps } from "$lib/stores/maps.svelte";
   import { toastUndo, toastSuccess } from "$lib/toast";
   import {
-    ChevronRight,
     FileText,
     FileWarning,
     FolderX,
@@ -31,7 +30,6 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
   import { useSidebar } from "$lib/components/ui/sidebar";
-  import { slide } from "svelte/transition";
   import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
     TREE_DRAG_MIME,
@@ -44,6 +42,8 @@
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
   import { treeRename } from "$lib/stores/tree-rename.svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { shell } from "$lib/utils/shell-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
   import { recycleBin } from "$lib/utils/platform";
@@ -432,7 +432,9 @@
   );
 
   function rows(): HTMLElement[] {
-    return [...document.querySelectorAll<HTMLElement>("[data-tree-row]")];
+    return [...document.querySelectorAll<HTMLElement>("[data-tree-row]")].filter(
+      (r) => !r.closest("[inert]"),
+    );
   }
 
   function moveFocus(e: KeyboardEvent): boolean {
@@ -619,7 +621,7 @@
         <Sidebar.MenuItem>
           <Collapsible.Root
             bind:open={() => expanded, (val) => treeExpansion.set(node.path, val)}
-            class="group/collapsible [&[data-state=open]>div>button>svg:first-child]:rotate-90"
+            class="group/collapsible"
           >
             <!-- The folder's whole region is the drop target (see handleDragOver);
                only the row below shows it. -->
@@ -643,7 +645,7 @@
                         ? 'ring-1 ring-primary/50'
                         : ''}"
                     >
-                      <ChevronRight class="transition-transform" />
+                      <DisclosureChevron open={expanded} />
                       {#if unreadable}
                         <FolderX class="size-4 shrink-0 text-muted-foreground" />
                       {:else}
@@ -676,8 +678,8 @@
               </div>
               <Collapsible.Content forceMount>
                 {#snippet child({ props, open })}
-                  {#if open}
-                    <div {...props} transition:slide>
+                  <div {...props}>
+                    <Disclosure {open}>
                       <Sidebar.MenuSub>
                         {#each node.children as subNode (subNode.path)}
                           <FileTree
@@ -690,8 +692,8 @@
                           />
                         {/each}
                       </Sidebar.MenuSub>
-                    </div>
-                  {/if}
+                    </Disclosure>
+                  </div>
                 {/snippet}
               </Collapsible.Content>
             </div>

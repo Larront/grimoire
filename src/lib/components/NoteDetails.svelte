@@ -149,7 +149,7 @@
           <button
             data-slot="backlink-row"
             onclick={() => onNavigateNote?.(link.id, link.title)}
-            class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
+            class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-(--motion-quick)"
           >
             <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
               {link.title}
@@ -168,7 +168,7 @@
           <button
             data-slot="backlinks-expand"
             onclick={expandBacklinks}
-            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-(--motion-quick)"
             >Show {hiddenBacklinksCount} more</button
           >
         {/if}
@@ -187,7 +187,7 @@
             <button
               data-slot="outbound-row"
               onclick={() => onNavigateNote?.(link.resolved_id!, link.resolved_title!)}
-              class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-100"
+              class="w-full text-left rounded px-1 py-0.5 hover:bg-surface-hover transition-colors duration-(--motion-quick)"
             >
               <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.resolved_title}
@@ -205,7 +205,7 @@
             <button
               data-slot="outbound-broken"
               onclick={() => onCreateStub?.(link.target_path)}
-              class="w-full text-left rounded px-1 py-0.5 opacity-50 hover:opacity-75 transition-opacity duration-100 cursor-pointer"
+              class="w-full text-left rounded px-1 py-0.5 opacity-50 hover:opacity-75 transition-opacity duration-(--motion-quick) cursor-pointer"
             >
               <div class="text-(length:--font-ui) font-medium text-foreground leading-snug truncate">
                 {link.target_path}
@@ -218,7 +218,7 @@
           <button
             data-slot="outbound-expand"
             onclick={expandOutbound}
-            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-100"
+            class="w-full text-left font-mono text-[11px] text-foreground-muted px-1 py-0.5 hover:text-foreground transition-colors duration-(--motion-quick)"
             >Show {hiddenOutboundCount} more</button
           >
         {/if}

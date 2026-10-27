@@ -37,10 +37,9 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .now-playing-bar {
-      animation: none;
-      transform: scaleY(0.6);
-    }
+  /* The app's Reduce Motion, which follows the computer's unless the GM says otherwise. */
+  :global([data-reduce-motion]) .now-playing-bar {
+    animation: none;
+    transform: scaleY(0.6);
   }
 </style>

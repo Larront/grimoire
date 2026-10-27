@@ -17,8 +17,7 @@
   // are all one thing — `handle` — and this reports gestures to it rather than performing
   // its sequences.
   import { tick } from "svelte";
-  import { cubicOut } from "svelte/easing";
-  import { MediaQuery } from "svelte/reactivity";
+  import { easeOut, ms } from "$lib/motion";
   import { GripVertical } from "@lucide/svelte";
   import type { Editor } from "@tiptap/core";
   import {
@@ -189,8 +188,6 @@
   // Short both ways, and shorter leaving than arriving: the hide is already delayed by
   // `HANDLE_HIDE_MS` before this starts, and a grip still visibly fading while the GM
   // types is a grip pointing at a block their edit may have moved.
-  const reducedMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
-
   /**
    * `in:`/`out:` rather than one bidirectional `transition:`, deliberately.
    *
@@ -212,8 +209,8 @@
   ) {
     if (direction === "out") node.style.pointerEvents = "none";
     return {
-      duration: reducedMotion.current ? 0 : direction === "out" ? 90 : 130,
-      easing: cubicOut,
+      duration: ms(direction === "out" ? 90 : 130),
+      easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }

@@ -100,7 +100,13 @@ export const commands = {
 	getAliasCollisions: (noteId: number) => __TAURI_INVOKE<AliasCollision[]>("get_alias_collisions", { noteId }),
 	getAnnotations: (mapId: number) => __TAURI_INVOKE<MapAnnotation[]>("get_annotations", { mapId }),
 	getAppPrefs: () => __TAURI_INVOKE<{
+	/**  Kept for builds that read only this: true when motion is reduced by choice. */
 	reduceMotion?: boolean,
+	/**
+	 *  Reduce Motion as chosen — "system" (follow the computer, the default), "on" or
+	 *  "off" (2026-10 design review). None in a file written before there was a choice.
+	 */
+	reduceMotionChoice?: string | null,
 	confirmRenameLinks?: boolean,
 	/**
 	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
@@ -341,7 +347,13 @@ export type AliasCollision = {
  *  Distinct from per-ledger preferences (`.grimoire/prefs.json`).
  */
 export type AppPrefs = {
+	/**  Kept for builds that read only this: true when motion is reduced by choice. */
 	reduceMotion?: boolean,
+	/**
+	 *  Reduce Motion as chosen — "system" (follow the computer, the default), "on" or
+	 *  "off" (2026-10 design review). None in a file written before there was a choice.
+	 */
+	reduceMotionChoice?: string | null,
 	confirmRenameLinks?: boolean,
 	/**
 	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about

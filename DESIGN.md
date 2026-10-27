@@ -255,6 +255,24 @@ _Why this replaced the Shadowless Rule._ Grimoire used to be "entirely flat": no
 
 Components respond with precision and without hurry. State transitions are 150ms ease-out. Nothing bounces, nothing overshoots. Every component rests quiet and signals clearly.
 
+### Motion
+
+Four durations and one curve, set once in `app.css` and read from script through `$lib/motion` (2026-10 design review). Before it, the app had seven speeds, three curves, and three ways to open a section.
+
+| Token | Length | For |
+| --- | --- | --- |
+| `--motion-quick` | 100ms | What answers the pointer: a menu, a popover, a tooltip opening. |
+| `--motion-base` | 150ms | A state change: a section opening, an arrow turning, the docked panel and the sidebar rail, a dialog arriving. The default of every `transition` utility. |
+| `--motion-arrive` | 300ms | Something arriving at its place: the Splash's rise, the graph fitting to a search. |
+| `--motion-attention` | 600ms | Where the eye should go: the search hit's tint fading. |
+
+The curve is `--ease-out`, `cubic-bezier(0.2, 0, 0, 1)`: everything arrives fast and settles. Toasts move in 200ms, the time sonner gives one to leave before it removes it.
+
+- **A section opens with one quick glide.** Every expand and collapse — the sidebar's groups, a folder, a callout, a statblock, a timeline entry, the scene mixer, a pin's Appearance — is the shared `Disclosure`: its height from nothing to its own over `--motion-base`, the content fading in alongside, and its `DisclosureChevron` turning at the same speed. Shut, the content is `inert`.
+- **Hover changes colour, nothing else.** No button grows, no row shifts.
+- **Staged, briefly.** A staged entrance waits 75ms between steps, never more.
+- **Reduce Motion is the app's answer, asked everywhere.** Match my computer (the default, followed live), On or Off. CSS reads it as `[data-reduce-motion]`; a Svelte transition, the graph and a smooth scroll ask `$lib/motion`. Nothing reads `prefers-reduced-motion` or uses `motion-reduce:` on its own, or Off would not be off. Under it everything snaps; what has to keep saying something holds still instead — the now-playing bars stand still, the search tint shows and goes without fading, a spinner keeps turning (`data-motion-essential`).
+
 ### Buttons
 
 - **Shape:** Gently restrained corners (structural 6px). Consistent with all other chrome.
@@ -615,7 +633,7 @@ One component (`VolumeSlider`) for every level in the app: the scene editor, the
 - **Do** make empty states purposeful: a Metamorphous headline, one Nunito orienting line, one CTA.
 - **Do** put buttons and menu items in sentence case — "New scene", "Add track", "Close others".
 - **Do** spell what the GM reads the British way — colour, favourite, centre, customise (2026-10 design review; the menus had "Customise" beside "Favorite" and "Change color"). Identifiers in the code keep whatever spelling their library uses.
-- **Do** use `prefers-reduced-motion` to snap all transitions to instant and replace animated elements (waveform visualizer → static level bar, now-playing bars → still bars).
+- **Do** take a duration from the four motion tokens and ease out (§5 Motion), and ask the app's Reduce Motion — `[data-reduce-motion]` in CSS, `$lib/motion` in script — never the computer's directly. Under it, snap transitions and still what loops (now-playing bars → still bars).
 
 ### Don't:
 
@@ -628,5 +646,5 @@ One component (`VolumeSlider`) for every level in the app: the scene editor, the
 - **Don't** use Ember Faint (`#6b6460`) for body text or interactive labels. It is sub-AA and reserved for non-essential decorative text.
 - **Don't** bold Metamorphous. It is a display face — weight 400 only, always.
 - **Don't** use a modal dialog for destructive confirmation. Prefer undo toast (low-stakes) or inline "Delete? / Cancel" (higher-stakes). Modals are disproportionate.
-- **Don't** animate CSS layout properties (`width`, `height`, `padding`, `top`, `left`). Transitions use `opacity`, `transform`, and `color` only.
+- **Don't** animate CSS layout properties (`width`, `height`, `padding`, `top`, `left`). Transitions use `opacity`, `transform`, and `color` only. Two exceptions, both structural: a section's height, only through the shared `Disclosure` (a grid row from `0fr` to `1fr`); and the width of what docks beside the editor — the details panel and the sidebar's rail — which has to push the page aside rather than cover it.
 - **Don't** make this look like Obsidian with a TTRPG skin. This is its own thing.

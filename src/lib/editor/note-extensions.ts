@@ -23,6 +23,7 @@ import { TimelineBlock } from "$lib/editor/timeline-block";
 import { WikiLink } from "$lib/editor/wiki-link";
 import { SlashCommand } from "$lib/editor/slash-command";
 import { BlockHandle, type BlockTarget } from "$lib/editor/block-handle";
+import { SearchHit } from "$lib/editor/search-hit";
 import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -77,5 +78,6 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
       onTarget: options.onBlockTarget ?? (() => {}),
       onGrab: options.onBlockGrab ?? (() => {}),
     }),
+    SearchHit,
   ];
 }

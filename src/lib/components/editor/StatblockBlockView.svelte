@@ -45,15 +45,10 @@
   //
   // Nothing here knows what an entry *is*, and nothing knows what a mark *means*. A
   // section heading, an entry name and a condition label are all text the GM typed.
-  import {
-    Bookmark,
-    Check,
-    ChevronDown,
-    FoldHorizontal,
-    Pencil,
-    UnfoldHorizontal,
-  } from "@lucide/svelte";
+  import { Bookmark, Check, FoldHorizontal, Pencil, UnfoldHorizontal } from "@lucide/svelte";
   import { tick } from "svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import RowList from "$lib/components/editor/RowList.svelte";
   import { linkedPlainText } from "$lib/editor/linked-text";
   import SavePresetDialog from "$lib/components/editor/SavePresetDialog.svelte";
@@ -469,7 +464,9 @@
           use:takeFocus
           bind:value={poolDraft}
           oninput={() => (poolRefused = false)}
-          aria-label="{rowName(i)}, {value.current} of {value.max}. Type -12 to take 12, +5 to add 5, or a number to set it"
+          aria-label="{rowName(
+            i,
+          )}, {value.current} of {value.max}. Type -12 to take 12, +5 to add 5, or a number to set it"
           aria-invalid={poolRefused}
           aria-describedby="statblock-pool-hint-{i}"
           placeholder={String(value.current)}
@@ -501,7 +498,8 @@
           title="Take damage (-12), heal (+5), or set (30)"
           class="statblock-pool -my-1.5 -mx-1 cursor-pointer px-1 py-1.5 tabular-nums
                  focus-visible:outline-none"
-          onclick={() => openPool(i)}><span class="statblock-pool-face">{value.current}</span></button
+          onclick={() => openPool(i)}
+          ><span class="statblock-pool-face">{value.current}</span></button
         >
       {/if}
       <!-- The maximum is drawn, never targeted. That is the whole mis-click argument:
@@ -640,7 +638,7 @@
        chrome its siblings deleted is the drift ADR-0016 §8 exists to prevent (#219). -->
   <div
     class="absolute top-1 right-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity
-           duration-150 motion-reduce:transition-none group-hover/block:opacity-100
+           duration-(--motion-base) group-hover/block:opacity-100
            focus-within:opacity-100"
     class:opacity-100={editing}
   >
@@ -652,12 +650,7 @@
       aria-expanded={!collapsed}
       onclick={toggleCollapsed}
     >
-      <ChevronDown
-        size={14}
-        class="transition-transform duration-150 motion-reduce:transition-none {collapsed
-          ? '-rotate-90'
-          : ''}"
-      />
+      <DisclosureChevron open={!collapsed} class="size-3.5" />
     </button>
     <!-- Width, which is how the GM lays an encounter out: narrow the creatures in a
          fight and they tile inside the callout holding them. Saved with the block, so
@@ -724,11 +717,10 @@
     class="statblock-field font-heading text-sm leading-snug text-foreground mb-1 pr-[7.5rem]"
   />
 
-  {#if !collapsed && block.rows.length === 0}
-    <div class="font-sans text-xs italic text-muted-foreground mb-1">No header rows yet</div>
-  {/if}
-
-  {#if collapsed}
+  <!-- Collapsed is a different view, not nothing: what's played, in a line. The two views
+       glide past each other — one shutting as the other opens, so the block's height moves
+       between them — where the block used to snap (2026-10 design review). -->
+  <Disclosure open={collapsed}>
     <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {#each playableRows as { row, index } (index)}
         <!-- `shrink-0`: an item in a wrapping row could otherwise shrink to its narrowest
@@ -739,45 +731,52 @@
         </span>
       {/each}
     </div>
-  {:else if editing}
-    <RowList
-      rows={block.rows}
-      row={headerRow}
-      noun="row"
-      createRow={blankLabelledRow}
-      onChange={handleRowChange}
-    />
+  </Disclosure>
 
-    <RowList
-      rows={block.sections}
-      row={statblockSection}
-      noun="section"
-      createRow={blankStatblockSection}
-      onChange={handleSectionChange}
-    />
-  {:else}
-    <!-- A creature with no sections — the common shape in a tiled fight — is its stats
+  <Disclosure open={!collapsed}>
+    {#if block.rows.length === 0}
+      <div class="font-sans text-xs italic text-muted-foreground mb-1">No header rows yet</div>
+    {/if}
+    {#if editing}
+      <RowList
+        rows={block.rows}
+        row={headerRow}
+        noun="row"
+        createRow={blankLabelledRow}
+        onChange={handleRowChange}
+      />
+
+      <RowList
+        rows={block.sections}
+        row={statblockSection}
+        noun="section"
+        createRow={blankStatblockSection}
+        onChange={handleSectionChange}
+      />
+    {:else}
+      <!-- A creature with no sections — the common shape in a tiled fight — is its stats
          alone: no empty second column, and no divider ruling off nothing. -->
-    <div class="statblock-split" class:statblock-split-solo={block.sections.length === 0}>
-      <div class="statblock-stats">
-        {#each block.rows as row, i (i)}
-          {@render viewRow(row, i)}
-        {/each}
-      </div>
-      {#if block.sections.length > 0}
-        <div class="statblock-reference">
-          {#each block.sections as section, s (s)}
-            <div class="pt-2">
-              {@render sectionHeading(section, s, false)}
-              {#each section.entries as entry, i (i)}
-                <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
-              {/each}
-            </div>
+      <div class="statblock-split" class:statblock-split-solo={block.sections.length === 0}>
+        <div class="statblock-stats">
+          {#each block.rows as row, i (i)}
+            {@render viewRow(row, i)}
           {/each}
         </div>
-      {/if}
-    </div>
-  {/if}
+        {#if block.sections.length > 0}
+          <div class="statblock-reference">
+            {#each block.sections as section, s (s)}
+              <div class="pt-2">
+                {@render sectionHeading(section, s, false)}
+                {#each section.entries as entry, i (i)}
+                  <div class="py-0.5">{@render entryFields(entry, s, i, false)}</div>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </Disclosure>
 </div>
 
 <SavePresetDialog bind:open={savingPreset} fence={capturedFence} suggestedName={block.name} />
@@ -881,7 +880,7 @@
     border-radius: var(--radius-structural);
     background: color-mix(in oklab, var(--background) 50%, transparent);
     text-align: center;
-    transition: border-color 150ms ease-out;
+    transition: border-color var(--motion-base) var(--ease-out);
   }
 
   .statblock-pool:hover .statblock-pool-face {
@@ -908,19 +907,13 @@
     border-radius: var(--radius-structural);
     color: var(--background);
     cursor: pointer;
-    transition: background-color 150ms ease-out;
+    transition: background-color var(--motion-base) var(--ease-out);
   }
 
   .statblock-mark::after {
     content: "";
     position: absolute;
     inset: -4px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .statblock-mark {
-      transition: none;
-    }
   }
 
   /* Ticked fills with the text's own colour. Crimson is kept for what is playing, active

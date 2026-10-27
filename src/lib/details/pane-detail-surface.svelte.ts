@@ -1,5 +1,6 @@
 import { createSubscriber } from "svelte/reactivity";
 import { overlay, type RightRailPanel } from "$lib/stores/overlay.svelte.js";
+import { BASE, easeOut, ms } from "$lib/motion";
 
 /**
  * The pane width at which a [[Details Pane]] stops floating and docks to the
@@ -76,7 +77,6 @@ class LiveMediaQuery {
 export class PaneDetailSurface {
   #token: RightRailPanel;
   #isMobile = new LiveMediaQuery("(max-width: 1023px)");
-  #reducedMotion = new LiveMediaQuery("(prefers-reduced-motion: reduce)");
   #width = $state(0);
   #policy = $state<SurfacePolicy | null>(null);
   #claimant: symbol | null = null;
@@ -192,9 +192,11 @@ export class PaneDetailSurface {
     else this.open = !this.open;
   };
 
-  /** `fly` parameters for the floating chrome. Reduced motion snaps (ADR-0006). */
-  get transition(): { x: number; duration: number } {
-    return { x: 200, duration: this.#reducedMotion.current ? 0 : 150 };
+  /** `fly` parameters for the floating chrome. Reduced motion snaps (ADR-0006) — the
+   *  app's Reduce Motion, which until the 2026-10 review this asked the computer for.
+   *  A short drift, not a 200px fly: it arrives from beside where it sits. */
+  get transition(): { x: number; duration: number; easing: (t: number) => number } {
+    return { x: 16, duration: ms(BASE), easing: easeOut };
   }
 
   /** Test seam — see `resetPaneSurfaces`. */

@@ -46,6 +46,11 @@ function titleField(editor: Editor, index = 0): HTMLElement {
 
 // ─── The body is ProseMirror's ────────────────────────────────────────────────
 
+/** Shut sections are `inert` (jsdom keeps it as a property, not an attribute). */
+function shut(el: Element | null): boolean {
+  return !!el && ((el as HTMLElement).inert === true || shut(el.parentElement));
+}
+
 describe("a callout's body is ordinary document content", () => {
   const MD = "> [!warning] The bridge is out\n> The eastern crossing collapsed last winter.";
 
@@ -377,7 +382,7 @@ describe("collapsing a callout", () => {
     const editor = note(MD);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
+    expect(shut(dom(editor).querySelector("[data-node-view-content]"))).toBe(true);
     expect(titleField(editor)).toHaveTextContent("The Ambush");
   });
 
@@ -388,7 +393,7 @@ describe("collapsing a callout", () => {
 
     await fireEvent.click(dom(editor).querySelector('[aria-label="Expand callout"]')!);
     expect(saved(editor)).toBe(MD);
-    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute("hidden");
+    expect(shut(dom(editor).querySelector("[data-node-view-content]"))).toBe(false);
   });
 
   it("takes the caret out of a body it hides", async () => {
@@ -417,14 +422,14 @@ describe("collapsing a callout", () => {
   it("starts collapsed when the file's fold marker asks for it", () => {
     const editor = note("> [!encounter]- The Ambush\n> Four goblins.");
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
+    expect(shut(dom(editor).querySelector("[data-node-view-content]"))).toBe(true);
     expect(dom(editor).querySelector('[aria-label="Expand callout"]')).toBeTruthy();
   });
 
   it("starts open when the marker asks for open, and writes the marker back either way", async () => {
     const editor = note("> [!encounter]+ The Ambush\n> Four goblins.");
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).not.toHaveAttribute("hidden");
+    expect(shut(dom(editor).querySelector("[data-node-view-content]"))).toBe(false);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
     expect(saved(editor)).toBe("> [!encounter]+ The Ambush\n> Four goblins.");
   });

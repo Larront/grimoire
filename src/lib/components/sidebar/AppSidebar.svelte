@@ -36,7 +36,8 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { staleLinks } from "$lib/stores/stale-links.svelte";
-  import { slide } from "svelte/transition";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
     canDrop,
@@ -56,10 +57,12 @@
   import SidebarScenes from "./SidebarScenes.svelte";
   import RailScenes from "./RailScenes.svelte";
   import { createUntitledNote } from "$lib/utils/note-actions";
+  import { scrollBehavior } from "$lib/motion";
 
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
+  let filesOpen = $state(true);
 
   // What the open tab is, as the rail says it: the icon standing for it is marked as
   // the current one, as a row is in the expanded sidebar. The rail marked nothing,
@@ -99,7 +102,9 @@
   function reveal(sectionId: string) {
     sidebarState.setOpen(true);
     requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById(sectionId)
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     });
   }
 
@@ -354,7 +359,7 @@
          button, is a decoy, and the toggle it used to carry lives in the tab bar
          and on Ctrl/Cmd+\. -->
     <div
-      class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-200 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
+      class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-(--motion-base) group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
     >
       <span class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
         >Grimoire</span
@@ -505,22 +510,20 @@
 
     <!-- Files section -->
     <div id="sidebar-files-section" class={EXPANDED_ONLY}>
-      <Collapsible.Root open class="group/collapsible">
+      <Collapsible.Root bind:open={filesOpen} class="group/collapsible">
         <Sidebar.Group>
           <Sidebar.GroupLabel>
             {#snippet child({ props })}
               <Collapsible.Trigger {...props}>
                 Files
-                <ChevronDown
-                  class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-                />
+                <DisclosureChevron open={filesOpen} class="ms-auto" />
               </Collapsible.Trigger>
             {/snippet}
           </Sidebar.GroupLabel>
           <Collapsible.Content forceMount>
             {#snippet child({ props, open })}
-              {#if open}
-                <div {...props} transition:slide>
+              <div {...props}>
+                <Disclosure {open}>
                   <Sidebar.GroupContent>
                     <!-- The world's root, as a folder's row is that folder: its own
                          menu for making things there, and room under the last row to
@@ -599,8 +602,8 @@
                       </ContextMenu.Content>
                     </ContextMenu.Root>
                   </Sidebar.GroupContent>
-                </div>
-              {/if}
+                </Disclosure>
+              </div>
             {/snippet}
           </Collapsible.Content>
         </Sidebar.Group>
