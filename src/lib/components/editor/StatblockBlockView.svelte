@@ -621,6 +621,7 @@
       noun="entry"
       createRow={blankStatblockEntry}
       onChange={(next, change) => handleEntryChange(s, next, change)}
+      addAlwaysShown
     />
   </div>
 {/snippet}
@@ -748,6 +749,7 @@
         noun="row"
         createRow={blankLabelledRow}
         onChange={handleRowChange}
+        addAlwaysShown
       />
 
       <RowList
@@ -756,6 +758,7 @@
         noun="section"
         createRow={blankStatblockSection}
         onChange={handleSectionChange}
+        addAlwaysShown
       />
     {:else}
       <!-- A creature with no sections — the common shape in a tiled fight — is its stats

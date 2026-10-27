@@ -596,7 +596,7 @@ A compact panel of facts about the note's subject — a wiki infobox — floated
 
 The rows of a timeline, an infobox and a statblock's edit mode.
 
-- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. The gap is real space (`--row-gap`, the block's to set) and the hover zone is that space alone, never over a row's words or links. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty; a block with its own Add may leave it out.
+- **Inserting:** hovering the gap between two rows draws a dashed line where the new row will land, with a plus on it (on the spine, in a timeline); only the plus inserts. The gap is real space (`--row-gap`, the block's to set) and the hover zone is that space alone, never over a row's words or links. Alt+Enter inserts below the focused row. A labelled "Add …" ends the list, quiet while reading and always shown when the list is empty or drawn only for authoring (a statblock's structure); a block with its own Add may leave it out.
 - **Row controls:** Move up (Alt+↑), Move down (Alt+↓) and Delete, 24px with tooltips, in a gutter at the row's right — in the flow, so they never cover the row's words — revealed on hover or focus. A narrow block takes them as one "⋯" menu per row instead, which also offers Insert below; it floats just past the block's edge, beside its row, so the row keeps the block's whole width.
 - **Focus and speech:** focus follows the row through a move and goes into the next row after a delete; moves and deletes are announced, and rows are named by their content.
 

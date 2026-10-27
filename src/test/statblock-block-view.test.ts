@@ -759,6 +759,15 @@ describe("the mode is scoped to structure", () => {
     expect(getByLabelText("Add row")).toBeInTheDocument();
   });
 
+  it("shows every Add while editing, so a fresh block's only plus isn't Add section (2026-10 design review)", async () => {
+    const { getByLabelText, edit } = statblock(creature);
+    await edit();
+
+    for (const label of ["Add row", "Add section", "Add entry"]) {
+      expect(getByLabelText(label).classList.contains("row-list-add-quiet")).toBe(false);
+    }
+  });
+
   it("tells the two apart by input chrome and a dashed accent rail, with no banner", async () => {
     const { container, getAllByLabelText, edit } = statblock(creature);
     const block = container.querySelector(".statblock-block")!;

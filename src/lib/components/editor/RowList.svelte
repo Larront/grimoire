@@ -28,6 +28,7 @@
     addClass = "",
     controls = "gutter",
     showAdd = true,
+    addAlwaysShown = false,
   }: {
     /** The rows, in order. The consumer owns them; this never mutates them. */
     rows: T[];
@@ -68,6 +69,13 @@
      * list always shows it.
      */
     showAdd?: boolean;
+    /**
+     * Show the "Add …" at rest, not only while the list is hovered or worked in. For a
+     * list drawn only while authoring, where there is no reading for it to stay out of:
+     * a fresh statblock showed "Add section" alone, its empty sections' Add, right under
+     * its one row, and the GM took it for adding a row (2026-10 design review).
+     */
+    addAlwaysShown?: boolean;
   } = $props();
 
   // There was an `onRowFocusOut` here, reporting focus leaving a row so a consumer could
@@ -372,7 +380,7 @@
              transition-[opacity,color] duration-(--motion-base)
              hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100
              focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
-             {rows.length === 0 ? '' : 'row-list-add-quiet'}"
+             {rows.length === 0 || addAlwaysShown ? '' : 'row-list-add-quiet'}"
         onclick={() => insert(rows.length)}
         aria-label={`Add ${noun}`}
       >
