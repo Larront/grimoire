@@ -31,14 +31,7 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { portal } from "$lib/utils/portal";
-  import {
-    findWikiTrigger,
-    readWikiSuggestKey,
-    searchWikiTargets,
-    wikiMenuAnchor,
-    type NoteSearchResult,
-    type WikiMenuAnchor,
-  } from "$lib/editor/wiki-suggest";
+  import { createFieldWikiSuggest } from "$lib/editor/wiki-field-suggest.svelte";
   import WikiLinkSuggestion from "$lib/components/editor/WikiLinkSuggestion.svelte";
 
   let {
@@ -50,6 +43,7 @@
     focused = false,
     restrict,
     multiline = false,
+    wrap = false,
     readonly = false,
   }: {
     /** The value as the document holds it. The field never mutates it. */
@@ -95,11 +89,29 @@
      * value stay live, because a link is navigation and never an edit.
      */
     readonly?: boolean;
+    /**
+     * A one-line value that wraps where it is drawn, edited as it is drawn. A one-line
+     * input collapsed a three-line Infobox title to a single line scrolled to its end —
+     * the start out of sight and the panel jumping by two lines. The field is a textarea
+     * that sizes to its text; Enter still commits, and a newline can still not be typed.
+     */
+    wrap?: boolean;
   } = $props();
 
   let editing = $state(false);
   let draft = $state("");
   let input = $state<HTMLInputElement | HTMLTextAreaElement>();
+  let display = $state<HTMLButtonElement>();
+  // The drawn value, as the button's description. The button is named by its field
+  // ("Event 3 title") and that name replaces its text for a screen reader, which heard
+  // every field and never a word of what was in it.
+  const valueId = $props.id();
+  // Set by Enter and Escape, the two ways out from the keyboard. The input leaves the
+  // page as it closes, and focus used to go with it to the document body: a keyboard GM
+  // lost their place after every edit, and in a block with a mode a second Escape no
+  // longer reached the block to leave it. Leaving by pointer — clicking elsewhere — goes
+  // where the pointer went, so it does not set this.
+  let returnFocus = false;
 
   const segments = $derived(splitLinkedText(value));
 
@@ -135,7 +147,7 @@
   });
 
   function commit() {
-    suggestion = null;
+    wiki.close();
     editing = false;
     // The restriction is applied again here because a multi-line field cannot apply
     // it per keystroke: the newline the GM just pressed Enter for is, for the one
@@ -148,7 +160,7 @@
   }
 
   function cancel() {
-    suggestion = null;
+    wiki.close();
     draft = value;
     editing = false;
   }
@@ -163,17 +175,26 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (suggestion && handleSuggestionKeydown(e)) return;
+    if (wiki.keydown(e)) return;
     // In a multi-line field Enter is a line break the value is allowed to hold, so
     // the only ways out are leaving the field and Escape.
     if (e.key === "Enter" && !multiline) {
       e.preventDefault();
+      returnFocus = true;
       commit();
     } else if (e.key === "Escape") {
       e.preventDefault();
+      returnFocus = true;
       cancel();
     }
   }
+
+  // Back to the drawn value the GM opened, once it is drawn again.
+  $effect(() => {
+    if (editing || !display || !returnFocus) return;
+    returnFocus = false;
+    display.focus();
+  });
 
   // ── `[[` autocomplete ───────────────────────────────────────────────────────
   //
@@ -184,66 +205,30 @@
   // drift into two answers about Enter; the dropdown is `WikiLinkSuggestion`, the same
   // component the wikilink node's own suggestion plugin draws.
 
-  interface FieldSuggestion extends WikiMenuAnchor {
-    items: NoteSearchResult[];
-    selectedIndex: number;
-    /** Where the `[[` sits in the draft, so accepting replaces from there. */
-    triggerStart: number;
-  }
+  const wiki = createFieldWikiSuggest({
+    input: () => input,
+    value: () => draft,
+    setValue: (next) => (draft = next),
+  });
 
-  let suggestion = $state<FieldSuggestion | null>(null);
-
-  async function offerSuggestions(el: HTMLInputElement | HTMLTextAreaElement) {
-    // No open `[[`, or the GM already closed it: there is nothing to complete.
-    const trigger = findWikiTrigger(el.value, el.selectionStart ?? el.value.length);
-    if (!trigger) {
-      suggestion = null;
-      return;
-    }
-
-    const items = await searchWikiTargets(trigger.query);
-    suggestion = {
-      items,
-      selectedIndex: 0,
-      ...wikiMenuAnchor(el.getBoundingClientRect()),
-      triggerStart: trigger.start,
-    };
-  }
-
-  /** Whether the key belonged to the dropdown. */
-  function handleSuggestionKeydown(e: KeyboardEvent): boolean {
-    if (!suggestion) return false;
-    const verdict = readWikiSuggestKey(e.key, {
-      itemCount: suggestion.items.length,
-      selectedIndex: suggestion.selectedIndex,
-    });
-    if (!verdict) return false;
-
+  // Ctrl/Cmd+Enter follows the value's first link, the keyboard's way to what the pointer
+  // gets by clicking it: Enter opens the field for editing, so a link in a value — "Born:
+  // [[Thornhaven Village]]" — could not be followed from the keyboard at all. The click
+  // goes to the link itself, so the host's own navigation handles it.
+  function followLinkByKey(e: KeyboardEvent) {
+    if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+    const link = display?.querySelector<HTMLElement>("[data-wiki-link]");
+    if (!link) return;
     e.preventDefault();
-    if (verdict.kind === "move") {
-      suggestion.selectedIndex = verdict.selectedIndex;
-    } else if (verdict.kind === "dismiss") {
-      // Escape closes the dropdown and keeps the edit — one Escape, one dismissal.
-      suggestion = null;
-    } else {
-      accept(suggestion.items[verdict.selectedIndex]);
-    }
-    return true;
+    e.stopPropagation();
+    link.click();
   }
 
-  function accept(item: NoteSearchResult) {
-    if (!suggestion) return;
-    const { triggerStart } = suggestion;
-    const caret = input?.selectionStart ?? draft.length;
-    const inserted = `[[${item.path}]]`;
-    draft = draft.slice(0, triggerStart) + inserted + draft.slice(caret);
-    suggestion = null;
-
-    const next = triggerStart + inserted.length;
-    tick().then(() => {
-      input?.focus();
-      input?.setSelectionRange(next, next);
-    });
+  function followFocusedLink(e: KeyboardEvent) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).click();
   }
 
   // A click that landed on a link is the link's: it bubbles to the host surface's
@@ -256,35 +241,46 @@
 
 <!-- The value as the GM sees it, drawn identically whether it is a button they can
      click into or a read-only span. One snippet, so the two can never disagree about
-     how a link or an empty value looks. -->
+     how a link or an empty value looks.
+
+     A read-only value's links are Tab stops, and Enter follows one by the same click the
+     pointer gives it (2026-10 design review: a statblock in play had links the keyboard
+     could not reach). In an editable value they sit inside its button, which Ctrl+Enter
+     follows instead. -->
 {#snippet drawn()}
   {#if value}
     {#each segments as segment, i (i)}
-      {#if segment.kind === "text"}{segment.text}{:else}<span
+      {#if segment.kind === "text"}{segment.text}{:else}<!-- svelte-ignore a11y_no_noninteractive_tabindex: it is a `link` whenever it is a Tab stop --><span
           data-wiki-link
           data-path={segment.path}
           data-title={segment.title}
-          data-broken={broken(segment.path) ? "" : undefined}>{segment.title}</span
+          data-broken={broken(segment.path) ? "" : undefined}
+          role={readonly ? "link" : undefined}
+          tabindex={readonly ? 0 : undefined}
+          onkeydown={readonly ? followFocusedLink : undefined}>{segment.title}</span
         >{/if}
     {/each}
   {:else}
-    <span class="text-muted-foreground/60 italic">{placeholder}</span>
+    <span data-placeholder class="text-muted-foreground italic">{placeholder}</span>
   {/if}
 {/snippet}
 
 {#if readonly}
   <span class="block w-full whitespace-pre-wrap break-words {className}">{@render drawn()}</span>
-{:else if editing && multiline}
+{:else if editing && (multiline || wrap)}
   <textarea
     bind:this={input}
     value={draft}
     {placeholder}
     aria-label={ariaLabel}
-    rows={Math.max(2, draft.split("\n").length)}
-    class="w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
+    aria-autocomplete="list"
+    rows={multiline ? Math.max(2, draft.split("\n").length) : 1}
+    class="linked-textarea {multiline
+      ? ''
+      : 'linked-textarea-wrap'} w-full resize-y bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
-      void offerSuggestions(e.currentTarget);
+      void wiki.offer(e.currentTarget);
     }}
     onblur={commit}
     onkeydown={handleKeydown}></textarea>
@@ -295,28 +291,32 @@
     value={draft}
     {placeholder}
     aria-label={ariaLabel}
+    aria-autocomplete="list"
     class="w-full bg-transparent border-b border-border outline-none focus-visible:border-primary {className}"
     oninput={(e) => {
       handleInput(e.currentTarget.value);
-      void offerSuggestions(e.currentTarget);
+      void wiki.offer(e.currentTarget);
     }}
     onblur={commit}
     onkeydown={handleKeydown}
   />
 {:else}
   <button
+    bind:this={display}
     type="button"
     aria-label={ariaLabel}
+    aria-describedby={valueId}
     class="w-full text-left rounded border-b border-transparent whitespace-pre-wrap break-words
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
+           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring
            {className}"
     onclick={handleClick}
+    onkeydown={followLinkByKey}
   >
-    {@render drawn()}
+    <span id={valueId}>{@render drawn()}</span>
   </button>
 {/if}
 
-{#if suggestion}
+{#if wiki.current}
   <!-- `mousedown` is swallowed so choosing a note with the pointer does not blur the
        input first — a blur would commit the edit and unmount the dropdown under the
        click. The dropdown itself is `position: fixed`, so this wrapper adds no box.
@@ -328,12 +328,29 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div use:portal onmousedown={(e) => e.preventDefault()}>
     <WikiLinkSuggestion
-      items={suggestion.items}
-      selectedIndex={suggestion.selectedIndex}
-      x={suggestion.x}
-      y={suggestion.y}
-      anchorTop={suggestion.anchorTop}
-      onSelect={accept}
+      items={wiki.current.items}
+      selectedIndex={wiki.current.selectedIndex}
+      x={wiki.current.x}
+      y={wiki.current.y}
+      anchorTop={wiki.current.anchorTop}
+      onSelect={wiki.accept}
+      onHover={wiki.hover}
+      onReposition={wiki.reposition}
     />
   </div>
 {/if}
+
+<style>
+  /* A description opens at the height of what it holds. Its row count used to be its
+     line breaks, which ignores wrapping: three wrapped lines opened as a 57px box scrolled
+     to the end, the opening hidden. `rows` stays the floor where this is not supported. */
+  .linked-textarea {
+    field-sizing: content;
+    min-height: 3lh;
+  }
+
+  .linked-textarea-wrap {
+    min-height: 1lh;
+    resize: none;
+  }
+</style>

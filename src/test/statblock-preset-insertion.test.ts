@@ -26,7 +26,12 @@ function withStore(presets: { name: string; fence: string }[], def: string | nul
 async function stamp(argument: string): Promise<{ markdown: string; json: unknown }> {
   const ed = new Editor({ extensions: noteExtensions(), content: "<p></p>" });
   try {
-    await filterCommands("statblock")[0].command(ed, { from: 1, to: 1 }, argument);
+    // Enter on the menu's first row, as the GM presses it.
+    const [first] = filterCommands(argument ? `statblock ${argument}` : "statblock", {
+      presets: statblockPresets.available,
+      defaultName: statblockPresets.defaultName,
+    });
+    await first.command(ed, { from: 1, to: 1 }, argument);
     return { markdown: ed.getMarkdown().trimEnd(), json: ed.getJSON() };
   } finally {
     ed.destroy();

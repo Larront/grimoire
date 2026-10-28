@@ -11,9 +11,17 @@ const APP_PREFS_FILE: &str = "app-prefs.json";
 #[derive(Debug, Serialize, specta::Type, Deserialize, Default, Clone, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppPrefs {
+    /// Kept for builds that read only this: true when motion is reduced by choice.
     pub reduce_motion: bool,
+    /// Reduce Motion as chosen — "system" (follow the computer, the default), "on" or
+    /// "off" (2026-10 design review). None in a file written before there was a choice.
+    pub reduce_motion_choice: Option<String>,
     pub confirm_rename_links: bool,
-    pub sample_banner_dismissed: bool,
+    /// How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+    /// the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+    /// each world opened at whatever density it happened to have been left in. None until
+    /// the GM chooses, when the open ledger's old value is adopted once.
+    pub density: Option<String>,
 }
 
 fn app_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -27,11 +35,8 @@ fn app_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// `None` when the GM has never saved prefs, which is a different answer from "every
-/// pref is false" and the frontend needs to tell them apart: on a first run it seeds
-/// `reduceMotion` from the operating system's own setting, and it can only do that
-/// while it knows nobody has chosen yet. Returning `AppPrefs::default()` here made a
-/// fresh install indistinguishable from an explicit "no, I want motion", so a GM who
-/// had asked for reduced motion system-wide got the full-motion app regardless.
+/// pref is false": the frontend keeps its own defaults then (Reduce Motion following the
+/// computer) rather than reading a file of falses as choices the GM made.
 fn read_prefs_file(path: &Path) -> Result<Option<AppPrefs>, String> {
     if !path.exists() {
         return Ok(None);
@@ -75,8 +80,9 @@ mod tests {
 
         let prefs = AppPrefs {
             reduce_motion: true,
+            reduce_motion_choice: Some("on".into()),
             confirm_rename_links: false,
-            sample_banner_dismissed: true,
+            density: Some("dense".into()),
         };
         write_prefs_file(&path, &prefs).unwrap();
 
@@ -102,6 +108,17 @@ mod tests {
         let prefs = read_prefs_file(&path).unwrap().expect("file exists");
         assert!(prefs.reduce_motion);
         assert!(!prefs.confirm_rename_links);
-        assert!(!prefs.sample_banner_dismissed);
+    }
+
+    /// The example world's banner, and its "dismissed" pref, went in the 2026-10 design
+    /// review; a GM's prefs file written before still carries the key, and must load.
+    #[test]
+    fn a_file_with_the_retired_banner_pref_still_loads() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join(APP_PREFS_FILE);
+        fs::write(&path, r#"{ "reduceMotion": true, "sampleBannerDismissed": true }"#).unwrap();
+
+        let prefs = read_prefs_file(&path).unwrap().expect("file exists");
+        assert!(prefs.reduce_motion);
     }
 }

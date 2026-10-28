@@ -1,14 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), {
     error: vi.fn(),
     success: vi.fn(),
+    dismiss: vi.fn(),
   }),
 }));
 
 import { toast as sonner } from "svelte-sonner";
-import { toastError, toastSuccess, toastUndo, toastImportFailures } from "../lib/toast";
+import { toastError, toastSuccess, toastUndo } from "../lib/toast";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,56 +44,15 @@ describe("toastSuccess", () => {
   });
 });
 
-describe("toastImportFailures", () => {
-  it("shows no toast when failures array is empty", () => {
-    toastImportFailures([], vi.fn());
-    expect(sonner.error).not.toHaveBeenCalled();
-  });
-
-  it("shows singular 'file' message for one failure, styled as an error", () => {
-    toastImportFailures([{ path: "notes/foo.md", reason: "Permission denied" }], vi.fn());
-    expect(sonner.error).toHaveBeenCalledWith(
-      "Couldn't import 1 file",
-      expect.objectContaining({
-        action: expect.objectContaining({ label: "Show details" }),
-      }),
-    );
-  });
-
-  it("shows plural 'files' message for multiple failures", () => {
-    toastImportFailures(
-      [
-        { path: "a.md", reason: "Permission denied" },
-        { path: "b.md", reason: "Broken symlink" },
-      ],
-      vi.fn(),
-    );
-    expect(sonner.error).toHaveBeenCalledWith(
-      "Couldn't import 2 files",
-      expect.objectContaining({
-        action: expect.objectContaining({ label: "Show details" }),
-      }),
-    );
-  });
-
-  it("action onClick calls onShowDetails", () => {
-    const onShowDetails = vi.fn();
-    toastImportFailures([{ path: "foo.md", reason: "err" }], onShowDetails);
-    const opts = vi.mocked(sonner.error).mock.calls[0][1] as unknown as {
-      action: { onClick: () => void };
-    };
-    opts.action.onClick();
-    expect(onShowDetails).toHaveBeenCalledOnce();
-  });
-});
-
 describe("toastUndo", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+  type UndoOpts = {
+    duration: number;
+    action: { label: string; onClick: (e: MouseEvent) => void };
+    onAutoClose: () => void;
+    onDismiss: () => void;
+  };
+  const opts = () => vi.mocked(sonner).mock.calls.at(-1)![1] as unknown as UndoOpts;
+  const clickUndo = () => opts().action.onClick(new MouseEvent("click"));
 
   it("shows a toast with an Undo action", () => {
     toastUndo("Note deleted", vi.fn());
@@ -104,21 +64,54 @@ describe("toastUndo", () => {
     );
   });
 
-  it("executes onConfirm after duration when undo is not clicked", () => {
+  it("commits when the toast runs out", () => {
     const onConfirm = vi.fn();
     toastUndo("Note deleted", onConfirm);
-    vi.advanceTimersByTime(5000);
+    opts().onAutoClose();
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
-  it("does NOT execute onConfirm when undo action is clicked", () => {
+  it("commits when the toast is closed with its ✕ or swiped away", () => {
     const onConfirm = vi.fn();
     toastUndo("Note deleted", onConfirm);
+    opts().onDismiss();
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
 
+  /*
+    The 2026-10 design review's bug: the toast pauses while the pointer rests on it, and
+    the commit used to be a five-second timer of its own — so the delete happened while
+    Undo was still on screen, and Undo then did nothing. Time alone commits nothing now.
+  */
+  it("commits nothing while the toast is still up, however long that is", () => {
+    vi.useFakeTimers();
+    try {
+      const onConfirm = vi.fn();
+      toastUndo("Note deleted", onConfirm);
+      vi.advanceTimersByTime(60_000);
+      expect(onConfirm).not.toHaveBeenCalled();
+      clickUndo();
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not commit after Undo, whatever closes the toast", () => {
+    const onConfirm = vi.fn();
+    toastUndo("Note deleted", onConfirm);
     clickUndo();
-
-    vi.advanceTimersByTime(5000);
+    opts().onAutoClose();
+    opts().onDismiss();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("commits once, even if the toast reports closing twice", () => {
+    const onConfirm = vi.fn();
+    toastUndo("Note deleted", onConfirm);
+    opts().onAutoClose();
+    opts().onDismiss();
+    expect(onConfirm).toHaveBeenCalledOnce();
   });
 
   /*
@@ -134,7 +127,6 @@ describe("toastUndo", () => {
     clickUndo();
 
     expect(onUndo).toHaveBeenCalledOnce();
-    vi.advanceTimersByTime(5000);
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
@@ -143,25 +135,18 @@ describe("toastUndo", () => {
     const onUndo = vi.fn();
     toastUndo("Pin deleted", onConfirm, onUndo);
 
-    vi.advanceTimersByTime(5000);
+    opts().onAutoClose();
 
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(onUndo).not.toHaveBeenCalled();
   });
 
-  /* The file tree and template list pass two arguments and must stay unaffected. */
+  /* Callers that leave their UI alone until the commit pass two arguments. */
   it("is safe to call without onUndo", () => {
     const onConfirm = vi.fn();
     toastUndo("Note deleted", onConfirm);
     expect(() => clickUndo()).not.toThrow();
-    vi.advanceTimersByTime(5000);
+    opts().onAutoClose();
     expect(onConfirm).not.toHaveBeenCalled();
   });
-
-  function clickUndo() {
-    const options = vi.mocked(sonner).mock.calls.at(-1)![1] as unknown as {
-      action: { onClick: (e: MouseEvent) => void };
-    };
-    options.action.onClick(new MouseEvent("click"));
-  }
 });

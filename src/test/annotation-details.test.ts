@@ -63,7 +63,7 @@ describe("AnnotationDetails — rendering", () => {
       },
     });
     await flush();
-    expect(getByText("Text Label")).toBeTruthy();
+    expect(getByText("Text label")).toBeTruthy();
   });
 
   it("renders kind badge for circle annotation", async () => {
@@ -163,7 +163,7 @@ describe("AnnotationDetails — rendering", () => {
     expect(container.querySelector('[data-section="opacity"]')).toBeNull();
   });
 
-  it("renders ColorSwatches for color section", async () => {
+  it("renders the colour picker for the color section", async () => {
     const { container } = render(AnnotationDetails, {
       props: {
         annotation: baseAnnotation,
@@ -172,7 +172,7 @@ describe("AnnotationDetails — rendering", () => {
       },
     });
     await flush();
-    expect(container.querySelector('[data-slot="color-swatches"]')).toBeTruthy();
+    expect(container.querySelector("[data-color-picker]")).toBeTruthy();
   });
 
   it("renders delete button in actions section", async () => {
@@ -251,7 +251,7 @@ describe("AnnotationDetails — label editing", () => {
 // ── Color updates ─────────────────────────────────────────────────────────────
 
 describe("AnnotationDetails — color updates", () => {
-  it("calls onUpdate with new fill color when a swatch is clicked", async () => {
+  it("calls onUpdate with new fill color when one is entered", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(AnnotationDetails, {
       props: { annotation: baseAnnotation, onUpdate, onDelete: vi.fn() },
@@ -259,14 +259,13 @@ describe("AnnotationDetails — color updates", () => {
     await flush();
     const colorSection = container.querySelector('[data-section="color"]');
     expect(colorSection).toBeTruthy();
-    const swatch = colorSection!.querySelector(
-      '[data-slot="color-swatches"] button',
-    ) as HTMLElement;
-    await fireEvent.click(swatch);
-    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ color: expect.any(String) }));
+    const hex = colorSection!.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+    await fireEvent.input(hex, { target: { value: "#3a7fa8" } });
+    await fireEvent.keyDown(hex, { key: "Enter" });
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ color: "#3a7fa8" }));
   });
 
-  it("calls onUpdate with new stroke color when stroke swatch is clicked", async () => {
+  it("calls onUpdate with new stroke color when one is entered", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const { container } = render(AnnotationDetails, {
       props: { annotation: baseAnnotation, onUpdate, onDelete: vi.fn() },
@@ -274,12 +273,11 @@ describe("AnnotationDetails — color updates", () => {
     await flush();
     const strokeSection = container.querySelector('[data-section="stroke"]');
     expect(strokeSection).toBeTruthy();
-    const swatch = strokeSection!.querySelector(
-      '[data-slot="color-swatches"] button',
-    ) as HTMLElement;
-    await fireEvent.click(swatch);
+    const hex = strokeSection!.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+    await fireEvent.input(hex, { target: { value: "#3a7fa8" } });
+    await fireEvent.keyDown(hex, { key: "Enter" });
     expect(onUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stroke_color: expect.any(String) }),
+      expect.objectContaining({ stroke_color: "#3a7fa8" }),
     );
   });
 });

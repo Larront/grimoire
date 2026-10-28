@@ -10,7 +10,7 @@
 // Every authoring test opens the mode first, through `edit()`. That is the ticket's
 // central claim in the shape of a test helper: the structure is not reachable without
 // a deliberate gesture, so a mis-click during a fight cannot edit the creature.
-import { render, fireEvent, cleanup } from "@testing-library/svelte";
+import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import StatblockBlockView from "$lib/components/editor/StatblockBlockView.svelte";
 import {
@@ -64,6 +64,25 @@ function statblock(
   /** Opens the structure, the way the GM does: the pencil in the block's chrome. */
   const edit = () => fireEvent.click(rendered.getByLabelText("Edit statblock structure"));
   return { ...rendered, onCommit, edit };
+}
+
+/**
+ * A row's pool, button or open input, and one box of a row's mark track — found by the
+ * hooks the block draws for them rather than by their names, which carry the creature's
+ * name and the GM's own label ("Goblin Scout HP, 43 of 59").
+ */
+function queryPool(row: number): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(`[data-pool-row="${row - 1}"]`);
+}
+function pool(row: number): HTMLElement {
+  const el = queryPool(row);
+  if (!el) throw new Error(`row ${row} has no pool on screen`);
+  return el;
+}
+function mark(row: number, box: number): HTMLElement {
+  const el = document.body.querySelector<HTMLElement>(`[data-mark="${row - 1}-${box - 1}"]`);
+  if (!el) throw new Error(`row ${row} has no mark ${box}`);
+  return el;
 }
 
 /** The statblock as the block last handed it to the document. */
@@ -482,7 +501,7 @@ describe("a pool is played on", () => {
   it("opens the current half for arithmetic, and only the current half", async () => {
     const { getByLabelText, queryByLabelText } = statblock(wounded);
 
-    expect(getByLabelText("Row 1 current value")).toBeInTheDocument();
+    expect(pool(1)).toBeInTheDocument();
     // The maximum is drawn and nothing else. There is no control to slip onto, which
     // is the whole reason the mode exists.
     expect(queryByLabelText("Row 1 maximum")).toBeNull();
@@ -491,11 +510,11 @@ describe("a pool is played on", () => {
 
   it("takes a hit as a signed delta", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
-    await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), {
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), {
       target: { value: "-7" },
     });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+    await fireEvent.keyDown(pool(1), {
       key: "Enter",
     });
 
@@ -507,19 +526,19 @@ describe("a pool is played on", () => {
 
   it("takes an unsigned number as an absolute", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
-    await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), {
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), {
       target: { value: "20" },
     });
-    await fireEvent.blur(getByLabelText("Row 1 current value"));
+    await fireEvent.blur(pool(1));
 
     expect(committed(onCommit).rows[0].value).toBe("20/59");
   });
 
   it("writes nothing at all for an empty input", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
-    await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.blur(getByLabelText("Row 1 current value"));
+    await fireEvent.click(pool(1));
+    await fireEvent.blur(pool(1));
 
     expect(onCommit).not.toHaveBeenCalled();
   });
@@ -529,11 +548,11 @@ describe("a pool is played on", () => {
       rows: [{ label: "HP", value: "3/12" }],
       sections: [],
     });
-    await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), {
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), {
       target: { value: "-9" },
     });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+    await fireEvent.keyDown(pool(1), {
       key: "Enter",
     });
 
@@ -542,16 +561,16 @@ describe("a pool is played on", () => {
 
   it("abandons the edit on Escape", async () => {
     const { getByLabelText, onCommit } = statblock(wounded);
-    await fireEvent.click(getByLabelText("Row 1 current value"));
-    await fireEvent.input(getByLabelText("Row 1 current value"), {
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), {
       target: { value: "-7" },
     });
-    await fireEvent.keyDown(getByLabelText("Row 1 current value"), {
+    await fireEvent.keyDown(pool(1), {
       key: "Escape",
     });
 
     expect(onCommit).not.toHaveBeenCalled();
-    expect(getByLabelText("Row 1 current value").tagName).toBe("BUTTON");
+    expect(pool(1).tagName).toBe("BUTTON");
   });
 
   it("offers no reset, restore or clear-all, at any scope", () => {
@@ -584,8 +603,8 @@ describe("a mark track is ticked", () => {
       sections: [],
     });
 
-    expect(getByLabelText("Row 1 mark 1")).toHaveAttribute("aria-pressed", "true");
-    expect(getByLabelText("Row 1 mark 2")).toHaveAttribute("aria-pressed", "false");
+    expect(mark(1, 1)).toHaveAttribute("aria-pressed", "true");
+    expect(mark(1, 2)).toHaveAttribute("aria-pressed", "false");
     expect(queryByLabelText("Row 1 value")).toBeNull();
   });
 
@@ -594,7 +613,7 @@ describe("a mark track is ticked", () => {
       rows: [{ label: "Legendary", value: "[x][ ][ ]" }],
       sections: [],
     });
-    await fireEvent.click(getByLabelText("Row 1 mark 2"));
+    await fireEvent.click(mark(1, 2));
 
     expect(committed(onCommit).rows[0].value).toBe("[x][x][ ]");
   });
@@ -604,7 +623,7 @@ describe("a mark track is ticked", () => {
       rows: [{ label: "Legendary", value: "[x][x][ ]" }],
       sections: [],
     });
-    await fireEvent.click(getByLabelText("Row 1 mark 1"));
+    await fireEvent.click(mark(1, 1));
 
     expect(committed(onCommit).rows[0].value).toBe("[ ][x][ ]");
   });
@@ -614,7 +633,7 @@ describe("a mark track is ticked", () => {
       rows: [{ label: "Conditions", value: "[ ] Prone [ ] Charmed" }],
       sections: [],
     });
-    await fireEvent.click(getByLabelText("Row 1 mark 1: Prone"));
+    await fireEvent.click(mark(1, 1));
 
     expect(committed(onCommit).rows[0].value).toBe("[x] Prone [ ] Charmed");
   });
@@ -639,8 +658,8 @@ describe("a mark track is ticked", () => {
       sections: [],
     });
 
-    const invented = getByLabelText("Row 1 mark 2: Ectoplasm-slick");
-    const known = getByLabelText("Row 1 mark 1: Prone");
+    const invented = mark(1, 2);
+    const known = mark(1, 1);
     expect(invented.className).toBe(known.className);
     expect(container.querySelector("[data-condition]")).toBeNull();
   });
@@ -657,26 +676,30 @@ describe("the mode is scoped to structure", () => {
     sections: ACTIONS,
   };
 
-  it("makes every value live in view mode, whatever its syntax", () => {
-    const { getByLabelText } = statblock(creature);
+  it("plays pools and marks in view mode, and draws every other value as text", () => {
+    // Every value used to open on one click, so a hit aimed a little low at HP landed in
+    // the row under it as text. Anything that changes in play is written as a pool or a
+    // mark track; everything else is definition, behind the pencil.
+    const { container } = statblock(creature);
 
-    expect(getByLabelText("Row 1 current value")).toBeInTheDocument();
-    // Anything else is a plain text input, one click — which is how a free-text
-    // `Conditions:` row stays editable without a mode round-trip.
-    expect(getByLabelText("Row 2 value")).toBeInTheDocument();
+    expect(pool(1)).toBeInTheDocument();
+    expect(container).toHaveTextContent("Bloodied");
+    expect(container.querySelector("input")).toBeNull();
+    expect(
+      [...container.querySelectorAll("button")].some((b) => b.textContent?.includes("Bloodied")),
+    ).toBe(false);
   });
 
-  it("gives a bare integer a text input rather than a pool's arithmetic", async () => {
-    // "A bare integer is inert" is a statement about *playability*: `14` gets no
-    // arithmetic and no maximum, because there is no pool there to have one. It is
-    // still one of "every value", so it opens as plain text — the ticket's comment is
-    // explicit that anything not a pool or a track is "a plain text input, one click".
-    const { getByLabelText, queryByLabelText, onCommit } = statblock({
+  it("draws a bare integer as text, edited behind the pencil", async () => {
+    // "A bare integer is inert": `30` has no pool to play on, so it reads as text in view
+    // mode and is edited, like any definition, with the pencil.
+    const { getByLabelText, onCommit, edit } = statblock({
       rows: [{ label: "Speed", value: "30" }],
       sections: [],
     });
 
-    expect(queryByLabelText("Row 1 current value")).toBeNull();
+    expect(queryPool(1)).toBeNull();
+    await edit();
     await fireEvent.click(getByLabelText("Row 1 value"));
     await fireEvent.input(getByLabelText("Row 1 value"), {
       target: { value: "-20" },
@@ -704,8 +727,9 @@ describe("the mode is scoped to structure", () => {
         // collapse, but it is still not a label, heading, entry or row: there is nothing
         // here for a mis-click to damage, which is the rule this case guards.
         "Narrow statblock",
-        "Row 1 current value",
-        "Row 2 value",
+        // The pool, named by the creature and the GM's own label. "Notes: Bloodied" is
+        // not here: it is text, and edited behind the pencil.
+        "Goblin Scout HP, 43 of 59",
       ].sort(),
     );
   });
@@ -733,6 +757,15 @@ describe("the mode is scoped to structure", () => {
     expect(getByLabelText("Section 1 heading")).toHaveTextContent("Actions");
     expect(getByLabelText("Section 1 entry 1 body")).toBeInTheDocument();
     expect(getByLabelText("Add row")).toBeInTheDocument();
+  });
+
+  it("shows every Add while editing, so a fresh block's only plus isn't Add section (2026-10 design review)", async () => {
+    const { getByLabelText, edit } = statblock(creature);
+    await edit();
+
+    for (const label of ["Add row", "Add section", "Add entry"]) {
+      expect(getByLabelText(label).classList.contains("row-list-add-quiet")).toBe(false);
+    }
   });
 
   it("tells the two apart by input chrome and a dashed accent rail, with no banner", async () => {
@@ -811,8 +844,8 @@ describe("a collapsed statblock is a combat row", () => {
     await collapse(getByLabelText);
 
     expect(getByText("Aboleth")).toBeInTheDocument();
-    expect(getByLabelText("Row 1 current value")).toBeInTheDocument();
-    expect(getByLabelText("Row 3 mark 1")).toBeInTheDocument();
+    expect(pool(1)).toBeInTheDocument();
+    expect(mark(3, 1)).toBeInTheDocument();
     // The inert row and the sections are what collapse takes away.
     expect(queryByLabelText("Row 2 value")).toBeNull();
     expect(queryByText("Shortbow")).toBeNull();
@@ -821,7 +854,7 @@ describe("a collapsed statblock is a combat row", () => {
   it("keeps those rows interactive", async () => {
     const { getByLabelText, onCommit } = statblock(creature);
     await collapse(getByLabelText);
-    await fireEvent.click(getByLabelText("Row 3 mark 2"));
+    await fireEvent.click(mark(3, 2));
 
     expect(committed(onCommit).rows[2].value).toBe("[x][x][ ]");
   });
@@ -940,5 +973,72 @@ describe("the card's width is the GM's, and it is kept", () => {
     expect(committed.name).toBe("Goblin Scout");
     expect(committed.rows).toEqual(HEADER);
     expect(committed.sections).toEqual(ACTIONS);
+  });
+});
+
+// ─── Mid-fight ──────────────────────────────────────────────────────────────────
+
+describe("a hit mid-fight", () => {
+  const wounded = { rows: [{ label: "HP", value: "43/59" }], sections: [] };
+
+  it("shows what Enter will do while the GM types", async () => {
+    // "→ 36" for -7, and "→ 12" for a bare 12, which is how "unsigned sets it" shows
+    // before it lands rather than after.
+    const { container } = statblock(wounded);
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), { target: { value: "-7" } });
+    expect(container).toHaveTextContent("→ 36");
+
+    await fireEvent.input(pool(1), { target: { value: "12" } });
+    expect(container).toHaveTextContent("→ 12");
+  });
+
+  it("refuses junk out loud and keeps the input open", async () => {
+    // Closing on junk looked exactly like a hit that landed.
+    const { container, onCommit } = statblock(wounded);
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), { target: { value: "2d6" } });
+    await fireEvent.keyDown(pool(1), { key: "Enter" });
+
+    expect(pool(1).tagName).toBe("INPUT");
+    expect(pool(1)).toHaveAttribute("aria-invalid", "true");
+    expect(container).toHaveTextContent("Not a number");
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("puts focus back on the pool after Enter, so the next hit is one more Enter away", async () => {
+    statblock(wounded);
+    await fireEvent.click(pool(1));
+    await fireEvent.input(pool(1), { target: { value: "-7" } });
+    await fireEvent.keyDown(pool(1), { key: "Enter" });
+
+    await waitFor(() => expect(document.activeElement).toBe(pool(1)));
+    expect(pool(1).tagName).toBe("BUTTON");
+  });
+
+  it("names the pool by the creature, the GM's label and its values", () => {
+    statblock(wounded);
+    expect(pool(1)).toHaveAttribute("aria-label", "Goblin Scout HP, 43 of 59");
+  });
+
+  it("ticks a mark from its label as well as its box", async () => {
+    // The word beside the box is what a GM aims at.
+    const { getByText, onCommit } = statblock({
+      rows: [{ label: "Conditions", value: "[ ] Prone [ ] Charmed" }],
+      sections: [],
+    });
+    await fireEvent.click(getByText("Charmed"));
+
+    expect(committed(onCommit).rows[0].value).toBe("[ ] Prone [x] Charmed");
+  });
+
+  it("puts focus on the pencil when the mode is left", async () => {
+    const { getByLabelText, edit } = statblock(wounded);
+    await edit();
+    await fireEvent.click(getByLabelText("Done editing statblock"));
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(getByLabelText("Edit statblock structure")),
+    );
   });
 });

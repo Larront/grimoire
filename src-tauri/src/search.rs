@@ -873,8 +873,8 @@ pub fn search_notes_in_index(
     // Excerpt uses the free-text portion of the query (no tag: tokens)
     let excerpt_q = if tag_filters.is_empty() { query } else { free_text.as_str() };
 
-    let mut with_ts: Vec<(i64, NoteSearchResult)> = Vec::with_capacity(top_docs.len());
-    for (_score, addr) in top_docs {
+    let mut with_ts: Vec<(i64, f32, NoteSearchResult)> = Vec::with_capacity(top_docs.len());
+    for (score, addr) in top_docs {
         let doc: TantivyDocument = searcher.doc(addr).map_err(|e| e.to_string())?;
 
         let id = match doc.get_first(entity_id_f) {
@@ -906,15 +906,23 @@ pub fn search_notes_in_index(
             (None, 0)
         };
 
-        with_ts.push((ts, NoteSearchResult { id, title, path, excerpt, match_count }));
+        with_ts.push((ts, score, NoteSearchResult { id, title, path, excerpt, match_count }));
     }
 
     // For tag-only queries, sort by modified_at descending (most-recently-updated first)
     if !tag_filters.is_empty() && !has_free_text {
         with_ts.sort_by(|a, b| b.0.cmp(&a.0));
+    } else {
+        // Equally good matches by name, numbers by value: they came back in index order,
+        // so "Annal" listed Annal 1, 101, 102… (2026-10 design review).
+        with_ts.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| crate::commands::names::compare_names(&a.2.title, &b.2.title))
+        });
     }
 
-    Ok(with_ts.into_iter().take(limit).map(|(_, r)| r).collect())
+    Ok(with_ts.into_iter().take(limit).map(|(_, _, r)| r).collect())
 }
 
 fn search_maps_in_index(

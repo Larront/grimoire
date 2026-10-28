@@ -7,6 +7,12 @@ import type { SceneWithCount } from "../lib/types/ledger";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { audioEngine } from "../lib/stores/audio-engine.svelte";
 import { scenes } from "../lib/stores/scenes.svelte";
+import { toastUndo } from "../lib/toast";
+
+vi.mock("../lib/toast", async (original) => ({
+  ...(await original<typeof import("../lib/toast")>()),
+  toastUndo: vi.fn(),
+}));
 
 // Mutable mock data — reassigned per test
 let mockScenes: SceneWithCount[] = [];
@@ -86,6 +92,10 @@ vi.mock("../lib/stores/tabs.svelte", () => ({
 vi.mock("../lib/stores/audio-engine.svelte", () => ({
   audioEngine: {
     playScene: vi.fn(),
+    stopAll: vi.fn(),
+    pauseScene: vi.fn(),
+    resumeScene: vi.fn(),
+    isScenePaused: false,
     get activeSceneId() {
       return mockActiveSceneId;
     },
@@ -95,6 +105,12 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get isPlaying() {
       return false;
     },
+    sceneState: (id: number) =>
+      id === mockLoadingSceneId
+        ? "loading"
+        : mockLoadingSceneId === null && id === mockActiveSceneId
+          ? "playing"
+          : "idle",
   },
 }));
 
@@ -143,7 +159,7 @@ describe("ScenesDashboard", () => {
   it("shows + New Scene button in the header", () => {
     const { getAllByRole } = render(ScenesDashboard);
     const buttons = getAllByRole("button");
-    const newSceneBtn = buttons.find((b) => b.textContent?.includes("New Scene"));
+    const newSceneBtn = buttons.find((b) => b.textContent?.includes("New scene"));
     expect(newSceneBtn).toBeTruthy();
   });
 
@@ -151,7 +167,7 @@ describe("ScenesDashboard", () => {
     const { container, getAllByRole } = render(ScenesDashboard);
     expect(container.querySelector("[data-empty-state]")).toBeTruthy();
     const buttons = getAllByRole("button");
-    const ctaBtn = buttons.find((b) => b.textContent?.includes("New Scene"));
+    const ctaBtn = buttons.find((b) => b.textContent?.includes("New scene"));
     expect(ctaBtn).toBeTruthy();
   });
 
@@ -213,6 +229,21 @@ describe("ScenesDashboard", () => {
     const card = container.querySelector("[data-scene-card]");
     expect(card?.querySelector("[data-play-btn]")).toBeTruthy();
   });
+
+  it("pressing the card's picture plays the scene rather than opening it", async () => {
+    mockScenes = [makeScene(1, "Battle Music", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.click(container.querySelector("[data-play-btn]")!);
+    expect(audioEngine.playScene).toHaveBeenCalledWith(1);
+    expect(tabs.openTab).not.toHaveBeenCalled();
+  });
+
+  it("the card's edit button opens the scene editor", async () => {
+    mockScenes = [makeScene(1, "Battle Music", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.click(container.querySelector("[data-edit-btn]")!);
+    expect(tabs.openTab).toHaveBeenCalledWith({ type: "scene", id: 1, title: "Battle Music" });
+  });
 });
 
 // ── Context menu helpers ──────────────────────────────────────────────────────
@@ -237,32 +268,49 @@ async function clickMenuItem(label: RegExp | string): Promise<HTMLElement> {
 }
 
 // ── Context menu: structure ───────────────────────────────────────────────────
+//
+// Playing first, then editing, then Delete (2026-10 design review). Picture, colour
+// and icon are one Appearance popover where a "Customise" submenu opened three windows.
+
+function menuLabels(): string[] {
+  return Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]')).map((el) =>
+    (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+  );
+}
 
 describe("ScenesDashboard — context menu structure", () => {
-  it("shows context menu items on right-click", async () => {
+  it("leads with Play, then editing, then Delete by name", async () => {
     mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCardContextMenu(container);
-    await waitFor(() => {
-      const items = document.body.querySelectorAll('[data-slot="context-menu-item"]');
-      expect(items.length).toBeGreaterThan(0);
-    });
+    await clickMenuItem("Play");
+    expect(menuLabels()).toEqual([
+      "Play",
+      "Open",
+      "Rename F2",
+      "Appearance…",
+      "Favourite",
+      "Delete “Forest Ambience” Del",
+    ]);
   });
 
-  it("shows Favorite label for unfavorited scene", async () => {
-    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
-    const { container } = render(ScenesDashboard);
-    await openCardContextMenu(container);
-    const item = await clickMenuItem("Favorite");
-    expect(item).toBeTruthy();
-  });
-
-  it("shows Unfavorite label for favorited scene", async () => {
+  it("offers Unfavourite on a favourite", async () => {
     mockScenes = [makeScene(1, "Forest Ambience", true, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCardContextMenu(container);
-    const item = await clickMenuItem("Unfavorite");
-    expect(item).toBeTruthy();
+    expect(await clickMenuItem("Unfavourite")).toBeTruthy();
+  });
+
+  // Play on a sounding scene did nothing a GM could see.
+  it("offers Stop on the scene that is playing, and it stops", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    mockActiveSceneId = 1;
+    const { container } = render(ScenesDashboard);
+    await openCardContextMenu(container);
+    await fireEvent.click(await clickMenuItem("Stop"));
+    expect(audioEngine.stopAll).toHaveBeenCalled();
+    expect(menuLabels()).not.toContain("Play");
+    mockActiveSceneId = null;
   });
 });
 
@@ -286,16 +334,16 @@ describe("ScenesDashboard — context menu actions", () => {
     mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCardContextMenu(container);
-    const item = await clickMenuItem("Play");
+    const item = await clickMenuItem(/^\s*Play\s*$/);
     await fireEvent.click(item);
     expect(audioEngine.playScene).toHaveBeenCalledWith(1);
   });
 
-  it("Favorite toggles via toggle_scene_favorite and reloads", async () => {
+  it("Favourite toggles via toggle_scene_favorite and reloads", async () => {
     mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCardContextMenu(container);
-    const item = await clickMenuItem("Favorite");
+    const item = await clickMenuItem("Favourite");
     await fireEvent.click(item);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("toggle_scene_favorite", {
@@ -315,6 +363,15 @@ describe("ScenesDashboard — inline rename", () => {
     await openCardContextMenu(container);
     const item = await clickMenuItem("Rename");
     await fireEvent.click(item);
+    await waitFor(() => {
+      expect(container.querySelector('[data-mode="edit"]')).toBeTruthy();
+    });
+  });
+
+  it("F2 on the card starts the same rename", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.keyDown(container.querySelector("[data-play-btn]")!, { key: "F2" });
     await waitFor(() => {
       expect(container.querySelector('[data-mode="edit"]')).toBeTruthy();
     });
@@ -343,37 +400,40 @@ describe("ScenesDashboard — inline rename", () => {
 });
 
 // ── Context menu: delete ──────────────────────────────────────────────────────
+//
+// An undo toast, as removing a track has; the modal said "cannot be undone".
 
 describe("ScenesDashboard — delete", () => {
-  it("Delete shows confirmation dialog", async () => {
+  it("takes the card away at once, with Undo, and no dialog", async () => {
     mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     await openCardContextMenu(container);
-    const item = await clickMenuItem("Delete");
-    await fireEvent.click(item);
-    await waitFor(() => {
-      expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy();
-    });
+    await fireEvent.click(await clickMenuItem("Delete"));
+    await waitFor(() => expect(container.querySelector("[data-scene-card]")).toBeNull());
+    expect(vi.mocked(toastUndo).mock.calls[0][0]).toBe("Deleted “Forest Ambience”");
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("delete_scene", { id: 1 });
   });
 
-  it("confirming delete calls delete_scene and reloads", async () => {
+  it("deletes when the toast closes", async () => {
     mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
-    await openCardContextMenu(container);
-    const item = await clickMenuItem("Delete");
-    await fireEvent.click(item);
-    const confirmBtn = await waitFor(() => {
-      const btn = document.body.querySelector(
-        '[role="alertdialog"] button[data-slot="alert-dialog-action"]',
-      ) as HTMLElement;
-      if (!btn) throw new Error("confirm button not found");
-      return btn;
-    });
-    await fireEvent.click(confirmBtn);
+    await fireEvent.keyDown(container.querySelector("[data-play-btn]")!, { key: "Delete" });
+    const [, commit] = vi.mocked(toastUndo).mock.calls[0];
+    await commit();
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("delete_scene", { id: 1 });
       expect(scenes.load).toHaveBeenCalled();
     });
+  });
+
+  it("puts the card back on Undo", async () => {
+    mockScenes = [makeScene(1, "Forest Ambience", false, "2024-01-01")];
+    const { container } = render(ScenesDashboard);
+    await fireEvent.keyDown(container.querySelector("[data-play-btn]")!, { key: "Delete" });
+    await waitFor(() => expect(container.querySelector("[data-scene-card]")).toBeNull());
+    vi.mocked(toastUndo).mock.calls[0][2]!();
+    await waitFor(() => expect(container.querySelector("[data-scene-card]")).toBeTruthy());
   });
 });
 
@@ -424,70 +484,55 @@ describe("ScenesDashboard — playing indicator", () => {
   });
 });
 
-// ── Thumbnail colour picker ───────────────────────────────────────────────────
+// ── Appearance ────────────────────────────────────────────────────────────────
 
-async function openCustomiseSubmenu(container: HTMLElement) {
+async function openAppearance(container: HTMLElement) {
   await openCardContextMenu(container);
-  const subTrigger = await waitFor(() => {
-    const el = document.body.querySelector('[data-slot="context-menu-sub-trigger"]') as HTMLElement;
-    if (!el) throw new Error("Customise sub-trigger not found");
-    return el;
-  });
-  await fireEvent.click(subTrigger);
+  await fireEvent.click(await clickMenuItem("Appearance…"));
   await waitFor(() => {
-    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
-    if (!items.some((el) => el.textContent?.includes("Change color")))
-      throw new Error("submenu not open");
+    if (!document.body.querySelector("[data-icon-picker]")) throw new Error("not open");
   });
 }
 
-describe("ScenesDashboard — color picker", () => {
-  it("Change color opens a color picker dialog", async () => {
+describe("ScenesDashboard — appearance colour", () => {
+  it("Appearance… opens the picture, colour and icon together", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change color");
-    await fireEvent.click(item);
-    await waitFor(() => {
-      expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
-    });
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
+    expect(document.body.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
   });
 
-  it("selecting a color swatch calls update_scene_thumbnail and reloads", async () => {
+  it("a colour entered in the picker is saved as hex and reloads", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change color");
-    await fireEvent.click(item);
-    const swatch = await waitFor(() => {
-      const el = document.body.querySelector("[data-color-swatch]") as HTMLElement;
-      if (!el) throw new Error("color swatch not found");
+    await openAppearance(container);
+    const hex = await waitFor(() => {
+      const el = document.body.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+      if (!el) throw new Error("hex field not found");
       return el;
     });
-    await fireEvent.click(swatch);
+    await fireEvent.input(hex, { target: { value: "3a7fa8" } });
+    await fireEvent.keyDown(hex, { key: "Enter" });
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
-        expect.objectContaining({ id: 1 }),
+        expect.objectContaining({ id: 1, thumbnailColor: "#3a7fa8" }),
       );
       expect(scenes.load).toHaveBeenCalled();
     });
   });
 
-  it("Reset to default clears thumbnail_color", async () => {
-    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+  it("Default clears thumbnail_color", async () => {
+    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_color: "#3a7fa8" }];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change color");
-    await fireEvent.click(item);
-    await waitFor(() => document.body.querySelector("[data-color-picker]"));
-    const resetBtn = await waitFor(() => {
-      const btns = Array.from(document.body.querySelectorAll("button"));
-      const btn = btns.find((b) => b.textContent?.includes("Reset")) as HTMLElement | undefined;
-      if (!btn) throw new Error("Reset button not found");
+    await openAppearance(container);
+    const defaultBtn = await waitFor(() => {
+      const btn = document.body.querySelector("[data-color-default]") as HTMLElement | null;
+      if (!btn) throw new Error("Default button not found");
       return btn;
     });
-    await fireEvent.click(resetBtn);
+    await fireEvent.click(defaultBtn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
@@ -497,31 +542,24 @@ describe("ScenesDashboard — color picker", () => {
   });
 });
 
-// ── Thumbnail icon picker ─────────────────────────────────────────────────────
-
-describe("ScenesDashboard — icon picker", () => {
-  it("Change icon opens an icon picker dialog", async () => {
+describe("ScenesDashboard — appearance icon", () => {
+  it("marks the icon the scene has", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change icon");
-    await fireEvent.click(item);
-    await waitFor(() => {
-      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
-    });
+    await openAppearance(container);
+    expect(document.body.querySelector('[data-icon-btn="default"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("selecting an icon calls update_scene_thumbnail and reloads", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change icon");
-    await fireEvent.click(item);
-    const iconBtn = await waitFor(() => {
-      const el = document.body.querySelector("[data-icon-btn]") as HTMLElement;
-      if (!el) throw new Error("icon button not found");
-      return el;
-    });
+    await openAppearance(container);
+    const iconBtn = document.body.querySelector(
+      '[data-icon-btn]:not([data-icon-btn="default"])',
+    ) as HTMLElement;
     await fireEvent.click(iconBtn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
@@ -532,20 +570,11 @@ describe("ScenesDashboard — icon picker", () => {
     });
   });
 
-  it("Reset to default clears thumbnail_icon", async () => {
-    mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
+  it("Default clears thumbnail_icon", async () => {
+    mockScenes = [{ ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_icon: "Skull" }];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change icon");
-    await fireEvent.click(item);
-    await waitFor(() => document.body.querySelector("[data-icon-picker]"));
-    const resetBtn = await waitFor(() => {
-      const btns = Array.from(document.body.querySelectorAll("button"));
-      const btn = btns.find((b) => b.textContent?.includes("Reset")) as HTMLElement | undefined;
-      if (!btn) throw new Error("Reset button not found");
-      return btn;
-    });
-    await fireEvent.click(resetBtn);
+    await openAppearance(container);
+    await fireEvent.click(document.body.querySelector('[data-icon-btn="default"]')!);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
@@ -555,20 +584,17 @@ describe("ScenesDashboard — icon picker", () => {
   });
 });
 
-// ── Thumbnail image upload ────────────────────────────────────────────────────
-
-describe("ScenesDashboard — thumbnail image upload", () => {
+describe("ScenesDashboard — appearance picture", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("Change thumbnail opens file picker filtered to image types", async () => {
+  it("Choose picture opens file picker filtered to image types", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     vi.mocked(open).mockResolvedValueOnce(null);
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change thumbnail");
-    await fireEvent.click(item);
+    await openAppearance(container);
+    await fireEvent.click(document.body.querySelector("[data-edit-thumbnail-btn]")!);
     await waitFor(() => {
       expect(vi.mocked(open)).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -582,7 +608,7 @@ describe("ScenesDashboard — thumbnail image upload", () => {
     });
   });
 
-  it("selected image calls copy_thumbnail_file and update_scene_thumbnail", async () => {
+  it("a chosen picture is copied in and saved", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
     vi.mocked(open).mockResolvedValueOnce("/path/to/image.jpg");
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
@@ -590,9 +616,8 @@ describe("ScenesDashboard — thumbnail image upload", () => {
       return null;
     });
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Change thumbnail");
-    await fireEvent.click(item);
+    await openAppearance(container);
+    await fireEvent.click(document.body.querySelector("[data-edit-thumbnail-btn]")!);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith("copy_thumbnail_file", {
         absolutePath: "/path/to/image.jpg",
@@ -608,38 +633,19 @@ describe("ScenesDashboard — thumbnail image upload", () => {
     });
   });
 
-  it("Remove image option appears when thumbnail_path is set", async () => {
-    mockScenes = [
-      {
-        ...makeScene(1, "Forest", false, "2024-01-01"),
-        thumbnail_path: ".grimoire/thumbnails/img.jpg",
-      },
-    ];
-    const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Remove image");
-    expect(item).toBeTruthy();
-  });
-
-  it("Remove image option does not appear when thumbnail_path is null", async () => {
+  it("offers Remove only when there is a picture, and it clears it", async () => {
     mockScenes = [makeScene(1, "Forest", false, "2024-01-01")];
-    const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const items = Array.from(document.body.querySelectorAll('[data-slot="context-menu-item"]'));
-    expect(items.some((el) => el.textContent?.includes("Remove image"))).toBe(false);
-  });
+    const first = render(ScenesDashboard);
+    await openAppearance(first.container);
+    expect(document.body.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
+    cleanup();
 
-  it("Remove image calls update_scene_thumbnail with thumbnailPath null and reloads", async () => {
     mockScenes = [
-      {
-        ...makeScene(1, "Forest", false, "2024-01-01"),
-        thumbnail_path: ".grimoire/thumbnails/img.jpg",
-      },
+      { ...makeScene(1, "Forest", false, "2024-01-01"), thumbnail_path: ".grimoire/thumbnails/img.jpg" },
     ];
     const { container } = render(ScenesDashboard);
-    await openCustomiseSubmenu(container);
-    const item = await clickMenuItem("Remove image");
-    await fireEvent.click(item);
+    await openAppearance(container);
+    await fireEvent.click(document.body.querySelector("[data-remove-thumbnail-btn]")!);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
         "update_scene_thumbnail",
@@ -668,11 +674,12 @@ describe("ScenesDashboard — thumbnail image upload", () => {
 // ── Thumbnail icon rendering ──────────────────────────────────────────────────
 
 describe("ScenesDashboard — thumbnail icon", () => {
-  it("shows default icon (Clapperboard) when thumbnail_icon is null", () => {
+  // The music note, as on every other surface that draws a scene (DEFAULT_SCENE_ICON).
+  it("shows the default music note when thumbnail_icon is null", () => {
     mockScenes = [makeScene(1, "Scene", false, "2024-01-01")];
     const { container } = render(ScenesDashboard);
     const card = container.querySelector("[data-scene-card]");
-    expect(card?.querySelector("[data-thumbnail-icon='Clapperboard']")).toBeTruthy();
+    expect(card?.querySelector("[data-thumbnail-icon='Music2']")).toBeTruthy();
   });
 
   it("shows custom icon when thumbnail_icon is set", () => {

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { api } from "$lib/api";
 
   import { noteExtensions } from "$lib/editor/note-extensions";
   import { insertImageFromHandle, isImageFile } from "$lib/editor/image-block";
-  import { wikiBrokenLinkKey, parseWikiTarget, stripWikiFragment } from "$lib/editor/wiki-link";
+  import { wikiBrokenLinkKey, stripWikiFragment } from "$lib/editor/wiki-link";
+  import { showSearchHit } from "$lib/editor/search-hit";
   import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
   import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -19,15 +19,18 @@
   import { linkResolver } from "$lib/stores/link-resolver.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
-  import { parseFrontmatter } from "$lib/utils";
+  import { createLinkPreview } from "$lib/editor/link-preview.svelte";
+  import { createNoteFromStub } from "$lib/editor/stub-note";
 
   interface Props {
     initialContent: string;
     onSave: (markdown: string) => Promise<void>;
     highlightQuery?: string;
+    /** The note being edited — a link menu never offers a note a link to itself. */
+    notePath?: string | null;
   }
 
-  let { initialContent, onSave, highlightQuery = "" }: Props = $props();
+  let { initialContent, onSave, highlightQuery = "", notePath = null }: Props = $props();
 
   let element = $state<HTMLDivElement>();
   let editor = $state<Editor | null>(null);
@@ -41,6 +44,9 @@
   // debounced write is suspended.
   let autosavePaused = false;
   let inFlightSave: Promise<void> | null = null;
+  // The note's text as it was opened or last written. A save of the same text is no
+  // save: opening a note is not editing it (see `save`).
+  let savedBody = "";
   let unregisterFlush: (() => void) | undefined;
   // Bumped on every doc edit so the broken-link resolver re-runs when links change.
   let docVersion = $state(0);
@@ -48,14 +54,6 @@
   // ── Overlay state ────────────────────────────────────────────────────────────
   let slashState = $state<SlashCommandSuggestionState | null>(null);
   let wikiState = $state<WikiLinkSuggestionState | null>(null);
-  let wikiPreview = $state<{
-    path: string;
-    title: string;
-    content: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  let previewTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ── The block handle ─────────────────────────────────────────────────────────
   // Which block the grip belongs to, whether it is on screen at all, and what its menu is
@@ -94,11 +92,7 @@
 
     editorInstance.commands.setTextSelection(found);
     editorInstance.commands.scrollIntoView();
-
-    // Brief pulse on the editor element to draw attention to the selection
-    const el = editorInstance.view.dom as HTMLElement;
-    el.dataset.searchPulse = "1";
-    setTimeout(() => delete el.dataset.searchPulse, 600);
+    showSearchHit(editorInstance.view, found);
   }
 
   onMount(() => {
@@ -114,6 +108,7 @@
         onWikiSuggestion: (state) => {
           wikiState = state;
         },
+        notePath: () => notePath,
         onBlockTarget: blockHandle.point,
         onBlockGrab: blockHandle.grab,
       }),
@@ -131,6 +126,8 @@
         saveTimer = setTimeout(save, 500);
       },
     });
+
+    savedBody = bodyOf(editor);
 
     // Ledger switches and window close flush through this registry; the
     // editor's own unmount flushes in onDestroy below.
@@ -152,7 +149,6 @@
 
   onDestroy(() => {
     unregisterFlush?.();
-    clearTimeout(previewTimer);
     blockHandle.destroy();
     // flush() captures the markdown synchronously (before its first await),
     // so the pending edit is safe to hand off before destroying the editor.
@@ -160,10 +156,32 @@
     editor?.destroy();
   });
 
-  async function save() {
+  /**
+   * The note's text as it goes to disk: the editor's markdown, ending in one newline.
+   *
+   * Tiptap keeps an empty paragraph after a note's last block, so the caret can always
+   * get below it, and adds it with the first transaction after a note opens — marking
+   * its broken links is enough. That paragraph is never content, and it serialised as a
+   * blank line at the end of the file, so the note looked edited and was saved as it
+   * opened (2026-10 design review). Trailing blank lines are dropped for the same reason.
+   */
+  function bodyOf(ed: Editor): string {
+    const markdown = ed.getMarkdown().trimEnd();
+    return markdown ? markdown + "\n" : "";
+  }
+
+  /**
+   * Write the buffer, unless it says what was opened or last written. `force` writes it
+   * anyway: "Keep my version" puts the GM's text back over a change made on disk, which
+   * this buffer can match while the file no longer does.
+   */
+  async function save(force = false) {
     if (!editor) return;
     dirty = false;
-    const run: Promise<void> = onSave(editor.getMarkdown()).finally(() => {
+    const body = bodyOf(editor);
+    if (!force && body === savedBody) return;
+    savedBody = body;
+    const run: Promise<void> = onSave(body).finally(() => {
       if (inFlightSave === run) inFlightSave = null;
     });
     inFlightSave = run;
@@ -193,7 +211,7 @@
    * including edits made after the file vanished — back to the original path.
    */
   export function getMarkdown(): string {
-    return editor?.getMarkdown() ?? initialContent;
+    return editor ? bodyOf(editor) : initialContent;
   }
 
   /**
@@ -210,11 +228,13 @@
   /**
    * Unfreeze autosave and persist the kept buffer now ("Keep my version"): the
    * GM chose their edits, so write them to disk immediately rather than leaving
-   * the editor and disk silently diverged until the next keystroke.
+   * the editor and disk silently diverged until the next keystroke. Whether or not
+   * an edit is pending: a note whose file came back after a delete has edits that
+   * were never saved, with nothing left waiting to save them.
    */
-  export function resumeAutosave(): void {
+  export function resumeAutosave(): Promise<void> {
     autosavePaused = false;
-    if (dirty) void save();
+    return save(true);
   }
 
   /**
@@ -256,6 +276,7 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    if (previewLinkAtCaret(e)) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
       clearTimeout(saveTimer);
@@ -284,13 +305,6 @@
 
   // ── Wiki-link interaction ────────────────────────────────────────────────────
 
-  async function createNoteFromStub(path: string) {
-    const { title } = parseWikiTarget(path);
-    const newNote = await api.createNote(title, path, null);
-    await notes.load();
-    tabs.navigate({ type: "note", id: newNote.id, title: newNote.title });
-  }
-
   async function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
     if (!link?.dataset.path) return;
@@ -310,38 +324,42 @@
     }
   }
 
-  function handleMouseover(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest<HTMLElement>("[data-wiki-link]");
-    if (!link?.dataset.path) return;
-    const path = link.dataset.path;
-    const target = stripWikiFragment(path);
-    const title = link.dataset.title ?? "";
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(async () => {
-      // A hover preview owns its own (absent) error UI, so this lookup is silent.
-      const note = await linkResolver.resolve(target, { silent: true }).catch(() => null);
-      if (!note) return;
-      try {
-        const raw = await api.readNoteContent(note.path);
-        const { body } = parseFrontmatter(raw);
-        const r = link.getBoundingClientRect();
-        wikiPreview = {
-          path,
-          title: title || note.title,
-          content: body,
-          x: r.left,
-          y: r.bottom + 6,
-        };
-      } catch {
-        /* unreadable — skip preview */
-      }
-    }, 400);
-  }
+  // ── The link preview ─────────────────────────────────────────────────────────
+  // Its life is the shared controller's, used by every surface that draws links; what is
+  // left here is this surface's pointer and the keyboard's way in.
+  const preview = createLinkPreview();
+  onDestroy(() => preview.destroy());
 
-  function handleMouseout(e: MouseEvent) {
-    if (!(e.target as HTMLElement).closest("[data-wiki-link]")) return;
-    clearTimeout(previewTimer);
-    wikiPreview = null;
+  /**
+   * Ctrl/Cmd+Shift+P: the preview of the link at the caret, or in the block field that has
+   * focus. Keyboard users had no preview at all — a link in prose cannot take focus.
+   */
+  function previewLinkAtCaret(e: KeyboardEvent): boolean {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== "p") return false;
+    // A block field's value is a button holding its links; the note's own text is the
+    // editor, which holds every link in the note, so it is asked by caret instead.
+    // A read-only block value's link takes focus itself.
+    const focused = document.activeElement as HTMLElement | null;
+    let link = focused?.hasAttribute("data-wiki-link")
+      ? focused
+      : focused?.tagName === "BUTTON"
+        ? focused.querySelector<HTMLElement>("[data-wiki-link]")
+        : null;
+    if (!link && editor) {
+      const caret = editor.state.selection.$from;
+      const at =
+        caret.nodeAfter?.type.name === "wikiLink"
+          ? caret.pos
+          : caret.nodeBefore?.type.name === "wikiLink"
+            ? caret.pos - caret.nodeBefore.nodeSize
+            : null;
+      const dom = at === null ? null : editor.view.nodeDOM(at);
+      link = dom instanceof HTMLElement ? dom : null;
+    }
+    if (!link) return false;
+    e.preventDefault();
+    preview.openFor(link);
+    return true;
   }
 </script>
 
@@ -354,8 +372,8 @@
   ondragover={(e) => e.preventDefault()}
   ondrop={handleDrop}
   onclick={handleClick}
-  onmouseover={handleMouseover}
-  onmouseout={handleMouseout}
+  onmouseover={preview.pointerOver}
+  onmouseout={preview.pointerOut}
 ></div>
 
 {#if slashState}
@@ -374,9 +392,24 @@
     y={wikiState.y}
     anchorTop={wikiState.anchorTop}
     onSelect={wikiState.command}
+    onHover={wikiState.select}
+    onReposition={wikiState.reposition}
   />
 {/if}
 
-{#if wikiPreview}
-  <WikiLinkPreview {...wikiPreview} />
+{#if preview.card}
+  <WikiLinkPreview
+    card={preview.card}
+    allowCreate
+    onPointer={preview.cardPointer}
+    onOpen={(note) => {
+      preview.close();
+      tabs.navigate({ type: "note", id: note.id, title: note.title });
+    }}
+    onCreate={(path) => {
+      preview.close();
+      void createNoteFromStub(stripWikiFragment(path));
+    }}
+    onClose={preview.close}
+  />
 {/if}

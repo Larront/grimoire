@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { flushSync } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
-import { createPinDetailsSource } from "$lib/details/pin-details-source.svelte";
+import { createPinDetailsSource, pinNotePreview } from "$lib/details/pin-details-source.svelte";
 import type { PinDetailsSource } from "$lib/details/pin-details-source.svelte";
 import type { Note, Pin } from "$lib/types/ledger";
 
@@ -373,5 +373,21 @@ describe("pin Details Source — teardown (#210)", () => {
     cleanup!();
     cleanup = null;
     expect(vi.getTimerCount()).toBe(pending - 1);
+  });
+});
+
+describe("pinNotePreview", () => {
+  it("reads as prose: no frontmatter, no title echo, wikilinks as their names", () => {
+    const raw =
+      "---\ntags: location\n---\n# The Ember Keep\n\nA crumbling fortress on the edge of [[The Ashfen Marshes]], held by **the Order**.";
+    expect(pinNotePreview(raw, "The Ember Keep")).toBe(
+      "A crumbling fortress on the edge of The Ashfen Marshes, held by the Order.",
+    );
+  });
+
+  it("keeps a first line that is not the title", () => {
+    expect(pinNotePreview("# Notes on the keep\nWalls.", "The Ember Keep")).toBe(
+      "Notes on the keep Walls.",
+    );
   });
 });

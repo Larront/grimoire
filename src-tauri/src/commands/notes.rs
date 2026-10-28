@@ -8,7 +8,7 @@ use diesel::prelude::*;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 pub use crate::search::{NoteSearchResult, SearchAllResult};
 
@@ -49,18 +49,33 @@ pub(crate) fn validate_parent_path(ledger_root: &Path, relative: &str) -> Result
     Ok(joined) // parent is validated; return the full (not yet existing) file path
 }
 
-pub(crate) fn resolve_note_filename(base_title: &str, parent_dir: &std::path::Path) -> (String, std::path::PathBuf) {
+/// How many "Untitled 2", "Untitled 3"… to try before giving up rather than looping.
+const MAX_NAME_ATTEMPTS: u32 = 10_000;
+
+pub(crate) fn resolve_note_filename(
+    base_title: &str,
+    parent_dir: &std::path::Path,
+) -> Result<(String, std::path::PathBuf), String> {
     let mut resolved_title = base_title.to_string();
-    let mut counter = 2u32;
-    loop {
+    for counter in 2..=MAX_NAME_ATTEMPTS + 1 {
         let filename = format!("{}.md", resolved_title);
         let full_path = parent_dir.join(&filename);
-        if !full_path.exists() {
-            return (resolved_title, full_path);
+        // Free only when the file is known *not* to be there. `exists()` answered
+        // false for a file it couldn't check — a cloud-only file, one another program
+        // had locked — and a new note of the same name was written over it.
+        match full_path.try_exists() {
+            Ok(false) => return Ok((resolved_title, full_path)),
+            Ok(true) => {}
+            // A name the filesystem can't check is one it can't hold either, and it
+            // answers the same for every numbered try: this used to loop forever while
+            // holding the world's lock, so a link like [[Who rang the bell?]] froze the
+            // app (2026-10 design review). Callers check the name first; this is the
+            // backstop.
+            Err(e) => return Err(format!("ERR_BAD_NAME: '{resolved_title}' can't be a file name: {e}")),
         }
         resolved_title = format!("{} {}", base_title, counter);
-        counter += 1;
     }
+    Err(format!("No free name for '{base_title}' after {MAX_NAME_ATTEMPTS} tries"))
 }
 
 #[tauri::command]
@@ -92,6 +107,10 @@ fn create_note_inner(
 ) -> Result<Note, String> {
     let OpenLedger { path: ledger_path, conn, index } = l;
 
+    // A note's name becomes its file's name, so it follows the file-name rule —
+    // a link's text can name something a file can't be called (`?`, `:`).
+    let note_title = crate::commands::names::check_file_name(note_title, "note")?;
+
     // Determine the parent directory and resolve any filename conflicts
     // validate_parent_path creates the parent dir and canonicalizes it to guard against traversal
     let initial_full_path = validate_parent_path(ledger_path, note_path)?;
@@ -99,7 +118,7 @@ fn create_note_inner(
         .parent()
         .ok_or("Cannot determine parent directory")?;
 
-    let (resolved_title, full_path) = resolve_note_filename(note_title, parent_dir);
+    let (resolved_title, full_path) = resolve_note_filename(note_title, parent_dir)?;
 
     // Convert the resolved absolute path back to a ledger-relative forward-slash path
     let resolved_path = full_path
@@ -158,7 +177,7 @@ fn create_note_from_template_inner(
         .parent()
         .ok_or("Cannot determine parent directory")?;
 
-    let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir);
+    let (resolved_title, full_path) = resolve_note_filename("Untitled", parent_dir)?;
 
     let resolved_path = full_path
         .strip_prefix(ledger_path)
@@ -213,6 +232,9 @@ pub struct RenameNoteResult {
     pub note: Note,
     #[specta(type = i32)]
     pub updated_count: usize,
+    /// The notes rewritten, for the command to tell their open panes. Not sent.
+    #[serde(skip)]
+    pub rewritten: Vec<String>,
 }
 
 /// Rename a note (change its filename/path). Always re-keys the moved note's own
@@ -230,9 +252,12 @@ pub struct RenameNoteResult {
 pub fn rename_note(
     note: Note,
     rewrite_backlinks: bool,
+    app: AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<RenameNoteResult, String> {
-    with_open_ledger(&ledger, |l| rename_note_inner(l, &note, rewrite_backlinks))
+    let result = with_open_ledger(&ledger, |l| rename_note_inner(l, &note, rewrite_backlinks))?;
+    crate::ledger_watch::announce_rewritten(&app, &result.rewritten);
+    Ok(result)
 }
 
 fn rename_note_inner(
@@ -241,6 +266,10 @@ fn rename_note_inner(
     rewrite_backlinks: bool,
 ) -> Result<RenameNoteResult, String> {
     let OpenLedger { path: ledger_path, conn, index } = l;
+
+    // The new name becomes the file's: refuse what a file can't be called before
+    // anything moves.
+    crate::commands::names::check_file_name(&note.title, "note")?;
 
     let old_note: Note = notes.find(note.id).first(conn).map_err(|e| e.to_string())?;
 
@@ -268,13 +297,14 @@ fn rename_note_inner(
         rewrite_backlinks,
     )?;
 
-    let updated_count = match renamed.backlinks {
-        note_mutation::RenamedBacklinks::Rewritten(n) => n,
-        note_mutation::RenamedBacklinks::Deferred(_) => 0,
+    let rewritten = match renamed.backlinks {
+        note_mutation::RenamedBacklinks::Rewritten(paths) => paths,
+        note_mutation::RenamedBacklinks::Deferred(_) => Vec::new(),
     };
     Ok(RenameNoteResult {
         note: renamed.note,
-        updated_count,
+        updated_count: rewritten.len(),
+        rewritten,
     })
 }
 
@@ -296,18 +326,20 @@ fn rename_note_inner(
 pub fn apply_backlink_rewrite(
     from_path: String,
     to_path: String,
+    app: AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<u32, String> {
-    with_open_ledger(&ledger, |l| {
+    let rewritten = with_open_ledger(&ledger, |l| {
         let rewrites = crate::commands::links::collect_backlink_rewrites_on_conn(
             l.path,
             l.conn,
             &from_path,
             &to_path,
         )?;
-        let count = note_mutation::commit_backlink_rewrites(l.conn, l.index, l.path, rewrites)?;
-        Ok(count as u32)
-    })
+        note_mutation::commit_backlink_rewrites(l.conn, l.index, l.path, rewrites)
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    Ok(rewritten.len() as u32)
 }
 
 #[tauri::command]
@@ -322,7 +354,7 @@ fn delete_note_inner(l: OpenLedger, note_id: i32) -> Result<u32, String> {
     let note: Note = notes.find(note_id).first(conn).map_err(|e| e.to_string())?;
     let full_path = validate_path(ledger_path, &note.path)?;
     if full_path.exists() {
-        fs::remove_file(&full_path).map_err(|e| e.to_string())?;
+        crate::commands::recycle::to_recycle_bin(&full_path)?;
     }
 
     note_index::remove(conn, index, note_id, &note.path)?;
@@ -371,7 +403,21 @@ fn write_note_content_inner(
         .first::<Note>(conn)
         .optional()
         .map_err(|e| e.to_string())?;
+    let before = fs::read_to_string(&full_path).ok();
     note_mutation::commit_or_write(conn, index, &full_path, maybe_note.as_ref(), &content)?;
+
+    // The row's modified time follows what the GM changed. It was set once, when the
+    // row was made, so a note's Details said "Modified" with its creation time and the
+    // world's home listed notes by when they were made, not written in (2026-10
+    // design review). Not for a save that only changes trailing whitespace: that is how
+    // a file's ending settles to the editor's one newline, which is not the GM's edit.
+    let changed = before.as_deref().map(str::trim_end) != Some(content.trim_end());
+    if maybe_note.is_some() && changed {
+        diesel::update(notes.filter(path.eq(note_path)))
+            .set(modified_at.eq(chrono::Utc::now().to_rfc3339()))
+            .execute(conn)
+            .map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -468,7 +514,11 @@ pub fn search_all(query: String, ledger: State<AppLedger>) -> Result<SearchAllRe
             .filter(|(lower, _)| !active_tag_filters.iter().any(|f| f == lower.as_str()))
             .map(|(_, (name, cnt))| TagFacet { name, note_count: cnt })
             .collect();
-        tag_facets.sort_by(|a, b| b.note_count.cmp(&a.note_count).then(a.name.cmp(&b.name)));
+        tag_facets.sort_by(|a, b| {
+            b.note_count
+                .cmp(&a.note_count)
+                .then_with(|| crate::commands::names::compare_names(&a.name, &b.name))
+        });
         tag_facets.truncate(5);
 
         match l.index {
@@ -563,6 +613,48 @@ mod tests {
     }
 
     #[test]
+    fn saving_a_note_moves_its_modified_time_forward() {
+        let (dir, mut conn) = open_ledger_fixture();
+        fs::write(dir.path().join("Mira.md"), "old").unwrap();
+        let note = seed_note(&mut conn, "Mira.md", "Mira");
+        diesel::update(notes.filter(id.eq(note.id)))
+            .set(modified_at.eq("2020-01-01T00:00:00+00:00"))
+            .execute(&mut conn)
+            .unwrap();
+
+        write_note_content_inner(
+            OpenLedger { path: dir.path(), conn: &mut conn, index: None },
+            "Mira.md",
+            "new body",
+        )
+        .unwrap();
+
+        let after: Note = notes.find(note.id).first(&mut conn).unwrap();
+        assert!(after.modified_at.as_str() > "2026", "got {}", after.modified_at);
+    }
+
+    #[test]
+    fn a_save_that_only_adds_a_trailing_blank_line_is_not_an_edit() {
+        let (dir, mut conn) = open_ledger_fixture();
+        fs::write(dir.path().join("Start Here.md"), "# Welcome\n").unwrap();
+        let note = seed_note(&mut conn, "Start Here.md", "Start Here");
+        diesel::update(notes.filter(id.eq(note.id)))
+            .set(modified_at.eq("2020-01-01T00:00:00+00:00"))
+            .execute(&mut conn)
+            .unwrap();
+
+        write_note_content_inner(
+            OpenLedger { path: dir.path(), conn: &mut conn, index: None },
+            "Start Here.md",
+            "# Welcome\n\n",
+        )
+        .unwrap();
+
+        let after: Note = notes.find(note.id).first(&mut conn).unwrap();
+        assert_eq!(after.modified_at, "2020-01-01T00:00:00+00:00");
+    }
+
+    #[test]
     fn renaming_onto_an_existing_file_is_refused_with_err_name_taken() {
         let (dir, mut conn) = open_ledger_fixture();
         fs::write(dir.path().join("Aldric.md"), "# Aldric").unwrap();
@@ -637,7 +729,7 @@ mod tests {
     #[test]
     fn test_no_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("My Note", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("My Note", dir.path()).unwrap();
         assert_eq!(resolved_title, "My Note");
         assert_eq!(full_path, dir.path().join("My Note.md"));
     }
@@ -646,7 +738,7 @@ mod tests {
     fn test_one_conflict() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Untitled.md"), "").unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path()).unwrap();
         assert_eq!(resolved_title, "Untitled 2");
         assert_eq!(full_path, dir.path().join("Untitled 2.md"));
     }
@@ -656,8 +748,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Untitled.md"), "").unwrap();
         fs::write(dir.path().join("Untitled 2.md"), "").unwrap();
-        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path());
+        let (resolved_title, full_path) = resolve_note_filename("Untitled", dir.path()).unwrap();
         assert_eq!(resolved_title, "Untitled 3");
         assert_eq!(full_path, dir.path().join("Untitled 3.md"));
+    }
+
+    // A name the filesystem can't check gave the same error for every numbered try,
+    // and the loop never ended — a link like [[Who rang the bell?]] froze the app on
+    // Windows. A NUL byte fails the check on every platform, so it stands in here.
+    #[test]
+    fn a_name_the_filesystem_cannot_check_is_refused_rather_than_looped_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = resolve_note_filename("Who rang\0the bell", dir.path()).unwrap_err();
+        assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
     }
 }

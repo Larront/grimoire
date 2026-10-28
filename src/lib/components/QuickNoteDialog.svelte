@@ -36,15 +36,47 @@
   // **Silent with no ledger open.** No toast explaining that a world is required —
   // the shell that mounts this only exists once one is, and the guard below makes
   // that the component's own rule rather than a consequence of where it is hung.
-  import { onDestroy } from "svelte";
+  //
+  // What the GM sees (2026-10 design review). Every rule above used to be invisible:
+  // Enter emptied the box and nothing else changed, which looks exactly like a lost
+  // line, and what Escape does was said only to a screen reader. Now a line under the
+  // box says "Parked · N today", the keys say what they will do with what is in the
+  // box, and Enter on an empty box closes — one key per thought, one more to finish.
+  // It takes the palette's place and look: the box is the surface, not a field drawn
+  // inside a card, because the two dialogs that open on a key to type a line are one
+  // family.
+  import { onDestroy, untrack } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import WikiCaptureBox from "$lib/components/editor/WikiCaptureBox.svelte";
+  import { Check, NotebookPen } from "@lucide/svelte";
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
+  import { searchPalette } from "$lib/stores/search.svelte";
+  import { tabs } from "$lib/stores/tabs.svelte";
+  import { countCapturedOn } from "$lib/utils/quick-note-days";
 
   let box = $state<ReturnType<typeof WikiCaptureBox>>();
+  let draft = $state("");
+  /** Whether a line has been parked since the dialog opened — what the status line says. */
+  let parked = $state(false);
+  const today = $derived(countCapturedOn(quickNotes.notes));
+
+  /** What the keys would do with what is in the box. Escape always parks a line. */
+  const keys = $derived(draft.trim() ? "↵ park · esc park & close" : "↵ or esc close");
+
+  /**
+   * Where focus was when the dialog opened. Nothing focused means nothing to go back
+   * to — the dialog's own answer then was the first button it could find, which put
+   * a focus ring on the sidebar's Settings for no reason the GM could see.
+   */
+  let returnTo: Element | null = null;
+  $effect.pre(() => {
+    if (!dialogs.quickNoteOpen) return;
+    parked = false;
+    returnTo = untrack(() => document.activeElement);
+  });
 
   function onKeydown(e: KeyboardEvent) {
     if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
@@ -52,6 +84,9 @@
     if (e.key.toLowerCase() !== "n") return;
     if (!ledger.isOpen) return;
     e.preventDefault();
+    // Over the palette, the palette goes, as it does when this is its own command:
+    // two modals stacked, scrim on scrim, is two places at once.
+    searchPalette.open = false;
     dialogs.quickNoteOpen = true;
   }
 
@@ -88,6 +123,14 @@
     // Un-caught as in the pane: `api` has already told the GM the write failed,
     // and the rejection is what puts the line back in the box.
     await quickNotes.capture(body);
+    parked = true;
+  }
+
+  /** The pane, with whatever is in the box parked first — the box is never left behind. */
+  async function openPane() {
+    await commitAndClose();
+    if (dialogs.quickNoteOpen) return;
+    tabs.openTab({ type: "quickNotes", id: 0, title: "Quick Notes" });
   }
 </script>
 
@@ -103,7 +146,7 @@
        out of flow, so they cost the card no row and no gap. -->
   <Dialog.Content
     data-testid="quick-note-dialog"
-    class="sm:max-w-lg"
+    class="sm:max-w-[560px] top-1/3 translate-y-0 gap-0 overflow-hidden p-0"
     showCloseButton={false}
     onOpenAutoFocus={(e) => {
       // The box, named rather than discovered. The trap's own answer is "the first
@@ -122,20 +165,58 @@
       e.preventDefault();
       if (!isInSuggestions(e.target)) void commitAndClose();
     }}
+    onCloseAutoFocus={(e) => {
+      if (!returnTo || returnTo === document.body || !returnTo.isConnected) e.preventDefault();
+    }}
   >
     <Dialog.Title class="sr-only">Quick Note</Dialog.Title>
     <Dialog.Description class="sr-only">
-      Park a thought. Enter commits it and clears the box for the next line; leaving commits
-      whatever is in it.
+      Park a thought. Enter parks it and clears the box for the next; Enter on an empty box closes.
+      Escape or clicking away parks whatever is in the box and closes.
     </Dialog.Description>
-    <div class="relative">
+    <div class="flex items-start gap-2.5 px-3 py-2.5">
+      <NotebookPen class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <WikiCaptureBox
         bind:this={box}
+        bind:value={draft}
+        variant="bare"
         ariaLabel="Capture a Quick Note"
         placeholder="Park a thought…"
         commitOnTeardown
         onCommit={capture}
+        onEmptyEnter={() => void commitAndClose()}
       />
+    </div>
+    <div
+      class="flex min-h-8 items-center border-t border-border py-1.5 pr-3 pl-[2.375rem]
+             text-(length:--font-ui) text-foreground-muted"
+    >
+      <!-- Indented to the text column above (12px + the 16px icon + 10px), so the
+           footer reads as being about the box. -->
+      <!-- Always in the DOM, so the first "Parked" is announced and not just drawn. -->
+      <p
+        aria-live="polite"
+        data-testid="quick-note-status"
+        class="flex min-w-0 items-center gap-1.5 {parked ? 'mr-3' : ''}"
+      >
+        {#if parked}
+          <Check class="size-3.5 shrink-0" aria-hidden="true" />
+          <span class="truncate">Parked · {today} today</span>
+        {/if}
+      </p>
+      <button
+        type="button"
+        data-testid="quick-note-open-pane"
+        class="shrink-0 cursor-pointer rounded-sm underline decoration-foreground-muted/50 underline-offset-2
+               hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2
+               focus-visible:outline-ring"
+        onclick={() => void openPane()}>Open Quick Notes</button
+      >
+      <span
+        aria-hidden="true"
+        data-testid="quick-note-keys"
+        class="ml-auto shrink-0 pl-3 font-mono text-[11px]">{keys}</span
+      >
     </div>
   </Dialog.Content>
 </Dialog.Root>

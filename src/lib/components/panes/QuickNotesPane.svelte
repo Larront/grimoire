@@ -38,6 +38,9 @@
   import { stripWikiFragment } from "$lib/editor/wiki-target";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { toastUndo } from "$lib/toast";
+  import { onDestroy } from "svelte";
+  import { createLinkPreview } from "$lib/editor/link-preview.svelte";
+  import WikiLinkPreview from "$lib/components/editor/WikiLinkPreview.svelte";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import WikiCaptureBox from "$lib/components/editor/WikiCaptureBox.svelte";
   import type { QuickNote } from "$lib/bindings.gen";
@@ -136,14 +139,21 @@
     // rather than opened a second time, and the pane stays one step back.
     if (note) tabs.navigateOpen({ type: "note", id: note.id, title: note.title });
   }
+
+  // The same peek prose has: these are the same links, and they showed no card at all.
+  // A note not written yet is inert here (see `handleClick`), so its card offers no Create.
+  const preview = createLinkPreview();
+  onDestroy(() => preview.destroy());
 </script>
 
 <div data-quick-notes-pane class="flex flex-1 min-h-0 flex-col overflow-hidden">
   <!-- Pinned above the list, so the box a GM types into never scrolls away. -->
   <div class="shrink-0 border-b border-border px-8 pt-8 pb-5">
     <div class="mx-auto w-full max-w-3xl">
-      <h1 class="font-sans text-3xl font-semibold tracking-tight text-foreground">Quick Notes</h1>
-      <div class="mt-3 h-px bg-linear-to-r from-primary/30 via-primary/10 to-transparent"></div>
+      <h1 class="font-sans text-[1.75rem] leading-tight font-semibold tracking-tight text-foreground">
+        Quick Notes
+      </h1>
+      <div class="mt-3 h-px bg-border"></div>
       <div class="relative mt-5">
         <WikiCaptureBox
           ariaLabel="Capture a Quick Note"
@@ -209,7 +219,13 @@
        many Quick Notes the pen is holding. -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="flex-1 min-h-0 overflow-y-auto px-8 py-6" onclick={handleClick}>
+  <!-- svelte-ignore a11y_mouse_events_have_key_events -->
+  <div
+    class="flex-1 min-h-0 overflow-y-auto px-8 py-6"
+    onclick={handleClick}
+    onmouseover={preview.pointerOver}
+    onmouseout={preview.pointerOut}
+  >
     <div class="mx-auto w-full max-w-3xl">
       {#if days.length === 0 && filtering}
         <!-- A filter matching nothing is not an empty pen, and saying so would be
@@ -226,7 +242,7 @@
       {:else}
         {#each days as day (day.key)}
           <section data-capture-day={day.key} class="mb-8 last:mb-0">
-            <h2 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+            <h2 class="text-xs font-semibold text-muted-foreground">
               {day.label}
             </h2>
             <ul class="mt-3 flex flex-col gap-1.5">
@@ -268,3 +284,15 @@
     </div>
   </div>
 </div>
+
+{#if preview.card}
+  <WikiLinkPreview
+    card={preview.card}
+    onPointer={preview.cardPointer}
+    onOpen={(note) => {
+      preview.close();
+      tabs.navigateOpen({ type: "note", id: note.id, title: note.title });
+    }}
+    onClose={preview.close}
+  />
+{/if}

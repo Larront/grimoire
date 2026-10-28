@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import GraphPane from "../lib/components/panes/GraphPane.svelte";
 import { tabs } from "../lib/stores/tabs.svelte";
 import { notes } from "../lib/stores/notes.svelte";
+import { tagsTick } from "../lib/stores/tags-tick.svelte";
 
 // ── Cytoscape mock ─────────────────────────────────────────────────────────────
 // JSDOM has no canvas; mock cytoscape so the component mounts without errors.
@@ -174,7 +175,11 @@ vi.mock("cytoscape", () => {
       },
       getElementById: (id: string) => {
         const node = nodeMap.get(id);
-        return { length: node ? 1 : 0 };
+        return {
+          length: node ? 1 : 0,
+          empty: () => !node,
+          data: (key?: string, val?: unknown) => node?.data(key, val),
+        };
       },
       nodes: () => ({
         forEach: (cb: (n: CyNode) => void) => nodeStore.forEach(cb),
@@ -219,6 +224,8 @@ const mockGraphData = {
       kind: "note",
       entity_id: 1,
       primary_tag: "npc",
+      // Coloured by npc, but carries quest too — hiding quest must hide it.
+      tags: ["npc", "quest"],
       backlink_count: 5,
     },
     {
@@ -227,6 +234,7 @@ const mockGraphData = {
       kind: "note",
       entity_id: 2,
       primary_tag: "quest",
+      tags: ["quest"],
       backlink_count: 0,
     },
     {
@@ -235,6 +243,7 @@ const mockGraphData = {
       kind: "note",
       entity_id: 3,
       primary_tag: null,
+      tags: [],
       backlink_count: 2,
     },
     {
@@ -260,10 +269,11 @@ const mockGraphData = {
   ],
 };
 
-// "npc" has an explicit hex color; "quest" has null (auto-assign from accent cycle)
+// "npc" has an explicit hex color; "quest" has none and wears the ramp step the
+// backend pinned to it (slot 0 — the first step).
 const mockTagStyles = {
-  npc: { color: "#ff0000", hidden: false },
-  quest: { color: null, hidden: false },
+  npc: { color: "#ff0000", hidden: false, slot: null },
+  quest: { color: null, hidden: false, slot: 0 },
 };
 
 // Tags returned by list_all_tags
@@ -300,7 +310,7 @@ function setupInvoke() {
     if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
     if (cmd === "get_tag_graph_styles") return Promise.resolve(mockTagStyles);
     if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
-    if (cmd === "set_tag_graph_style") return Promise.resolve(null);
+    if (cmd === "set_tag_graph_hidden") return Promise.resolve(null);
     if (cmd === "create_note")
       return Promise.resolve({
         id: 99,
@@ -318,11 +328,11 @@ function setupInvokeWithHiddenNpc() {
     if (cmd === "get_graph_data") return Promise.resolve(mockGraphData);
     if (cmd === "get_tag_graph_styles")
       return Promise.resolve({
-        npc: { color: "#ff0000", hidden: true },
-        quest: { color: null, hidden: false },
+        npc: { color: "#ff0000", hidden: true, slot: null },
+        quest: { color: null, hidden: false, slot: 0 },
       });
     if (cmd === "list_all_tags") return Promise.resolve(mockAllTags);
-    if (cmd === "set_tag_graph_style") return Promise.resolve(null);
+    if (cmd === "set_tag_graph_hidden") return Promise.resolve(null);
     return Promise.resolve(null);
   });
 }
@@ -454,7 +464,7 @@ describe("GraphPane – node tag coloring", () => {
         elements: { nodes: Array<{ data: Record<string, unknown> }> };
       };
       const note2 = opts.elements.nodes.find((n) => n.data.id === "note-2");
-      // "quest" is the only tag without an explicit colour, so it takes slot 1.
+      // "quest" wears the step the backend pinned to it — slot 0, the ramp's first.
       expect(note2?.data.color).toBe(VIZ_STUB(1));
     });
   });
@@ -937,7 +947,7 @@ describe("GraphPane – filter panel", () => {
     });
   });
 
-  it("toggling a visible tag calls set_tag_graph_style with hidden: true", async () => {
+  it("toggling a visible tag writes hidden: true and nothing else", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
     const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
@@ -951,15 +961,16 @@ describe("GraphPane – filter panel", () => {
     await fireEvent.click(toggle);
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+      // The colour is not sent: it used to be, stale from mount, undoing any colour
+      // the Tag Manager had set since.
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_hidden", {
         tag: "npc",
-        color: "#ff0000",
         hidden: true,
       });
     });
   });
 
-  it("toggling a tag from hidden=true calls set_tag_graph_style with hidden: false", async () => {
+  it("toggling a tag from hidden=true writes hidden: false", async () => {
     setupInvokeWithHiddenNpc();
 
     const { container } = render(GraphPane);
@@ -975,15 +986,14 @@ describe("GraphPane – filter panel", () => {
     await fireEvent.click(toggle);
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_hidden", {
         tag: "npc",
-        color: "#ff0000",
         hidden: false,
       });
     });
   });
 
-  it("toggling untagged row calls set_tag_graph_style with tag '' and hidden: true", async () => {
+  it("toggling untagged row writes hidden: true for tag ''", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
     const btn = container.querySelector("[data-testid='filter-toggle']") as HTMLElement;
@@ -997,9 +1007,8 @@ describe("GraphPane – filter panel", () => {
     await fireEvent.click(toggle);
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_hidden", {
         tag: "",
-        color: null,
         hidden: true,
       });
     });
@@ -1057,7 +1066,7 @@ describe("GraphPane – filter panel", () => {
 // ── Node visibility (filter) ──────────────────────────────────────────────────
 
 describe("GraphPane – node visibility filtering", () => {
-  it("hiding 'npc' tag sets display:none on note-1 (which has primary_tag npc)", async () => {
+  it("hiding 'npc' tag sets display:none on note-1 (which carries npc)", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
@@ -1077,7 +1086,7 @@ describe("GraphPane – node visibility filtering", () => {
     });
   });
 
-  it("hiding 'npc' does not set display:none on note-2 (which has primary_tag quest)", async () => {
+  it("hiding 'npc' does not set display:none on note-2 (which carries only quest)", async () => {
     const { container } = render(GraphPane);
     await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
 
@@ -1099,6 +1108,52 @@ describe("GraphPane – node visibility filtering", () => {
     // note-2 (quest tag) should NOT be hidden
     const questStyles = nodeStyleStores.get("note-2");
     expect(questStyles?.["display"]).not.toBe("none");
+  });
+
+  it("hiding a tag hides every note carrying it, not only those it colours", async () => {
+    const { container } = render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    await fireEvent.click(container.querySelector("[data-testid='filter-toggle']") as HTMLElement);
+    await waitFor(() =>
+      expect(container.querySelector("[data-testid='filter-tag-toggle-quest']")).toBeTruthy(),
+    );
+    await fireEvent.click(
+      container.querySelector("[data-testid='filter-tag-toggle-quest']") as HTMLElement,
+    );
+
+    await waitFor(() => {
+      expect(nodeStyleStores.get("note-2")?.["display"]).toBe("none");
+      // note-1 is drawn in npc's colour, but it is a quest note too.
+      expect(nodeStyleStores.get("note-1")?.["display"]).toBe("none");
+    });
+    expect(nodeStyleStores.get("note-3")?.["display"]).not.toBe("none");
+  });
+
+  it("follows the Tag Manager: a tag change refetches styles and the nodes' tags", async () => {
+    render(GraphPane);
+    await waitFor(() => expect(cytoscapeOptions).toBeTruthy());
+
+    // The Tag Manager renamed quest to errand, and that note is hidden now.
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "get_tag_graph_styles")
+        return Promise.resolve({
+          npc: { color: "#ff0000", hidden: false, slot: null },
+          errand: { color: null, hidden: true, slot: 0 },
+        });
+      if (cmd === "list_all_tags") return Promise.resolve(["errand", "npc"]);
+      if (cmd === "get_graph_data")
+        return Promise.resolve({
+          ...mockGraphData,
+          nodes: mockGraphData.nodes.map((n) =>
+            n.id === "note-2" ? { ...n, primary_tag: "errand", tags: ["errand"] } : n,
+          ),
+        });
+      return Promise.resolve(null);
+    });
+    tagsTick.bump();
+
+    await waitFor(() => expect(nodeStyleStores.get("note-2")?.["display"]).toBe("none"));
   });
 
   it("edge e-0 (note-1 → note-2) gets display:none when note-1 is hidden", async () => {

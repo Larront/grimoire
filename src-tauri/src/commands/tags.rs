@@ -10,6 +10,9 @@
 // shape with a sibling table.
 
 use crate::commands::frontmatter;
+use crate::commands::graph_styles::{
+    carry_style_through_retag, load_style_rows, restore_style_rows, TagStyleRow,
+};
 use crate::db::models::Note;
 use crate::db::schema::note_tags::dsl as nt;
 use crate::db::schema::notes::dsl as nd;
@@ -18,7 +21,7 @@ use crate::ledger::{with_open_ledger, AppLedger};
 use crate::note_mutation::CommitItem;
 use diesel::prelude::*;
 use diesel::SqliteConnection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -30,6 +33,29 @@ pub struct RetagResult {
     pub note_count: usize,
     #[specta(type = i32)]
     pub pin_count: usize,
+    /// True when the target was already a tag — the toast says "Merged".
+    pub merged: bool,
+    /// Everything the retag changed, as it was: hand it to `undo_retag`.
+    pub undo: RetagUndo,
+}
+
+/// What a retag overwrote. Opaque to the frontend, which only hands it back.
+#[derive(Serialize, Deserialize, specta::Type, Debug, Clone)]
+pub struct RetagUndo {
+    pub from_tag: String,
+    pub to_tag: Option<String>,
+    /// Each affected note's tag list before the retag.
+    pub notes: Vec<TagsBefore<String>>,
+    /// Each affected pin's tag list before the retag.
+    pub pins: Vec<TagsBefore<i32>>,
+    /// The style rows for both names before the retag.
+    pub styles: Vec<TagStyleRow>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Debug, Clone)]
+pub struct TagsBefore<K> {
+    pub key: K,
+    pub tags: Vec<String>,
 }
 
 /// Validate a tag target name against the ledger-wide allowlist: letters, digits, -, _, /.
@@ -46,6 +72,54 @@ pub fn validate_tag_name(tag: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Put back what a retag changed: each note's and pin's tags, and both names'
+/// graph styles. A note deleted or renamed since is skipped, as is a deleted pin —
+/// Undo restores what is still there to restore.
+#[tauri::command]
+#[specta::specta]
+pub fn undo_retag(undo: RetagUndo, ledger: State<AppLedger>) -> Result<(), String> {
+    with_open_ledger(&ledger, |l| undo_retag_on_conn(l.conn, l.index, l.path, &undo))
+}
+
+pub fn undo_retag_on_conn(
+    conn: &mut SqliteConnection,
+    index: Option<&tantivy::Index>,
+    ledger_path: &Path,
+    undo: &RetagUndo,
+) -> Result<(), String> {
+    let mut items: Vec<CommitItem> = Vec::with_capacity(undo.notes.len());
+    for before in &undo.notes {
+        let full_path = ledger_path.join(&before.key);
+        let Ok(content) = fs::read_to_string(&full_path) else {
+            continue;
+        };
+        let Ok(note) = nd::notes.filter(nd::path.eq(&before.key)).first::<Note>(conn) else {
+            continue;
+        };
+        let content = frontmatter::apply_tags(&content, &before.tags);
+        items.push(CommitItem { full_path, note, content });
+    }
+    if !items.is_empty() {
+        crate::note_mutation::commit_many(conn, index, items)?;
+    }
+
+    for before in &undo.pins {
+        let exists: i64 = crate::db::schema::pins::table
+            .filter(crate::db::schema::pins::id.eq(before.key))
+            .count()
+            .get_result(conn)
+            .map_err(|e| e.to_string())?;
+        if exists > 0 {
+            upsert_pin_tags(conn, before.key, &before.tags)?;
+        }
+    }
+
+    let mut names = vec![undo.from_tag.as_str()];
+    names.extend(undo.to_tag.as_deref());
+    conn.transaction(|c| restore_style_rows(c, &names, &undo.styles))
+        .map_err(|e: diesel::result::Error| e.to_string())
 }
 
 #[tauri::command]
@@ -105,6 +179,32 @@ pub fn retag_tag_on_conn(
         .select((nt::note_path, nt::tag))
         .load(conn)
         .map_err(|e| e.to_string())?;
+    let all_pin_rows: Vec<(i32, String)> = pt::pin_tags
+        .select((pt::pin_id, pt::tag))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    // A merge is a retag onto a name already in use. A change of case only is
+    // still a rename — it is the same tag.
+    let merged = to_tag.is_some_and(|to| {
+        let to_lower = to.to_lowercase();
+        to_lower != from_lower
+            && all_note_rows
+                .iter()
+                .map(|(_, t)| t)
+                .chain(all_pin_rows.iter().map(|(_, t)| t))
+                .any(|t| t.to_lowercase() == to_lower)
+    });
+
+    let style_names: Vec<String> =
+        std::iter::once(from_lower.clone()).chain(to_tag.map(str::to_lowercase)).collect();
+    let styles_before: Vec<TagStyleRow> = load_style_rows(conn)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|r| style_names.contains(&r.tag.to_lowercase()))
+        .collect();
+    let mut notes_before: Vec<TagsBefore<String>> = Vec::new();
+    let mut pins_before: Vec<TagsBefore<i32>> = Vec::new();
 
     let mut seen_paths: BTreeSet<String> = BTreeSet::new();
     for (path, tag) in &all_note_rows {
@@ -128,6 +228,7 @@ pub fn retag_tag_on_conn(
             let current_tags = frontmatter::read_tags(&content);
             let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
             let new_content = frontmatter::apply_tags(&content, &new_tags);
+            notes_before.push(TagsBefore { key: note_path.clone(), tags: current_tags });
 
             let note: Note = nd::notes
                 .filter(nd::path.eq(note_path))
@@ -141,11 +242,6 @@ pub fn retag_tag_on_conn(
     }
 
     // ── Pins ──────────────────────────────────────────────────────────────────
-    let all_pin_rows: Vec<(i32, String)> = pt::pin_tags
-        .select((pt::pin_id, pt::tag))
-        .load(conn)
-        .map_err(|e| e.to_string())?;
-
     let mut seen_pins: BTreeSet<i32> = BTreeSet::new();
     for (pin_id, tag) in &all_pin_rows {
         if tag.to_lowercase() == from_lower {
@@ -165,9 +261,26 @@ pub fn retag_tag_on_conn(
         let new_tags = rebuild_tags(&current_tags, &from_lower, to_tag);
 
         upsert_pin_tags(conn, *pin_id, &new_tags)?;
+        pins_before.push(TagsBefore { key: *pin_id, tags: current_tags });
     }
 
-    Ok(RetagResult { note_count, pin_count })
+    // ── Graph style ───────────────────────────────────────────────────────────
+    // The colour goes where the tag goes — see `carry_style_through_retag`.
+    conn.transaction(|c| carry_style_through_retag(c, from_tag, to_tag, merged))
+        .map_err(|e: diesel::result::Error| e.to_string())?;
+
+    Ok(RetagResult {
+        note_count,
+        pin_count,
+        merged,
+        undo: RetagUndo {
+            from_tag: from_tag.to_string(),
+            to_tag: to_tag.map(str::to_string),
+            notes: notes_before,
+            pins: pins_before,
+            styles: styles_before,
+        },
+    })
 }
 
 #[derive(Serialize, specta::Type, Debug, Clone)]
@@ -226,7 +339,7 @@ pub fn get_tag_usage_counts_from_conn(
             pin_count: pin_counts.get(lower).copied().unwrap_or(0),
         })
         .collect();
-    result.sort_by(|a, b| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()));
+    result.sort_by(|a, b| crate::commands::names::compare_names(&a.tag, &b.tag));
     Ok(result)
 }
 
@@ -350,6 +463,12 @@ mod tests {
                 pin_id INTEGER NOT NULL REFERENCES pins(id) ON DELETE CASCADE,
                 tag TEXT NOT NULL,
                 PRIMARY KEY (pin_id, tag)
+            );
+            CREATE TABLE tag_graph_styles (
+                tag    TEXT    NOT NULL PRIMARY KEY,
+                color  TEXT,
+                hidden INTEGER NOT NULL DEFAULT 0,
+                slot   INTEGER
             );",
         )
         .expect("create tables");
@@ -753,5 +872,100 @@ mod tests {
             retag_tag_on_conn(&mut conn, None, dir.path(), "ghost", Some("phantom")).unwrap();
         assert_eq!(result.note_count, 0);
         assert_eq!(result.pin_count, 0);
+    }
+
+    #[test]
+    fn retag_says_merged_only_when_the_target_was_already_a_tag() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---
+tags: [npc]
+---
+").unwrap();
+        fs::write(dir.path().join("b.md"), "---
+tags: [person]
+---
+").unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "b.md", "B");
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "b.md", &["person".to_string()]).unwrap();
+
+        let renamed = retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("NPC")).unwrap();
+        assert!(!renamed.merged, "a change of case is a rename");
+        let merged =
+            retag_tag_on_conn(&mut conn, None, dir.path(), "NPC", Some("person")).unwrap();
+        assert!(merged.merged);
+    }
+
+    #[test]
+    fn retag_carries_the_graph_style_with_the_tag() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---
+tags: [npc]
+---
+").unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+        crate::commands::graph_styles::set_tag_graph_color_on_conn(&mut conn, "npc", Some("#abcdef"))
+            .unwrap();
+
+        retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("person")).unwrap();
+        let rows = load_style_rows(&mut conn).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].tag, "person");
+        assert_eq!(rows[0].color.as_deref(), Some("#abcdef"));
+    }
+
+    #[test]
+    fn undo_puts_a_merge_back_tags_and_styles_both() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---
+tags: [npc, city]
+---
+Body").unwrap();
+        fs::write(dir.path().join("b.md"), "---
+tags: [person]
+---
+Body").unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        insert_note(&mut conn, 2, "b.md", "B");
+        insert_pin(&mut conn, 1);
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string(), "city".to_string()]).unwrap();
+        seed_note_tags(&mut conn, "b.md", &["person".to_string()]).unwrap();
+        upsert_pin_tags(&mut conn, 1, &["npc".to_string()]).unwrap();
+        crate::commands::graph_styles::set_tag_graph_color_on_conn(&mut conn, "npc", Some("#111111"))
+            .unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("person")).unwrap();
+        assert!(result.merged);
+        undo_retag_on_conn(&mut conn, None, dir.path(), &result.undo).unwrap();
+
+        let tags = frontmatter::read_tags(&fs::read_to_string(dir.path().join("a.md")).unwrap());
+        assert_eq!(tags, vec!["npc".to_string(), "city".to_string()]);
+        let pin: Vec<String> = pt::pin_tags.select(pt::tag).load(&mut conn).unwrap();
+        assert_eq!(pin, vec!["npc".to_string()]);
+        let rows = load_style_rows(&mut conn).unwrap();
+        assert_eq!(rows.iter().find(|r| r.tag == "npc").unwrap().color.as_deref(), Some("#111111"));
+    }
+
+    #[test]
+    fn undo_skips_a_note_deleted_in_the_meantime() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.md"), "---
+tags: [npc]
+---
+").unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "a.md", "A");
+        seed_note_tags(&mut conn, "a.md", &["npc".to_string()]).unwrap();
+
+        let result =
+            retag_tag_on_conn(&mut conn, None, dir.path(), "npc", Some("person")).unwrap();
+        fs::remove_file(dir.path().join("a.md")).unwrap();
+        undo_retag_on_conn(&mut conn, None, dir.path(), &result.undo).unwrap();
     }
 }

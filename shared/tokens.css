@@ -1,5 +1,5 @@
 /* ── Grimoire Design Tokens ───────────────────────────────────────────────
-   THE SINGLE SOURCE OF TRUTH FOR COLOUR, TYPE, AND RADIUS.
+   THE SINGLE SOURCE OF TRUTH FOR COLOUR, TYPE, RADIUS AND MOTION.
 
    Imported by both products: the desktop app (src/app.css) and the website
    (site/src/styles/global.css). The app's vocabulary is canonical — the site
@@ -9,7 +9,7 @@
 
    Only what BOTH products need lives here. Anything app-only — shadcn
    aliases, the density scale, accent presets, editor prose — stays in
-   src/app.css. Anything site-only — scroll reveals, the CTA ember — stays in
+   src/app.css. Anything site-only — the scroll reveals — stays in
    site/src/styles/global.css. If you are tempted to add something here for
    one consumer, it belongs in that consumer's file.
 
@@ -19,6 +19,7 @@
      primary     — accent / interactive states
      error       — destructive feedback
      success     — confirmatory feedback
+     motion      — four durations and one curve (DESIGN.md §5 Motion)
 
    The fonts are imported HERE, not by each consumer, and that is deliberate.
    These @fontsource packages register the families as "Nunito Variable" /
@@ -38,11 +39,16 @@
 @import "@fontsource-variable/jetbrains-mono/index.css";
 
 :root {
-  /* Background family */
-  --background: #1f1f1f;
-  --background-subtle: #181818;
-  --background-elevated: #262626;
-  --background-border: rgba(255, 255, 255, 0.08);
+  /* Background family — Iron, tinted toward red-brown.
+     The ramp used to be pure grey (#181818 / #1f1f1f / #262626, R=G=B), so the
+     warmth DESIGN.md promised came only from the cream text and the accent, and
+     its steps sat 1.08:1 apart — too close for tonal layering to read. These
+     carry a faint red-brown cast and a wider raised step (base>raised 1.15:1).
+     Body text on base is 14.9:1, muted 6.6:1. */
+  --background: #1c1917;
+  --background-subtle: #131110;
+  --background-elevated: #2a2522;
+  --background-border: rgba(255, 238, 226, 0.09);
 
   /* Foreground family */
   --foreground: #f0ece8;
@@ -51,21 +57,31 @@
 
   /* Primary family — default: Crimson preset */
   --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
+  --primary-foreground: #ffffff;
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 
-  /* Semantic feedback */
-  --error: #d4645a;
+  /* Semantic feedback. Error was #d4645a until the 2026-10 design review: as text on
+     a raised surface (a menu's Delete) it came to 4.2:1. This clears 4.5:1 on every
+     dark surface, raised included. */
+  --error: #dc6e64;
   --success: #6ab187;
 
   /* Hover overlays */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
+  --hover-overlay: rgba(255, 240, 230, 0.045);
 
   /* Border radius scale */
   --radius-structural: 6px;
   --radius-elevated: 8px;
   --radius-pill: 100px;
+
+  /* Motion — DESIGN.md §5 Motion, mirrored for script in the app's
+     `$lib/motion`. Shared since the site was found rising at 700ms on its own
+     expo curve beside an app whose Splash says the same line at 300ms. */
+  --motion-quick: 100ms;
+  --motion-base: 150ms;
+  --motion-arrive: 300ms;
+  --motion-attention: 600ms;
 }
 
 /* Light mode values. In the app these are applied by mode-watcher via the
@@ -146,4 +162,11 @@
   --radius-xl: var(--radius-elevated);
   --radius-2xl: var(--radius-pill);
   --radius-full: var(--radius-pill);
+
+  /* Motion. Every Tailwind transition defaults to `base` easing out, and the
+     `ease-out` / `ease-in` utilities take these curves, not Tailwind's. */
+  --default-transition-duration: var(--motion-base);
+  --default-transition-timing-function: var(--ease-out);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
 }

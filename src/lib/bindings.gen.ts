@@ -9,6 +9,10 @@ export const commands = {
 	 *  Copies the current (possibly-edited) sandbox at `app_data_dir/sample-world/` to
 	 *  `parent/name/` and returns the destination path. The frontend follows up with the
 	 *  vanilla `open_ledger` path (which records recents and persists prefs) and clears `isSample`.
+	 * 
+	 *  Async, and the copy on a blocking thread: the sandbox is tens of megabytes, and a
+	 *  synchronous command runs on the main thread, where it froze the window for as long
+	 *  as the disk took.
 	 */
 	adoptSampleLedger: (parent: string, name: string) => __TAURI_INVOKE<string>("adopt_sample_ledger", { parent, name }),
 	/**
@@ -27,6 +31,13 @@ export const commands = {
 	 *  edited. Returns the number of notes whose files were actually rewritten.
 	 */
 	applyBacklinkRewrite: (fromPath: string, toPath: string) => __TAURI_INVOKE<number>("apply_backlink_rewrite", { fromPath, toPath }),
+	/**
+	 *  Point the chosen broken links at the notes the GM chose, through the same
+	 *  batched write the backlink rewrite uses. Returns how many notes were rewritten.
+	 */
+	applyLinkRepairs: (choices: LinkRepairChoice[]) => __TAURI_INVOKE<number>("apply_link_repairs", { choices }),
+	/**  The broken links in the open world that a note's name can still place. */
+	planLinkRepairs: () => __TAURI_INVOKE<LinkRepair[]>("plan_link_repairs"),
 	assignMapImage: (mapId: number, sourceImagePath: string, destFolder: string | null) => __TAURI_INVOKE<Map>("assign_map_image", { mapId, sourceImagePath, destFolder }),
 	closeLedger: () => __TAURI_INVOKE<null>("close_ledger"),
 	/**
@@ -60,7 +71,7 @@ export const commands = {
 	createPinCategory: (mapId: number | null, name: string, icon: string, color: string) => __TAURI_INVOKE<PinCategory>("create_pin_category", { mapId, name, icon, color }),
 	createScene: (name: string) => __TAURI_INVOKE<Scene>("create_scene", { name }),
 	createSceneSlot: (sceneId: number, source: string, sourceId: string, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("create_scene_slot", { sceneId, source, sourceId, label, volume, loop, slotOrder, shuffle }),
-	createTemplate: () => __TAURI_INVOKE<TemplateEntry>("create_template"),
+	createTemplate: (name: string) => __TAURI_INVOKE<TemplateEntry>("create_template", { name }),
 	deleteAnnotation: (annotationId: number) => __TAURI_INVOKE<number>("delete_annotation", { annotationId }),
 	deleteFolder: (folderPath: string) => __TAURI_INVOKE<null>("delete_folder", { folderPath }),
 	deleteMap: (mapId: number) => __TAURI_INVOKE<number>("delete_map", { mapId }),
@@ -78,6 +89,13 @@ export const commands = {
 	deleteStatblockPreset: (name: string) => __TAURI_INVOKE<null>("delete_statblock_preset", { name }),
 	deleteTemplate: (path: string) => __TAURI_INVOKE<null>("delete_template", { path }),
 	/**
+	 *  The sandbox an earlier exploration left, if there is one: its path, without
+	 *  touching it. The Splash offers to continue it rather than wiping it, which
+	 *  `explore_sample_ledger` always does (2026-10 design review: a GM who explored,
+	 *  wrote notes and came back lost them without a word).
+	 */
+	existingSampleLedger: () => __TAURI_INVOKE<string | null>("existing_sample_ledger"),
+	/**
 	 *  Copies the bundled sample-world resource tree to a writable sandbox at
 	 *  `app_data_dir/sample-world/`, wipes any prior sandbox, pre-seeds the
 	 *  database with the sample map and pins, and returns the sandbox path.
@@ -89,9 +107,21 @@ export const commands = {
 	getAliasCollisions: (noteId: number) => __TAURI_INVOKE<AliasCollision[]>("get_alias_collisions", { noteId }),
 	getAnnotations: (mapId: number) => __TAURI_INVOKE<MapAnnotation[]>("get_annotations", { mapId }),
 	getAppPrefs: () => __TAURI_INVOKE<{
+	/**  Kept for builds that read only this: true when motion is reduced by choice. */
 	reduceMotion?: boolean,
+	/**
+	 *  Reduce Motion as chosen — "system" (follow the computer, the default), "on" or
+	 *  "off" (2026-10 design review). None in a file written before there was a choice.
+	 */
+	reduceMotionChoice?: string | null,
 	confirmRenameLinks?: boolean,
-	sampleBannerDismissed?: boolean,
+	/**
+	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+	 *  each world opened at whatever density it happened to have been left in. None until
+	 *  the GM chooses, when the open ledger's old value is adopted once.
+	 */
+	density?: string | null,
 } | null>("get_app_prefs"),
 	getAudioAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_audio_absolute_path", { relativePath }),
 	getBacklinks: (noteId: number) => __TAURI_INVOKE<BacklinkNote[]>("get_backlinks", { noteId }),
@@ -99,6 +129,7 @@ export const commands = {
 	getFileTree: () => __TAURI_INVOKE<FileNode>("get_file_tree"),
 	getGraphData: () => __TAURI_INVOKE<GraphData_Serialize>("get_graph_data"),
 	getImageAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_image_absolute_path", { relativePath }),
+	resolveImageEmbed: (target: string) => __TAURI_INVOKE<string | null>("resolve_image_embed", { target }),
 	getLedgerPath: () => __TAURI_INVOKE<string | null>("get_ledger_path"),
 	getMapImageDataUrl: (mapId: number) => __TAURI_INVOKE<string>("get_map_image_data_url", { mapId }),
 	getMaps: () => __TAURI_INVOKE<Map[]>("get_maps"),
@@ -154,6 +185,13 @@ export const commands = {
 	movePdf: (oldPath: string, destFolder: string) => __TAURI_INVOKE<string>("move_pdf", { oldPath, destFolder }),
 	openLedger: (path: string) => __TAURI_INVOKE<OpenLedgerResult>("open_ledger", { path }),
 	/**
+	 *  Read the open world's notes from disk again — the reconcile and index walk an open
+	 *  does, without closing and reopening it. The Try again of the notes Grimoire couldn't
+	 *  open: once OneDrive is running or the other program has let go, they read. Emits
+	 *  `ledger:rebuilt`, as the Ledger Watcher's bulk path does, so open views refetch.
+	 */
+	rereadNotes: () => __TAURI_INVOKE<RereadReport>("reread_notes"),
+	/**
 	 *  What the consent prompt is built from, or `None` when no pending migration
 	 *  finds work — in which case there is no prompt at all and `open_ledger` will
 	 *  have stamped the vault forward in silence.
@@ -165,10 +203,12 @@ export const commands = {
 	from: number,
 	to: number,
 	/**
-	 *  One sentence per pending migration **that found work**. A migration
-	 *  finding nothing contributes nothing.
+	 *  One sentence per pending migration **that found work** — the why, for the
+	 *  report. A migration finding nothing contributes nothing.
 	 */
 	sentences: string[],
+	/**  The same migrations' one-line summaries — what changes, for the prompt. */
+	changes: string[],
 	/**
 	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
 	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
@@ -176,6 +216,12 @@ export const commands = {
 	file_count: number,
 	/**  Warnings the scan produced, each prefixed with the file it came from. */
 	warnings: string[],
+	/**
+	 *  Every note the update will rewrite, by vault-relative path, with the
+	 *  warnings that are its own — so the prompt can name them rather than count
+	 *  them (2026-10 design review).
+	 */
+	notes: PlannedNote[],
 } | null>("plan_format_migration", { path }),
 	readNoteContent: (notePath: string) => __TAURI_INVOKE<string>("read_note_content", { notePath }),
 	readNoteTags: (notePath: string) => __TAURI_INVOKE<string[]>("read_note_tags", { notePath }),
@@ -208,6 +254,12 @@ export const commands = {
 	renamePdf: (oldPath: string, newStem: string) => __TAURI_INVOKE<string>("rename_pdf", { oldPath, newStem }),
 	renameStatblockPreset: (from: string, to: string) => __TAURI_INVOKE<null>("rename_statblock_preset", { from, to }),
 	retagTag: (fromTag: string, toTag: string | null) => __TAURI_INVOKE<RetagResult>("retag_tag", { fromTag, toTag }),
+	/**
+	 *  Put back what a retag changed: each note's and pin's tags, and both names'
+	 *  graph styles. A note deleted or renamed since is skipped, as is a deleted pin —
+	 *  Undo restores what is still there to restore.
+	 */
+	undoRetag: (undo: RetagUndo) => __TAURI_INVOKE<null>("undo_retag", { undo }),
 	renameTemplate: (path: string, newName: string) => __TAURI_INVOKE<null>("rename_template", { path, newName }),
 	reorderSceneSlots: (sceneId: number, orderedIds: number[]) => __TAURI_INVOKE<null>("reorder_scene_slots", { sceneId, orderedIds }),
 	resolveNoteTarget: (target: string) => __TAURI_INVOKE<{
@@ -234,9 +286,20 @@ export const commands = {
 	saveStatblockPresetDefault: (preset: string | null) => __TAURI_INVOKE<void>("save_statblock_preset_default", { preset }),
 	searchAll: (query: string) => __TAURI_INVOKE<SearchAllResult>("search_all", { query }),
 	searchNotes: (query: string) => __TAURI_INVOKE<NoteSearchResult[]>("search_notes", { query }),
+	searchLinkTargets: (query: string, excludePath: string | null) => __TAURI_INVOKE<LinkTarget[]>("search_link_targets", { query, excludePath }),
 	setNoteAliases: (noteId: number, aliases: string[]) => __TAURI_INVOKE<null>("set_note_aliases", { noteId, aliases }),
 	setPinTags: (pinId: number, tags: string[]) => __TAURI_INVOKE<null>("set_pin_tags", { pinId, tags }),
-	setTagGraphStyle: (tag: string, color: string | null, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_style", { tag, color, hidden }),
+	/**
+	 *  A tag's explicit colour; `None` is Automatic (its ramp step). Touches only the
+	 *  colour — the hidden flag and the step stay as they are.
+	 */
+	setTagGraphColor: (tag: string, color: string | null) => __TAURI_INVOKE<null>("set_tag_graph_color", { tag, color }),
+	/**
+	 *  Whether a tag's notes are hidden from the graph ("" is the untagged notes).
+	 *  Touches only the flag — two surfaces write it, and neither may carry a stale
+	 *  colour along with it.
+	 */
+	setTagGraphHidden: (tag: string, hidden: boolean) => __TAURI_INVOKE<null>("set_tag_graph_hidden", { tag, hidden }),
 	spotifyExchangeCode: (code: string, state: string) => __TAURI_INVOKE<SpotifyAuthStatus>("spotify_exchange_code", { code, state }),
 	spotifyGetAccessToken: () => __TAURI_INVOKE<string>("spotify_get_access_token"),
 	spotifyGetAuthStatus: () => __TAURI_INVOKE<{
@@ -268,8 +331,8 @@ export const commands = {
 	 *  The propagation is best-effort **after** the rename has landed: the scene is
 	 *  renamed either way, and failing the command over a note that could not be written
 	 *  would leave the GM's gesture looking rejected when the database took it. What is
-	 *  left behind in that case is a stale name in a note, which is what the planned
-	 *  repair-backlinks tool is for.
+	 *  left behind in that case is a stale name in a note, corrected by the scene's next
+	 *  rename. The notes it did rewrite are announced, so a pane holding one reloads.
 	 */
 	updateScene: (id: number, name: string) => __TAURI_INVOKE<Scene>("update_scene", { id, name }),
 	updateSceneSlot: (id: number, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("update_scene_slot", { id, label, volume, loop, slotOrder, shuffle }),
@@ -277,6 +340,7 @@ export const commands = {
 	writeNoteContent: (notePath: string, content: string) => __TAURI_INVOKE<null>("write_note_content", { notePath, content }),
 	writeNoteTags: (notePath: string, tags: string[]) => __TAURI_INVOKE<null>("write_note_tags", { notePath, tags }),
 	writeTemplate: (path: string, content: string) => __TAURI_INVOKE<null>("write_template", { path, content }),
+	writeTemplateTags: (path: string, tags: string[]) => __TAURI_INVOKE<null>("write_template_tags", { path, tags }),
 };
 
 /* Types */
@@ -291,9 +355,21 @@ export type AliasCollision = {
  *  Distinct from per-ledger preferences (`.grimoire/prefs.json`).
  */
 export type AppPrefs = {
+	/**  Kept for builds that read only this: true when motion is reduced by choice. */
 	reduceMotion?: boolean,
+	/**
+	 *  Reduce Motion as chosen — "system" (follow the computer, the default), "on" or
+	 *  "off" (2026-10 design review). None in a file written before there was a choice.
+	 */
+	reduceMotionChoice?: string | null,
 	confirmRenameLinks?: boolean,
-	sampleBannerDismissed?: boolean,
+	/**
+	 *  How tight the app is drawn — "cozy", "balanced" or "dense". App-wide: it is about
+	 *  the GM's screen, not the world (2026-10 design review). It was saved per ledger, so
+	 *  each world opened at whatever density it happened to have been left in. None until
+	 *  the GM chooses, when the open ledger's old value is adopted once.
+	 */
+	density?: string | null,
 };
 
 export type BacklinkNote = {
@@ -307,8 +383,17 @@ export type FailedFile = {
 	reason: string,
 };
 
+/**
+ *  A note file — or a folder, its path ending in `/` — that this walk could not read.
+ * 
+ *  **Its record is left alone.** It used to count as gone from disk, so a note that
+ *  was only briefly unreadable (a cloud-only file with the sync app off, a file another
+ *  program had locked) lost its record: pins unlinked, backlinks gone, and back as a
+ *  different note on the next good open (2026-10 design review).
+ */
 export type FailedImport = {
 	path: string,
+	/**  Why, in the GM's words — see `describe_unreadable`. The OS's own text is logged. */
 	reason: string,
 };
 
@@ -346,8 +431,17 @@ export type GraphNodeData_Deserialize = {
 	label: string,
 	kind: string,
 	entity_id: number | null,
-	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	/**
+	 *  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+	 *  The tag a node is *coloured* by.
+	 */
 	primary_tag: string | null,
+	/**
+	 *  Every tag the note carries, sorted; empty for maps and stubs. A node is
+	 *  *hidden* when any of these is — hiding a tag hides every note with it,
+	 *  not only the notes it happens to colour.
+	 */
+	tags: string[],
 	/**
 	 *  Number of note_links rows whose target_path resolves to this note's path.
 	 *  Always 0 for map and stub nodes.
@@ -360,13 +454,53 @@ export type GraphNodeData_Serialize = {
 	label: string,
 	kind: string,
 	entity_id?: number | null,
-	/**  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes. */
+	/**
+	 *  First tag from note_tags (MIN(tag) for determinism); None for maps/stubs/untagged notes.
+	 *  The tag a node is *coloured* by.
+	 */
 	primary_tag?: string | null,
+	/**
+	 *  Every tag the note carries, sorted; empty for maps and stubs. A node is
+	 *  *hidden* when any of these is — hiding a tag hides every note with it,
+	 *  not only the notes it happens to colour.
+	 */
+	tags: string[],
 	/**
 	 *  Number of note_links rows whose target_path resolves to this note's path.
 	 *  Always 0 for map and stub nodes.
 	 */
 	backlink_count: number,
+};
+
+/**  One broken link and the notes it could mean now. */
+export type LinkRepair = {
+	/**  The link as the notes write it, e.g. `Places/Thornhaven`. */
+	target: string,
+	/**
+	 *  Notes with the file name the link ends in, shortest path first. One is the
+	 *  usual case; more and the GM chooses.
+	 */
+	candidates: ResolvedNote[],
+	/**  The notes holding the link, by title. */
+	sources: ResolvedNote[],
+};
+
+/**  What the GM chose for one broken link: the note it should point at now. */
+export type LinkRepairChoice = {
+	target: string,
+	note_id: number,
+};
+
+/**  One note the menu can link to. */
+export type LinkTarget = {
+	id: number,
+	title: string,
+	/**  Ledger-relative, as the link is written. */
+	path: string,
+	/**  The folder it lives in, for telling two notes of one name apart. None at the root. */
+	folder: string | null,
+	/**  The alias the query matched, when it was an alias and not the title that answered. */
+	alias: string | null,
 };
 
 export type Map = {
@@ -415,10 +549,12 @@ export type MigrationPlan = {
 	from: number,
 	to: number,
 	/**
-	 *  One sentence per pending migration **that found work**. A migration
-	 *  finding nothing contributes nothing.
+	 *  One sentence per pending migration **that found work** — the why, for the
+	 *  report. A migration finding nothing contributes nothing.
 	 */
 	sentences: string[],
+	/**  The same migrations' one-line summaries — what changes, for the prompt. */
+	changes: string[],
 	/**
 	 *  A union, not a sum: a file two migrations touch is one file. `u32` because
 	 *  specta refuses to export `usize` (precision loss across the IPC boundary).
@@ -426,6 +562,12 @@ export type MigrationPlan = {
 	file_count: number,
 	/**  Warnings the scan produced, each prefixed with the file it came from. */
 	warnings: string[],
+	/**
+	 *  Every note the update will rewrite, by vault-relative path, with the
+	 *  warnings that are its own — so the prompt can name them rather than count
+	 *  them (2026-10 design review).
+	 */
+	notes: PlannedNote[],
 };
 
 /**  What happened, once the GM said yes. */
@@ -434,6 +576,11 @@ export type MigrationReport = {
 	to: number,
 	/**  Vault-relative paths of the files actually rewritten. */
 	migrated: string[],
+	/**
+	 *  The same files with the warnings that are their own — what the GM was told
+	 *  would change in their writing, so the toast can say where it did.
+	 */
+	notes: PlannedNote[],
 	/**
 	 *  Files that could not be written, with the reason — the casualties the
 	 *  partial-failure path is required to name.
@@ -491,9 +638,26 @@ export type OpenLedgerResult = {
 	/**
 	 *  Set when the database was auto-restored from the `.grimoire/backups`
 	 *  snapshot after corruption (issue #116) — the snapshot's RFC 3339 date,
-	 *  so the frontend can toast "scenes and pins reflect <date>".
+	 *  so the frontend can say when scenes, pins and maps are from.
 	 */
 	recovered_from_backup: string | null,
+	/**
+	 *  Where a damaged database was kept, after a restore, a salvage or a rebuild — so
+	 *  the GM can be shown it (and try another tool on it).
+	 */
+	damaged_file: string | null,
+	/**
+	 *  Set when a damaged database with no usable snapshot was salvaged on the way in
+	 *  (2026-10 design review): what came back of what only the database held.
+	 */
+	salvaged: SalvageSummary | null,
+	/**  Set only by a rebuild: what it brought back besides the notes. */
+	rebuilt: RebuildSummary | null,
+	/**
+	 *  Notes turned up at paths the records didn't hold, so some links may point at
+	 *  where a note used to be: the frontend asks `plan_link_repairs`.
+	 */
+	notes_arrived: boolean,
 };
 
 export type OutboundLink = {
@@ -538,10 +702,23 @@ export type PinCategory = {
 	shape: string,
 };
 
+/**  One note the update will rewrite. */
+export type PlannedNote = {
+	path: string,
+	/**  Path-free: the prompt shows them under the note's name. */
+	warnings: string[],
+};
+
 export type QuickNote = {
 	id: number,
 	body: string,
 	captured_at: string,
+};
+
+/**  What a rebuild recovered besides the notes. See `rebuild_ledger_db`. */
+export type RebuildSummary = {
+	/**  Maps brought back from their images, without their pins. */
+	maps_recovered: number,
 };
 
 export type RecentEntityResult = {
@@ -571,6 +748,13 @@ export type RenameNoteResult = {
 	updated_count: number,
 };
 
+/**  What reading the notes again found. See `reread_notes`. */
+export type RereadReport = {
+	/**  Notes (and folders) still unreadable. */
+	failed_imports: FailedImport[],
+	unlinked_pins: UnlinkedPin[],
+};
+
 export type ResolvedNote = {
 	id: number,
 	title: string,
@@ -580,6 +764,39 @@ export type ResolvedNote = {
 export type RetagResult = {
 	note_count: number,
 	pin_count: number,
+	/**  True when the target was already a tag — the toast says "Merged". */
+	merged: boolean,
+	/**  Everything the retag changed, as it was: hand it to `undo_retag`. */
+	undo: RetagUndo,
+};
+
+/**  What a retag overwrote. Opaque to the frontend, which only hands it back. */
+export type RetagUndo = {
+	from_tag: string,
+	to_tag: string | null,
+	/**  Each affected note's tag list before the retag. */
+	notes: TagsBefore<string>[],
+	/**  Each affected pin's tag list before the retag. */
+	pins: TagsBefore<number>[],
+	/**  The style rows for both names before the retag. */
+	styles: TagStyleRow[],
+};
+
+/**
+ *  What salvaging a damaged database brought back of what only the database held.
+ *  Notes are not counted: they come back from their files on every open regardless.
+ */
+export type SalvageSummary = {
+	scenes: number,
+	/**  Maps with their image, from the database — titles and pins intact. */
+	maps: number,
+	pins: number,
+	quick_notes: number,
+	/**
+	 *  Maps the database had lost, brought back from their images without pins — the
+	 *  rebuild's own recovery, run over the salvaged database by `open_ledger`.
+	 */
+	maps_from_images: number,
 };
 
 export type Scene = {
@@ -646,6 +863,16 @@ export type TagFacet = {
 export type TagGraphStyleResponse = {
 	color: string | null,
 	hidden: boolean,
+	/**  The ramp step, 0-based; `None` past the eighth tag. */
+	slot: number | null,
+};
+
+/**  One `tag_graph_styles` row, whole — what a retag's Undo puts back. */
+export type TagStyleRow = {
+	tag: string,
+	color: string | null,
+	hidden: boolean,
+	slot: number | null,
 };
 
 export type TagUsageEntry = {
@@ -654,9 +881,19 @@ export type TagUsageEntry = {
 	pin_count: number,
 };
 
+export type TagsBefore<K> = {
+	key: K,
+	tags: string[],
+};
+
 export type TemplateEntry = {
 	display_name: string,
 	path: string,
+	/**
+	 *  The tags a note made from it starts with — what the template gives
+	 *  besides its text, so a list can say so without opening each one.
+	 */
+	tags: string[],
 };
 
 /**
@@ -664,12 +901,17 @@ export type TemplateEntry = {
  *  placed it: the pin's own title and the map it sits on.
  * 
  *  Carries no note path and no row id the GM ever sees — those went with the row,
- *  and the pin is the thing they have to go and re-link.
+ *  and the pin is the thing they have to go and re-link. It does carry the *title*
+ *  of the note it pointed at, read before the row went: the usual cause is a folder
+ *  reorganised outside Grimoire, so the note is still there under a new path, and
+ *  the GM should not have to remember which one it was (2026-10 design review).
  */
 export type UnlinkedPin = {
 	pin_id: number,
 	pin_title: string,
 	map_id: number,
 	map_title: string,
+	/**  The title of the note the pin pointed at before the repair. */
+	was_note_title: string,
 };
 

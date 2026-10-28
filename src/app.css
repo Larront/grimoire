@@ -18,6 +18,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A short window with the sidebar open (2026-10 design review). At 560px tall, the
+   wordmark, the mini player and the footer rows left the Files tree no room at all,
+   so below 720px the sidebar gives some back: a smaller wordmark, Graph and Settings
+   beside the world's name, and a tree that scrolls in place. Never on the 48px rail,
+   which has nothing to give. */
+@custom-variant short {
+  @media (max-height: 720px) {
+    &:not([data-collapsible="icon"] *) {
+      @slot;
+    }
+  }
+}
+
 /* ── Grimoire Design Tokens ──────────────────────────────────── */
 /*
   The token values themselves live in shared/tokens.css, imported above and
@@ -106,9 +119,13 @@
   quietly missing from Settings.
 */
 
+/* Label-on-fill pairs are chosen per preset for >= 4.5:1, not by habit. Crimson
+   takes white (4.9:1; the old #f9f1f0 was 4.4). Arcane, Verdant and Ice are mid-tone
+   fills that pale text could not clear (3.6, 3.0, 2.7:1), so they take near-black
+   (4.8, 5.6, 6.1:1) the way Amber always has. */
 .accent-crimson {
   --primary: #c2483d;
-  --primary-foreground: #f9f1f0;
+  --primary-foreground: #ffffff;
   --primary-subtle: rgba(194, 72, 61, 0.12);
   --primary-muted: rgba(194, 72, 61, 0.24);
 }
@@ -122,7 +139,7 @@
 
 .accent-arcane {
   --primary: #9b6bbf;
-  --primary-foreground: #f5f0fa;
+  --primary-foreground: #120d16;
   --primary-subtle: rgba(155, 107, 191, 0.12);
   --primary-muted: rgba(155, 107, 191, 0.24);
 }
@@ -136,7 +153,7 @@
 
 .accent-verdant {
   --primary: #5c9e6e;
-  --primary-foreground: #f0f9f3;
+  --primary-foreground: #1a1614;
   --primary-subtle: rgba(92, 158, 110, 0.12);
   --primary-muted: rgba(92, 158, 110, 0.24);
 }
@@ -150,7 +167,7 @@
 
 .accent-ice {
   --primary: #5b9ec9;
-  --primary-foreground: #f0f6fb;
+  --primary-foreground: #1a1614;
   --primary-subtle: rgba(91, 158, 201, 0.12);
   --primary-muted: rgba(91, 158, 201, 0.24);
 }
@@ -175,6 +192,11 @@
   --primary-subtle: rgba(160, 122, 32, 0.1);
   --primary-muted: rgba(160, 122, 32, 0.2);
 }
+
+/* ── Motion tokens ────────────────────────────────────────────── */
+/* The durations (--motion-quick / base / arrive / attention) and the `ease-out` /
+   `ease-in` curves live in shared/tokens.css, so the website moves as the app does.
+   They are mirrored for script in `$lib/motion`. */
 
 /* ── Reduce Motion ────────────────────────────────────────────── */
 /*
@@ -206,18 +228,28 @@
   `animate-pulse` is deliberately NOT exempt. A skeleton communicates "content pending"
   by its shape and position, which survive being held still; the spinner has nothing
   left when it stops.
+
+  Delays go too: a staged entrance kept its wait, so the Splash's second column sat
+  invisible and then popped in. And this rule reaches only CSS — what moves from script
+  (Svelte transitions, the graph, the map, a smooth scroll) asks `$lib/motion` instead,
+  which reads the same setting; it is set here from `appPrefs.reduceMotion`, the GM's
+  choice or their computer's (2026-10 design review: Svelte's slides ran at full length
+  with the setting on).
 */
 
 [data-reduce-motion="true"] *,
 [data-reduce-motion="true"] *::before,
 [data-reduce-motion="true"] *::after {
   animation-duration: 0.01ms !important;
+  animation-delay: 0s !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
   scroll-behavior: auto !important;
 }
 
 [data-reduce-motion="true"] .animate-spin,
+[data-reduce-motion="true"] .sonner-loading-bar,
 [data-reduce-motion="true"] [data-motion-essential] {
   animation-duration: 1.6s !important;
   animation-iteration-count: infinite !important;
@@ -288,12 +320,15 @@
   and the callout that tiles a fight sizes each column to it. If those two ever disagree
   the tiling silently mis-sizes, so there is one of each number.
 
-  Narrow is the TILING width, and the number is a derivation rather than a taste. Two of
-  them plus the gap between have to fit the body of a callout in a note pane — a pane that
-  has already given up the icon rail, the sidebar and its own padding — so the ceiling is
-  about (53rem - 1rem) / 2. 24rem sits under that with room for a narrower pane, and it is
-  comfortably below the 34rem at which the card folds its own two columns, which is the
-  other thing a tiled creature must do: read as one column, so it can sit beside another.
+  Narrow is the TILING width. It is comfortably below the 34rem at which the card folds
+  its own two columns, which is what a tiled creature must do: read as one column, so it
+  can sit beside another. And it is wide enough to read a creature at a glance mid-fight.
+
+  The callout holding a fight is what makes room for it, not this number. The prose
+  column is capped at 46rem, so a callout body inside it is about 39rem — under the two
+  of these plus a gap a fight needs (49rem). This used to be derived from a 53rem callout
+  the note column never had, and no encounter ever tiled. A callout that tiles now grows
+  past the prose measure, up to the pane: see "Tiling" below.
 
   Sizing narrow to the fold threshold instead (34rem) is the mistake this replaces. It
   folded correctly and never once tiled: two of them are 68rem, wider than any pane this
@@ -390,12 +425,55 @@
   --tab-bar-h: 32px;
 }
 
+/* ── Elevation ────────────────────────────────────────────────── */
+/*
+  THREE LEVELS, NAMED BY WHAT A SURFACE DOES — see DESIGN.md §4.
+
+    in the page   border only. Note blocks, cards, the docked detail rail, sticky
+                  bars that belong to their pane. No shadow: they sit IN the
+                  surface, and a tonal step plus Iron Border is enough to read.
+    floating      Iron Raised (`bg-popover`) + Iron Border + `shadow-float`. Every
+                  menu, popover, tooltip, suggestion list, link preview, the floating
+                  detail panel, and any control over the GM's imagery.
+    modal         a dim scrim (`bg-scrim`) behind a floating surface. No blur: the
+                  app stays legible behind a dialog, which is what lets a GM keep
+                  reading the read-aloud text while the palette is open.
+
+  This replaces the Shadowless Rule. It was right that chrome should not wear
+  shadows for decoration, and wrong that a raised tone alone separates a floating
+  surface: the dark ramp's steps are close together by design, a menu over the
+  editor needs to read as *above* it, and the rule had already been bypassed in ten
+  places by components that needed exactly that. One token, used everywhere it is
+  needed, beats ten ad-hoc shadows and a rule nobody could follow.
+
+  The shadow carries a real offset and a soft blur — it is depth, not a halo.
+*/
+:root {
+  --elevation-float: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.45);
+  --scrim: rgb(8 6 5 / 0.55);
+}
+
+.light {
+  --elevation-float:
+    0 12px 32px -10px rgb(31 26 29 / 0.22), 0 2px 8px -2px rgb(31 26 29 / 0.12);
+  --scrim: rgb(31 26 29 / 0.28);
+}
+
 /* ── Tailwind theme bridge ──────────────────────────────────────
    The colour, font and radius utilities are bridged in shared/tokens.css.
    This block adds only the shadcn aliases, which exist to satisfy the
    vendored component library and are not part of Grimoire's vocabulary. */
 
 @theme inline {
+  /* Elevation — `shadow-float` and `bg-scrim`, the only two depth utilities. */
+  --shadow-float: var(--elevation-float);
+  --color-scrim: var(--scrim);
+
+  /* Motion — DESIGN.md §5 Motion. Before the 2026-10 review there were no tokens and
+     five durations and five easings in use. The default transition and the `ease-out` /
+     `ease-in` curves are set in shared/tokens.css; floating surfaces use `quick`;
+     `attention` is for a search hit. */
+
   /* Shadcn compat */
   --color-card: var(--background-elevated);
   --color-card-foreground: var(--foreground);
@@ -443,6 +521,16 @@
   body {
     @apply bg-background text-foreground;
     font-size: var(--font-body);
+  }
+
+  /*
+    Selected text is the accent's tint, not the platform's blue. Selection is one of the
+    five things the accent means (DESIGN.md §2), and the system highlight was the one
+    piece of colour in the app that belonged to no part of it — a GM selecting a word in
+    a note or a scene's name saw Windows blue on warm iron.
+  */
+  ::selection {
+    background-color: var(--primary-muted);
   }
 
   /*
@@ -512,8 +600,14 @@
 
 /* ── TipTap Editor Prose ──────────────────────────────────────── */
 
+/* Prose sets one step above the chrome's body size: 16px at Balanced, where the shell
+   reads at 14. A note is read at arm's length mid-session, often in a dim room, and
+   the chrome's 14px is a list size, not a reading size. The column is capped at 46rem
+   (NotePane, TemplatePane) — about 72ch of Nunito at this size, the widest measure
+   that still lets an Infobox float beside the prose (it floats at a 640px column). */
 .tiptap {
-  line-height: 1.75;
+  font-size: calc(var(--font-body) + 2px);
+  line-height: 1.7;
   font-kerning: normal;
   /* The prose column is a query container, which is what lets a block respond to the
      width it actually has rather than to the window's (see the Infobox below). It is
@@ -562,39 +656,68 @@
   display: block;
 }
 
-/* Note scroll container — scrollbar sits at the pane edge, fades in on hover */
-[data-note-scroll] {
+/* A selected block — a statblock, an infobox, a divider — is what the next keystroke
+   replaces, so it has to look selected. Nothing drew it: ProseMirror's own stylesheet is
+   not loaded, and a statblock just stamped from the slash menu sat selected and unmarked
+   until the GM typed over it. The focus ring's crimson, which is the Signal Rule's
+   "selected". A block that draws its own selection (the image) never gets the class.
+   Only while the editor has focus — only then can a keystroke replace it, and a note
+   whose first block is an Infobox opens with that block selected. */
+.tiptap.ProseMirror-focused .ProseMirror-selectednode {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-lg);
+}
+
+/* Pane scroll container — scrollbar sits at the pane edge, fades in on hover. Notes
+   first; the scene editor wears the same one rather than the platform's light bar. */
+[data-note-scroll],
+[data-pane-scroll] {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  transition: scrollbar-color 150ms ease;
+  transition: scrollbar-color var(--motion-base) var(--ease-out);
 }
 
 [data-note-scroll]:hover,
-[data-note-scroll]:focus-within {
+[data-note-scroll]:focus-within,
+[data-pane-scroll]:hover,
+[data-pane-scroll]:focus-within {
   scrollbar-color: var(--background-border) transparent;
 }
 
-[data-note-scroll]::-webkit-scrollbar {
+[data-note-scroll]::-webkit-scrollbar,
+[data-pane-scroll]::-webkit-scrollbar {
   width: 8px;
+  /* The horizontal bar, for a pane wider than it is — a PDF zoomed in or in a split. */
+  height: 8px;
 }
 
-[data-note-scroll]::-webkit-scrollbar-track {
+[data-pane-scroll]::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-[data-note-scroll]::-webkit-scrollbar-thumb {
+[data-note-scroll]::-webkit-scrollbar-track,
+[data-pane-scroll]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-note-scroll]::-webkit-scrollbar-thumb,
+[data-pane-scroll]::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 4px;
-  transition: background 150ms ease;
+  transition: background var(--motion-base) var(--ease-out);
 }
 
 [data-note-scroll]:hover::-webkit-scrollbar-thumb,
-[data-note-scroll]:focus-within::-webkit-scrollbar-thumb {
+[data-note-scroll]:focus-within::-webkit-scrollbar-thumb,
+[data-pane-scroll]:hover::-webkit-scrollbar-thumb,
+[data-pane-scroll]:focus-within::-webkit-scrollbar-thumb {
   background: var(--background-border);
 }
 
-[data-note-scroll]::-webkit-scrollbar-thumb:hover {
+[data-note-scroll]::-webkit-scrollbar-thumb:hover,
+[data-pane-scroll]::-webkit-scrollbar-thumb:hover {
   background: var(--foreground-faint);
 }
 
@@ -623,28 +746,35 @@
   clear: both;
 }
 
+/* The note's type scale, each step ~1.25x the one below it and every step clearly
+   apart: title 44 (the pane's field) / H1 28 / H2 22 / H3 18 / H4 16 over 16px prose.
+   It was 36 / 30 / 24 / 20 / 18 over 14 — the title and H1 sat 6px apart, and with
+   almost every note opening on `# <title>` that was the same words twice at nearly
+   the same size. (The sample world and built-in templates no longer open on that echo.)
+   H4 matches the prose size and is told apart by the world's face and
+   the space above it. More space above a heading than below it, always. */
 .tiptap h1 {
-  font-size: 1.875rem;
+  font-size: 1.75rem;
   margin-top: 2.5rem;
-  margin-bottom: 1rem;
-}
-
-.tiptap h2 {
-  font-size: 1.5rem;
-  margin-top: 2rem;
   margin-bottom: 0.75rem;
 }
 
+.tiptap h2 {
+  font-size: 1.375rem;
+  margin-top: 2.25rem;
+  margin-bottom: 0.625rem;
+}
+
 .tiptap h3 {
-  font-size: 1.25rem;
-  margin-top: 1.5rem;
+  font-size: 1.125rem;
+  margin-top: 1.75rem;
   margin-bottom: 0.5rem;
 }
 
 .tiptap h4 {
-  font-size: 1.125rem;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .tiptap p {
@@ -677,7 +807,7 @@
 }
 
 .tiptap blockquote {
-  border-left: 2px solid var(--primary);
+  border-left: 2px solid var(--foreground-faint);
   padding-left: 1rem;
   margin: 1.5rem 0;
   color: var(--foreground-muted);
@@ -708,19 +838,28 @@
   #180's selectors are unchanged: a callout is still the ordinary quote wearing a
   type, and a quote with no type is still styled as the quote it is.
 */
+/* The frame every Note Block shares (DESIGN.md §4, "in the page"): 1px Iron Border,
+   elevated radius, Iron Raised at 40% — the same `border bg-card/40 rounded-lg` the
+   infobox, statblock and scene embeds draw. It used to be a 3px accent stripe over an
+   8% tint, which made the callout the loudest box in any note it sat in. */
 .tiptap blockquote[data-callout] {
   --callout-accent: var(--foreground-muted);
-  border-left: 3px solid var(--callout-accent);
-  border-radius: var(--radius-structural);
-  background: color-mix(in oklab, var(--callout-accent) 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-elevated);
+  background: color-mix(in oklab, var(--background-elevated) 40%, transparent);
   padding: 0.75rem 1rem;
   margin: 1.5rem 0;
   color: var(--foreground);
   font-style: normal;
 }
 
+/* A recognised type used to take the accent. It no longer does: the accent is reserved
+   for selection, focus, the primary action and what is playing, and a read-aloud box is
+   none of those. What tells `warning` from `encounter` is its icon and title word —
+   exactly what the One Accent Rule asked for in the first place. The attribute stays,
+   and so does this hook, so a future per-type treatment has one place to land. */
 .tiptap blockquote[data-callout-known] {
-  --callout-accent: var(--primary);
+  --callout-accent: var(--foreground-muted);
 }
 
 /* A note opening with a quote: the node view's wrapper element is the editor's first
@@ -751,7 +890,7 @@
   font-size: 0.8125rem;
   line-height: 1.3;
   letter-spacing: 0.02em;
-  color: var(--callout-accent);
+  color: var(--foreground);
 }
 
 /* Recessive but not faint: DESIGN.md's Sub-AA Exception reserves below-AA contrast
@@ -771,6 +910,25 @@
    that rather than a child of the quote. */
 .tiptap .callout-body > * > :last-child {
   margin-bottom: 0;
+}
+
+/* And its first block's top margin, so the space under the title is the header's own
+   gap rather than whatever the first block brings — a statblock's margin sat over the
+   cards of every fight. */
+.tiptap .callout-body > * > :first-child {
+  margin-top: 0;
+}
+
+/* The callout's own chrome keeps ordinary whitespace; only its body is editor text. The
+   editor preserves spaces (`break-spaces`), and the quote inherited that, so the template
+   whitespace between the header and the body drew as a blank line — 27px of nothing under
+   the title of every callout. */
+.tiptap blockquote.callout-block {
+  white-space: normal;
+}
+
+.tiptap .callout-body {
+  white-space: break-spaces;
 }
 
 /* A callout's body is a query container too, under the same name as the prose column.
@@ -809,6 +967,46 @@
    A flex row rather than a grid, because the blocks are not a matrix: they are as many as
    the GM put in the box, at whatever widths they chose, and a wrapping row is the one of
    the two that does not invent a column count on their behalf. */
+/* The room a fight needs. A callout holding two or more statblocks may grow past the
+   prose column — prose has a measure, and a row of creatures read at once does not — to
+   as many narrow creatures side by side as the pane has room for, up to three. Its width
+   snaps to a whole number of them (`round(down, …)`), because a box wider than its
+   creatures leaves a ragged gap at the end of every row. Centred on the column, so it
+   reads as the same box, wider. 34px is the callout's own padding and border.
+
+   The pane's width is read where the note column is, through a registered length: a
+   plain custom property would carry `100cqw` down unresolved and measure it against
+   whichever container sits nearest the callout (the prose column itself). Where nothing
+   sets it — a surface that is not a note pane — it is 0, and the box keeps its width. */
+@property --note-pane-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+[data-note-column] {
+  --note-pane-w: 100cqw;
+}
+
+.tiptap
+  [data-note-block="callout"]:has(
+    .callout-body > * > [data-note-block="statblock"] ~ [data-note-block="statblock"]
+  ) {
+  --encounter-step: calc(var(--statblock-narrow) + 1rem);
+  --encounter-w: max(
+    100%,
+    calc(
+      min(
+        round(down, calc(var(--note-pane-w) - 3rem - 34px + 1rem), var(--encounter-step)),
+        3 * var(--encounter-step)
+      ) -
+        1rem + 34px
+    )
+  );
+  width: var(--encounter-w);
+  margin-inline: calc((100% - var(--encounter-w)) / 2);
+}
+
 .tiptap .callout-body > *:has(> [data-note-block="statblock"] ~ [data-note-block="statblock"]) {
   display: flex;
   flex-wrap: wrap;
@@ -938,7 +1136,37 @@
    draws a box belongs in this selector. */
 .tiptap [data-note-block]:not([data-infobox-block]),
 .tiptap pre {
-  clear: right;
+  /* Both sides: a note image aligned left floats too (below). */
+  clear: both;
+}
+
+/* ── Note images ──────────────────────────────────────────────────
+   An image aligned left or right floats beside the prose that follows it, as the
+   Infobox does and at the same threshold: only where the column is wide enough for
+   readable prose beside it (640px — see the Infobox's derivation above). Below that it
+   stands in its row at its side, as it always did. "Align right" used to do only that,
+   at every width, and left a hole beside the image the text never filled.
+
+   The node view's own element floats and takes the image's width; the image inside
+   fills it (`--image-frame-width`). Centred images never float. */
+@container note-column (min-width: 640px) {
+  .tiptap [data-image-block][data-align="left"],
+  .tiptap [data-image-block][data-align="right"] {
+    width: var(--image-width);
+    --image-frame-width: 100%;
+  }
+
+  .tiptap [data-image-block][data-align="right"] {
+    float: right;
+    clear: right;
+    margin-left: 1.5rem;
+  }
+
+  .tiptap [data-image-block][data-align="left"] {
+    float: left;
+    clear: left;
+    margin-right: 1.5rem;
+  }
 }
 
 .tiptap hr {
@@ -974,16 +1202,19 @@
   border-radius: 0;
 }
 
+/* External links speak like wikilinks (see "Wiki-link nodes" below): full foreground,
+   accent underline. One link grammar across the note, whichever kind it is. */
 .tiptap a {
-  color: var(--primary);
+  color: var(--foreground);
   text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: var(--primary-muted);
-  transition: text-decoration-color 0.15s;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--primary);
+  transition: text-decoration-thickness var(--motion-base) var(--ease-out);
 }
 
 .tiptap a:hover {
-  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
 }
 
 /* ── Range inputs ─────────────────────────────────────────────── */
@@ -1012,7 +1243,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--primary);
   cursor: pointer;
   border: none;
-  transition: transform 0.1s ease;
+  transition: transform var(--motion-quick) var(--ease-out);
 }
 
 input[type="range"]:hover::-webkit-slider-thumb {
@@ -1033,6 +1264,35 @@ input[type="range"]:disabled {
   opacity: 0.35;
 }
 
+/* The colour picker's hue strip: the whole spectrum as its track, and a ring rather than
+   a crimson dot as its handle, so the handle shows the hue under it instead of the
+   accent. The thin dark edge keeps the white ring visible over yellow. */
+input[type="range"].hue-slider {
+  height: 12px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+input[type="range"].hue-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+input[type="range"].hue-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+input[type="range"].hue-slider:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* ── Sonner toasts ───────────────────────────────────────────── */
 /*
   svelte-sonner arrives wearing its own design system — system-ui type, a grey
@@ -1044,24 +1304,14 @@ input[type="range"]:disabled {
   Everything below is styling only. What each toast *says*, how long it lives,
   and which are permitted to persist are decisions in $lib/toast.ts.
 
-  **The status spine.** A toast carries its semantic hue as a 3px left border
-  over a quiet surface. That is not a new invention: it is the same grammar the
-  editor already speaks for callouts and blockquotes — accent left border, faint
-  tint of the same hue (see `.tiptap blockquote[data-callout]` above). A toast is
-  the app saying something and a callout is a note saying something; they should
-  read as one language. It is also the only place a *neutral* toast can carry
-  colour at all, since neutral toasts have no status icon and no tinted surface.
-
   Roles, one hue per toast (`--toast-hue`), no second colour anywhere in it:
-    error   — error hue spine, 12% error tint on the surface
-    success — success hue spine, 12% success tint
-    neutral — the user's accent spine, surface left as plain Iron Raised
+    error   — error icon, 12% error tint on the surface
+    success — success icon, 12% success tint
+    neutral — plain Iron Raised; the accent appears only on its action button
 
-  Neutral keeps the untinted surface deliberately: a routine "Deleted X / Undo"
-  should not spend the accent on a whole surface (DESIGN.md — "use Crimson
-  sparingly … its scarcity is what makes it read as signal"). The spine alone is
-  enough to make the accent preset visible in toasts, which it previously was
-  not — a Verdant or Ice user never saw their accent here.
+  A neutral toast spends no accent on its surface: a routine "Deleted X / Undo" is
+  not a signal (DESIGN.md's Signal Rule), and its Undo button is the one thing in it
+  worth the accent.
 
   **On the specificity.** Every selector here is deliberately over-qualified,
   and that is load-bearing rather than defensive. Sonner sets its palette on
@@ -1116,12 +1366,21 @@ input[type="range"]:disabled {
   --toast-close-button-transform: none;
 }
 
+/* A toast takes clicks while a dialog or the sidebar's sheet is open. Those set
+   `pointer-events: none` on <body> for everything outside themselves, and the toaster
+   inherited it — so Undo, raised by something done inside the dialog, could not be
+   pressed until the dialog closed (2026-10 design review). The dialogs, for their part,
+   don't count a click on a toast as one outside them (`isOnToast`). */
+[data-sonner-toaster] {
+  pointer-events: auto;
+}
+
 /* One hue per toast type. Neutral is the default; `--toast-on-hue` is the text
    punched out of a hue-filled button.
 
    `var(--background)` is the correct on-hue text in *both* themes without a
    per-mode branch: in dark mode it is Iron Dark against light semantic hues
-   (#1f1f1f on #d4645a = 4.6:1, on #6ab187 = 6.6:1) and in light mode it is
+   (#1c1917 on #dc6e64 = 5.4:1, on #6ab187 = 6.8:1) and in light mode it is
    Parchment against dark ones (#faf8f5 on #a02020 = 7.3:1, on #2e6e4a = 5.8:1).
    The accent ships its own designed pair. */
 [data-sonner-toaster] [data-sonner-toast] {
@@ -1139,21 +1398,99 @@ input[type="range"]:disabled {
   --toast-on-hue: var(--background);
 }
 
-/*
-  Shadowless Rule (DESIGN.md §4, absolute): sonner ships a drop-shadow on every
-  toast, but Grimoire chrome is flat — elevation reads from the raised surface
-  and its border, never a shadow.
+/* A toast arrives and leaves in 200ms, easing out (DESIGN.md §5 Motion). Sonner's own
+   400ms on the browser's `ease` drifted in slower than anything else in the app, and
+   left by being cut off: it unmounts a removed toast 200ms after it starts to go.
+   The second selector outranks sonner's rule for a toast leaving from behind the front
+   one (five attributes); neither is `!important`, so Reduce Motion still stills them. */
+[data-sonner-toaster] [data-sonner-toast],
+[data-sonner-toaster]
+  [data-sonner-toast][data-removed][data-front][data-swipe-out][data-expanded] {
+  transition-duration: 200ms;
+  transition-timing-function: var(--ease-out);
+}
 
-  The spine goes on here too. `:not([data-type])` covers neutral toasts, which
-  carry no `data-type` attribute at all; both selectors sit at four attributes
-  so they beat rich-colour's `border-color`. `padding-left` drops the 2px the
-  thicker border added, keeping the text 16px from the outer edge.
+/* Sonner stills its toasts by the computer's setting, with `!important`, so with
+   Reduce Motion Off on a computer that reduces motion they still snapped while
+   everything else moved. Under that query, and only while the app's Reduce Motion is
+   off, this gives back what it took: the toast's own 200ms, a swipe's exit, and its
+   contents' hover colour. The toast mid-swipe keeps no transition, as sonner has it. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion="true"]) [data-sonner-toast]:not([data-swiping="true"]) {
+    transition-property: transform, opacity, height, box-shadow !important;
+    transition-duration: 200ms !important;
+    transition-timing-function: var(--ease-out) !important;
+  }
+
+  :root:not([data-reduce-motion="true"]) [data-sonner-toast] > * {
+    transition-property: color, background-color, border-color, opacity, box-shadow !important;
+    transition-duration: var(--motion-base) !important;
+    transition-timing-function: var(--ease-out) !important;
+  }
+
+  :root:not([data-reduce-motion="true"]) [data-sonner-toast][data-swipe-out="true"] {
+    animation-duration: 200ms !important;
+    animation-timing-function: var(--ease-out) !important;
+    animation-fill-mode: forwards !important;
+  }
+
+  :root:not([data-reduce-motion="true"])
+    [data-sonner-toast][data-swipe-out="true"][data-swipe-direction="left"] {
+    animation-name: swipe-out-left !important;
+  }
+
+  :root:not([data-reduce-motion="true"])
+    [data-sonner-toast][data-swipe-out="true"][data-swipe-direction="right"] {
+    animation-name: swipe-out-right !important;
+  }
+
+  :root:not([data-reduce-motion="true"])
+    [data-sonner-toast][data-swipe-out="true"][data-swipe-direction="up"] {
+    animation-name: swipe-out-up !important;
+  }
+
+  :root:not([data-reduce-motion="true"])
+    [data-sonner-toast][data-swipe-out="true"][data-swipe-direction="down"] {
+    animation-name: swipe-out-down !important;
+  }
+
+  /* The update's spinner says "still working" whatever the setting (see the Reduce
+     Motion rule's exemptions); sonner stopped it too. With the app's setting off it
+     turns as sonner draws it, each bar a tenth of a second behind the last; with it
+     on, the global rule drops those offsets and the bars pulse together. `:root` to
+     outrank sonner's rule, whose stylesheet arrives after this one. */
+  :root .sonner-loading-bar {
+    animation: sonner-spin 1.2s linear infinite !important;
+  }
+
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(1) { animation-delay: -1.2s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(2) { animation-delay: -1.1s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(3) { animation-delay: -1s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(4) { animation-delay: -0.9s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(5) { animation-delay: -0.8s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(6) { animation-delay: -0.7s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(7) { animation-delay: -0.6s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(8) { animation-delay: -0.5s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(9) { animation-delay: -0.4s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(10) { animation-delay: -0.3s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(11) { animation-delay: -0.2s !important; }
+  :root:not([data-reduce-motion="true"]) .sonner-loading-bar:nth-child(12) { animation-delay: -0.1s !important; }
+}
+
+/*
+  A toast FLOATS (DESIGN.md §4): over whatever the GM is looking at, so it takes the
+  one floating shadow rather than sonner's own. Its frame is the plain 1px Iron Border
+  every floating surface wears — the 3px status spine is gone. Error and success still
+  read at a glance from their icon and tinted surface, and a neutral "Deleted X / Undo"
+  has no status to signal, so under the Signal Rule it carries no accent at all.
+
+  `:not([data-type])` covers neutral toasts, which carry no `data-type` attribute;
+  both selectors sit at four attributes so they beat rich-colour's `border-color`.
 */
 [data-sonner-toast][data-rich-colors][data-styled="true"][data-type],
 [data-sonner-toast][data-rich-colors][data-styled="true"]:not([data-type]) {
-  box-shadow: none;
-  border-left: 3px solid var(--toast-hue);
-  padding-left: 13px;
+  box-shadow: var(--elevation-float);
+  border: 1px solid var(--border);
 }
 
 /* Two voices are not in play here — a toast is the tool speaking, never GM
@@ -1310,7 +1647,7 @@ input[type="range"]:disabled {
 
 /* Focus is a 2px accent outline at 2px offset everywhere in Grimoire. Sonner
    draws focus rings as black box-shadows, which both fails on Iron surfaces and
-   breaks the Shadowless Rule. (The report link inside a description needs no arm
+   is a shadow pretending to be a focus ring. (The report link inside a description needs no arm
    here — the base layer's `:focus-visible` rule already gives it this exact ring.
    It only had to stop transitioning its own outline-colour; see
    MigrationReportBody.) */
@@ -1328,25 +1665,54 @@ input[type="range"]:disabled {
 
 /* ── Wiki-link nodes ──────────────────────────────────────────── */
 
-/* Wikilinks read as accent everywhere they appear — editor node views and the spans a
-   block's Linked Text Fields draw alike. Resolved links are full accent; unresolved stubs
-   ([data-broken], set by the editor's decoration plugin or a Linked Text Field) are
-   faded accent. Color/cursor live here so both render paths share one source. */
+/* Wikilinks are TEXT FIRST, LINK SECOND — editor node views and the spans a block's
+   Linked Text Fields draw alike. In a worldbuilding note nearly every proper noun is a
+   link, so painting links in the accent made it roughly a tenth of the prose: red stopped
+   meaning "selected" or "playing", and the names a GM scans for at the table were the
+   lowest-contrast words on the page (#c2483d on Iron is 3.4:1). A link now reads at full
+   foreground and declares itself with a full-accent underline, which thickens on hover.
+
+   Unresolved stubs ([data-broken], set by the editor's decoration plugin or a Linked
+   Text Field) keep readable muted text and swap the underline for a dotted one — "not
+   written yet" is a shape, not a fade. The old 45%-accent stub measured 1.6:1.
+
+   Color/cursor/underline live here so both render paths share one source. */
 [data-wiki-link] {
-  color: var(--primary);
+  color: var(--foreground);
   cursor: pointer;
   vertical-align: -0.03em;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--primary);
+  transition: text-decoration-thickness var(--motion-base) var(--ease-out);
+}
+
+[data-wiki-link]:hover {
+  text-decoration-thickness: 2px;
 }
 
 [data-wiki-link][data-broken] {
-  color: color-mix(in oklab, var(--primary) 45%, transparent);
-  cursor: pointer;
+  color: var(--foreground-muted);
+  text-decoration-style: dotted;
+  text-decoration-color: var(--foreground-muted);
 }
 
-/* ── Search-match pulse ───────────────────────────────────────── */
+[data-wiki-link][data-broken]:hover {
+  color: var(--foreground);
+  text-decoration-color: var(--foreground);
+  text-decoration-thickness: 1px;
+}
 
-@keyframes search-match-pulse {
-  0% {
+/* ── Search hit ───────────────────────────────────────────────── */
+/* The words a search landed on, tinted and fading (`$lib/editor/search-hit`). With
+   Reduce Motion the tint holds still for the same moment and goes, rather than the
+   stilled animation jumping straight to its end and showing nothing. */
+
+/* Held for the first part, so the tint is still there when the eye arrives. */
+@keyframes search-hit-fade {
+  0%,
+  40% {
     background-color: var(--primary-subtle);
   }
   100% {
@@ -1354,9 +1720,13 @@ input[type="range"]:disabled {
   }
 }
 
-[data-search-pulse="1"] ::selection {
-  background-color: var(--primary);
-  animation: search-match-pulse 600ms ease-out forwards;
+.search-hit {
+  animation: search-hit-fade var(--motion-attention) var(--ease-out) forwards;
+}
+
+[data-reduce-motion="true"] .search-hit {
+  animation: none !important;
+  background-color: var(--primary-subtle);
 }
 
 /* ── Splash screen animations ─────────────────────────────────── */
@@ -1372,14 +1742,16 @@ input[type="range"]:disabled {
   }
 }
 
+/* Staged 75ms apart, so the whole rise is done in under half a second — it was 600ms
+   from first to last, a wait at the door of an app opened many times a day. */
 .splash-fade {
-  animation: splash-fade-in 300ms ease-out both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) both;
 }
 
 .splash-fade-delay-1 {
-  animation: splash-fade-in 300ms ease-out 150ms both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) 75ms both;
 }
 
 .splash-fade-delay-2 {
-  animation: splash-fade-in 300ms ease-out 300ms both;
+  animation: splash-fade-in var(--motion-arrive) var(--ease-out) 150ms both;
 }

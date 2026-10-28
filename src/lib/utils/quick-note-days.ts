@@ -114,3 +114,12 @@ export function groupByCaptureDay(
       ),
     }));
 }
+
+/**
+ * How many Quick Notes were captured on `now`'s local day — what the
+ * [[Quick Notes Dialog]] says after a park, and the same day the pane heads "Today".
+ */
+export function countCapturedOn(notes: QuickNote[], now: Date = new Date()): number {
+  const today = dayKey(now);
+  return notes.filter((note) => dayKey(new Date(note.captured_at)) === today).length;
+}

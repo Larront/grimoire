@@ -141,7 +141,7 @@ describe("the pointer's hover zone", () => {
   // A pane 300 wide with a 36px gutter: prose from 36 to 300, one block tall.
   const zone = {
     prose: { left: 36, top: 100, width: 264, height: 200 },
-    columnLeft: 0,
+    gutterLeft: 0,
   };
 
   it("leaves a pointer over the words exactly where it is", () => {

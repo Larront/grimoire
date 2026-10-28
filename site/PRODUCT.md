@@ -1,8 +1,10 @@
 # Product
 
-## Register
+<!-- impeccable:product-schema 1 -->
 
-brand
+## Platform
+
+web
 
 ## Users
 
@@ -33,6 +35,47 @@ The site exists to convert visitors into users. Success, in priority order:
 Underneath both: establish credibility. The visitor should leave certain this is a
 carefully made instrument by someone who understands the craft of running a game.
 
+## Positioning
+
+The same claim as the app (root `PRODUCT.md`): **notes, maps and ambient audio in
+one tool.** Lore, annotated maps and the soundscapes a GM plays at the table live
+together and link to each other, so running a session never means juggling apps.
+Local-first, plain Markdown, open source and no account are the credibility signals
+that back the claim, not the claim itself.
+
+## Operating Context
+
+- **Where visitors come from.** Believed to be mostly the GitHub repository (they
+  have read the README and come here to download) and links shared in TTRPG
+  communities such as Reddit and Discord (they arrive cold, with no context). There
+  are no analytics, so this is the owner's belief, not a measurement.
+- **What they decide here.** Whether Grimoire is worth trying for a campaign, which
+  installer fits their machine, and whether to trust an unsigned build.
+- **What happens after the download.** The first launch opens on the example ledger,
+  _The Ashfen Vale_, which they can explore before making their own. A ledger they
+  make is a folder they name and place; Grimoire keeps everything for it there.
+
+## Capabilities and Constraints
+
+**The site only claims what the release it links to contains.** The site deploys from
+`main` and its download links resolve to the latest GitHub release, so a feature
+merged into `next` goes on the site when it ships, not before. The full capability
+list lives in the root `PRODUCT.md`; check a claim against the code before writing it.
+
+Not features, whatever earlier copy said: maps nested inside maps, and journeys or
+routes drawn on a map. Pins link to notes; map drawings are text, rectangles and
+circles.
+
+**Terminology (owner's decision, 2026-10-29).** _Ledger_ is the visitor-facing word for
+the folder a GM keeps their campaign in: "a portable ledger", "your ledger", lower case
+in running text. _World_ is the fiction they build in it: "the world you're building".
+The site uses ledger for the thing on disk and never calls it a world. The app says the
+same: its Splash, menus and dialogs were changed from "world" to "ledger" for the folder
+on the same day (root `DESIGN.md` and `CONTEXT.md` carry the rule).
+
+Constraints: free and GPL-3.0; Windows, macOS and Linux; builds are unsigned; no
+account, no cloud, no subscription.
+
 ## Brand Personality
 
 **Literary, restrained, crafted.** Quiet confidence over hype. The voice is that of a
@@ -58,7 +101,7 @@ substance and ownership, not as an excuse for fantasy costume.
 - **Corporate / sterile.** Not cold, not safe, not enterprise-blue. It must have a
   point of view; it should never read as "could be any B2B tool."
 
-## Design Principles
+## Product Principles
 
 1. **The tool disappears.** The product's own thesis is the site's discipline: nothing
    competes with the message. Restraint is the brand, not a limitation.
@@ -74,11 +117,27 @@ substance and ownership, not as an excuse for fantasy costume.
    resonance, but always in service of clarity — never at the cost of a GM
    understanding exactly what they're downloading.
 
+## Evidence on Hand
+
+- Product screenshots in `site/public/`: `screenshot.png` (the example ledger, The
+  Ashfen Vale, in the editor), `maps.webp` (map with a selected pin and its location
+  note), `audio-note.webp` (a scene embedded in a note), `audio-pdf.webp` (a scene
+  pinned to a PDF passage). All four predate the October 2026 warm iron surfaces and
+  show the old grey app; they need recapturing from the release that ships it.
+- The example ledger itself, bundled with the app: the source for any new screenshot.
+- Live release data (version, per-OS download assets) fetched from GitHub at build time via
+  `site/src/lib/releases.ts`.
+
+Nothing else. There are no testimonials, user or download counts, press, reviews or
+community quotes. Do not invent them, and do not imply them with placeholder copy.
+Builds are unsigned and the app is a prerelease (`0.X.Y`); the site must not suggest
+otherwise.
+
 ## Accessibility & Inclusion
 
 Not a formal compliance gate for this project (per owner). Still, the impeccable
 baseline holds and is non-negotiable craft: legible body-text contrast (the muted
 ember-on-iron palette must be checked — ember-muted/ember-faint on dark iron need to
 clear 4.5:1 for body copy), visible keyboard focus states, and a working
-`prefers-reduced-motion` path (already scaffolded in `app.css`). Treat these as part
+`prefers-reduced-motion` path (in `site/src/styles/global.css`). Treat these as part
 of "crafted," not as a checkbox.

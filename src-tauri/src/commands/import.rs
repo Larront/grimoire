@@ -19,27 +19,83 @@ use crate::db::schema::{maps, pins};
 use diesel::prelude::*;
 use diesel::SqliteConnection;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-#[derive(Serialize, specta::Type, Debug)]
+/// A note file — or a folder, its path ending in `/` — that this walk could not read.
+///
+/// **Its record is left alone.** It used to count as gone from disk, so a note that
+/// was only briefly unreadable (a cloud-only file with the sync app off, a file another
+/// program had locked) lost its record: pins unlinked, backlinks gone, and back as a
+/// different note on the next good open (2026-10 design review).
+#[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct FailedImport {
     pub path: String,
+    /// Why, in the GM's words — see `describe_unreadable`. The OS's own text is logged.
     pub reason: String,
+}
+
+/// What an OS error reading a note means, said so a GM can act on it.
+pub fn describe_unreadable(e: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    #[cfg(windows)]
+    const LOCKED: &[i32] = &[32, 33];
+    #[cfg(not(windows))]
+    const LOCKED: &[i32] = &[];
+    #[cfg(windows)]
+    const CLOUD: &[i32] = &[362, 389, 426];
+    #[cfg(not(windows))]
+    const CLOUD: &[i32] = &[];
+    #[cfg(windows)]
+    const TOO_LONG: &[i32] = &[206];
+    #[cfg(not(windows))]
+    const TOO_LONG: &[i32] = &[36, 63];
+    #[cfg(windows)]
+    const LOOPS: &[i32] = &[1921];
+    #[cfg(not(windows))]
+    const LOOPS: &[i32] = &[40, 62];
+
+    let code = e.raw_os_error().unwrap_or(-1);
+    let words = if CLOUD.contains(&code) {
+        "It's only in the cloud. Start OneDrive, or your sync app, and try again."
+    } else if LOCKED.contains(&code) {
+        "Another program is using it. Close that program, or wait for syncing to finish."
+    } else if TOO_LONG.contains(&code) {
+        "Its name or folder path is too long."
+    } else if LOOPS.contains(&code) {
+        "It's a link that loops back on itself."
+    } else {
+        match e.kind() {
+            ErrorKind::PermissionDenied => {
+                "Your computer won't let Grimoire read it. Check its permissions."
+            }
+            ErrorKind::NotFound => {
+                "It disappeared while the world was opening, or it's a shortcut to something missing."
+            }
+            ErrorKind::TimedOut => "The drive it's on didn't respond.",
+            _ => "Grimoire couldn't read it.",
+        }
+    };
+    words.to_string()
 }
 
 /// A pin whose note the repair deleted out from under it, named the way the GM
 /// placed it: the pin's own title and the map it sits on.
 ///
 /// Carries no note path and no row id the GM ever sees — those went with the row,
-/// and the pin is the thing they have to go and re-link.
+/// and the pin is the thing they have to go and re-link. It does carry the *title*
+/// of the note it pointed at, read before the row went: the usual cause is a folder
+/// reorganised outside Grimoire, so the note is still there under a new path, and
+/// the GM should not have to remember which one it was (2026-10 design review).
 #[derive(Serialize, specta::Type, Debug, Clone)]
 pub struct UnlinkedPin {
     pub pin_id: i32,
     pub pin_title: String,
     pub map_id: i32,
     pub map_title: String,
+    /// The title of the note the pin pointed at before the repair.
+    pub was_note_title: String,
 }
 
 #[derive(Serialize, specta::Type, Debug)]
@@ -48,6 +104,9 @@ pub struct ImportReport {
     /// Empty on the ordinary open, where the repair finds nothing to do. Non-empty
     /// only when rows were deleted and pins were pointing at them.
     pub unlinked_pins: Vec<UnlinkedPin>,
+    /// Notes were found at paths the records didn't hold: new files, or moved ones.
+    /// What tells the open that links may need repairing.
+    pub arrived: bool,
 }
 
 /// Walk `ledger_path`, sync the `notes` table to match disk, and return
@@ -59,6 +118,10 @@ pub fn reconcile_notes_with_disk(
     let mut failed: Vec<FailedImport> = Vec::new();
     let mut disk_files: Vec<(String, String)> = Vec::new();
 
+    // The world's own folder unreadable is not "every note is gone": refuse rather
+    // than let the walk below delete every record.
+    fs::read_dir(ledger_path)
+        .map_err(|e| format!("Couldn't read the world's folder: {e}"))?;
     collect_md_files(ledger_path, "", &mut disk_files, &mut failed);
 
     let existing_paths: Vec<String> = n::notes
@@ -69,11 +132,7 @@ pub fn reconcile_notes_with_disk(
     let existing_set: HashSet<String> = existing_paths.into_iter().collect();
     let disk_set: HashSet<String> = disk_files.iter().map(|(p, _)| p.clone()).collect();
 
-    let to_delete: Vec<String> = existing_set
-        .iter()
-        .filter(|p| !disk_set.contains(*p))
-        .cloned()
-        .collect();
+    let to_delete = records_to_delete(&existing_set, &disk_set, &failed);
 
     let to_insert: Vec<(String, String)> = disk_files
         .into_iter()
@@ -87,21 +146,27 @@ pub fn reconcile_notes_with_disk(
             let paths: Vec<&str> = batch.iter().map(|s| s.as_str()).collect();
             // Read the casualties *before* the delete: afterwards the pins hold
             // NULL and there is no way back to which note they meant.
-            let doomed: Vec<i32> = n::notes
+            let doomed: HashMap<i32, String> = n::notes
                 .filter(n::path.eq_any(&paths))
-                .select(n::id)
-                .load(c)?;
+                .select((n::id, n::title))
+                .load::<(i32, String)>(c)?
+                .into_iter()
+                .collect();
+            let doomed_ids: Vec<i32> = doomed.keys().copied().collect();
             let mut hit: Vec<UnlinkedPin> = pins::table
                 .inner_join(maps::table)
-                .filter(pins::note_id.eq_any(&doomed))
-                .select((pins::id, pins::title, maps::id, maps::title))
-                .load::<(i32, String, i32, String)>(c)?
+                .filter(pins::note_id.eq_any(&doomed_ids))
+                .select((pins::id, pins::title, maps::id, maps::title, pins::note_id))
+                .load::<(i32, String, i32, String, Option<i32>)>(c)?
                 .into_iter()
-                .map(|(pin_id, pin_title, map_id, map_title)| UnlinkedPin {
+                .map(|(pin_id, pin_title, map_id, map_title, note_id)| UnlinkedPin {
                     pin_id,
                     pin_title,
                     map_id,
                     map_title,
+                    was_note_title: note_id
+                        .and_then(|id| doomed.get(&id).cloned())
+                        .unwrap_or_default(),
                 })
                 .collect();
             unlinked_pins.append(&mut hit);
@@ -137,7 +202,30 @@ pub fn reconcile_notes_with_disk(
     Ok(ImportReport {
         failed,
         unlinked_pins,
+        arrived: !to_insert.is_empty(),
     })
+}
+
+/// The records whose file is gone. **Unread is not absent**: a note that failed to
+/// read, or that sits in a folder that failed to list, keeps its record.
+fn records_to_delete(
+    existing: &HashSet<String>,
+    on_disk: &HashSet<String>,
+    failed: &[FailedImport],
+) -> Vec<String> {
+    let unread_files: HashSet<&str> = failed.iter().map(|f| f.path.as_str()).collect();
+    let unread_folders: Vec<&str> = failed
+        .iter()
+        .map(|f| f.path.as_str())
+        .filter(|p| p.ends_with('/'))
+        .collect();
+    existing
+        .iter()
+        .filter(|p| !on_disk.contains(*p))
+        .filter(|p| !unread_files.contains(p.as_str()))
+        .filter(|p| !unread_folders.iter().any(|dir| p.starts_with(dir)))
+        .cloned()
+        .collect()
 }
 
 fn collect_md_files(
@@ -148,7 +236,18 @@ fn collect_md_files(
 ) {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
-        Err(_) => return,
+        Err(e) => {
+            // A folder that won't list used to vanish from the records with no word
+            // at all. It is reported, and its notes keep their records.
+            if !relative.is_empty() {
+                log::warn!("[collect_md_files] couldn't list '{relative}': {e}");
+                failed.push(FailedImport {
+                    path: format!("{relative}/"),
+                    reason: describe_unreadable(&e),
+                });
+            }
+            return;
+        }
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -173,9 +272,10 @@ fn collect_md_files(
                     out.push((child_rel, mtime));
                 }
                 Err(e) => {
+                    log::warn!("[collect_md_files] couldn't read '{child_rel}': {e}");
                     failed.push(FailedImport {
                         path: child_rel,
-                        reason: e.to_string(),
+                        reason: describe_unreadable(&e),
                     });
                 }
             }
@@ -481,6 +581,45 @@ mod tests {
         assert_eq!(pin_note_id, None);
     }
 
+    fn failed(path: &str) -> FailedImport {
+        FailedImport { path: path.to_string(), reason: String::new() }
+    }
+
+    #[test]
+    fn a_note_that_could_not_be_read_keeps_its_record() {
+        let existing: HashSet<String> =
+            ["Lore/Embers.md", "Sessions/Session 4.md", "Gone.md"].map(String::from).into();
+        let on_disk: HashSet<String> = HashSet::new();
+        let mut to_delete = records_to_delete(
+            &existing,
+            &on_disk,
+            &[failed("Sessions/Session 4.md"), failed("Lore/")],
+        );
+        to_delete.sort();
+        // Only the note that is really gone loses its record: the unreadable file and
+        // everything in the folder that would not list are left alone.
+        assert_eq!(to_delete, vec!["Gone.md".to_string()]);
+    }
+
+    #[test]
+    fn unreadable_reasons_are_in_words_not_os_text() {
+        use std::io::{Error, ErrorKind};
+        let denied = describe_unreadable(&Error::from(ErrorKind::PermissionDenied));
+        assert!(denied.contains("permissions"), "{denied}");
+        let gone = describe_unreadable(&Error::from(ErrorKind::NotFound));
+        assert!(gone.contains("disappeared"), "{gone}");
+        let other = describe_unreadable(&Error::other("boom"));
+        assert_eq!(other, "Grimoire couldn't read it.");
+        #[cfg(windows)]
+        {
+            assert!(describe_unreadable(&Error::from_raw_os_error(32)).contains("Another program"));
+            assert!(describe_unreadable(&Error::from_raw_os_error(362)).contains("cloud"));
+        }
+        for text in [denied, gone, other] {
+            assert!(!text.contains("os error"), "{text}");
+        }
+    }
+
     /// The whole of #224 in one test: a folder moved outside the app leaves the
     /// `notes` row keyed to a path that no longer exists and the file keyed to no
     /// row, so the repair deletes one and inserts the other. The note's *text* is
@@ -530,6 +669,9 @@ mod tests {
         assert_eq!(report.unlinked_pins[0].pin_title, "Waterdeep");
         assert_eq!(report.unlinked_pins[0].map_title, "Sword Coast");
         assert_eq!(report.unlinked_pins[0].map_id, 1);
+        // ...and which note it meant, by the name the GM knows it by — so they can
+        // find it again at its new path.
+        assert_eq!(report.unlinked_pins[0].was_note_title, "Waterdeep");
     }
 
     /// The common case, and the one that must stay quiet: the repair looks, finds
@@ -572,6 +714,7 @@ mod tests {
                 reason: "permission denied".to_string(),
             }],
             unlinked_pins: Vec::new(),
+            arrived: false,
         };
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].path, "bad.md");

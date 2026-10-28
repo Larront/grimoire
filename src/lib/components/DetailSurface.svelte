@@ -6,7 +6,7 @@
    * ADR-0006 §2 and §4: one shell, rendered "docked or floating by its pane
    * host". The three variants used to be hand-written in each host, which is how
    * the map panels ended up at a different z-index, a different width, and a
-   * hardcoded `fly` that ignored `prefers-reduced-motion`. Everything about the
+   * hardcoded `fly` that ignored Reduce Motion. Everything about the
    * box lives here; the body is the caller's snippet.
    */
   import type { Snippet } from "svelte";
@@ -54,8 +54,8 @@
     data-slot="right-rail"
     data-mobile="false"
     data-state={open ? "open" : "closed"}
-    class="flex w-0 shrink-0 flex-col overflow-hidden motion-reduce:transition-none
-           transition-[width] duration-200 ease-linear data-[state=open]:w-[300px]"
+    class="flex w-0 shrink-0 flex-col overflow-hidden transition-[width]
+           duration-(--motion-base) ease-out data-[state=open]:w-[300px]"
   >
     <div
       class="flex h-full w-[300px] flex-col border-l border-background-border bg-background-subtle"
@@ -86,7 +86,7 @@
     out:fly={surface.transition}
     class={[
       "absolute top-4 right-4 flex max-h-[calc(100%-2rem)] w-80 flex-col overflow-hidden",
-      "rounded-lg border border-background-border bg-background shadow-2xl",
+      "rounded-lg border border-background-border bg-popover shadow-float",
       surface.overStackedHost ? "z-1000" : "z-50",
     ]}
   >

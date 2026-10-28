@@ -37,12 +37,15 @@ function createPaneDetailState() {
   // drops them all. Owned here rather than in `closeLedger` for the same reason
   // tabs owns its own reset (`tabs.svelte.ts`): the store that holds the
   // per-ledger state is the store that knows when it expires.
+  //
+  // Keyed on the open rather than the path: re-exploring the Example World
+  // reopens the same sandbox path over a fresh database, whose pin ids restart.
   $effect.root(() => {
-    let lastPath: string | null = null;
+    let lastOpen: number | null = null;
     $effect(() => {
-      const path = ledger.isOpen ? ledger.path : null;
-      if (path === lastPath) return;
-      lastPath = path;
+      const open = ledger.isOpen ? ledger.openGeneration : null;
+      if (open === lastOpen) return;
+      lastOpen = open;
       reset();
     });
   });

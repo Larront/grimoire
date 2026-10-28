@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "../grimoire-site", "-l", "4173"],
       "port": 4173
+    },
+    {
+      "name": "site-dev",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "site:dev"],
+      "port": 4321
     }
   ]
 }

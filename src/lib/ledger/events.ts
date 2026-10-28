@@ -7,7 +7,7 @@
 // subscribe to `ledger:rebuilt` itself and had to have `NotePane` relay it —
 // a pane choreographing, which CONTEXT.md says panes do not do (#212).
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { UnlinkedPin } from "$lib/stores/ledger.svelte";
+import type { UnlinkedPin } from "$lib/bindings.gen";
 
 /** Every Ledger Watcher event, mapped to the payload it carries. */
 export interface LedgerEvents {
@@ -19,8 +19,11 @@ export interface LedgerEvents {
   /** A note's file moved outside Grimoire. The row was re-keyed in place, so
    *  the note keeps its id — open panes follow it rather than losing it. */
   "note:moved": { from: string; to: string };
-  /** The set of notes on disk changed (created, removed, renamed): the Files
-   *  tree is stale. Carries no payload — the tree is rebuilt wholesale. */
+  /** The set of notes on disk changed (created, removed, renamed), or a folder
+   *  was removed, arrived or moved — even an empty one: the Files tree is
+   *  stale. Notes a folder move carried keep their ids, so this refetch is all
+   *  an open pane needs to follow them. Carries no payload — the tree is
+   *  rebuilt wholesale — and is sent at most once per watcher batch. */
   "ledger:tree-changed": null;
   /** A bulk external change (git checkout, cloud sync) exceeded the per-file
    *  threshold, so the backend rebuilt the whole ledger under one coarse event.
@@ -35,6 +38,11 @@ export interface LedgerEvents {
    *  only when there is something to heal. The count is display-only —
    *  `applyBacklinkRewrite` recomputes the real set (ADR-0014). */
   "note:external-move-links-stale": { from: string; to: string; count: number };
+  /** A bulk rebuild found notes at paths the records didn't hold — moved, most
+   *  likely — so links written as paths may point at where they used to be. Says
+   *  nothing about which: `planLinkRepairs` works that out. The open-time repair
+   *  reports the same through `open_ledger`'s `notes_arrived`. */
+  "notes:arrived": null;
 }
 
 export type LedgerEventName = keyof LedgerEvents;

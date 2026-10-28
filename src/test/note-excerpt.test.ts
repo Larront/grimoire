@@ -9,7 +9,7 @@
 // #156 ruled out showing a filed link as flat text, and the excerpt keeps its
 // notation honest rather than dressing a dead link up as a live one.
 import { describe, it, expect } from "vitest";
-import { noteExcerpt } from "$lib/editor/note-excerpt";
+import { noteExcerpt, noteExcerptBlocks } from "$lib/editor/note-excerpt";
 import { wikiFragment } from "$lib/editor/wiki-target";
 
 // ─── The reported bug ─────────────────────────────────────────────────────────
@@ -26,16 +26,18 @@ describe("a fence", () => {
     expect(noteExcerpt(body)).toBe("Statblock — Goblin Scout\n\nStatblock — Goblin Boss");
   });
 
-  it("names an Infobox and a Scene by the same convention", () => {
-    expect(noteExcerpt("```infobox\n# Harbor's End\nRuler: [[Aldric]]\n```")).toBe(
-      "Infobox — Harbor's End",
-    );
+  it("names a Scene by the same convention", () => {
     expect(noteExcerpt("```scene\n# Boss Battle\nId: 4\n```")).toBe("Scene — Boss Battle");
   });
 
   it("falls back to the bare type when the block has no name", () => {
     expect(noteExcerpt("```statblock\nHP: 3/12\n```")).toBe("Statblock");
-    expect(noteExcerpt("```infobox\n#\nRuler: Aldric\n```")).toBe("Infobox");
+  });
+
+  it("leaves an Infobox out, so a note's preview opens on its prose", () => {
+    // It read as the bare word "Infobox" on the first line, its facts thrown away.
+    const body = "```infobox\n# Harbor's End\nRuler: [[Aldric]]\n```\n\nA port on the marsh.";
+    expect(noteExcerpt(body)).toBe("A port on the marsh.");
   });
 
   it("counts a Timeline instead of naming it after its first event", () => {
@@ -100,10 +102,42 @@ describe("inline notation", () => {
     );
   });
 
-  it("keeps a wikilink's brackets, and takes a markdown link's text", () => {
-    expect(noteExcerpt("Ruled by [[People/Aldric|Aldric]], see [the map](map.png)")).toBe(
-      "Ruled by [[People/Aldric|Aldric]], see the map",
+  it("reads a wikilink as its name, and a markdown link as its text", () => {
+    // The brackets were the noise in a card read at a glance (2026-10 design review).
+    expect(noteExcerpt("Ruled by [[People/Aldric|the Regent]], see [the map](map.png)")).toBe(
+      "Ruled by the Regent, see the map",
     );
+  });
+
+  it("names a path-style wikilink by its title, not its file", () => {
+    expect(noteExcerpt("Edge of [[Lore/The Ashfen Marshes.md]] and [[Aldric#Tactics]]")).toBe(
+      "Edge of The Ashfen Marshes and Aldric",
+    );
+  });
+
+  it("reads an embed as the name of what it embeds", () => {
+    expect(noteExcerpt("See ![[Mira Ashvale]]")).toBe("See Mira Ashvale");
+  });
+
+  it("drops an aligned image's settings", () => {
+    expect(noteExcerpt("![The gate](images/gate.png){align=right width=40%}")).toBe(
+      "Image — The gate",
+    );
+    expect(noteExcerpt("Before ![gate](g.png){align=left} after")).toBe("Before gate after");
+  });
+
+  it("reads a table as its cells, without the rules", () => {
+    expect(noteExcerpt("| Toll | 2cp |\n|---|---|\n| Bed | 5sp |")).toBe("Toll · 2cp\n\nBed · 5sp");
+  });
+
+  it("drops a task's box, a footnote's mark and raw HTML", () => {
+    expect(noteExcerpt("- [ ] buy rope\n- [x] hire guide")).toBe("buy rope\nhire guide");
+    expect(noteExcerpt("The keep fell[^1].\n\n[^1]: Per Mira.")).toBe("The keep fell.");
+    expect(noteExcerpt("A <span>quiet</span> village")).toBe("A quiet village");
+  });
+
+  it("keeps an escaped character as itself", () => {
+    expect(noteExcerpt("Rated \\*\\*\\* by locals")).toBe("Rated *** by locals");
   });
 
   it("leaves underscores alone so file_names survive", () => {
@@ -139,5 +173,28 @@ describe("a link into a section", () => {
   it("reads the fragment off the path the preview is given", () => {
     expect(wikiFragment("Bestiary/Goblin Scout#Tactics")).toBe("Tactics");
     expect(wikiFragment("Bestiary/Goblin Scout")).toBe("");
+  });
+});
+
+describe("headings with nothing under them", () => {
+  it("drops a templated note's empty sections", () => {
+    const body = "```infobox\nRole: Smith\n```\n\n## Description\n\n## Personality\n\n## Notes\n";
+    expect(noteExcerpt(body)).toBe("");
+  });
+
+  it("keeps a section that has words, and a parent above it", () => {
+    const body = "# Brannoc\n\n## Description\n\nBroad hands.\n\n## Notes\n";
+    expect(noteExcerpt(body)).toBe("Brannoc\n\nDescription\n\nBroad hands.");
+  });
+});
+
+describe("noteExcerptBlocks", () => {
+  it("sets headings apart and joins a paragraph's lines", () => {
+    const body = "Opening line.\nSecond line.\n\n## Tactics\n\nFlanks the party.";
+    expect(noteExcerptBlocks(body)).toEqual([
+      { kind: "text", text: "Opening line.\nSecond line." },
+      { kind: "heading", text: "Tactics" },
+      { kind: "text", text: "Flanks the party." },
+    ]);
   });
 });

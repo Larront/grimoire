@@ -24,12 +24,12 @@ vi.mock("$lib/stores/link-resolver.svelte", () => ({
 }));
 
 const SEARCH_RESULTS = [
-  { id: 1, title: "Captain Ash", path: "People/Ash.md" },
-  { id: 2, title: "Ashfall Vale", path: "Places/Ashfall Vale.md" },
+  { id: 1, title: "Captain Ash", path: "People/Ash.md", folder: "People", alias: null },
+  { id: 2, title: "Ashfall Vale", path: "Places/Ashfall Vale.md", folder: "Places", alias: null },
 ];
 
 vi.mock("$lib/api", () => ({
-  api: { searchNotes: vi.fn(async () => SEARCH_RESULTS) },
+  api: { silent: { searchLinkTargets: vi.fn(async () => SEARCH_RESULTS) } },
 }));
 
 afterEach(cleanup);
@@ -253,6 +253,42 @@ describe("typing [[ in a field offers notes to link", () => {
     const { queryByRole } = await openSuggestions("Ruled by [[Captain Ash]]");
     expect(queryByRole("listbox")).toBeNull();
   });
+
+  it("stays dismissed after Escape while the GM keeps typing in the same brackets", async () => {
+    // The next keystroke used to reopen it, and a reflexive second Escape then cancelled
+    // the whole edit, links already accepted with it.
+    const { queryByRole, getByLabelText } = await openSuggestions("Ruled by [[Ca");
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Escape" });
+    await fireEvent.input(getByLabelText("Value"), { target: { value: "Ruled by [[Cap" } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(queryByRole("listbox")).toBeNull();
+  });
+
+  it("writes the display text the GM typed after the name", async () => {
+    const { getByLabelText } = await openSuggestions("Ruled by [[Ash|the Captain");
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter" });
+
+    expect(getByLabelText("Value")).toHaveValue("Ruled by [[People/Ash.md|the Captain]]");
+  });
+
+  it("offers a name no note has as a new note, and links it as typed", async () => {
+    const { getByText, getByLabelText } = await openSuggestions("Ruled by [[Brannoc");
+    await fireEvent.click(getByText("New note “Brannoc”"));
+
+    expect(getByLabelText("Value")).toHaveValue("Ruled by [[Brannoc]]");
+  });
+
+  it("points a screen reader at the selected row while focus stays in the field", async () => {
+    const { getByLabelText } = await openSuggestions();
+    const input = getByLabelText("Value");
+    expect(input).toHaveAttribute("aria-expanded", "true");
+    expect(input).toHaveAttribute("aria-activedescendant", "wiki-link-menu-option-0");
+
+    await fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input).toHaveAttribute("aria-activedescendant", "wiki-link-menu-option-1");
+  });
 });
 
 // ─── No HTML strings ──────────────────────────────────────────────────────────
@@ -272,5 +308,115 @@ describe("nothing in the field's path builds an HTML string", () => {
     ["the Infobox's view", infoboxViewSource],
   ])("%s renders no HTML string", (_what, source) => {
     expect(source).not.toMatch(HTML_TAG);
+  });
+});
+
+// ─── Leaving by keyboard ────────────────────────────────────────────────────────
+
+describe("a Linked Text Field left from the keyboard keeps the GM's place", () => {
+  // The input leaves the page as it closes, and focus used to go with it to the body:
+  // a keyboard GM lost their place after every edit, and a block's own Escape no longer
+  // reached the block.
+  it.each([
+    ["Enter", "commits"],
+    ["Escape", "cancels"],
+  ])("%s %s and puts focus back on the value", async (key) => {
+    const { getByLabelText } = field({ value: "15" });
+    await fireEvent.click(getByLabelText("Value"));
+    const input = getByLabelText("Value") as HTMLInputElement;
+    expect(input.tagName).toBe("INPUT");
+
+    await fireEvent.keyDown(input, { key });
+
+    const shown = getByLabelText("Value");
+    expect(shown.tagName).toBe("BUTTON");
+    expect(document.activeElement).toBe(shown);
+  });
+});
+
+describe("a Linked Text Field says what it holds to a screen reader", () => {
+  it("describes its button by the value it draws", () => {
+    // Named by its field, the button's text was replaced for assistive tech: a timeline
+    // read as "Event 1 date, Event 1 title" with not a word of either.
+    const { getByLabelText } = field({ value: "The Keep Falls" });
+    const button = getByLabelText("Value");
+    const described = document.getElementById(button.getAttribute("aria-describedby")!);
+    expect(described).toHaveTextContent("The Keep Falls");
+  });
+});
+
+describe("a wrapping Linked Text Field", () => {
+  // A one-line value that wraps where it is drawn — an Infobox title or row in a panel
+  // ~300px wide — is edited as it is drawn, rather than collapsed to one line scrolled
+  // to its end.
+  it("opens as a field that wraps, and still commits on Enter", async () => {
+    const { getByLabelText, onCommit } = field({ value: "Mira Ashvale", wrap: true });
+    await fireEvent.click(getByLabelText("Value"));
+    const input = getByLabelText("Value");
+    expect(input.tagName).toBe("TEXTAREA");
+
+    await fireEvent.input(input, { target: { value: "Mira Ashvale the Elder" } });
+    await fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onCommit).toHaveBeenCalledWith("Mira Ashvale the Elder");
+  });
+
+  it("keeps a newline out as it is typed, as a one-line field does", async () => {
+    const { getByLabelText } = field({
+      value: "",
+      wrap: true,
+      restrict: (s: string) => s.replace(/\n/g, " "),
+    });
+    await fireEvent.click(getByLabelText("Value"));
+    await fireEvent.input(getByLabelText("Value"), { target: { value: "two\nlines" } });
+
+    expect(getByLabelText("Value")).toHaveValue("two lines");
+  });
+});
+
+describe("a link in a Linked Text Field from the keyboard", () => {
+  it("follows the value's link on Ctrl+Enter, where Enter alone opens the field", async () => {
+    // "Born: [[Thornhaven Village]]" — Enter edits, so the link had no keyboard route.
+    const { getByLabelText, container } = field({ value: "Born in [[Thornhaven Village]]" });
+    const followed = vi.fn();
+    container.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("[data-wiki-link]");
+      if (link) followed(link.getAttribute("data-path"));
+    });
+
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter", ctrlKey: true });
+
+    expect(followed).toHaveBeenCalledWith("Thornhaven Village");
+    expect(getByLabelText("Value").tagName).toBe("BUTTON");
+  });
+
+  it("does nothing on Ctrl+Enter when the value has no link", async () => {
+    const { getByLabelText } = field({ value: "4,200" });
+    await fireEvent.keyDown(getByLabelText("Value"), { key: "Enter", ctrlKey: true });
+    expect(getByLabelText("Value").tagName).toBe("BUTTON");
+  });
+
+  it("makes a read-only value's links Tab stops that Enter follows (2026-10 design review)", async () => {
+    // A statblock in play draws its entries read-only; their links had no keyboard route.
+    const { getByRole, container } = field({
+      value: "Bites, as [[Kobold]] do",
+      readonly: true,
+    });
+    const followed = vi.fn();
+    container.addEventListener("click", (e) => {
+      const link = (e.target as HTMLElement).closest("[data-wiki-link]");
+      if (link) followed(link.getAttribute("data-path"));
+    });
+
+    const link = getByRole("link", { name: "Kobold" });
+    expect(link).toHaveAttribute("tabindex", "0");
+    await fireEvent.keyDown(link, { key: "Enter" });
+
+    expect(followed).toHaveBeenCalledWith("Kobold");
+  });
+
+  it("keeps an editable value's links out of the Tab order: its button is the stop", () => {
+    const { container } = field({ value: "Bites, as [[Kobold]] do" });
+    expect(container.querySelector("[data-wiki-link]")).not.toHaveAttribute("tabindex");
   });
 });

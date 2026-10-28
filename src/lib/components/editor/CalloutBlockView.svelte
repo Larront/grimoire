@@ -17,7 +17,8 @@
   // before typing into an aside would be absurd. The one piece of chrome that is not a
   // field is the collapse chevron, and collapse is **view state** — it never reaches the
   // file, in either direction. Obsidian's fold marker seeds it and is otherwise a no-op.
-  import { ChevronDown } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { BLOCK_ICONS } from "$lib/components/editor/block-icons";
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { oneLine } from "$lib/editor/labelled-row";
@@ -126,24 +127,22 @@
 
       <button
         type="button"
-        class="callout-toggle shrink-0 rounded p-0.5 transition-colors motion-reduce:transition-none
+        class="callout-toggle shrink-0 rounded p-0.5 transition-colors
                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         aria-label={collapsed ? "Expand callout" : "Collapse callout"}
         aria-expanded={!collapsed}
         onclick={toggleCollapsed}
       >
-        <ChevronDown
-          size={14}
-          class="transition-transform duration-150 motion-reduce:transition-none {collapsed
-            ? '-rotate-90'
-            : ''}"
-        />
+        <DisclosureChevron open={!collapsed} class="size-3.5" />
       </button>
     </header>
   {/if}
 
-  <!-- ProseMirror's hole. Hidden rather than unmounted when collapsed: the children are
-       real document content, and a collapse that removed them from the DOM would be a
-       collapse that edited the note. -->
-  <div class="callout-body" data-node-view-content hidden={collapsed}></div>
+  <!-- ProseMirror's hole. Kept mounted while collapsed: the children are real document
+       content, and a collapse that removed them from the DOM would be a collapse that
+       edited the note. It glides shut like every section (it used to snap), and is inert
+       while shut. -->
+  <Disclosure open={!collapsed} keepMounted holdsPlace>
+    <div class="callout-body" data-node-view-content></div>
+  </Disclosure>
 </blockquote>

@@ -19,11 +19,11 @@
 //! are reconciled in one transaction.
 //!
 //! **Flagged when the decision was taken and still true: this is a bulk note edit
-//! with no prompt.** A note open in an editor with unsaved changes keeps its buffer,
-//! and its next autosave writes the old name back — the same edge the planned
-//! repair-backlinks tool exists for. It is not made worse by being here: a rename
-//! touches only the notes that reference the renamed scene, which is a far smaller
-//! set than a folder move's backlinks.
+//! with no prompt.** It used to be worse: a note open in an editor kept its buffer,
+//! and its next autosave wrote the old name back. Since the 2026-10 design review the
+//! command announces every note it rewrote (`ledger_watch::announce_rewritten`), so an
+//! open note reloads, or, holding unsaved changes, raises its Conflict Banner rather
+//! than overwrite either side.
 //!
 //! **The grammar is duplicated in Rust, and that is a real cost.** ADR-0016 §3 says
 //! a block's parser is the editor's; this rewrite has to find a fence in a *file*
@@ -42,9 +42,9 @@ use diesel::SqliteConnection;
 use std::path::Path;
 
 /// Rewrite the cached name of scene `scene_id` to `new_name` in every note that
-/// references it, returning how many notes were rewritten.
+/// references it, returning the notes rewritten.
 ///
-/// Notes whose fences already carry the new name are not written — the count is what
+/// Notes whose fences already carry the new name are not written — the list is what
 /// actually changed on disk, so a rename that renames nothing is silent.
 ///
 /// [[Template]]s are deliberately out of scope: they have no `notes` row to
@@ -58,7 +58,7 @@ pub fn propagate_rename(
     ledger_path: &Path,
     scene_id: i32,
     new_name: &str,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     // Every note, read from disk. There is no index to narrow this by, and there is
     // not going to be one: ADR-0016 §8 draws the line at persistence — "nothing
     // indexes a block's insides", no fifth Derived Index member — so which notes hold
@@ -441,7 +441,7 @@ mod tests {
         std::fs::write(dir.path().join("Prose.md"), "No scenes here.").unwrap();
 
         let count =
-            propagate_rename(&mut conn, Some(&index), dir.path(), 7, "Final Stand").unwrap();
+            propagate_rename(&mut conn, Some(&index), dir.path(), 7, "Final Stand").unwrap().len();
 
         assert_eq!(count, 1, "only the note that references the scene is rewritten");
         let after = std::fs::read_to_string(dir.path().join("Session.md")).unwrap();
@@ -504,7 +504,7 @@ mod tests {
         std::fs::write(dir.path().join("Prose.md"), "No scenes here.").unwrap();
 
         assert_eq!(
-            propagate_rename(&mut conn, None, dir.path(), 7, "Final Stand").unwrap(),
+            propagate_rename(&mut conn, None, dir.path(), 7, "Final Stand").unwrap().len(),
             0
         );
         assert!(
@@ -561,7 +561,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            propagate_rename(&mut conn, None, dir.path(), 7, "Final Stand").unwrap(),
+            propagate_rename(&mut conn, None, dir.path(), 7, "Final Stand").unwrap().len(),
             1,
             "the scene is renamed either way; one unreadable note may not block it"
         );

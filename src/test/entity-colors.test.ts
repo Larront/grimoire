@@ -1,21 +1,15 @@
-// The entity colour ramp (#222) — the swatch row every picker in the app draws from.
+// The accent presets as data (#222) — what Settings' accent list and the PDF scene-link
+// layer draw from.
 //
 // **Why this test reads a stylesheet.** `entity-colors.ts` claims its five named steps
-// ARE the accent presets, and the claim is the whole reason a GM's picker looks like this
-// app rather than like a generic Tailwind scale. But the two cannot share a definition:
-// `app.css` holds a *theme* that re-resolves on every mode and accent change, and this
-// holds *data* frozen into SQLite rows the moment a swatch is clicked. So the agreement
-// is by construction and would rot silently — a preset retuned in `app.css` would leave
-// the pickers painting last year's crimson, and nothing would fail. This is what fails.
+// ARE the accent presets. But the two cannot share a definition: `app.css` holds a
+// *theme* that re-resolves on every mode and accent change, and this holds *data* that
+// must not. So the agreement is by construction and would rot silently — a preset retuned
+// in `app.css` would leave Settings' swatches and the PDF highlights painting last year's
+// crimson, and nothing would fail. This is what fails.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import {
-  ACCENT_PRESETS,
-  DEFAULT_PIN_COLOR,
-  DEFAULT_ANNOTATION_COLOR,
-  DEFAULT_ANNOTATION_STROKE,
-  ENTITY_COLOR_PRESETS,
-} from "$lib/entity-colors";
+import { ACCENT_PRESETS } from "$lib/entity-colors";
 
 // Relative to the runner's working directory, which is the project root.
 const css = readFileSync("src/app.css", "utf8");
@@ -49,34 +43,5 @@ describe("entity colour presets", () => {
     // is a value this module deliberately does not carry.
     const shippedDefault = /--primary:\s*([^;]+);/.exec(tokens)?.[1].trim();
     expect(shippedDefault).toBe(crimson.swatch);
-  });
-});
-
-describe("the picker row", () => {
-  it("carries every colour an entity can arrive wearing", () => {
-    // A default outside the row is a state a GM can leave but never get back to.
-    for (const fallback of [
-      DEFAULT_PIN_COLOR,
-      DEFAULT_ANNOTATION_COLOR,
-      DEFAULT_ANNOTATION_STROKE,
-    ]) {
-      expect(ENTITY_COLOR_PRESETS).toContain(fallback);
-    }
-  });
-
-  it("leads with the pin default, so a pin's first swatch is where it started", () => {
-    expect(ENTITY_COLOR_PRESETS[0]).toBe(DEFAULT_PIN_COLOR);
-  });
-
-  it("repeats no colour", () => {
-    expect(new Set(ENTITY_COLOR_PRESETS).size).toBe(ENTITY_COLOR_PRESETS.length);
-  });
-
-  it("is warm — nothing from the cold Tailwind ramp this replaced", () => {
-    // slate-200/400/50, teal-400, sky-400, violet-400, and the cold blue the pin
-    // default used to be. Named individually rather than by a hue test: the point is
-    // that these specific values were on this specific row (#222).
-    const banned = ["#e2e8f0", "#94a3b8", "#f8fafc", "#2dd4bf", "#38bdf8", "#a78bfa", "#4a90c4"];
-    for (const hex of banned) expect(ENTITY_COLOR_PRESETS).not.toContain(hex);
   });
 });

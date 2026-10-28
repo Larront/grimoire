@@ -1,26 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { formatBreadcrumb, formatRelativeTime } from "$lib/utils/note-meta";
+import { formatFolder, formatRelativeTime } from "$lib/utils/note-meta";
 
-describe("formatBreadcrumb", () => {
-  it("root-level note (no folder)", () => {
-    expect(formatBreadcrumb("Morrigan.md")).toBe("Morrigan.md");
+describe("formatFolder", () => {
+  it("says a note at the top of the world is at the top level, not in its own file", () => {
+    expect(formatFolder("Morrigan.md")).toBe("Top level");
   });
 
-  it("one folder deep", () => {
-    expect(formatBreadcrumb("NPCs/Morrigan.md")).toBe("NPCs / Morrigan.md");
+  it("names the folders, and only the folders", () => {
+    expect(formatFolder("NPCs/Morrigan.md")).toBe("NPCs");
+    expect(formatFolder("NPCs/Westmarch/Morrigan.md")).toBe("NPCs / Westmarch");
+    expect(formatFolder("A/B/C/Morrigan.md")).toBe("A / B / C");
   });
 
-  it("two folders deep (max untruncated)", () => {
-    expect(formatBreadcrumb("NPCs/Westmarch/Morrigan.md")).toBe("NPCs / Westmarch / Morrigan.md");
-  });
-
-  it("three folders deep truncates the middle", () => {
-    expect(formatBreadcrumb("A/B/C/Morrigan.md")).toBe("A / … / Morrigan.md");
-  });
-
-  it("deeply nested path truncates to first / … / last", () => {
-    expect(formatBreadcrumb("World/Locations/Cities/Westmarch/NPCs/Morrigan.md")).toBe(
-      "World / … / Morrigan.md",
+  it("shortens a long trail in the middle, keeping where it starts and ends", () => {
+    expect(formatFolder("World/Locations/Cities/Westmarch/NPCs/Morrigan.md")).toBe(
+      "World / … / Westmarch / NPCs",
     );
   });
 });

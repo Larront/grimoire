@@ -75,24 +75,31 @@ describe("the three things that apply to every block", () => {
     expect(items.map((i) => i.command)).toEqual(["duplicate", "copy", "delete"]);
   });
 
-  it("names the block it would act on, in the GM's word for it", () => {
+  it("names the block it would act on by its own name", () => {
     // A grip floating in the margin has no container to be read in, so "Delete" alone
-    // tells a screen reader nothing about which of forty blocks is about to go.
+    // tells a screen reader nothing about which of forty blocks is about to go — and
+    // "Delete statblock" says no more in an encounter of four kobolds.
     const editor = note("```statblock\n# Kobold A\nHP: 5/5\n```");
     const { items } = menuFor(editor, "statblockBlock")[0];
 
     expect(items.map((i) => i.label)).toEqual([
-      "Duplicate statblock",
-      "Copy statblock as Markdown",
-      "Delete statblock",
+      "Duplicate Kobold A",
+      "Copy Kobold A as Markdown",
+      "Delete Kobold A",
     ]);
   });
 
-  it("names a callout by its type, which is how a GM thinks of the box", () => {
-    const editor = note("> [!encounter] The Ambush\n> Two kobolds.");
-    const { items } = menuFor(editor, "blockquote")[0];
+  it("falls back to the GM's word for a block with no name", () => {
+    const editor = note("```statblock\nHP: 5/5\n```");
+    expect(menuFor(editor, "statblockBlock")[0].items[2].label).toBe("Delete statblock");
+  });
 
-    expect(items[2].label).toBe("Delete encounter callout");
+  it("names a callout by its title, and by its type when it has none", () => {
+    const titled = note("> [!encounter] The Ambush\n> Two kobolds.");
+    expect(menuFor(titled, "blockquote")[0].items[2].label).toBe("Delete The Ambush");
+
+    const untitled = note("> [!encounter]\n> Two kobolds.");
+    expect(menuFor(untitled, "blockquote")[0].items[2].label).toBe("Delete encounter callout");
   });
 
   it("stays last, below the transformations, on a block that has both", () => {
@@ -139,13 +146,13 @@ describe("the section offering what a text block can become", () => {
       },
       {
         command: { turnInto: "bulletList" },
-        label: "Bullet List",
+        label: "Bullet list",
         icon: "List",
         current: false,
       },
       {
         command: { turnInto: "orderedList" },
-        label: "Numbered List",
+        label: "Numbered list",
         icon: "ListOrdered",
         current: false,
       },
@@ -195,7 +202,7 @@ describe("the section offering what a text block can become", () => {
     const editor = note("1. first light");
     const { items } = section(menuFor(editor, "paragraph"), "Turn into");
 
-    expect(items.filter((i) => i.current).map((i) => i.label)).toEqual(["Numbered List"]);
+    expect(items.filter((i) => i.current).map((i) => i.label)).toEqual(["Numbered list"]);
   });
 
   it("marks a callout's own prose as a paragraph, the callout being a container", () => {

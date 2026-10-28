@@ -3,6 +3,7 @@ import { api } from "$lib/api";
 import type { Editor } from "@tiptap/core";
 import ImageBlockView from "$lib/components/editor/ImageBlockView.svelte";
 import { createBlockNodeView, type BlockView } from "$lib/editor/node-view-connector";
+import { NodeSelection } from "@tiptap/pm/state";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,13 @@ export interface ImageAttrs {
   align: string;
   width: string;
   title: string | null;
+  /**
+   * What an Obsidian embed (`![[map.png|300]]`) said between its brackets, kept so the
+   * note is written back as the GM's other tool wrote it; null for an ordinary image.
+   * Its file is found by name when the image is drawn, and `src` stays empty until the
+   * GM changes the image, which writes it Grimoire's way, as `![alt](path)`.
+   */
+  embed: string | null;
 }
 
 /** Image draws its own selected state, so its view must accept one. */
@@ -52,6 +60,13 @@ interface ImageBlockViewExports extends BlockView<ImageAttrs> {
  * ordinary path rather than an edge case.
  */
 const IMAGE_WITH_ATTRS_RE = /^!\[([^\]]*)\]\(([^)]+)\)\{([^}]+)\}/;
+
+/**
+ * Obsidian's image embed, `![[map.png]]` or `![[Art/map.png|300]]`, anchored. Only a
+ * target with an image's extension: `![[Some Note]]` transcludes a note, which Grimoire
+ * shows as the text the GM typed (`wiki-link.ts`).
+ */
+const IMAGE_EMBED_RE = /^!\[\[([^[\]|#]+\.(?:png|jpe?g|gif|webp)(?:[|#][^[\]]*)?)\]\]/i;
 
 /** `align=left width=60%` → `{ align: "left", width: "60%" }`. */
 function parseImageAttrs(attrsStr: string): Record<string, string> {
@@ -78,9 +93,11 @@ export function serializeImageNode(node: {
     alt: string | null;
     align: string;
     width: string;
+    embed?: string | null;
   };
 }): string {
   const { src, alt, align, width } = node.attrs;
+  if (node.attrs.embed) return `![[${node.attrs.embed}]]`;
   let md = `![${alt ?? ""}](${src})`;
   const parts: string[] = [];
   if (align !== "center") parts.push(`align=${align}`);
@@ -108,6 +125,11 @@ export const ImageBlock = Image.extend({
         parseHTML: (el) => (el as HTMLElement).getAttribute("data-width") ?? "100%",
         renderHTML: (attrs) => ({ "data-width": attrs.width }),
       },
+      embed: {
+        default: null,
+        parseHTML: (el) => (el as HTMLElement).getAttribute("data-embed"),
+        renderHTML: (attrs) => (attrs.embed ? { "data-embed": attrs.embed } : {}),
+      },
     };
   },
 
@@ -118,6 +140,8 @@ export const ImageBlock = Image.extend({
     // rather than swallowing the image into a paragraph's prose.
     start: (src: string) => src.indexOf("!["),
     tokenize: (src: string) => {
+      const embed = IMAGE_EMBED_RE.exec(src);
+      if (embed) return { type: "image", raw: embed[0], href: "", text: "", embed: embed[1] };
       const match = IMAGE_WITH_ATTRS_RE.exec(src);
       if (!match) return undefined;
       const [raw, alt, href, attrsStr] = match;
@@ -142,13 +166,31 @@ export const ImageBlock = Image.extend({
       title: token.title ?? null,
       align: token.align ?? "center",
       width: token.width ?? "100%",
+      embed: token.embed ?? null,
     }),
 
   // @ts-expect-error — renderMarkdown is read by @tiptap/markdown via getExtensionField
   renderMarkdown(node: {
-    attrs: { src: string; alt: string | null; align: string; width: string };
+    attrs: { src: string; alt: string | null; align: string; width: string; embed: string | null };
   }) {
     return serializeImageNode(node);
+  },
+
+  // Enter or Space on a selected image shows it full screen. Space used to replace the
+  // selection like any typed character, deleting the image — the key a GM presses to
+  // "show" something, mid-session.
+  addKeyboardShortcuts() {
+    const show = () => {
+      const { selection } = this.editor.state;
+      if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) {
+        return false;
+      }
+      this.editor.view
+        .nodeDOM(selection.from)
+        ?.dispatchEvent(new CustomEvent("image-block:open-viewer"));
+      return true;
+    };
+    return { Enter: show, Space: show };
   },
 
   addNodeView() {
@@ -161,12 +203,14 @@ export const ImageBlock = Image.extend({
         align: "center",
         width: "100%",
         title: null,
+        embed: null,
       },
       drawsOwnSelection: true,
       props: ({ updateAttributes }) => ({
         onUpdate: updateAttributes,
         onCaptionUpdate: (alt: string) => updateAttributes({ alt }),
-        onSrcReplace: (src: string) => updateAttributes({ src }),
+        // A replaced embed is the GM's own image now, written Grimoire's way.
+        onSrcReplace: (src: string) => updateAttributes({ src, embed: null }),
       }),
 
       // Image's use of the connector's event hole: a mousedown must reach

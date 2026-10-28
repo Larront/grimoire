@@ -15,6 +15,7 @@
 
 <script lang="ts">
   import { X } from "@lucide/svelte";
+  import { compareNames } from "$lib/utils/file-name";
 
   interface Props {
     tags: string[];
@@ -45,7 +46,7 @@
         const nk = normalizeTag(s);
         return nk.includes(key) && !attachedKeys.has(nk);
       })
-      .sort((a, b) => normalizeTag(a).localeCompare(normalizeTag(b)));
+      .sort((a, b) => compareNames(normalizeTag(a), normalizeTag(b)));
   });
 
   // Show "Create new tag: X" only when the draft is a valid tag value AND
@@ -133,14 +134,14 @@
     {#each tags as tag, i (tag + i)}
       <span
         data-slot="tag-chip"
-        class="group inline-flex items-center gap-1 rounded-[100px] bg-primary/15 px-2 py-0.5 text-xs font-medium text-foreground"
+        class="group inline-flex items-center gap-1 rounded-[100px] border border-border bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
       >
         <span>{tag}</span>
         <button
           type="button"
           data-slot="tag-chip-remove"
           aria-label={`Remove tag ${tag}`}
-          class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:text-primary"
+          class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
           onclick={(e) => {
             e.stopPropagation();
             removeAt(i);

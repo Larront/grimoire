@@ -135,4 +135,6 @@ export interface SpotifyAuthStatus {
 export interface TemplateEntry {
   display_name: string;
   path: string;
+  /** The tags a note made from it starts with. */
+  tags: string[];
 }

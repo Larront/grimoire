@@ -46,6 +46,13 @@ export class LocalStorageTabPersistence implements TabPersistence {
     } catch {}
   }
 
+  /** Forget this ledger's tabs, for a ledger whose contents were replaced wholesale. */
+  clear(): void {
+    try {
+      localStorage.removeItem(this.key);
+    } catch {}
+  }
+
   load(): PersistedState | null {
     const raw = localStorage.getItem(this.key);
     if (!raw) return null;

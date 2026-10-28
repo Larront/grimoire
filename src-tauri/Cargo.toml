@@ -1,6 +1,6 @@
 [package]
 name = "grimoire"
-version = "0.4.0"
+version = "0.5.0"
 description = "A local-first desktop app for tabletop RPG worldbuilders to manage lore, NPCs, maps, and ambient audio scenes."
 authors = ["Aaron Lamont"]
 license = "GPL-3.0-or-later"
@@ -17,6 +17,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Compiles the vendored SQLite recover extension (see build.rs).
+cc = "1"
 
 [dependencies]
 diesel = { version = "2.2.0", features = [
@@ -56,6 +58,7 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-window-state = "2.4.1"
 tauri-plugin-log = "2.8.0"
 log = "0.4.33"
+trash = "5.2.9"
 
 # Windows-only: lets us reach into the WebView2 controller to disable the
 # native pinch-zoom gesture so touchpad pinch reaches the page as ctrl+wheel

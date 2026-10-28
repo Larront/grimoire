@@ -25,7 +25,11 @@
   import LinkedTextField from "$lib/components/editor/LinkedTextField.svelte";
   import { remapRowIndices, settleRowChange, type RowChange } from "$lib/editor/row-list";
   import { oneLine } from "$lib/editor/labelled-row";
-  import { ChevronDown } from "@lucide/svelte";
+  import { linkedPlainText } from "$lib/editor/linked-text";
+  import { tick } from "svelte";
+  import { Plus } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
 
   // The block's record, taken as one prop bag rather than field by field: the connector
   // mounts a block with its record spread over the props, so the rest element *is* the
@@ -45,6 +49,8 @@
   let expandedSet = $state(new Set<number>());
   /** The event whose title is opening for typing, after an insert or a fresh `/timeline`. */
   let focusedRow = $state<number | null>(null);
+  /** The event whose description is opening for typing, from its "Add description". */
+  let focusedDescription = $state<number | null>(null);
 
   function commit() {
     onCommit($state.snapshot(timeline) as Timeline);
@@ -53,8 +59,40 @@
   function setEvent(index: number, patch: Partial<TimelineEvent>) {
     timeline.events[index] = { ...timeline.events[index], ...patch };
     focusedRow = null;
+    focusedDescription = null;
     commit();
   }
+
+  const isBlank = (e: TimelineEvent) => !e.date.trim() && !e.title.trim() && !e.description.trim();
+
+  // An insert the GM walked away from goes away with them. It was never written — a blank
+  // event is not serialized — but it stayed on screen as an "Untitled event", and a stray
+  // click between two events used to leave one behind. Focus moving within the row (to
+  // its controls, or from title to date) is not leaving it.
+  async function dropIfAbandoned(e: FocusEvent, event: TimelineEvent) {
+    const row = (e.currentTarget as HTMLElement).closest("[data-row-index]");
+    if (row && e.relatedTarget instanceof Node && row.contains(e.relatedTarget)) return;
+    // A task, not a microtask: microtasks run between this listener and the field's own
+    // blur, and removing the row first left the closing field — drawn by position — to
+    // save its empty title over the event that had moved into its place.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // A field swapping its drawn value for an input loses focus for a moment and has it
+    // back by now; that is not leaving.
+    if (row && row.contains(document.activeElement)) return;
+    const index = timeline.events.indexOf(event);
+    if (index === -1 || !isBlank(timeline.events[index])) return;
+    timeline.events = timeline.events.filter((_, i) => i !== index);
+    expandedSet = remapRowIndices(expandedSet, { kind: "delete", index });
+    focusedRow = null;
+  }
+
+  /** "Add description": open the panel and its field for typing. */
+  function addDescription(i: number) {
+    expandedSet = new Set([...expandedSet, i]);
+    focusedDescription = i;
+  }
+
+  const eventName = (e: TimelineEvent) => linkedPlainText(e.title);
 
   function toggleExpand(i: number) {
     const s = new Set(expandedSet);
@@ -71,9 +109,13 @@
     timeline.events = next;
     expandedSet = remapRowIndices(expandedSet, change);
     settleRowChange(change, {
+      // A new event opens its title for typing. Its description stays closed until the
+      // GM asks for one, as a fresh `/timeline`'s does: the two used to disagree.
+      // Cleared first, so a second insert at the same position is a change the title
+      // field sees: it opens on `focused` becoming true, and it was already true.
       focus: (index) => {
-        expandedSet = new Set([...expandedSet, index]); // description visible
-        focusedRow = index;
+        focusedRow = null;
+        void tick().then(() => (focusedRow = index));
       },
       commit: () => {
         focusedRow = null;
@@ -83,8 +125,12 @@
   }
 
   export function setAttrs(next: Timeline) {
+    // An undo that adds or removes events would leave the expanded set pointing at
+    // whichever events now sit at those positions, so it starts again closed.
+    if (next.events.length !== timeline.events.length) expandedSet = new Set();
     timeline = next;
     focusedRow = null;
+    focusedDescription = null;
   }
 
   /** A fresh insert opens its one blank event's title for typing. */
@@ -93,133 +139,234 @@
   }
 </script>
 
-<!-- One event, drawn by Timeline: the Row List draws the controls over this and
-     the insert-between gaps around it, and knows nothing of dates or titles. -->
+<!-- One event, drawn by Timeline: the Row List draws the controls over it and knows
+     nothing of dates or titles.
+
+     The date sits in its own column to the left of the spine, like a chronicle's margin:
+     at the table the question is "when?", and the eye can run straight down the dates.
+     It used to be the smallest, faintest line above the title. In a narrow pane there is
+     no room for a margin, and the grid puts the same field back above the title. -->
 {#snippet eventRow(event: TimelineEvent, i: number)}
-  <!-- Spine column: continuous line + node. The connecting line starts under the
-       node and extends past the row bottom (-bottom-[34px]) to bridge the 20px
-       insertion gap and meet the next node, which paints over its tail. The last
-       event draws no descending line. The node turns Crimson while the GM is in one of
-       the row's fields — the timeline's single use of the accent, and the same signal
-       the node used to carry for the mode this block no longer has. -->
-  <div class="relative w-4 flex-none self-stretch" aria-hidden="true">
-    {#if i < timeline.events.length - 1}
-      <div
-        class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[34px] w-px bg-muted-foreground/25"
-      ></div>
-    {/if}
-    <div
-      class="absolute left-1/2 -translate-x-1/2 top-[9px] size-[9px] rounded-full border bg-background
-             border-muted-foreground/50 group-focus-within:border-primary"
-    ></div>
-  </div>
-
-  <!-- Content column — pr-14 reserves the gutter the Row List's controls sit in.
-
-       Date, then title, then the description behind the chevron: every value a field
-       all of the time, so there is nothing to open before the GM can type — and an
-       empty one is reachable through its placeholder rather than needing a mode to
-       exist at all. -->
-  <div class="flex-1 min-w-0 pb-2 pr-14">
-    <!-- Date label: Metamorphous, small, ember-muted -->
-    <LinkedTextField
-      value={event.date}
-      onCommit={(date) => setEvent(i, { date })}
-      restrict={oneLine}
-      ariaLabel={`Event ${i + 1} date`}
-      placeholder="Date"
-      class="font-heading text-[11px] leading-tight text-muted-foreground mb-0.5"
-    />
-
-    <div class="flex items-start gap-1">
-      <!-- Title: Metamorphous (world voice) -->
+  {@const hasDescription = event.description.trim() !== ""}
+  {@const expanded = expandedSet.has(i)}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- Blur in the capture phase rather than focusout: a field closing on blur leaves the
+       page before a bubbling focusout reaches here, so the event was never heard. -->
+  <div class="timeline-event" onblurcapture={(e) => dropIfAbandoned(e, event)}>
+    <div class="timeline-date">
       <LinkedTextField
-        value={event.title}
-        onCommit={(title) => setEvent(i, { title })}
+        value={event.date}
+        onCommit={(date) => setEvent(i, { date })}
         restrict={oneLine}
-        focused={focusedRow === i}
-        ariaLabel={`Event ${i + 1} title`}
-        placeholder="Untitled event"
-        class="min-w-0 flex-1 font-heading text-sm leading-snug text-foreground"
+        ariaLabel={`Event ${i + 1} date`}
+        placeholder="Date"
+        class="font-sans text-sm font-medium leading-snug text-foreground"
       />
-
-      <!-- Expand/collapse toggle for the description. Drawn on every event, not only
-           the ones that have one: it is now the way a description is *added*, the mode
-           that used to reveal an empty one having gone. -->
-      <button
-        type="button"
-        class="shrink-0 mt-1 p-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground
-               transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2
-               focus-visible:ring-primary focus-visible:ring-offset-2"
-        onclick={() => toggleExpand(i)}
-        aria-label={expandedSet.has(i) ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
-        aria-expanded={expandedSet.has(i)}
-      >
-        <ChevronDown
-          size={12}
-          class="transition-transform duration-150 motion-reduce:transition-none {expandedSet.has(i)
-            ? 'rotate-180'
-            : ''}"
-        />
-      </button>
     </div>
 
-    <!-- Collapsible description: grid-rows slide (snaps under prefers-reduced-motion).
-         `multiline`, because a description wraps across lines inside the fence and the
-         format's own escape keeps a line that reads as a heading out of the next
-         event. -->
-    <!-- `inert` as well as `aria-hidden`, and this is the pair rather than one of them:
-         the panel holds a *focusable* field now where it used to hold text, so hidden
-         from a screen reader and still in the tab order would put the caret in a value
-         clipped to no height. Kept mounted rather than swapped out with an `{#if}`, so
-         the height it animates to is a height it has. -->
-    <div
-      class="desc-panel grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-      style="grid-template-rows: {expandedSet.has(i) ? '1fr' : '0fr'}"
-      aria-hidden={!expandedSet.has(i)}
-      inert={!expandedSet.has(i)}
-    >
-      <div class="min-h-0">
-        <!-- Description: Nunito (reading prose voice) -->
+    <!-- Spine: continuous line + node. The node turns Crimson while the GM is in one of
+         the row's fields — the timeline's single use of the accent. -->
+    <div class="timeline-spine relative" aria-hidden="true">
+      {#if i < timeline.events.length - 1}
+        <div
+          class="absolute left-1/2 -translate-x-1/2 top-[9px] -bottom-[calc(var(--row-gap)+11px)] w-px bg-muted-foreground/30"
+        ></div>
+      {/if}
+      <div
+        class="absolute left-1/2 -translate-x-1/2 top-[7px] size-[9px] rounded-full border bg-background
+               border-muted-foreground group-focus-within:border-primary"
+      ></div>
+    </div>
+
+    <div class="timeline-body min-w-0 pb-1">
+      <div class="flex items-start gap-1">
+        <!-- Title: Metamorphous (world voice) -->
+        <LinkedTextField
+          value={event.title}
+          onCommit={(title) => setEvent(i, { title })}
+          restrict={oneLine}
+          focused={focusedRow === i}
+          ariaLabel={`Event ${i + 1} title`}
+          placeholder="Untitled event"
+          class="min-w-0 flex-1 font-heading text-base leading-snug text-foreground"
+        />
+
+        {#if hasDescription}
+          <button
+            type="button"
+            class="flex size-7 shrink-0 -my-1 items-center justify-center rounded-md text-muted-foreground
+                 transition-colors hover:bg-surface-hover hover:text-foreground
+                 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            onclick={() => toggleExpand(i)}
+            aria-label={expanded ? `Collapse event ${i + 1}` : `Expand event ${i + 1}`}
+            aria-expanded={expanded}
+            title={expanded ? "Hide description" : "Show description"}
+          >
+            <DisclosureChevron open={expanded} class="size-3.5" />
+          </button>
+        {/if}
+      </div>
+
+      <!-- Collapsed, an event with a description shows its first line, so the chevron
+         means "more" rather than "maybe something"; it opens the rest. An event without
+         one shows nothing at rest and offers "Add description" on hover or focus. -->
+      <!-- The first line and the full description glide past each other, one shutting
+           as the other opens. The first line used to come back at once while the full
+           text was still shrinking, so for a moment the event said it twice (2026-10
+           design review). -->
+      <Disclosure open={!expanded}>
+        {#if hasDescription}
+          <button
+            type="button"
+            class="mt-0.5 block w-full truncate rounded-sm text-left font-sans text-sm leading-relaxed text-muted-foreground
+               hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            onclick={() => toggleExpand(i)}
+            aria-label={`Show the description of event ${i + 1}`}
+          >
+            {linkedPlainText(event.description).split("\n")[0]}
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="timeline-add-description mt-0.5 inline-flex h-6 items-center gap-1 rounded-md px-1 -mx-1 text-xs
+               text-muted-foreground hover:bg-surface-hover hover:text-foreground
+               focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            onclick={() => addDescription(i)}
+          >
+            <Plus size={12} aria-hidden="true" />
+            Add description
+          </button>
+        {/if}
+      </Disclosure>
+
+      <!-- The full description, in reading size: it used to be 12px with a tight line, in
+         a note whose prose is 16px. Kept mounted, so the field's focus survives a close. -->
+      <Disclosure open={expanded} keepMounted holdsPlace class="desc-panel">
         <LinkedTextField
           value={event.description}
           onCommit={(description) => setEvent(i, { description })}
           multiline
+          focused={focusedDescription === i}
           ariaLabel={`Event ${i + 1} description`}
-          placeholder="Description (optional)"
-          class="font-sans text-xs text-muted-foreground pt-1 pb-1"
+          placeholder="Description"
+          class="font-sans text-sm leading-relaxed text-foreground pt-1"
         />
-      </div>
+      </Disclosure>
     </div>
   </div>
 {/snippet}
 
-<div class="timeline-block my-2 select-none" contenteditable="false">
-  <!-- No chrome of its own. This corner held a trash can, because a sealed block holds
-       every click and so ProseMirror never selected the node for Backspace to take
-       (#175 review). The gutter handle picks the block up (#190) and its menu deletes it
-       (#194), so the block draws neither. -->
+<!-- The frame every note block shares (DESIGN.md §4, "in the page"). The timeline was the
+     one block without it, so its controls had no edge to sit against and it read as part
+     of the prose. A query container, so the date can leave the margin in a narrow pane. -->
+<div
+  class="timeline-block @container/timeline my-2 select-none rounded-lg border border-border bg-card/40 px-3 py-2"
+  contenteditable="false"
+>
+  <!-- No chrome of its own. The gutter handle picks the block up (#190) and its menu
+       deletes it (#194), so the block draws neither. -->
 
   {#if timeline.events.length === 0}
-    <div class="ml-6 text-xs text-muted-foreground font-sans italic mb-1">No events yet</div>
+    <p class="pl-[9.25rem] pt-1 text-sm text-muted-foreground">
+      No events yet — add the first thing that happened.
+    </p>
   {/if}
 
-  <!-- Order, the hover-revealed move / delete / insert-between controls and their
-       gaps are the Row List's; the gaps are indented to clear the spine. -->
+  <!-- Order and the move / delete / insert controls are the Row List's; Add lines up with
+       the titles, past the date margin and the spine. -->
   <RowList
     rows={timeline.events}
     row={eventRow}
     noun="event"
-    insertionPointClass="pl-6"
+    rowName={eventName}
+    addClass="timeline-add"
     createRow={createBlankEvent}
     onChange={handleRowChange}
   />
 </div>
 
 <style>
-  @media (prefers-reduced-motion: reduce) {
-    .desc-panel {
-      transition: none;
+  /* An event: the date in a 7rem margin, the spine, then the title and description. One
+     date field, placed by the grid — in a narrow pane (28rem, where the margin starts to
+     cost the title more than the date gains) it moves above the title. */
+  /* The insert point's plus sits on the spine: past the 7rem date margin and the gap,
+     at the middle of the 1rem spine column. */
+  .timeline-block {
+    --row-insert-x: 8.125rem;
+    /* The space between events, which the Row List draws and puts its insert point in. */
+    --row-gap: 0.75rem;
+  }
+
+  .timeline-event {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    grid-template-columns: 7rem 1rem minmax(0, 1fr);
+    grid-template-areas: "date spine body";
+    column-gap: 0.625rem;
+  }
+
+  .timeline-date {
+    grid-area: date;
+    padding-top: 0.125rem;
+  }
+
+  /* Right-aligned in the margin, so each date sits against the spine it belongs to. */
+  .timeline-date :global(button),
+  .timeline-date :global(input) {
+    text-align: right;
+  }
+
+  .timeline-spine {
+    grid-area: spine;
+  }
+
+  .timeline-body {
+    grid-area: body;
+  }
+
+  /* Add lines up with the titles: past the margin, the spine and their gaps. */
+  .timeline-block :global(.timeline-add) {
+    padding-left: 9.25rem;
+  }
+
+  @container timeline (max-width: 28rem) {
+    .timeline-block {
+      --row-insert-x: 0.5rem;
     }
+
+    .timeline-event {
+      grid-template-columns: 1rem minmax(0, 1fr);
+      grid-template-areas:
+        "spine date"
+        "spine body";
+    }
+
+    .timeline-date {
+      padding-top: 0;
+    }
+
+    .timeline-date :global(button),
+    .timeline-date :global(input) {
+      text-align: left;
+    }
+
+    .timeline-block :global(.timeline-add) {
+      padding-left: 1.625rem;
+    }
+
+    .timeline-block > p {
+      padding-left: 1.625rem;
+    }
+  }
+
+  /* "Add description" is there when the GM is working on the event, not while reading. */
+  .timeline-add-description {
+    opacity: 0;
+  }
+
+  :global(.row-list-row:hover) .timeline-add-description,
+  :global(.row-list-row:focus-within) .timeline-add-description {
+    opacity: 1;
   }
 </style>

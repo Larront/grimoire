@@ -16,8 +16,24 @@
 import { api } from "$lib/api";
 import { untrack } from "svelte";
 import { createSaveStatus } from "./save-status.svelte";
+import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+import { tagsTick } from "$lib/stores/tags-tick.svelte";
 import { staleGuard } from "./stale-guard";
 import type { Note, Pin, PinCategory } from "$lib/types/ledger";
+import { noteExcerpt } from "$lib/editor/note-excerpt";
+import { parseFrontmatter } from "$lib/utils";
+
+/** The linked note as the pin panel shows it: the same excerpt grammar the wikilink
+    hover preview speaks (`noteExcerpt`), without the frontmatter block it used to print
+    as `--- tags: location ---`, and without a leading line that only repeats the
+    note's title — the panel names the note directly above it. One paragraph, 150
+    characters. */
+export function pinNotePreview(content: string, title: string): string {
+  const lines = noteExcerpt(parseFrontmatter(content).body).split("\n");
+  if (lines[0]?.trim() === title.trim()) lines.shift();
+  const text = lines.join(" ").replace(/\s+/g, " ").trim();
+  return text.slice(0, 150) + (text.length > 150 ? "…" : "");
+}
 
 export type { SaveStatus } from "./save-status.svelte";
 
@@ -61,6 +77,10 @@ export function createPinDetailsSource(
     const targetId = p.id;
     loadedForPinId = targetId;
     saves.reset();
+    loadPinTags(targetId);
+  });
+
+  function loadPinTags(targetId: number) {
     const whenCurrent = staleGuard(targetId, () => loadedForPinId);
     api.silent
       .getPinTags(targetId)
@@ -75,6 +95,13 @@ export function createPinDetailsSource(
         }),
       );
     refreshAllTags();
+  }
+
+  // The Tag Manager renamed, merged or deleted a tag — maybe one of this pin's.
+  $effect(() => {
+    if (tagsTick.value === 0) return;
+    const p = untrack(() => getPin());
+    if (p) loadPinTags(p.id);
   });
 
   // Pin Categories — per-map, so keyed by map id.
@@ -119,8 +146,7 @@ export function createPinDetailsSource(
       .readNoteContent(targetPath)
       .then((content) =>
         whenCurrent(() => {
-          const stripped = content.replace(/[#*_`\[\]]/g, "").trim();
-          notePreview = stripped.slice(0, 150) + (stripped.length > 150 ? "…" : "");
+          notePreview = pinNotePreview(content, linked.title);
         }),
       )
       .catch(() =>
@@ -152,6 +178,8 @@ export function createPinDetailsSource(
     await saves.run(async () => {
       const saved = (await api.silent.updatePin(updated)) as Pin;
       applyPin(saved);
+      // A pin a repair unlinked is fixed the moment it has a note again.
+      if (saved.note_id != null) unlinkedPins.resolve(saved.id);
     });
   }
 

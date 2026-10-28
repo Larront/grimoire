@@ -2,7 +2,7 @@
   import type { AnnotationKind } from "$lib/types/ledger";
 
   export const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: "Text Label",
+    text: "Text label",
     rect: "Rectangle",
     circle: "Circle",
   };
@@ -13,8 +13,8 @@
   import type { MapAnnotation } from "$lib/types/ledger";
   import { Lock, LockOpen, Trash2 } from "@lucide/svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
-  import ColorSwatches from "$lib/components/ColorSwatches.svelte";
-  import { ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
+  import { DEFAULT_ANNOTATION_COLOR, DEFAULT_ANNOTATION_STROKE } from "$lib/entity-colors";
 
   interface Props {
     annotation: MapAnnotation;
@@ -58,7 +58,7 @@
 
 <!-- Kind row -->
 <div class="flex items-center justify-between pb-3">
-  <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]">
+  <span class="text-xs font-semibold text-foreground-muted">
     {KIND_LABELS[annotation.kind]}
   </span>
   <button
@@ -91,13 +91,13 @@
         if (e.key === "Enter") (e.target as HTMLElement).blur();
       }}
       class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-             font-mono text-[10px] text-foreground outline-none focus:border-primary"
+             font-mono text-[11px] text-foreground outline-none focus:border-primary"
       placeholder="Label text"
     />
   </DetailSection>
 
   <!-- Font size (text only) -->
-  <DetailSection label="Font Size — {annotation.font_size}px" sectionKey="font-size">
+  <DetailSection label="Font size — {annotation.font_size}px" sectionKey="font-size">
     <input
       id="ann-fontsize"
       type="range"
@@ -129,20 +129,24 @@
 
   <!-- Stroke color (shapes only) -->
   <DetailSection label="Stroke" sectionKey="stroke">
-    <ColorSwatches
+    <!-- An annotation always has a colour, so Default puts back the one it was drawn
+         with rather than clearing it. -->
+    <ColorPicker
       value={annotation.stroke_color}
-      presets={ENTITY_COLOR_PRESETS}
-      onchange={(color) => save({ stroke_color: color })}
+      defaultValue={DEFAULT_ANNOTATION_STROKE}
+      fallback={DEFAULT_ANNOTATION_STROKE}
+      onchange={(color) => color && save({ stroke_color: color })}
     />
   </DetailSection>
 {/if}
 
 <!-- Fill / text color -->
-<DetailSection label={annotation.kind === "text" ? "Text Color" : "Fill Color"} sectionKey="color">
-  <ColorSwatches
+<DetailSection label={annotation.kind === "text" ? "Text colour" : "Fill colour"} sectionKey="color">
+  <ColorPicker
     value={annotation.color}
-    presets={ENTITY_COLOR_PRESETS}
-    onchange={(color) => save({ color })}
+    defaultValue={DEFAULT_ANNOTATION_COLOR}
+    fallback={DEFAULT_ANNOTATION_COLOR}
+    onchange={(color) => color && save({ color })}
   />
 </DetailSection>
 
@@ -165,7 +169,7 @@
   <button
     type="button"
     onclick={() => onDelete(annotation.id)}
-    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(length:--font-ui)
            text-error hover:bg-error/10 transition-colors cursor-pointer"
   >
     <Trash2 class="size-3.5 shrink-0" />

@@ -118,9 +118,13 @@ pub struct Rewrite {
 pub struct Migration {
     /// The format version a vault is on once this has run over all of it.
     pub to_version: u32,
-    /// One plain sentence, in the GM's terms, for the consent prompt and the
-    /// report. This is the whole registration cost of a future format change,
-    /// and it is what lets the prompt be *composed* rather than written.
+    /// What changes in the GM's notes, in one short line — the consent prompt's.
+    /// About their notes, not about syntax: the GM deciding before a session needs
+    /// what happens and whether it is safe, not why (2026-10 design review).
+    pub summary: &'static str,
+    /// Why, in plain sentences — the report's. This and `summary` are the whole
+    /// registration cost of a future format change, and what lets the prompt be
+    /// *composed* rather than written.
     pub sentence: &'static str,
     /// Given a file's text: `None` if untouched, otherwise the rewrite.
     pub apply: fn(&str, &MigrationContext) -> Option<Rewrite>,
@@ -130,8 +134,9 @@ pub struct Migration {
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         to_version: 1,
-        // Plain text, not markdown: this same string is read straight into a dialog
+        // Plain text, not markdown: these strings are read straight into a dialog
         // and written into the report, and neither renders backticks.
+        summary: "Timelines: each event's title becomes a heading instead of a “Title:” line.",
         sentence: "Timeline events will be written with their title as a heading instead of a \
                    \"Title:\" line, so a description can run to more than one paragraph. Until \
                    now a blank line inside a description split it into a second, untitled event \
@@ -140,6 +145,7 @@ pub const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         to_version: 2,
+        summary: "Scene players: the line of HTML becomes a short block naming the scene.",
         sentence: "Scene references will be written as a short block naming the scene instead \
                    of a line of HTML, so a note that plays a scene reads as one in Obsidian \
                    and the scene's name can be found by searching your notes.",
@@ -230,13 +236,27 @@ struct Affected {
 pub struct MigrationPlan {
     pub from: u32,
     pub to: u32,
-    /// One sentence per pending migration **that found work**. A migration
-    /// finding nothing contributes nothing.
+    /// One sentence per pending migration **that found work** — the why, for the
+    /// report. A migration finding nothing contributes nothing.
     pub sentences: Vec<String>,
+    /// The same migrations' one-line summaries — what changes, for the prompt.
+    pub changes: Vec<String>,
     /// A union, not a sum: a file two migrations touch is one file. `u32` because
     /// specta refuses to export `usize` (precision loss across the IPC boundary).
     pub file_count: u32,
     /// Warnings the scan produced, each prefixed with the file it came from.
+    pub warnings: Vec<String>,
+    /// Every note the update will rewrite, by vault-relative path, with the
+    /// warnings that are its own — so the prompt can name them rather than count
+    /// them (2026-10 design review).
+    pub notes: Vec<PlannedNote>,
+}
+
+/// One note the update will rewrite.
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+pub struct PlannedNote {
+    pub path: String,
+    /// Path-free: the prompt shows them under the note's name.
     pub warnings: Vec<String>,
 }
 
@@ -247,6 +267,9 @@ pub struct MigrationReport {
     pub to: u32,
     /// Vault-relative paths of the files actually rewritten.
     pub migrated: Vec<String>,
+    /// The same files with the warnings that are their own — what the GM was told
+    /// would change in their writing, so the toast can say where it did.
+    pub notes: Vec<PlannedNote>,
     /// Files that could not be written, with the reason — the casualties the
     /// partial-failure path is required to name.
     pub failed: Vec<FailedFile>,
@@ -333,6 +356,7 @@ pub fn run(
                 from,
                 to,
                 migrated: Vec::new(),
+                notes: Vec::new(),
                 failed: Vec::new(),
                 warnings: Vec::new(),
                 backup_dir: String::new(),
@@ -342,7 +366,11 @@ pub fn run(
         ));
     }
 
-    let backup_dir = back_up(ledger_path, &affected)?;
+    // A retry after a partial failure adds to that attempt's backup rather than
+    // starting a new one: the notes it already rewrote have their originals only
+    // there, and "keep one" pruned them minutes later (2026-10 design review).
+    let unfinished = unfinished_backup(ledger_path);
+    let backup_dir = back_up(ledger_path, &affected, unfinished.as_deref())?;
 
     // Per-note best-effort from here on: keep going, skip what cannot be written.
     // Rollback is not merely expensive but wrong — it discards correct work and
@@ -371,22 +399,47 @@ pub fn run(
         .flat_map(located)
         .collect();
 
+    let notes = affected
+        .iter()
+        .filter(|f| migrated.contains(&f.rel))
+        .map(|f| PlannedNote {
+            path: f.rel.clone(),
+            warnings: f.warnings.clone(),
+        })
+        .collect();
+
     let stamped = failed.is_empty();
+    let earlier = unfinished.as_deref().map(earlier_migrated).unwrap_or_default();
     let mut report = MigrationReport {
         from,
         to,
         migrated,
+        notes,
         failed,
         warnings,
         backup_dir: backup_dir.to_string_lossy().to_string(),
         report_path: String::new(),
         stamped,
     };
-    let report_path = write_report(&backup_dir, &report, &plan);
+    let report_path = write_report(&backup_dir, &report, &plan, &earlier);
     report.report_path = report_path.to_string_lossy().to_string();
 
-    // Only now that the new backup has landed is the previous one expendable.
-    prune_old_backups(ledger_path, &backup_dir);
+    if stamped {
+        // Finished: this backup is the one kept, and the previous one is expendable.
+        let _ = std::fs::remove_file(backup_dir.join(UNFINISHED_MARKER));
+        prune_old_backups(ledger_path, &backup_dir);
+    } else {
+        // Not finished: mark it, with every note rewritten so far, so a retry adds to
+        // it — and prune nothing, since what is kept is the only copy of those notes.
+        let done: Vec<&str> = earlier
+            .iter()
+            .map(String::as_str)
+            .chain(report.migrated.iter().map(String::as_str))
+            .collect();
+        if let Err(e) = std::fs::write(backup_dir.join(UNFINISHED_MARKER), done.join("\n")) {
+            log::warn!("[format_migration] could not mark the backup unfinished: {e}");
+        }
+    }
 
     if stamped {
         crate::format_version::write_stamp(ledger_path, to)?;
@@ -422,20 +475,30 @@ fn located(file: &Affected) -> impl Iterator<Item = String> + '_ {
 
 fn plan_from(affected: &[Affected], from: u32, to: u32) -> MigrationPlan {
     // A sentence appears when its migration found work somewhere, once.
-    let sentences = MIGRATIONS
+    let found: Vec<&Migration> = MIGRATIONS
         .iter()
         .filter(|m| affected.iter().any(|f| f.versions.contains(&m.to_version)))
-        .map(|m| m.sentence.to_string())
         .collect();
+    let sentences = found.iter().map(|m| m.sentence.to_string()).collect();
+    let changes = found.iter().map(|m| m.summary.to_string()).collect();
 
     let warnings = affected.iter().flat_map(located).collect();
+    let notes = affected
+        .iter()
+        .map(|f| PlannedNote {
+            path: f.rel.clone(),
+            warnings: f.warnings.clone(),
+        })
+        .collect();
 
     MigrationPlan {
         from,
         to,
         sentences,
+        changes,
         file_count: affected.len() as u32,
         warnings,
+        notes,
     }
 }
 
@@ -539,12 +602,26 @@ const BACKUP_PREFIX: &str = "format-backup-";
 /// would appear in the file tree as real notes, with backlinks and search hits.
 ///
 /// Any failure aborts the whole migration before a single note is rewritten.
-fn back_up(ledger_path: &Path, affected: &[Affected]) -> Result<PathBuf, String> {
-    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
-    let dir = ledger_path.join(".grimoire").join(format!("{BACKUP_PREFIX}{stamp}"));
+fn back_up(
+    ledger_path: &Path,
+    affected: &[Affected],
+    reuse: Option<&Path>,
+) -> Result<PathBuf, String> {
+    let dir = match reuse {
+        Some(dir) => dir.to_path_buf(),
+        None => {
+            let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
+            ledger_path.join(".grimoire").join(format!("{BACKUP_PREFIX}{stamp}"))
+        }
+    };
 
     for file in affected {
         let dest = dir.join(&file.rel);
+        // A copy an earlier attempt made is the true original; this attempt's read
+        // of the same note is the same bytes at best, so the first copy stands.
+        if reuse.is_some() && dest.exists() {
+            continue;
+        }
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 format!(
@@ -564,6 +641,31 @@ fn back_up(ledger_path: &Path, affected: &[Affected]) -> Result<PathBuf, String>
     }
 
     Ok(dir)
+}
+
+/// Marks a backup whose update has not finished, listing the notes rewritten so far.
+const UNFINISHED_MARKER: &str = ".unfinished";
+
+/// The backup of an update that stopped part-way, if any.
+fn unfinished_backup(ledger_path: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(ledger_path.join(".grimoire"))
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with(BACKUP_PREFIX))
+                && p.join(UNFINISHED_MARKER).exists()
+        })
+        .max()
+}
+
+/// The notes earlier attempts at this update rewrote, from the unfinished marker.
+fn earlier_migrated(backup_dir: &Path) -> Vec<String> {
+    std::fs::read_to_string(backup_dir.join(UNFINISHED_MARKER))
+        .map(|s| s.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+        .unwrap_or_default()
 }
 
 /// Keep exactly one backup: drop every other `format-backup-*` folder now that
@@ -598,36 +700,45 @@ fn prune_old_backups(ledger_path: &Path, keep: &Path) {
 ///
 /// Best-effort, and it returns the path it tried: a report that failed to write
 /// must not undo a migration that worked.
-fn write_report(backup_dir: &Path, report: &MigrationReport, plan: &MigrationPlan) -> PathBuf {
+fn write_report(
+    backup_dir: &Path,
+    report: &MigrationReport,
+    plan: &MigrationPlan,
+    earlier: &[String],
+) -> PathBuf {
     let path = backup_dir.join("migration-report.md");
     let mut out = String::new();
+    let when = chrono::Local::now().format("%-d %B %Y at %H:%M");
 
     out.push_str("# Grimoire note format update\n\n");
-    out.push_str(&format!(
-        "Your notes were updated from format {} to format {} on {}.\n\n",
-        report.from,
-        report.to,
-        chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
-    ));
+    if report.stamped {
+        out.push_str(&format!("Your notes were updated on {when}.\n\n"));
+    } else {
+        // Not "were updated": some were not, and the world is still on the old format.
+        out.push_str(&format!(
+            "An update of your notes on {when} didn't finish — some notes couldn't be \
+             written. They are listed below.\n\n"
+        ));
+    }
     out.push_str(
         "The files in this folder, beside this report, are copies of every note as it was \
          before the update. They are ordinary markdown files — nothing here needs Grimoire \
          to read it.\n\n",
     );
 
-    out.push_str("## What changed\n\n");
+    // The prompt says what changes in a line; the report keeps the whole sentence,
+    // which says what and why.
+    out.push_str("## What changed, and why\n\n");
     for sentence in &plan.sentences {
         out.push_str(&format!("- {sentence}\n"));
     }
 
-    out.push_str(&format!(
-        "\n## Notes updated ({})\n\n",
-        report.migrated.len()
-    ));
-    if report.migrated.is_empty() {
+    let all: Vec<&String> = earlier.iter().chain(&report.migrated).collect();
+    out.push_str(&format!("\n## Notes updated ({})\n\n", all.len()));
+    if all.is_empty() {
         out.push_str("_None._\n");
     }
-    for path in &report.migrated {
+    for path in &all {
         out.push_str(&format!("- `{path}`\n"));
     }
 
@@ -649,8 +760,9 @@ fn write_report(backup_dir: &Path, report: &MigrationReport, plan: &MigrationPla
         out.push_str(
             "\nThese notes are still in the old format, and Grimoire has not recorded the \
              update as finished. Fix whatever stopped the write — a file open in another \
-             program, or a read-only permission — and open this ledger again: only the notes \
-             listed here will be updated the second time.\n",
+             program, or a read-only permission — and choose Try again, or open this world \
+             again: only the notes listed here will be updated the second time, and their \
+             copies are added to this folder.\n",
         );
     }
 
@@ -800,9 +912,9 @@ mod tests {
             })
         }
         let registry = [
-            Migration { to_version: 1, sentence: "one", apply: to_one },
-            Migration { to_version: 2, sentence: "two", apply: to_two },
-            Migration { to_version: 3, sentence: "three", apply: to_three },
+            Migration { to_version: 1, summary: "1", sentence: "one", apply: to_one },
+            Migration { to_version: 2, summary: "2", sentence: "two", apply: to_two },
+            Migration { to_version: 3, summary: "3", sentence: "three", apply: to_three },
         ];
 
         let folded = fold_over(&registry, "a one", 1, &ctx());
@@ -822,8 +934,8 @@ mod tests {
             Some(Rewrite { text: text.to_uppercase(), warnings: Vec::new() })
         }
         let registry = [
-            Migration { to_version: 1, sentence: "nothing", apply: no_op },
-            Migration { to_version: 2, sentence: "shout", apply: shout },
+            Migration { to_version: 1, summary: "-", sentence: "nothing", apply: no_op },
+            Migration { to_version: 2, summary: "!", sentence: "shout", apply: shout },
         ];
 
         let folded = fold_over(&registry, "quiet", 0, &ctx());
@@ -1098,6 +1210,7 @@ mod tests {
             from: 0,
             to: 1,
             migrated: vec!["Chronicle.md".into()],
+            notes: Vec::new(),
             failed: vec![FailedFile { path: "Locked.md".into(), reason: "access denied".into() }],
             warnings: Vec::new(),
             backup_dir: String::new(),
@@ -1110,15 +1223,64 @@ mod tests {
             from: 0,
             to: 1,
             sentences: vec!["Timeline events change shape.".into()],
+            changes: vec!["Timelines: titles become headings.".into()],
             file_count: 2,
             warnings: Vec::new(),
+            notes: Vec::new(),
         };
-        report.report_path = write_report(&backup, &report, &plan).to_string_lossy().to_string();
+        report.report_path =
+            write_report(&backup, &report, &plan, &[]).to_string_lossy().to_string();
 
         let text = std::fs::read_to_string(&report.report_path).unwrap();
         assert!(text.contains("Locked.md"));
         assert!(text.contains("access denied"));
-        assert!(text.contains("open this ledger again"));
+        assert!(text.contains("open this world again"));
+        // Not "your notes were updated": they weren't, all of them.
+        assert!(text.contains("didn't finish"), "{text}");
+        assert!(!text.contains("were updated on"), "{text}");
+    }
+
+    #[test]
+    fn a_retry_adds_to_the_unfinished_backup_instead_of_replacing_it() {
+        let dir = vault();
+        write(dir.path(), "A.md", OLD);
+        write(dir.path(), "B.md", OLD);
+
+        // First attempt: B can't be written.
+        let b = dir.path().join("B.md");
+        let mut perms = std::fs::metadata(&b).unwrap().permissions();
+        perms.set_readonly(true);
+        std::fs::set_permissions(&b, perms.clone()).unwrap();
+        let first = run_with(dir.path(), true).unwrap().1.unwrap();
+        assert!(!first.stamped);
+        assert_eq!(first.migrated, vec!["A.md".to_string()]);
+        let backup = PathBuf::from(&first.backup_dir);
+
+        // Fixed; try again. Only B is left, and A's original must still be kept.
+        perms.set_readonly(false);
+        std::fs::set_permissions(&b, perms).unwrap();
+        let second = run_with(dir.path(), true).unwrap().1.unwrap();
+        assert!(second.stamped);
+        assert_eq!(second.migrated, vec!["B.md".to_string()]);
+        assert_eq!(PathBuf::from(&second.backup_dir), backup, "the same backup, added to");
+        assert_eq!(std::fs::read_to_string(backup.join("A.md")).unwrap(), OLD);
+        assert_eq!(std::fs::read_to_string(backup.join("B.md")).unwrap(), OLD);
+        assert!(!backup.join(UNFINISHED_MARKER).exists(), "finished now");
+
+        // And the report lists both, the earlier attempt's included.
+        let text = std::fs::read_to_string(&second.report_path).unwrap();
+        assert!(text.contains("Notes updated (2)"), "{text}");
+    }
+
+    #[test]
+    fn the_plan_names_each_note_with_its_own_warnings_and_a_short_change() {
+        let dir = vault();
+        write(dir.path(), "Lore/Chronicle.md", OLD);
+        let (plan, _) = run_with(dir.path(), false).unwrap();
+        assert_eq!(plan.notes.len(), 1);
+        assert_eq!(plan.notes[0].path, "Lore/Chronicle.md");
+        assert_eq!(plan.changes.len(), plan.sentences.len());
+        assert!(plan.changes[0].len() < plan.sentences[0].len());
     }
 
     // ── The stamp ────────────────────────────────────────────────────────────

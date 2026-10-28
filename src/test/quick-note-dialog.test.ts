@@ -16,6 +16,7 @@ import { quickNotes } from "$lib/stores/quick-notes.svelte";
 import { tabs } from "$lib/stores/tabs.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { ledger } from "$lib/stores/ledger.svelte";
+import { searchPalette } from "$lib/stores/search.svelte";
 import type { QuickNote } from "$lib/bindings.gen";
 
 // Stubbed so "silent" can be asserted rather than assumed: the shell mounts no
@@ -30,7 +31,9 @@ vi.mock("svelte-sonner", () => ({
 // claim about the store actually being shut rather than about a stub saying so.
 const LEDGER_PATH = "/worlds/marsh";
 
-const SEARCH_RESULTS = [{ id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md" }];
+const SEARCH_RESULTS = [
+  { id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md", folder: "People", alias: null },
+];
 
 let rows: QuickNote[] = [];
 
@@ -61,7 +64,7 @@ beforeEach(() => {
     // Two shapes the blanket `[]` below is wrong for: a tree, and a name.
     if (cmd === "get_statblock_preset_default") return Promise.resolve(null);
     if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
-    if (cmd === "search_notes") return Promise.resolve(SEARCH_RESULTS);
+    if (cmd === "search_link_targets") return Promise.resolve(SEARCH_RESULTS);
     if (cmd === "create_quick_note") {
       const created: QuickNote = {
         id: rows.length + 1,
@@ -99,9 +102,9 @@ const dialog = () => document.querySelector('[data-testid="quick-note-dialog"]')
 /** The dialog's box, which is the only capture box the shell has open unless a
  *  Quick Notes Pane is showing — where the tests that care say which they mean. */
 const box = () =>
-  document.querySelector<HTMLInputElement>(
+  document.querySelector<HTMLTextAreaElement>(
     '[data-testid="quick-note-dialog"] [data-wiki-capture]',
-  ) as HTMLInputElement;
+  ) as HTMLTextAreaElement;
 
 /**
  * Click somewhere that is not the dialog.
@@ -391,5 +394,74 @@ describe("Quick Notes Dialog — every exit commits", () => {
     await pendingSaves.flushAll();
 
     expect(invoke).not.toHaveBeenCalledWith("create_quick_note", expect.anything());
+  });
+});
+
+// ── What the GM sees (2026-10 design review) ────────────────────────────────
+
+describe("Quick Notes Dialog — saying what happened", () => {
+  const status = () => document.querySelector('[data-testid="quick-note-status"]')!;
+  const keys = () => document.querySelector('[data-testid="quick-note-keys"]')!;
+
+  it("says a line was parked, and how many today — announced, not only drawn", async () => {
+    await openDialog();
+    expect(status().getAttribute("aria-live")).toBe("polite");
+    expect(status().textContent?.trim()).toBe("");
+
+    await fireEvent.input(box(), { target: { value: "the marsh fires spread west" } });
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    await waitFor(() => expect(status().textContent).toContain("Parked · 1 today"));
+
+    await fireEvent.input(box(), { target: { value: "and the ferry is gone" } });
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    await waitFor(() => expect(status().textContent).toContain("Parked · 2 today"));
+    // Still no toast: the line under the box is the whole confirmation.
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("says what the keys will do with what is in the box", async () => {
+    await openDialog();
+    expect(keys().textContent).toBe("↵ or esc close");
+    await fireEvent.input(box(), { target: { value: "a thought" } });
+    expect(keys().textContent).toBe("↵ park · esc park & close");
+  });
+
+  it("closes on Enter in an empty box — one key per thought, one more to finish", async () => {
+    await openDialog();
+    await fireEvent.input(box(), { target: { value: "one thought" } });
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    await waitFor(() => expect(box().value).toBe(""));
+    expect(dialog()).toBeTruthy();
+
+    await fireEvent.keyDown(box(), { key: "Enter" });
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(vi.mocked(invoke).mock.calls.filter(([c]) => c === "create_quick_note")).toHaveLength(1);
+  });
+
+  it("opens the pane from the dialog, parking what is in the box first", async () => {
+    await openDialog();
+    await fireEvent.input(box(), { target: { value: "half a thought" } });
+    await fireEvent.click(document.querySelector('[data-testid="quick-note-open-pane"]')!);
+
+    await waitFor(() => expect(dialog()).toBeNull());
+    expect(invoke).toHaveBeenCalledWith("create_quick_note", { body: "half a thought" });
+    expect(tabs.activeTab?.type).toBe("quickNotes");
+  });
+
+  it("wraps a long line instead of scrolling it out of sight; a pasted break is a space", async () => {
+    await openDialog();
+    expect(box().tagName).toBe("TEXTAREA");
+    await fireEvent.input(box(), { target: { value: "first half\nsecond half" } });
+    expect(box().value).toBe("first half second half");
+  });
+
+  it("closes the palette when the shortcut is pressed over it", async () => {
+    await openLedger();
+    render(AppShell);
+    searchPalette.open = true;
+    await settle();
+    await pressShortcut();
+    await waitFor(() => expect(dialog()).toBeTruthy());
+    expect(searchPalette.open).toBe(false);
   });
 });

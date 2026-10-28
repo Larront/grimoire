@@ -510,6 +510,35 @@ describe("node-view connector — event handling", () => {
     expect(view.stopEvent?.(eventOn(addOutsideElement()))).toBe(false);
   });
 
+  it("lets undo and redo through to the document, unless a field is being typed in", () => {
+    // Focus sits on a block's control after it is used — a pool after a hit — and
+    // Ctrl+Z there used to do nothing until the GM clicked back into the prose.
+    const { view } = mountNodeView(
+      createBlockNodeView<FixtureBlock>({ component: SealedBlockFixture }),
+    );
+    const inside = view.dom.querySelector("button") as HTMLElement;
+    const key = (target: globalThis.Node, init: Partial<KeyboardEvent>) =>
+      ({
+        type: "keydown",
+        target,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        ...init,
+      }) as unknown as Event;
+
+    expect(view.stopEvent?.(key(inside, { key: "z", ctrlKey: true }))).toBe(false);
+    expect(view.stopEvent?.(key(inside, { key: "Z", metaKey: true }))).toBe(false);
+    expect(view.stopEvent?.(key(inside, { key: "y", ctrlKey: true }))).toBe(false);
+    // Any other key stays the block's.
+    expect(view.stopEvent?.(key(inside, { key: "a", ctrlKey: true }))).toBe(true);
+
+    // A text field has an undo of its own.
+    const field = document.createElement("input");
+    inside.parentElement!.appendChild(field);
+    expect(view.stopEvent?.(key(field, { key: "z", ctrlKey: true }))).toBe(true);
+  });
+
   it("lets a block's own decision win over that default, either way", () => {
     const { view } = mountNodeView(
       createBlockNodeView<FixtureBlock>({

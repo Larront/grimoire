@@ -21,9 +21,8 @@
     toastError,
     toastSuccess,
     toastUndo,
-    toastImportFailures,
-    toastExternalMoveLinks,
     toastMigrationReport,
+    toastDbRestored,
   } from "$lib/toast";
 
   let open = $state(false);
@@ -52,51 +51,74 @@
       fire: () =>
         toastUndo("Deleted 'Harbour Watch'", () => console.log("[toast lab] undo window elapsed")),
     },
+    // Pins that lost their note, notes that couldn't open and links to moved notes
+    // aren't toasts any more: they wait in the ledger menu and on the Ledger Home.
     {
-      label: "Import failures",
-      hint: "error + action button",
+      label: "Ledger restored from backup",
+      hint: "persistent, closable, one action",
       fire: () =>
-        toastImportFailures(
-          [
-            { path: "notes/keep.md", reason: "unreadable frontmatter" },
-            { path: "notes/harbour.md", reason: "not UTF-8" },
-            { path: "notes/aurelia.md", reason: "empty file" },
-          ],
-          () => toastSuccess("Show details clicked"),
+        toastDbRestored("Ashfen", new Date().toISOString(), () =>
+          toastSuccess("Show damaged clicked"),
         ),
     },
     {
-      label: "External move",
-      hint: "persistent, cancel + action on their own row",
+      label: "Migration, clean",
+      hint: "neutral, names the notes, fades",
       fire: () =>
-        toastExternalMoveLinks("Harbour Watch", 4, () => toastSuccess("Backlinks updated")),
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["Lore/Chronicle.md", "Sessions/Session 1.md", "Start Here.md"],
+            notes: [],
+            failed: [],
+            report_path: REPORT_PATH,
+          },
+          () => {},
+        ),
     },
     {
-      label: "Migration, clean",
-      hint: "neutral with a description",
+      label: "Migration, own writing changed",
+      hint: "neutral, says where, stays",
       fire: () =>
-        toastMigrationReport({
-          migrated: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"],
-          failed: [],
-          report_path: REPORT_PATH,
-        }),
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["Lore/Chronicle.md"],
+            notes: [
+              {
+                path: "Lore/Chronicle.md",
+                warnings: [
+                  "In “The Founding”, a line starting with # gets a space in front, so it stays in the description instead of starting a new event.",
+                ],
+              },
+            ],
+            failed: [],
+            report_path: REPORT_PATH,
+          },
+          () => {},
+        ),
     },
     {
       label: "Migration, partial",
-      hint: "persistent error + long description",
+      hint: "neutral, persistent, Try again",
       fire: () =>
-        toastMigrationReport({
-          migrated: ["a", "b"],
-          failed: [{ path: "notes/keep.md", reason: "unparseable" }],
-          report_path: REPORT_PATH,
-        }),
+        toastMigrationReport(
+          "Ashfen",
+          {
+            migrated: ["a.md", "b.md"],
+            notes: [],
+            failed: [{ path: "notes/keep.md", reason: "unparseable" }],
+            report_path: REPORT_PATH,
+          },
+          () => toastSuccess("Try again clicked"),
+        ),
     },
   ];
 
   function fireAll() {
     toastError("Couldn't save 'Harbour Watch'");
     toastSuccess("Scene saved");
-    toastExternalMoveLinks("Harbour Watch", 4, () => {});
+    toastUndo("Deleted “Harbour Watch”", () => {});
   }
 
   // Dismissed one at a time, with a gap. svelte-sonner corrupts its own height
@@ -114,13 +136,15 @@
   }
 </script>
 
-<div class="fixed bottom-4 left-4 z-[9998] font-sans">
+<!-- Clear of the 48px rail, whose Settings it covered, and under dialogs and their scrim
+     (z 50) rather than over them; it is a dev tool, not part of the app. -->
+<div class="fixed bottom-4 left-16 z-40 font-sans">
   {#if open}
     <div
       class="w-64 rounded-lg border border-dashed border-background-border bg-background-elevated p-3"
     >
       <div class="mb-2 flex items-center justify-between">
-        <span class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-faint">
+        <span class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-foreground-muted">
           Toast lab · dev
         </span>
         <button

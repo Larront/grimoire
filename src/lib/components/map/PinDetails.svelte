@@ -1,18 +1,20 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import type { Note, Pin, PinCategory, PinShape } from "$lib/types/ledger";
-  import { ExternalLink, Lock, LockOpen, ChevronDown, Trash2 } from "@lucide/svelte";
+  import { ExternalLink, Lock, LockOpen, Trash2 } from "@lucide/svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
   } from "$lib/components/ui/collapsible";
-  import { CURATED_ICON_COMPONENTS } from "./pinAppearance";
-  import { DEFAULT_PIN_COLOR, ENTITY_COLOR_PRESETS } from "$lib/entity-colors";
+  import { CURATED_ICON_COMPONENTS, resolvedAppearance } from "./pinAppearance";
   import TagChipEditor from "$lib/components/TagChipEditor.svelte";
   import DetailSection from "$lib/components/DetailSection.svelte";
-  import ColorSwatches from "$lib/components/ColorSwatches.svelte";
+  import ColorPicker from "$lib/components/ColorPicker.svelte";
 
   // Controlled body (ADR-0006): all data arrives as props from the pane's
   // pin Details Source; edits leave through onUpdate / onTagsChange.
@@ -51,7 +53,27 @@
   let draftTitle = $state("");
   let draftDescription = $state("");
   let noteSearchQuery = $state("");
+  let noteSearchInput = $state<HTMLInputElement>();
   let appearanceOpen = $state(false);
+
+  /** The note this pin opened before a repair unlinked it, while it is still unlinked. */
+  const wasNote = $derived(pin.note_id == null ? unlinkedPins.wasNoteFor(pin.id) : null);
+
+  // Each pin starts its note search afresh — with the name of the note it used to open,
+  // when a repair unlinked it, so re-linking is usually one click (2026-10 design review).
+  // A pin chosen in the unlinked-pins list arrives with the caret in the search.
+  let searchFor: number | null = null;
+  $effect(() => {
+    const id = pin.id;
+    const was = wasNote;
+    untrack(() => {
+      if (searchFor !== id) {
+        searchFor = id;
+        noteSearchQuery = was ?? "";
+      }
+      if (unlinkedPins.takeFocus(id)) void tick().then(() => noteSearchInput?.select());
+    });
+  });
 
   // The row the drafts were loaded from. The `pin` prop is read through the
   // pane's `{#if selectedPin}`, so by teardown it can already be null —
@@ -124,7 +146,11 @@
     banner: `<path d="M3 2 H13 V14 L8 11 L3 14 Z" fill="currentColor"/>`,
   };
 
-  const resolvedColor = $derived(pin.color ?? DEFAULT_PIN_COLOR);
+  // What the map draws: the pin's own colour, else its category's, else brass. This used
+  // to skip the category, so a categorised pin's swatches and picker showed brass while
+  // the map showed the category's colour.
+  const pinCategory = $derived(categories.find((c) => c.id === pin.category_id));
+  const resolvedColor = $derived(resolvedAppearance(pin, pinCategory).color);
 </script>
 
 <!-- Title row -->
@@ -137,7 +163,7 @@
     onkeydown={(e) => {
       if (e.key === "Enter") (e.target as HTMLElement).blur();
     }}
-    class="flex-1 min-w-0 bg-transparent font-heading text-xl font-semibold text-foreground
+    class="flex-1 min-w-0 bg-transparent font-heading text-xl text-foreground
            border-none outline-none border-b border-transparent focus:border-primary
            pb-1 transition-colors"
     placeholder="Name this pin"
@@ -149,7 +175,7 @@
     class="mt-1 p-1.5 rounded-md transition-colors cursor-pointer shrink-0
            {unlocked
       ? 'text-primary hover:text-primary/70'
-      : 'text-foreground-faint hover:text-foreground-muted'}"
+      : 'text-foreground-muted hover:text-foreground'}"
   >
     {#if unlocked}
       <LockOpen class="w-4 h-4" />
@@ -160,38 +186,59 @@
 </div>
 
 <!-- Linked note -->
-<DetailSection label="Linked Note" sectionKey="linked-note">
+<DetailSection label="Linked note" sectionKey="linked-note">
   {#if linkedNote}
-    <div
-      class="bg-background-subtle border border-background-border rounded-lg p-3 flex flex-col gap-2"
-    >
-      <div class="flex items-center justify-between gap-2">
-        <span class="min-w-0 truncate font-heading text-sm font-semibold text-foreground"
-          >{linkedNote.title}</span
-        >
+    <!-- The note a pin points at is the reason a GM clicked it, so opening it is this
+         panel's primary action: a labelled button, not a 14px icon in the corner.
+         Unlinking is the rare, quiet one beside it. The preview is prose, not file
+         internals — see `pinNotePreview`. -->
+    <div class="flex flex-col gap-2">
+      <span class="min-w-0 truncate font-heading text-(length:--font-body) text-foreground"
+        >{linkedNote.title}</span
+      >
+      {#if notePreview}
+        <p class="text-xs leading-relaxed text-foreground-muted line-clamp-4">{notePreview}</p>
+      {/if}
+      <div class="flex items-center gap-1 pt-0.5">
         <button
           onclick={() => onOpenNote?.(linkedNote!.id, linkedNote!.title)}
-          class="shrink-0 p-1 text-primary hover:text-primary/70 transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium
+                 text-primary-foreground hover:bg-primary/85 transition-colors cursor-pointer"
           title="Open note"
         >
-          <ExternalLink class="w-3.5 h-3.5" />
+          <ExternalLink class="size-3.5" />
+          Open note
+        </button>
+        <button
+          onclick={() => save({ note_id: null })}
+          class="rounded-md px-2 py-1 text-xs text-foreground-muted hover:bg-hover-overlay
+                 hover:text-foreground transition-colors cursor-pointer"
+        >
+          Unlink
         </button>
       </div>
-      {#if notePreview}
-        <p class="font-mono text-[10px] text-foreground-muted leading-relaxed">{notePreview}</p>
-      {/if}
-      <button
-        onclick={() => save({ note_id: null })}
-        class="font-mono text-[10px] text-error hover:text-error/70 transition-colors cursor-pointer self-start"
-      >
-        Unlink
-      </button>
     </div>
   {:else}
     <div class="flex flex-col gap-1">
+      {#if wasNote}
+        <p class="text-xs text-foreground-muted" data-testid="pin-was-note">
+          Was linked to “{wasNote}”
+        </p>
+      {/if}
       <input
+        bind:this={noteSearchInput}
         bind:value={noteSearchQuery}
-        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 font-mono text-[10px] text-foreground outline-none focus:border-primary"
+        aria-label="Search notes to link"
+        onkeydown={(e) => {
+          // Enter takes the first match, as the link menus do.
+          const first = noteSearchQuery.trim() ? filteredNotes[0] : undefined;
+          if (e.key === "Enter" && first) {
+            e.preventDefault();
+            save({ note_id: first.id });
+            noteSearchQuery = "";
+          }
+        }}
+        class="bg-background-subtle border border-background-border rounded-lg px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
         placeholder="Search notes…"
       />
       {#if noteSearchQuery.trim()}
@@ -204,12 +251,12 @@
                 save({ note_id: n.id });
                 noteSearchQuery = "";
               }}
-              class="w-full px-3 py-2 font-mono text-[10px] text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
+              class="w-full px-3 py-2 text-xs text-foreground text-left hover:bg-primary-subtle transition-colors cursor-pointer"
             >
               {n.title}
             </button>
           {:else}
-            <p class="px-3 py-2 font-mono text-[10px] text-foreground-faint">No notes found</p>
+            <p class="px-3 py-2 text-xs text-foreground-muted">No notes found</p>
           {/each}
         </div>
       {/if}
@@ -233,7 +280,7 @@
       save({ category_id: id });
     }}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-1.5
-           font-mono text-[10px] text-foreground outline-none focus:border-primary cursor-pointer"
+           text-xs text-foreground outline-none focus:border-primary cursor-pointer"
   >
     <option value="">Uncategorized</option>
     {#each categories as cat (cat.id)}
@@ -250,7 +297,7 @@
     onblur={() => commit(descriptionPatch())}
     rows={4}
     class="w-full bg-background-subtle border border-background-border rounded-lg px-3 py-2
-           font-mono text-[10px] text-foreground outline-none focus:border-primary resize-none leading-relaxed"
+           text-xs text-foreground outline-none focus:border-primary resize-none leading-relaxed"
     placeholder="Add notes about this location…"></textarea>
 </DetailSection>
 
@@ -258,88 +305,91 @@
 <DetailSection label="Appearance" sectionKey="appearance">
   <Collapsible bind:open={appearanceOpen}>
     <CollapsibleTrigger class="w-full flex items-center justify-between cursor-pointer">
-      <span class="font-mono text-[10px] text-foreground-muted">Shape, icon, color</span>
-      <ChevronDown
-        class="w-3.5 h-3.5 text-foreground-faint transition-transform duration-200 {appearanceOpen
-          ? 'rotate-180'
-          : ''}"
-      />
+      <span class="text-xs text-foreground-muted">Shape, icon, colour</span>
+      <DisclosureChevron open={appearanceOpen} class="size-3.5 text-foreground-muted" />
     </CollapsibleTrigger>
 
-    <CollapsibleContent>
-      <div class="flex flex-col gap-3 pt-3">
-        <!-- Shape -->
-        <div class="flex flex-col gap-1.5" data-slot="shape-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
-            >Shape</span
-          >
-          <div class="flex gap-1">
-            {#each PIN_SHAPES as shape (shape)}
-              <button
-                type="button"
-                onclick={() => save({ shape })}
-                title={shape}
-                class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
+    <!-- Opens as every section does; it used to appear at once. -->
+    <CollapsibleContent forceMount>
+      {#snippet child({ props, open })}
+        <div {...props}>
+          <Disclosure {open} keepMounted>
+            <div class="flex flex-col gap-3 pt-3">
+              <!-- Shape -->
+              <div class="flex flex-col gap-1.5" data-slot="shape-section">
+                <span class="text-xs font-semibold text-foreground-muted">Shape</span>
+                <div class="flex gap-1">
+                  {#each PIN_SHAPES as shape (shape)}
+                    <button
+                      type="button"
+                      onclick={() => save({ shape })}
+                      title={shape}
+                      aria-label="Shape: {shape}"
+                      aria-pressed={pin.shape === shape}
+                      class="w-9 h-9 flex items-center justify-center rounded-md border transition-colors cursor-pointer
                        {pin.shape === shape
-                  ? 'border-primary bg-primary-subtle'
-                  : 'border-background-border hover:border-primary/50 hover:bg-primary-subtle/50'}"
-                style="color:{pin.shape === shape
-                  ? resolvedColor
-                  : 'var(--color-foreground-muted)'}"
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16">
-                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                  {@html SHAPE_PREVIEWS[shape]}
-                </svg>
-              </button>
-            {/each}
-          </div>
-        </div>
+                        ? 'border-primary bg-primary-subtle'
+                        : 'border-background-border hover:bg-surface-hover'}"
+                      style="color:{pin.shape === shape
+                        ? resolvedColor
+                        : 'var(--color-foreground-muted)'}"
+                    >
+                      <svg viewBox="0 0 16 16" width="16" height="16">
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                        {@html SHAPE_PREVIEWS[shape]}
+                      </svg>
+                    </button>
+                  {/each}
+                </div>
+              </div>
 
-        <!-- Icon -->
-        <div class="flex flex-col gap-1.5" data-slot="icon-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
-            >Icon</span
-          >
-          <div class="grid grid-cols-4 gap-1">
-            {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
+              <!-- Icon -->
+              <div class="flex flex-col gap-1.5" data-slot="icon-section">
+                <span class="text-xs font-semibold text-foreground-muted">Icon</span>
+                <div class="grid grid-cols-4 gap-1">
+                  {#each CURATED_ICON_COMPONENTS as [key, Component] (key)}
+                    <button
+                      type="button"
+                      onclick={() => save({ icon: key })}
+                      title={key}
+                      class="h-8 flex items-center justify-center rounded-md border transition-colors cursor-pointer
+                       {pin.icon === key
+                        ? 'border-primary bg-primary-subtle text-primary'
+                        : 'border-transparent hover:border-background-border hover:bg-primary-subtle/50 text-foreground-muted'}"
+                    >
+                      <Component size={14} />
+                    </button>
+                  {/each}
+                </div>
+              </div>
+
+              <!-- Colour -->
+              <div class="flex flex-col gap-1.5" data-slot="color-section">
+                <span class="text-xs font-semibold text-foreground-muted">Colour</span>
+                <!-- The same picker as a scene's. Default clears the pin's own colour, so it
+               wears what it would without one — its category's, if it has one. -->
+                <ColorPicker
+                  value={pin.color}
+                  fallback={resolvedColor}
+                  noneSwatch={resolvedColor}
+                  defaultLabel={pinCategory ? "Category" : "Default"}
+                  onchange={(color) => save({ color })}
+                />
+              </div>
+
+              <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
+             directly above it and nothing else, so its scope is the section it sits in. -->
               <button
                 type="button"
-                onclick={() => save({ icon: key })}
-                title={key}
-                class="h-8 flex items-center justify-center rounded-md border transition-colors cursor-pointer
-                       {pin.icon === key
-                  ? 'border-primary bg-primary-subtle text-primary'
-                  : 'border-transparent hover:border-background-border hover:bg-primary-subtle/50 text-foreground-muted'}"
+                onclick={() => save({ shape: null, icon: null, color: null })}
+                class="text-xs text-foreground-muted hover:text-error transition-colors cursor-pointer self-start"
               >
-                <Component size={14} />
+                Reset to default
               </button>
-            {/each}
-          </div>
+            </div>
+          </Disclosure>
         </div>
-
-        <!-- Color -->
-        <div class="flex flex-col gap-1.5" data-slot="color-section">
-          <span class="font-mono text-[10px] text-foreground-faint uppercase tracking-[0.1em]"
-            >Color</span
-          >
-          <ColorSwatches
-            value={pin.color}
-            presets={ENTITY_COLOR_PRESETS}
-            onchange={(color) => save({ color })}
-          />
-        </div>
-
-        <!-- Reset. Stays quiet and stays inside Appearance: it undoes the three controls
-             directly above it and nothing else, so its scope is the section it sits in. -->
-        <button
-          type="button"
-          onclick={() => save({ shape: null, icon: null, color: null })}
-          class="font-mono text-[10px] text-foreground-faint hover:text-error transition-colors cursor-pointer self-start"
-        >
-          Reset to default
-        </button>
-      </div>
+      {/snippet}
     </CollapsibleContent>
   </Collapsible>
 </DetailSection>
@@ -361,7 +411,7 @@
     type="button"
     data-testid="pin-delete"
     onclick={() => onDelete(pin.id)}
-    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(--font-ui)
+    class="flex items-center gap-1.5 rounded-[6px] px-2 py-1 -mx-2 text-(length:--font-ui)
            text-error hover:bg-error/10 transition-colors cursor-pointer"
   >
     <Trash2 class="size-3.5 shrink-0" />

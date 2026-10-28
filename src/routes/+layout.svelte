@@ -9,6 +9,7 @@
   import { appPrefs } from "../lib/stores/app-prefs.svelte";
   import { pendingSaves } from "$lib/stores/pending-saves";
   import { checkForUpdates } from "$lib/updater";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import "../app.css";
 
   const { children } = $props();
@@ -31,11 +32,12 @@
   // Keep the OS window title on the open ledger (issue #118): taskbar and
   // alt-tab identify the world, not just the app.
   $effect(() => {
-    const name = ledger.isSample
-      ? "Example World"
-      : ledger.isOpen && ledger.path
-        ? (ledger.path.split(/[\\/]/).pop() ?? null)
-        : null;
+    // The example by its own name, marked as one (2026-10 design review).
+    const name = !ledger.isOpen
+      ? null
+      : ledger.isSample
+        ? `${ledger.worldName} (example)`
+        : ledger.worldName || null;
     const title = name ? `${name} — Grimoire` : "Grimoire";
     if ("__TAURI_INTERNALS__" in window) {
       import("@tauri-apps/api/window")
@@ -67,7 +69,19 @@
       });
     });
   }
+
+  // The webview's own menu — Back, Refresh, Save as… — belongs to a browser. Anywhere
+  // the app has no menu of its own, a right-click used to raise it, and its Refresh
+  // reloads the whole app (2026-10 design review). It stays where it is the GM's tool:
+  // in text they can edit (spelling, paste) and over text they have selected (copy).
+  function onContextMenu(e: MouseEvent) {
+    if (e.defaultPrevented || isTypingIn(e.target)) return;
+    if (!(window.getSelection()?.isCollapsed ?? true)) return;
+    e.preventDefault();
+  }
 </script>
+
+<svelte:window oncontextmenu={onContextMenu} />
 
 <ThemeWatcher />
 <!-- closeButton is set per-toast (errors, import failures) — transient success
@@ -79,8 +93,21 @@
      are the pair DESIGN.md §6 names for confirmation and failure, and they are
      what makes the status legible without relying on the hue (red and green are
      invisible to ~8% of male users). Sonner's own error glyph is an
-     exclamation, not an x. Toast colours and geometry are in src/app.css. -->
-<Toaster richColors successIcon={circleCheckIcon} errorIcon={circleXIcon} {closeIcon} />
+     exclamation, not an x. Toast colours and geometry are in src/app.css.
+
+     Expanded, up to five: collapsed, sonner hid every toast past the third and
+     tucked the rest behind the front one, so an Undo raised before an error sat out
+     of sight while its window ran out, and a lasting one could vanish entirely
+     (2026-10 design review). What a world needs no longer comes as toasts, so few
+     are ever up at once, and each one is meant to be read. -->
+<Toaster
+  richColors
+  expand
+  visibleToasts={5}
+  successIcon={circleCheckIcon}
+  errorIcon={circleXIcon}
+  {closeIcon}
+/>
 
 {#snippet circleCheckIcon()}
   <CircleCheck size={16} strokeWidth={2} aria-hidden="true" />

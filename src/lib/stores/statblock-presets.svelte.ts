@@ -3,9 +3,11 @@
 //
 // Two lifetimes in one store, which is the shape of the feature rather than an
 // accident: the **shapes are app-wide**, loaded once per launch, while the **default
-// pointer is this vault's**, so it is re-read whenever the open ledger changes. Keying
-// the pointer on `ledger.path` rather than listening for an open event keeps the
+// pointer is this vault's**, so it is re-read whenever a ledger is opened. Keying the
+// pointer on `ledger.openGeneration` rather than listening for an open event keeps the
 // dependency one-way — nothing in the ledger's own store has to know presets exist.
+// The path alone is not enough: re-exploring the Example World reopens the same
+// sandbox path over a fresh copy, and a pointer set while exploring went with the old one.
 //
 // Every read here is silent by design. `/statblock` resolves mid-session, often
 // mid-fight, and a toast fires where the GM cannot act on it; a failure leaves the
@@ -38,8 +40,13 @@ function createStatblockPresets() {
   let defaultName = $state<string | null>(null);
 
   let loading: Promise<void> | null = null;
-  /** The ledger path the pointer was last read for — `undefined` means "never". */
-  let pointerFor: string | null | undefined = undefined;
+  /** The open the pointer was last read for — `null` is "no ledger", `undefined` "never". */
+  let pointerFor: number | null | undefined = undefined;
+
+  /** Which open of which ledger is current; `null` with none open. */
+  function currentOpen(): number | null {
+    return ledger.isOpen ? ledger.openGeneration : null;
+  }
 
   /** The app-wide shapes, loaded once and then kept current by the writes below. */
   async function loadStored(): Promise<void> {
@@ -56,14 +63,14 @@ function createStatblockPresets() {
   }
 
   /**
-   * Re-read the pointer if — and only if — a different vault is open. With no ledger
+   * Re-read the pointer if — and only if — a vault has been opened since. With no ledger
    * open the read still happens and answers nothing, which is the same absence as an
    * unset pointer and needs no branch of its own.
    */
   async function loadDefault(): Promise<void> {
-    const path = ledger.path;
-    if (pointerFor === path) return;
-    pointerFor = path;
+    const open = currentOpen();
+    if (pointerFor === open) return;
+    pointerFor = open;
     try {
       defaultName = (await api.silent.getStatblockPresetDefault()) ?? null;
     } catch {
@@ -97,7 +104,7 @@ function createStatblockPresets() {
   async function setDefault(name: string | null): Promise<void> {
     await api.saveStatblockPresetDefault(name);
     defaultName = name;
-    pointerFor = ledger.path;
+    pointerFor = currentOpen();
   }
 
   return {

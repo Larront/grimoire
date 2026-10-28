@@ -1,14 +1,23 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { toast } from "svelte-sonner";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, friendlyMessage } from "$lib/api";
 import {
+  dismissDbRecovery,
+  dismissFormatUpdate,
+  toastDbRebuilt,
+  toastDbRestored,
+  toastDbSalvaged,
   toastError,
-  toastImportFailures,
   toastMigrationReport,
-  toastUnlinkedPins,
 } from "$lib/toast";
+import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
+import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+import { staleLinks } from "$lib/stores/stale-links.svelte";
+import { linkRepairs } from "$lib/stores/link-repairs.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
-import type { MigrationPlan } from "$lib/bindings.gen";
+import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
+import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
+import type { MigrationPlan, MigrationReport, SalvageSummary } from "$lib/bindings.gen";
 
 export type AccentPreset =
   | "accent-crimson"
@@ -17,20 +26,16 @@ export type AccentPreset =
   | "accent-ice"
   | "accent-amber";
 
-export type DensityLevel = "cozy" | "balanced" | "dense";
+export type { DensityLevel } from "./app-prefs.svelte";
 
 export interface FailedImport {
   path: string;
   reason: string;
 }
 
-/** A pin the open-time ledger repair left pointing at nothing (#224). */
-export interface UnlinkedPin {
-  pin_id: number;
-  pin_title: string;
-  map_id: number;
-  map_title: string;
-}
+/** A pin a repair left pointing at nothing (#224) — see `unlinked-pins.svelte.ts`. */
+export type { UnlinkedPin } from "$lib/bindings.gen";
+import type { UnlinkedPin } from "$lib/bindings.gen";
 
 interface OpenLedgerResult {
   path: string;
@@ -43,6 +48,39 @@ interface OpenLedgerResult {
   unlinked_pins: UnlinkedPin[];
   /** RFC 3339 date of the snapshot the DB was auto-restored from (issue #116). */
   recovered_from_backup: string | null;
+  /** Where a damaged database was kept, after a restore, a salvage or a rebuild. */
+  damaged_file?: string | null;
+  /** Set when a damaged database with no backup was salvaged on the way in. */
+  salvaged?: SalvageSummary | null;
+  /** Set only by a rebuild: what came back besides the notes. */
+  rebuilt?: { maps_recovered: number } | null;
+  /** Notes turned up at paths the records didn't hold: links may need repairing. */
+  notes_arrived?: boolean;
+}
+
+/** The example world's own name, as its Start Here note gives it. */
+export const EXAMPLE_WORLD_NAME = "The Ashfen Vale";
+
+/** Where the example's copy lives, once known — its folder is "sample-world". */
+let examplePath: string | null = null;
+const samePath = (a: string, b: string) =>
+  a.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() ===
+  b.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+
+/**
+ * A world's name as the GM sees it: its folder's — or, for the example, its own name.
+ * It was "Example World" in the sidebar and the window title and "The Ashfen Vale" on
+ * its pages; one name now, marked as an example where that matters (2026-10 design
+ * review).
+ */
+export function worldNameOf(path: string): string {
+  if (examplePath && samePath(path, examplePath)) return EXAMPLE_WORLD_NAME;
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/** Show a kept damaged database in its folder. */
+function showDamaged(file: string | null | undefined): (() => void) | null {
+  return file ? () => void revealItemInDir(file).catch(() => {}) : null;
 }
 
 export interface RecentLedger {
@@ -56,65 +94,79 @@ export interface RecentLedger {
   missing?: boolean;
 }
 
-export const failedImportsModal = $state({
-  open: false,
-  failures: [] as FailedImport[],
-});
-
-/** The pins an open-time repair unlinked, and the dialog that lists them (#224).
- *  `pins` outlives the toast on purpose: the toast is how the GM learns, this is
- *  where they go on finding out, and closing one must not lose the other. */
-export const unlinkedPinsModal = $state({
-  open: false,
-  pins: [] as UnlinkedPin[],
-});
-
 function createLedgerStore() {
   let path = $state<string | null>(null);
   let isOpen = $state(false);
+  // Bumped by every successful open, including a reopen of the ledger already
+  // open. The path can't say "opened again": re-exploring the Example World
+  // reopens the same sandbox path over a freshly reset database, so anything
+  // that reloads on a path change keeps serving rows that are gone.
+  let openGeneration = $state(0);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let accent = $state<AccentPreset>("accent-crimson");
-  let density = $state<DensityLevel>("balanced");
   let isSample = $state(false);
   let pendingStartHere = $state(false);
   // Set when open_ledger reported ERR_DB_CORRUPT with no usable snapshot —
   // DbRecoveryDialog (mounted in the root layout) offers Rebuild/Cancel.
   let corruptLedgerPath = $state<string | null>(null);
+  /** Why the last rebuild failed, in the GM's words — shown in the rebuild dialog. */
+  let rebuildError = $state<string | null>(null);
   // Set when open_ledger refused because the vault's notes are on an older
   // format (ADR-0017) — FormatMigrationDialog (also in the root layout) composes
   // its copy from this plan and offers Update/Cancel. Declining leaves it null
   // and the ledger closed: the refusal that put it here simply stands.
   let formatMigration = $state<{ path: string; plan: MigrationPlan } | null>(null);
+  /** Why the last update failed, in the GM's words — shown in the update prompt. */
+  let migrateError = $state<string | null>(null);
 
   /** Applies a successful open_ledger result to store state and surfaces
-   *  failed imports and snapshot recovery. */
-  function applyOpenResult(result: OpenLedgerResult): void {
+   *  failed imports and snapshot recovery — and, when the open came from a note
+   *  format update, how that went. */
+  function applyOpenResult(result: OpenLedgerResult, formatUpdate?: MigrationReport): void {
     path = result.path;
     isOpen = true;
+    openGeneration++;
+    // An open is of an ordinary world unless the caller says otherwise —
+    // `exploreSample` sets this back after its open. Switching worlds from inside the
+    // Example World used to leave the next one labelled "Example World".
+    isSample = false;
 
-    if (result.failed_imports.length > 0) {
-      failedImportsModal.failures = result.failed_imports;
-      toastImportFailures(result.failed_imports, () => {
-        failedImportsModal.open = true;
-      });
-    }
+    // Every open, empty or not: a world that reads cleanly takes the last one's
+    // list, and its toast, down.
+    unreadableNotes.replace(result.failed_imports);
+    staleLinks.clear();
+    linkRepairs.clear();
+    // Notes turned up at new places while the world was closed: links written as
+    // paths may point where they were. Listed if any can be healed, never healed here.
+    if (result.notes_arrived) void linkRepairs.check();
 
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are
     // named rather than counted (issue #224).
-    unlinkedPinsModal.pins = result.unlinked_pins;
-    toastUnlinkedPins(result.unlinked_pins.length, () => {
-      unlinkedPinsModal.open = true;
-    });
+    unlinkedPins.replace(result.unlinked_pins);
 
-    // Invisible background recovery → informational toast (issue #116).
-    if (result.recovered_from_backup) {
-      const taken = new Date(result.recovered_from_backup);
-      toast("Ledger restored from a backup", {
-        description: `The database was damaged and has been restored — scenes and pins reflect ${taken.toLocaleString()}. The damaged file was kept beside it.`,
-        duration: Infinity,
-      });
+    // A damaged database recovered on the way in (#116): say what came back and what
+    // didn't, lastingly; any other open takes the last such word down.
+    const world = worldNameOf(result.path);
+    if (result.rebuilt) {
+      toastDbRebuilt(world, result.rebuilt.maps_recovered, showDamaged(result.damaged_file));
+    } else if (result.recovered_from_backup) {
+      toastDbRestored(world, result.recovered_from_backup, showDamaged(result.damaged_file));
+    } else if (result.salvaged) {
+      toastDbSalvaged(world, result.salvaged, showDamaged(result.damaged_file));
+    } else {
+      dismissDbRecovery();
+    }
+    // A note-format update's word belongs to the world it was about. A Try again
+    // replaces it in place: dismissing first would take the new word down with the
+    // old, since the toast library removes by id.
+    if (formatUpdate) {
+      toastMigrationReport(world, formatUpdate, () =>
+        runFormatUpdate(result.path).catch((e) => toastError(friendlyMessage(e))),
+      );
+    } else {
+      dismissFormatUpdate();
     }
   }
 
@@ -143,15 +195,17 @@ function createLedgerStore() {
    *  format refusal with no prompt would be a dead end.
    *
    *  Returns whether a prompt took the refusal over, which is what decides if it
-   *  is also toasted. Only the [[Format Migration]] prompt answers yes: it states
-   *  the whole refusal — the count, what changes, and both ways out — so a toast
-   *  beside it would say less than the dialog behind it. The rebuild prompt is
-   *  left reporting, because a damaged database is a fault the GM should be told
-   *  about whether or not they take the offer to repair it. */
+   *  is also toasted. Both prompts answer yes: each states the whole refusal and its
+   *  ways out, so a toast beside it says less than the dialog behind it. The rebuild
+   *  prompt used to be left reporting too, and the GM got the dialog's title again
+   *  as a red toast they couldn't even close while the dialog was up (2026-10 design
+   *  review). */
   async function routeOpenRefusal(ledgerPath: string, e: unknown): Promise<boolean> {
     const raw = String(e);
     if (raw.includes("ERR_DB_CORRUPT")) {
       corruptLedgerPath = ledgerPath;
+      rebuildError = null;
+      return true;
     }
     if (raw.includes("ERR_FORMAT_MIGRATION_REQUIRED")) {
       // Ask the scan what would change, so the prompt is composed from the
@@ -179,7 +233,7 @@ function createLedgerStore() {
         selectedPath ??
         (await open({
           directory: true,
-          title: "Open Ledger Folder",
+          title: "Open a ledger folder",
         }));
 
       if (!ledgerPath || typeof ledgerPath !== "string") {
@@ -187,6 +241,7 @@ function createLedgerStore() {
         return false;
       }
 
+      if (path && path !== ledgerPath) await rememberCounts();
       const result = await openAtPath(ledgerPath);
       recordRecent(result);
       return true;
@@ -195,6 +250,49 @@ function createLedgerStore() {
       throw e;
     } finally {
       isLoading = false;
+    }
+  }
+
+  /**
+   * A recent world whose folder can't be found, looked for by the GM: they choose where it
+   * is now, it opens from there, and the entry that pointed at the old folder goes — only
+   * once it has opened, so a failed open leaves the list as it was. A folder that isn't a
+   * world yet opens as one, as "Open a world folder…" does (the owner's call, 2026-10
+   * design review: a moved world could only be taken off the list and found by hand).
+   */
+  async function findWorld(missingPath: string, name: string): Promise<boolean> {
+    const picked = await open({ directory: true, title: `Where is ${name} now?` });
+    if (!picked || typeof picked !== "string") return false;
+    const opened = await openLedger(picked);
+    if (opened && picked !== missingPath) {
+      await api.silent.removeRecentLedger(missingPath).catch(() => {});
+    }
+    return opened;
+  }
+
+  // The Splash's counts are written as a world opens, and again as the GM leaves it —
+  // by closing it or opening another — so a world given its first note no longer says
+  // "Nothing in it yet" (2026-10 design review).
+  async function rememberCounts(): Promise<void> {
+    const at = path;
+    if (!at || isSample) return;
+    try {
+      const [notesNow, mapsNow, scenesNow, recents] = await Promise.all([
+        api.silent.getNotes(),
+        api.silent.getMaps(),
+        api.silent.getScenes(),
+        api.silent.getRecentLedgers(),
+      ]);
+      const entry = recents.find((r) => r.path === at);
+      if (!entry) return;
+      await api.silent.addRecentLedger({
+        ...entry,
+        note_count: notesNow.length,
+        map_count: mapsNow.length,
+        scene_count: scenesNow.length,
+      });
+    } catch {
+      // The counts stay as they were; nothing the GM did is at stake.
     }
   }
 
@@ -226,8 +324,10 @@ function createLedgerStore() {
     if (!target) return false;
     isLoading = true;
     error = null;
+    rebuildError = null;
     try {
-      const result = await api.rebuildLedgerDb(target);
+      // Quiet: a failure is said in the dialog, beside the button that failed.
+      const result = await api.silent.rebuildLedgerDb(target);
       applyOpenResult(result);
       recordRecent(result);
       corruptLedgerPath = null;
@@ -235,8 +335,12 @@ function createLedgerStore() {
     } catch (e) {
       // A rebuilt database can still be a vault whose *notes* are behind: the
       // rebuild ran, the format gate refused, and without this the GM would be
-      // left holding a generic toast and no way through.
+      // left with no way through. The migration prompt then says it all.
       await routeOpenRefusal(target, e);
+      if (!formatMigration) {
+        corruptLedgerPath = target;
+        rebuildError = friendlyMessage(e);
+      }
       error = String(e);
       throw e;
     } finally {
@@ -246,6 +350,7 @@ function createLedgerStore() {
 
   function dismissCorruptLedger(): void {
     corruptLedgerPath = null;
+    rebuildError = null;
   }
 
   /** The GM said yes to the [[Format Migration]] prompt: the backend backs the
@@ -258,14 +363,15 @@ function createLedgerStore() {
     if (!target) return false;
     isLoading = true;
     error = null;
+    migrateError = null;
     try {
-      const result = await api.migrateLedgerFormat(target.path);
-      applyOpenResult(result.ledger);
-      recordRecent(result.ledger);
+      await runFormatUpdate(target.path);
       formatMigration = null;
-      toastMigrationReport(result.report);
       return true;
     } catch (e) {
+      // Said in the prompt, beside the button that failed — a toast raised under the
+      // prompt can't even be clicked while it is up.
+      migrateError = friendlyMessage(e);
       error = String(e);
       throw e;
     } finally {
@@ -273,18 +379,33 @@ function createLedgerStore() {
     }
   }
 
+  /** Run the update over `ledgerPath`, open it, and say how it went — with a Try
+   *  again on a partial failure that runs this again (the backend closes the open
+   *  world first). */
+  async function runFormatUpdate(ledgerPath: string): Promise<void> {
+    const result = await api.silent.migrateLedgerFormat(ledgerPath);
+    applyOpenResult(result.ledger, result.report);
+    recordRecent(result.ledger);
+  }
+
   /** Declining opens nothing: there is no compatibility mode, because with no
    *  reader for the old format an un-migrated vault would not expose the GM to a
    *  risk they accepted — it would destroy content they never see leave. */
   function dismissFormatMigration(): void {
     formatMigration = null;
+    migrateError = null;
   }
 
   async function adopt(parent: string, name: string): Promise<boolean> {
     isLoading = true;
     error = null;
     try {
-      const destPath = await api.adoptSampleLedger(parent, name);
+      // The copy is of what is on disk, so the last edits have to be there first —
+      // as `exploreSample` flushes before it resets.
+      await pendingSaves.flushAll();
+      // Silent: the Adopt dialog says what went wrong, beside the field it is about,
+      // and a generic toast on top of it said the same thing worse.
+      const destPath = await api.silent.adoptSampleLedger(parent, name);
       const opened = await openLedger(destPath);
       if (!opened) {
         // openLedger only resolves false (without throwing) when no path was
@@ -311,6 +432,10 @@ function createLedgerStore() {
       // freshly reset copy.
       await pendingSaves.flushAll();
       const sandboxPath = await api.exploreSampleLedger();
+      examplePath = sandboxPath;
+      // The backend just replaced the sandbox, so the tabs saved for it name notes,
+      // maps and scenes of a copy that is gone — some made while exploring.
+      new LocalStorageTabPersistence(sandboxPath).clear();
       await openAtPath(sandboxPath);
       isSample = true;
       pendingStartHere = true;
@@ -323,9 +448,45 @@ function createLedgerStore() {
     }
   }
 
+  /** Where an earlier exploration of the example left it, or null when there is none. */
+  async function existingSample(): Promise<string | null> {
+    try {
+      const found = (await api.silent.existingSampleLedger()) ?? null;
+      if (found) examplePath = found;
+      return found;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Open the example as an earlier exploration left it: its notes, its tabs. The
+   * Splash offers this beside starting over, which `exploreSample` does (2026-10
+   * design review — exploring again used to wipe a GM's changes without a word).
+   */
+  async function continueSample(): Promise<boolean> {
+    const sandboxPath = await existingSample();
+    if (!sandboxPath) return exploreSample();
+    isLoading = true;
+    error = null;
+    try {
+      await openAtPath(sandboxPath);
+      isSample = true;
+      return true;
+    } catch (e) {
+      error = String(e);
+      throw e;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  /**
+   * Density is app-wide now (`appPrefs.density`). This stays for the one ledger that had a
+   * density of its own before, which `checkExistingLedger` hands over once.
+   */
   function setDensity(level: DensityLevel): void {
-    density = level;
-    api.silent.saveDensityLevel(level).catch(console.error);
+    appPrefs.setDensity(level);
   }
 
   function setAccent(preset: AccentPreset): void {
@@ -343,6 +504,7 @@ function createLedgerStore() {
 
   async function closeLedger(): Promise<void> {
     await pendingSaves.flushAll();
+    await rememberCounts();
     try {
       await api.closeLedger();
     } catch (e) {
@@ -354,8 +516,16 @@ function createLedgerStore() {
     isSample = false;
     pendingStartHere = false;
     accent = "accent-crimson";
-    density = "balanced";
     error = null;
+    // A world's own news goes with it: the restore or rebuild toast, and the note-
+    // format update's, used to sit on over the Splash and the next world. So does
+    // what needed its attention — pins, unreadable notes, links to moved notes.
+    dismissDbRecovery();
+    dismissFormatUpdate();
+    unreadableNotes.replace([]);
+    unlinkedPins.replace([]);
+    staleLinks.clear();
+    linkRepairs.clear();
   }
 
   async function checkExistingLedger(): Promise<void> {
@@ -364,11 +534,12 @@ function createLedgerStore() {
       if (existingPath) {
         path = existingPath;
         isOpen = true;
+        openGeneration++;
       }
       const savedAccent = await api.getAccentPreset().catch(() => null);
       if (savedAccent) accent = savedAccent as AccentPreset;
       const savedDensity = await api.getDensityLevel().catch(() => null);
-      if (savedDensity) density = savedDensity as DensityLevel;
+      if (savedDensity) appPrefs.adoptDensity(savedDensity);
     } catch {
       // No ledger open — normal on first launch
     }
@@ -381,6 +552,11 @@ function createLedgerStore() {
     get isOpen() {
       return isOpen;
     },
+    /** Counts opens. Read it to re-run whenever a ledger is (re)opened — the
+     *  path alone misses a reopen of the same ledger. */
+    get openGeneration() {
+      return openGeneration;
+    },
     get isLoading() {
       return isLoading;
     },
@@ -391,19 +567,29 @@ function createLedgerStore() {
       return accent;
     },
     get density() {
-      return density;
+      return appPrefs.density;
     },
     get isSample() {
       return isSample;
     },
+    /** The open world's name as the GM sees it (`worldNameOf`), or "" with none open. */
+    get worldName() {
+      return path ? worldNameOf(path) : "";
+    },
     get pendingStartHere() {
       return pendingStartHere;
+    },
+    get rebuildError() {
+      return rebuildError;
     },
     get corruptLedgerPath() {
       return corruptLedgerPath;
     },
     get formatMigration() {
       return formatMigration;
+    },
+    get migrateError() {
+      return migrateError;
     },
     clearPendingStartHere() {
       pendingStartHere = false;
@@ -413,8 +599,11 @@ function createLedgerStore() {
     migrateLedgerFormat,
     dismissFormatMigration,
     openLedger,
+    findWorld,
     adopt,
     exploreSample,
+    existingSample,
+    continueSample,
     closeLedger,
     checkExistingLedger,
     getRecentLedgers,

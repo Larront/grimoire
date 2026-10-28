@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { api } from "$lib/api";
   import { scenes } from "$lib/stores/scenes.svelte";
@@ -7,9 +7,11 @@
   import { tabs } from "$lib/stores/tabs.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Rename from "$lib/components/ui/rename";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Tabs from "$lib/components/ui/tabs";
   import Input from "$lib/components/ui/input/input.svelte";
   import {
     Music2,
@@ -26,16 +28,25 @@
     SkipBack,
     SkipForward,
     Palette,
-    Image as ImageIcon,
-    X,
     ChevronLeft,
+    VolumeOff,
+    Ellipsis,
+    CircleX,
   } from "@lucide/svelte";
   import type { SceneSlot, SpotifyAuthStatus } from "$lib/types/ledger";
   import { getSpotifyStatus, connectSpotify } from "$lib/utils/spotify-auth";
-  import { changeThumbnail, removeThumbnail } from "$lib/utils/thumbnail-actions";
-  import { ACCENT_BG, ACCENT_FG, ICON_OPTIONS, ICON_MAP } from "./thumbnail-presets";
-  import { ACCENT_PRESETS } from "$lib/entity-colors";
+  import {
+    DEFAULT_SCENE_ICON,
+    sceneIcon,
+    sceneThumbColors,
+  } from "./thumbnail-presets";
+  import SceneAppearance from "$lib/components/SceneAppearance.svelte";
+  import { isTypingIn } from "$lib/utils/keyboard";
   import { open } from "@tauri-apps/plugin-dialog";
+  import VolumeSlider from "$lib/components/VolumeSlider.svelte";
+  import NowPlayingBars from "$lib/components/NowPlayingBars.svelte";
+  import { SvelteSet } from "svelte/reactivity";
+  import { toastUndo } from "$lib/toast";
 
   interface Props {
     sceneId: number;
@@ -48,10 +59,16 @@
 
   // ---- Hero header ----
 
-  let heroColor = $derived(
-    scene ? (scene.thumbnail_color ?? ACCENT_BG[scene.id % 5]) : ACCENT_BG[0],
+  // The scene's own colours, as its dashboard card and the in-note player draw them —
+  // or, while the GM drags the colour picker, the colour under their hand.
+  let draftColor = $state<string | null>(null);
+  let heroColors = $derived(
+    scene
+      ? sceneThumbColors({ thumbnail_color: draftColor ?? scene.thumbnail_color })
+      : { bg: "var(--background-elevated)", fg: "var(--foreground-muted)" },
   );
-  let heroIconColor = $derived(scene ? ACCENT_FG[scene.id % 5] : ACCENT_FG[0]);
+  let heroColor = $derived(heroColors.bg);
+  let heroIconColor = $derived(heroColors.fg);
   let thumbnailUrl = $state<string | null>(null);
 
   $effect(() => {
@@ -70,31 +87,13 @@
     }
   });
 
-  // ---- Thumbnail pickers ----
-  let colorPickerOpen = $state(false);
-  let iconPickerOpen = $state(false);
-
-  async function applyColor(color: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailColor(scene.id, color);
-    } catch (e) {
-      console.error("update thumbnail color failed:", e);
-    } finally {
-      colorPickerOpen = false;
-    }
-  }
-
-  async function applyIcon(icon: string | null) {
-    if (!scene) return;
-    try {
-      await scenes.applyThumbnailIcon(scene.id, icon);
-    } catch (e) {
-      console.error("update thumbnail icon failed:", e);
-    } finally {
-      iconPickerOpen = false;
-    }
-  }
+  // ---- Appearance ----
+  // Picture, colour and icon live in one popover anchored to an always-visible button.
+  // They used to be three buttons that appeared only on hover — so a keyboard user's
+  // first three Tab stops were invisible — each opening a modal that did not mark the
+  // current choice. The popover stays open as choices land, so a GM can try a colour
+  // against the icon without reopening anything.
+  let appearanceOpen = $state(false);
 
   // ---- Tab title sync ----
   $effect(() => {
@@ -130,6 +129,21 @@
     }
   }
 
+  // A scene just made from "New Scene" opens with its placeholder name selected, so the
+  // GM's first keystroke names it rather than hunting for the field.
+  let nameInput = $state<HTMLInputElement | null>(null);
+  let offeredRename = false;
+  const PLACEHOLDER_NAMES = ["New Scene", "Untitled Scene"];
+
+  $effect(() => {
+    if (offeredRename || !scene || slotsLoading || !nameInput) return;
+    offeredRename = true;
+    if (slots.length === 0 && PLACEHOLDER_NAMES.includes(scene.name)) {
+      nameInput.focus();
+      nameInput.select();
+    }
+  });
+
   function handleNameKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -158,9 +172,29 @@
     }
   });
 
+  // Another surface changed a scene's tracks (`slotsRevision`): show this scene's as
+  // they now are — a loop turned off in the mini player is off here too.
+  $effect(() => {
+    void scenes.slotsRevision;
+    const id = untrack(() => lastLoadedSceneId);
+    if (id === null) return;
+    scenes.getSlots(id).then((s) => {
+      if (lastLoadedSceneId === id) slots = s;
+    });
+  });
+
   // ---- Playback derived state ----
-  let isThisScenePlaying = $derived(scene !== null && audioEngine.isScenePlaying(scene.id));
-  let isThisSceneLoading = $derived(audioEngine.loadingSceneId === scene?.id);
+  // Every one of these asks about THIS scene, through the engine's one answer for it
+  // (`sceneState`). The paused check used to be the engine's global one, so with Boss
+  // Battle paused, Town Market's editor offered "Resume" — and resumed the boss music.
+  // Active is wider than playing: a paused scene is still the active one, and its tracks
+  // still answer their own controls.
+  let isThisSceneActive = $derived(scene !== null && audioEngine.isSceneActive(scene.id));
+  let sceneState = $derived(audioEngine.sceneState(scene?.id ?? null));
+  let isThisSceneLoading = $derived(sceneState === "loading");
+  let isThisScenePaused = $derived(sceneState === "paused");
+  let isThisScenePlaying = $derived(sceneState === "playing");
+  let hasTracks = $derived(!slotsLoading && slots.length > 0);
 
   // ---- Play / Stop ----
   async function handlePlayStop() {
@@ -186,42 +220,38 @@
     audioEngine.stopAll();
   }
 
-  // ---- Master volume ----
-  function handleMasterVolumeInput(e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
-    audioEngine.setMasterVolume(value);
-  }
-
   // ---- Slot volume ----
-  function handleSlotVolumeInput(slot: SceneSlot, e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  function handleSlotVolumeInput(slot: SceneSlot, value: number) {
     const idx = slots.findIndex((s) => s.id === slot.id);
     if (idx !== -1) slots[idx] = { ...slots[idx], volume: value };
-    if (isThisScenePlaying) audioEngine.setSlotVolume(slot.id, value);
+    if (isThisSceneActive) audioEngine.setSlotVolume(slot.id, value);
   }
 
-  async function handleSlotVolumeChange(slot: SceneSlot, e: Event) {
-    const value = parseFloat((e.target as HTMLInputElement).value);
+  async function handleSlotVolumeChange(slot: SceneSlot, value: number) {
     try {
-      await api.updateSceneSlot(
-        slot.id,
-        slot.label,
-        value,
-        slot.loop,
-        slot.slot_order,
-        !!slot.shuffle,
-      );
+      slots = await scenes.patchSlot(slot, { volume: value });
     } catch (err) {
       console.error("Failed to save volume:", err);
     }
   }
 
   // ---- Slot play/pause ----
-  async function toggleSlotPlayback(slotId: number) {
-    if (audioEngine.isSlotPlaying(slotId)) {
-      await audioEngine.pauseSlot(slotId);
-    } else {
-      await audioEngine.resumeSlot(slotId);
+  // slot ids with a play/pause in flight, so a double click is one toggle
+  let busySlots = new SvelteSet<number>();
+
+  async function playSlot(slot: SceneSlot) {
+    if (!scene || busySlots.has(slot.id)) return;
+    busySlots.add(slot.id);
+    try {
+      if (!isThisSceneActive) {
+        await audioEngine.previewSlot(scene.id, slot.id);
+      } else if (audioEngine.isSlotPlaying(slot.id)) {
+        await audioEngine.pauseSlot(slot.id);
+      } else {
+        await audioEngine.resumeSlot(slot.id);
+      }
+    } finally {
+      busySlots.delete(slot.id);
     }
   }
 
@@ -265,6 +295,16 @@
     renamingSlotId = slot.id;
   }
 
+  // Leaving the field unmounts it, and focus fell to the page. Put it back on the row's
+  // menu button — unless the GM left by clicking something else, which keeps its focus.
+  async function endSlotRename(slotId: number) {
+    renamingSlotId = null;
+    await tick();
+    if (document.activeElement === document.body || document.activeElement === null) {
+      document.querySelector<HTMLElement>(`[data-slot-menu="${slotId}"]`)?.focus();
+    }
+  }
+
   async function handleSlotRename(slotId: number, newLabel: string) {
     const trimmed = newLabel.trim();
     if (!trimmed) {
@@ -284,27 +324,47 @@
     } catch (e) {
       console.error("Failed to rename slot:", e);
     } finally {
-      renamingSlotId = null;
+      endSlotRename(slotId);
     }
   }
 
-  // ---- Delete slot ----
-  let deleteSlotTarget = $state<SceneSlot | null>(null);
+  // ---- Remove slot ----
+  // An undo toast rather than a confirmation dialog (DESIGN.md: modals are
+  // disproportionate for this). The row leaves at once and falls silent; nothing is
+  // removed until the undo window closes, so Undo is a cancelled timer. Removing a track
+  // only takes it out of the scene — its audio file stays in the ledger — which the old
+  // dialog's "This action cannot be undone" made sound otherwise.
+  let pendingRemoval = new SvelteSet<number>();
+  let visibleSlots = $derived(slots.filter((s) => !pendingRemoval.has(s.id)));
 
-  async function confirmDeleteSlot() {
-    if (!deleteSlotTarget || !scene) return;
-    try {
-      slots = await scenes.deleteSlot(scene.id, deleteSlotTarget.id);
-    } catch (e) {
-      console.error("Failed to delete slot:", e);
-    } finally {
-      deleteSlotTarget = null;
-    }
+  function deleteSlot(slot: SceneSlot) {
+    if (!scene) return;
+    const sceneId = scene.id;
+    const wasPlaying = audioEngine.isSceneActive(sceneId) && audioEngine.isSlotPlaying(slot.id);
+    pendingRemoval.add(slot.id);
+    if (wasPlaying) void audioEngine.pauseSlot(slot.id);
+    toastUndo(
+      `Removed "${slot.label}" from the scene`,
+      async () => {
+        try {
+          slots = await scenes.deleteSlot(sceneId, slot.id);
+        } catch (e) {
+          console.error("Failed to delete slot:", e);
+        } finally {
+          pendingRemoval.delete(slot.id);
+        }
+      },
+      () => {
+        pendingRemoval.delete(slot.id);
+        if (wasPlaying && audioEngine.isSceneActive(sceneId)) void audioEngine.resumeSlot(slot.id);
+      },
+    );
   }
 
   // ---- Add track dialog ----
   let addDialogOpen = $state(false);
-  let addTab = $state<"local" | "spotify">("local");
+  // "local" | "spotify" — a string because the tabs primitive binds one.
+  let addTab = $state("local");
   let addLabel = $state("");
   let addLoop = $state(true);
   let addShuffle = $state(false);
@@ -369,10 +429,27 @@
 
   let parsedSpotifyInput = $derived(parseSpotifyInput(addSpotifyUri.trim()));
 
-  let canAdd = $derived(
-    addLabel.trim() !== "" &&
-      (addTab === "local" ? !!addSourcePath || !!addDroppedFile : !!parsedSpotifyInput),
+  let spotifyInputInvalid = $derived(
+    addTab === "spotify" && addSpotifyUri.trim() !== "" && !parsedSpotifyInput,
   );
+
+  // A Spotify track may be added unnamed: it takes its name from Spotify. Requiring a
+  // name here was what kept that lookup in handleAddTrack from ever running.
+  let canAdd = $derived(
+    addTab === "local"
+      ? (!!addSourcePath || !!addDroppedFile) && addLabel.trim() !== ""
+      : !!parsedSpotifyInput,
+  );
+
+  // Why Add is disabled, said beside it rather than left to guess.
+  let addBlockedReason = $derived.by(() => {
+    if (canAdd) return null;
+    if (addTab === "local") {
+      return addSourcePath || addDroppedFile ? "Give the track a name." : "Choose a file to add.";
+    }
+    if (!spotifyAuth?.is_connected || spotifyInputInvalid) return null;
+    return "Paste a Spotify link to add.";
+  });
 
   function resetAddDialog() {
     addDialogOpen = false;
@@ -421,7 +498,7 @@
 
   async function handleFilePick() {
     const picked = await open({
-      title: "Choose Audio File",
+      title: "Choose an audio file",
       filters: [
         {
           name: "Audio",
@@ -487,7 +564,7 @@
         volume: 0.8,
         loop: addLoop,
         slotOrder: slots.length,
-        shuffle: addShuffle,
+        shuffle: source === "spotify" && parseSpotifyInput(sourceId)?.type === "playlist" && addShuffle,
       });
       resetAddDialog();
     } catch (e) {
@@ -498,7 +575,7 @@
   }
 </script>
 
-<div class="flex flex-1 flex-col overflow-y-auto">
+<div data-pane-scroll class="@container flex flex-1 flex-col overflow-y-auto">
   {#if scenes.isLoading}
     <!-- Loading state -->
     <div class="flex flex-1 items-center justify-center">
@@ -510,81 +587,52 @@
       <p class="text-sm text-muted-foreground">Scene not found</p>
     </div>
   {:else}
-    <!-- HERO HEADER -->
-    {@const HeroIcon = (scene.thumbnail_icon && ICON_MAP[scene.thumbnail_icon]) || Music2}
+    <!-- HERO HEADER
+         A shorter band than it was (208px → 128px): the scene's picture and name still
+         open the editor, but Play and the tracks are no longer a quarter of the way down
+         the pane. Its content sits on the same column as the transport and the tracks, so
+         the name, "All Scenes" and the first track share a left edge. -->
+    {@const HeroIcon = sceneIcon(scene)}
     <div
       data-hero-header
-      class="group relative flex min-h-52 flex-col justify-end overflow-hidden"
+      class="relative shrink-0 overflow-hidden"
       style="background-color: {heroColor}; {thumbnailUrl
         ? `background-image: url(${thumbnailUrl}); background-size: cover; background-position: center;`
         : ''}"
     >
-      <!-- Gradient overlay for legibility (stronger on images) -->
-      <div
-        class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-      ></div>
+      <!-- Legibility over the GM's picture. Only over a picture: on a plain colour it
+           only muddied the colour they chose. -->
+      {#if thumbnailUrl}
+        <div
+          class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent"
+        ></div>
+      {/if}
 
-      <!-- Icon — always rendered per ADR-0002 -->
-      <div
-        data-hero-icon
-        data-icon-name={scene.thumbnail_icon ?? "Music2"}
-        class="pointer-events-none absolute top-5 right-6"
-      >
-        <HeroIcon
-          class="size-14 opacity-70"
-          strokeWidth={1.5}
-          style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl
-            ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))'
-            : ''}"
-        />
-      </div>
+      <div class="relative mx-auto flex min-h-32 w-full max-w-3xl items-end gap-3 px-8 pt-8 pb-5">
+        <!-- Icon — always rendered per ADR-0002 -->
+        <div
+          data-hero-icon
+          data-icon-name={scene.thumbnail_icon ?? "Music2"}
+          class="pointer-events-none mb-1 shrink-0"
+        >
+          <HeroIcon
+            class="size-8"
+            strokeWidth={1.5}
+            style="color: {thumbnailUrl ? 'white' : heroIconColor}; {thumbnailUrl
+              ? 'filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6))'
+              : ''}"
+          />
+        </div>
 
-      <!-- Thumbnail edit buttons (visible on hover) -->
-      <div
-        class="absolute top-3 left-3 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-      >
-        <button
-          data-edit-thumbnail-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-          onclick={() => changeThumbnail(scene.id)}
-        >
-          <ImageIcon class="size-3" />
-          Image
-        </button>
-        {#if scene.thumbnail_path}
-          <button
-            data-remove-thumbnail-btn
-            class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-            onclick={() => removeThumbnail(scene.id)}
-          >
-            <X class="size-3" />
-            Remove
-          </button>
-        {/if}
-        <button
-          data-edit-color-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-          onclick={() => (colorPickerOpen = true)}
-        >
-          <Palette class="size-3" />
-          Color
-        </button>
-        <button
-          data-edit-icon-btn
-          class="flex items-center gap-1 rounded-md bg-black/50 px-2 py-1 text-xs text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-          onclick={() => (iconPickerOpen = true)}
-        >
-          <HeroIcon class="size-3" />
-          Icon
-        </button>
-      </div>
-
-      <!-- Scene name (editable) -->
-      <div class="relative z-10 px-8 pb-5">
+        <!-- Scene name (editable). H1 on the type scale; a long name ends in an ellipsis
+             at rest and scrolls while it is being edited. -->
         <input
+          bind:this={nameInput}
           data-scene-name
+          aria-label="Scene name"
           bind:value={draftName}
-          class="font-heading w-full bg-transparent border-none outline-none p-0 text-3xl leading-tight tracking-tight placeholder:opacity-40 focus:ring-0"
+          class="font-heading min-w-0 flex-1 truncate rounded-sm border-none bg-transparent p-0 text-[1.75rem] leading-tight tracking-tight
+                 placeholder:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
           style="color: {thumbnailUrl ? 'white' : 'var(--foreground)'}; {thumbnailUrl
             ? 'text-shadow: 0 2px 8px rgba(0,0,0,0.5)'
             : ''}"
@@ -592,30 +640,56 @@
           onblur={commitName}
           onkeydown={handleNameKeydown}
         />
+
+        <!-- Appearance. A control over the GM's imagery, so it takes the floating
+             treatment (DESIGN.md §4) and is always there to find. -->
+        <Popover.Root bind:open={appearanceOpen}>
+          <Popover.Trigger
+            data-appearance-btn
+            class="mb-1 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-popover px-2.5 text-[0.8125rem] font-medium text-foreground
+                   shadow-float ring-1 ring-foreground/10 transition-colors hover:bg-surface-hover
+                   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <Palette class="size-3.5 text-muted-foreground" />
+            <span class="@max-md:sr-only">Appearance</span>
+          </Popover.Trigger>
+          <Popover.Content align="end" class="flex w-72 flex-col gap-4">
+            <SceneAppearance
+              {scene}
+              oncolorinput={(hex) => (draftColor = hex)}
+              oncolorsaved={(color) => {
+                // Hand the header back to the stored colour — unless the GM has already
+                // moved on to another one while this save was in flight.
+                if (draftColor === color || color === null) draftColor = null;
+              }}
+            />
+          </Popover.Content>
+        </Popover.Root>
       </div>
     </div>
 
-    <!-- CONTROLS BAR -->
-    <div class="flex items-center justify-between border-b border-border/60 px-8 py-3">
-      <!-- Playback controls -->
-      <div class="flex items-center gap-3">
+    <!-- TRANSPORT
+         Pinned under the header while the tracks scroll: at the table, Play and Stop must
+         not scroll away with a long track list. -->
+    <div class="sticky top-0 z-10 shrink-0 border-b border-border bg-background">
+      <div class="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 px-8 py-3">
         <Button
           variant="ghost"
           size="sm"
-          class="text-muted-foreground"
-          aria-label="All Scenes"
+          class="-ml-2.5 text-muted-foreground"
           onclick={() => tabs.openTab({ type: "scenes", id: 0, title: "All Scenes" })}
         >
           <ChevronLeft class="size-3.5" />
           All Scenes
         </Button>
-        <div class="h-4 w-px bg-border/60"></div>
-        {#if isThisSceneLoading || audioEngine.isCrossfading}
+        <div class="h-4 w-px bg-border"></div>
+
+        {#if isThisSceneLoading}
           <Button variant="secondary" size="sm" disabled>
             <LoaderCircle class="size-3.5 animate-spin" />
-            Loading...
+            Loading…
           </Button>
-        {:else if audioEngine.isScenePaused}
+        {:else if isThisScenePaused}
           <Button variant="default" size="sm" onclick={handleResume}>
             <Play class="size-3.5" />
             Resume
@@ -629,36 +703,53 @@
             <Pause class="size-3.5" />
             Pause
           </Button>
-          <Button variant="secondary" size="sm" onclick={handlePlayStop}>
+          <Button variant="secondary" size="sm" onclick={handleStop}>
             <Square class="size-3.5" />
             Stop
           </Button>
+          <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <NowPlayingBars />
+            Playing
+          </span>
         {:else}
-          <Button variant="default" size="sm" onclick={handlePlayStop}>
+          <!-- With no tracks there is nothing to play, and a crimson button that did
+               nothing was the loudest thing on an empty scene. -->
+          <Button
+            variant="default"
+            size="sm"
+            disabled={!hasTracks}
+            title={hasTracks ? undefined : "Add a track first"}
+            onclick={handlePlayStop}
+          >
             <Play class="size-3.5" />
-            Play Scene
+            Play scene
           </Button>
         {/if}
-      </div>
 
-      <!-- Master volume -->
-      <div class="flex items-center gap-2">
-        <Volume2 class="size-4 text-muted-foreground" />
-        <div class="relative flex items-center">
-          <div class="relative h-1 w-28 rounded-full bg-muted">
-            <div
-              class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-              style="width: {audioEngine.masterVolume * 100}%"
-            ></div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
+        <!-- Master volume — every scene, not this one, so it says so. -->
+        <div class="ml-auto flex items-center gap-1.5">
+          <span class="text-xs font-semibold text-muted-foreground @max-md:sr-only">Master</span>
+          <button
+            type="button"
+            class="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
+                   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onclick={() => audioEngine.toggleMasterMute()}
+            aria-label={audioEngine.isMasterMuted ? "Unmute all" : "Mute all"}
+            aria-pressed={audioEngine.isMasterMuted}
+            title={audioEngine.isMasterMuted ? "Unmute all" : "Mute all"}
+          >
+            {#if audioEngine.isMasterMuted}
+              <VolumeOff class="size-4 text-muted-foreground" />
+            {:else}
+              <Volume2 class="size-4 text-muted-foreground" />
+            {/if}
+          </button>
+          <VolumeSlider
+            class="w-28 @max-md:w-20"
             value={audioEngine.masterVolume}
-            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            oninput={handleMasterVolumeInput}
+            label="Master volume"
+            active={audioEngine.isSounding}
+            oninput={(v) => audioEngine.setMasterVolume(v)}
           />
         </div>
       </div>
@@ -673,104 +764,105 @@
           {/each}
         </div>
       {:else if slots.length === 0}
-        <!-- Empty state -->
-        <div class="flex flex-col items-center justify-center py-20">
-          <div class="flex size-14 items-center justify-center rounded-lg bg-primary/10">
-            <Music2 class="size-7 text-primary/60" strokeWidth={1.5} />
+        <!-- Empty state: a Metamorphous headline, one orienting line, one action
+             (DESIGN.md §6). Add Track is the primary here — it is the only next step, and
+             Play is disabled until there is something to play. -->
+        <div class="flex flex-col items-center justify-center py-16 text-center">
+          <div class="flex size-12 items-center justify-center rounded-lg bg-muted">
+            <DEFAULT_SCENE_ICON class="size-6 text-muted-foreground" strokeWidth={1.5} />
           </div>
-          <h2 class="mt-5 font-sans text-lg font-semibold text-foreground">No tracks yet</h2>
-          <p class="mt-2 max-w-sm text-center text-sm text-muted-foreground">
-            Add audio tracks to build your soundscape. Layer ambient sounds, music, and effects.
+          <h2 class="font-heading mt-5 text-[1.375rem] leading-tight font-normal text-foreground">
+            No tracks yet
+          </h2>
+          <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+            Layer rain, a crowd and music. They all play together when you press Play.
           </p>
-          <Button variant="outline" size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
+          <Button size="sm" class="mt-5" onclick={() => (addDialogOpen = true)}>
             <Plus class="size-3.5" />
-            Add Track
+            Add track
           </Button>
         </div>
       {:else}
         <div class="space-y-2">
-          {#each slots as slot (slot.id)}
+          {#each visibleSlots as slot (slot.id)}
+            {@const slotPlaying = isThisSceneActive && audioEngine.isSlotPlaying(slot.id)}
+            {@const playlist = isPlaylistSlot(slot)}
             <ContextMenu.Root>
               <ContextMenu.Trigger>
+                <!-- F2 and Delete work from anywhere on the row, as both its menus say;
+                     they used to work only from the "⋯". -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
-                  class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/50 hover:bg-card transition-colors"
+                  data-slot-row
+                  class="flex items-center gap-2 rounded-lg bg-card/50 py-2 pr-2 pl-1.5 transition-colors hover:bg-card"
+                  onkeydown={(e) => {
+                    if (isTypingIn(e.target)) return;
+                    if (e.key === "F2") {
+                      e.preventDefault();
+                      startSlotRename(slot);
+                    } else if (e.key === "Delete") {
+                      e.preventDefault();
+                      deleteSlot(slot);
+                    }
+                  }}
                 >
-                  <!-- Playback group: skip-back · play/pause · skip-forward -->
-                  <div class="flex shrink-0 items-center gap-1">
-                    {#if isPlaylistSlot(slot)}
-                      {#if isThisScenePlaying}
-                        <Button
-                          data-slot-skip-controls
-                          variant="ghost"
-                          size="icon"
-                          class="size-7 shrink-0"
-                          onclick={() => audioEngine.skipPrev()}
-                        >
-                          <SkipBack class="size-3.5" />
-                        </Button>
-                      {:else}
-                        <div
-                          data-slot-skip-controls
-                          class="flex size-7 shrink-0 items-center justify-center"
-                        >
-                          <SkipBack class="size-3.5 text-muted-foreground/30" />
-                        </div>
-                      {/if}
+                  <!-- Play this track. While the scene is stopped it previews the track on
+                       its own; while the scene is active it brings the track in or out. It
+                       used to be a faint glyph that did nothing until the whole scene
+                       played. -->
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8 shrink-0"
+                    disabled={busySlots.has(slot.id) || isThisSceneLoading}
+                    aria-label={slotPlaying
+                      ? `Pause ${slot.label}`
+                      : isThisSceneActive
+                        ? `Play ${slot.label}`
+                        : `Play ${slot.label} on its own`}
+                    title={isThisSceneActive ? undefined : "Play this track on its own"}
+                    onclick={() => playSlot(slot)}
+                  >
+                    {#if slotPlaying}
+                      <Pause class="size-3.5 text-foreground" />
                     {:else}
-                      <div class="size-7 shrink-0"></div>
+                      <Play class="size-3.5 text-muted-foreground" />
                     {/if}
+                  </Button>
 
-                    {#if isThisScenePlaying}
+                  <!-- Skip, for a playlist that is sounding: they act on the playing queue,
+                       so they appear with it rather than as placeholders. -->
+                  {#if playlist && slotPlaying}
+                    <div data-slot-skip-controls class="flex shrink-0 items-center">
                       <Button
                         variant="ghost"
                         size="icon"
-                        class="size-7 shrink-0"
-                        onclick={() => toggleSlotPlayback(slot.id)}
+                        class="size-7"
+                        aria-label="Previous track in {slot.label}"
+                        onclick={() => audioEngine.skipPrev()}
                       >
-                        {#if audioEngine.isSlotPlaying(slot.id)}
-                          <Pause class="size-3.5 text-foreground" />
-                        {:else}
-                          <Play class="size-3.5 text-foreground" />
-                        {/if}
+                        <SkipBack class="size-3.5" />
                       </Button>
-                    {:else}
-                      <div class="flex size-7 shrink-0 items-center justify-center">
-                        <Play class="size-3.5 text-muted-foreground/30" />
-                      </div>
-                    {/if}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-7"
+                        aria-label="Next track in {slot.label}"
+                        onclick={() => audioEngine.skipNext()}
+                      >
+                        <SkipForward class="size-3.5" />
+                      </Button>
+                    </div>
+                  {/if}
 
-                    {#if isPlaylistSlot(slot)}
-                      {#if isThisScenePlaying}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          class="size-7 shrink-0"
-                          onclick={() => audioEngine.skipNext()}
-                        >
-                          <SkipForward class="size-3.5" />
-                        </Button>
-                      {:else}
-                        <div class="flex size-7 shrink-0 items-center justify-center">
-                          <SkipForward class="size-3.5 text-muted-foreground/30" />
-                        </div>
-                      {/if}
-                    {:else}
-                      <div class="size-7 shrink-0"></div>
-                    {/if}
-                  </div>
-
-                  <!-- Source indicator -->
-                  <span
-                    class="inline-block w-12 shrink-0 rounded-full bg-muted py-0.5 text-center font-mono text-[10px] tracking-wide text-muted-foreground"
-                    >{slot.source === "spotify" ? "Spotify" : "Local"}</span
-                  >
-
-                  <!-- Label (renameable) -->
-                  <div class="min-w-0 flex-1">
+                  <!-- Label: click (or F2 from the row's menu button) to rename. -->
+                  <div class="flex min-w-0 flex-1 items-center gap-2">
                     <Rename.Root
                       this="span"
-                      class="truncate text-sm text-foreground"
-                      inputClass="bg-transparent px-0 py-0 text-sm"
+                      class="min-w-0 cursor-text truncate text-sm {slotPlaying
+                        ? 'text-foreground'
+                        : 'text-foreground/90'}"
+                      inputClass="w-full bg-transparent px-0 py-0 text-sm"
                       bind:value={
                         () => (renamingSlotId === slot.id ? renameSlotValue : slot.label),
                         (val) => {
@@ -780,51 +872,49 @@
                       bind:mode={
                         () => (renamingSlotId === slot.id ? "edit" : "view"),
                         (val) => {
-                          if (val === "view") renamingSlotId = null;
+                          // Both directions: the field enters editing itself when its text
+                          // is clicked, and ignoring that snapped it straight back, which
+                          // is why renaming only worked from the context menu.
+                          if (val === "edit") startSlotRename(slot);
+                          else if (renamingSlotId === slot.id) endSlotRename(slot.id);
                         }
                       }
                       onSave={(val) => handleSlotRename(slot.id, val)}
-                      onCancel={() => {
-                        renamingSlotId = null;
-                      }}
+                      onCancel={() => endSlotRename(slot.id)}
                     />
+                    <span
+                      class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground @max-md:hidden"
+                      >{slot.source === "spotify" ? "Spotify" : "Local"}</span
+                    >
                   </div>
 
-                  <!-- Volume slider -->
-                  <div class="relative flex shrink-0 items-center">
-                    <div class="relative h-1 w-24 rounded-full bg-muted">
-                      <div
-                        class="absolute inset-y-0 left-0 rounded-full bg-primary/50"
-                        style="width: {slot.volume * 100}%"
-                      ></div>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={slot.volume}
-                      class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      oninput={(e) => handleSlotVolumeInput(slot, e)}
-                      onchange={(e) => handleSlotVolumeChange(slot, e)}
-                    />
-                  </div>
+                  <VolumeSlider
+                    class="w-24 @max-sm:w-14"
+                    value={slot.volume}
+                    label="{slot.label} volume"
+                    active={slotPlaying}
+                    oninput={(v) => handleSlotVolumeInput(slot, v)}
+                    onchange={(v) => handleSlotVolumeChange(slot, v)}
+                  />
 
                   <!-- Loop and shuffle. Their OFF state was `text-muted-foreground/30`,
-                         which measures about 1.6:1 on Iron Dark — under the 3:1 that
-                         WCAG 1.4.11 asks of a control's own graphics, and reading as
-                         disabled when the control is live and one click from changing
-                         what the table hears. Ember Muted is the resting state for an
-                         enabled-but-inactive control everywhere else in the app.
+                       which measures about 1.6:1 on Iron Dark — under the 3:1 that
+                       WCAG 1.4.11 asks of a control's own graphics, and reading as
+                       disabled when the control is live and one click from changing
+                       what the table hears. Ember Muted is the resting state for an
+                       enabled-but-inactive control everywhere else in the app.
 
-                         `aria-pressed` because these are toggles and were announcing
-                         state only through a label that changed underneath. -->
+                       `aria-pressed` because these are toggles and were announcing
+                       state only through a label that changed underneath. Shuffle
+                       only for a Spotify playlist, the one source it means anything
+                       for — as the in-note player already does. -->
                   <Button
                     variant="ghost"
                     size="icon"
                     class="size-7 shrink-0"
-                    aria-label="Loop"
+                    aria-label="Loop {slot.label}"
                     aria-pressed={!!slot.loop}
+                    title="Loop"
                     onclick={() => toggleLoop(slot)}
                   >
                     <Repeat
@@ -832,29 +922,59 @@
                     />
                   </Button>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="size-7 shrink-0"
-                    aria-label="Shuffle"
-                    aria-pressed={!!slot.shuffle}
-                    onclick={() => toggleShuffle(slot)}
-                  >
-                    <Shuffle
-                      class="size-3.5 {!!slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
-                    />
-                  </Button>
+                  {#if playlist}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="size-7 shrink-0"
+                      aria-label="Shuffle {slot.label}"
+                      aria-pressed={!!slot.shuffle}
+                      title="Shuffle"
+                      onclick={() => toggleShuffle(slot)}
+                    >
+                      <Shuffle
+                        class="size-3.5 {slot.shuffle ? 'text-primary' : 'text-muted-foreground'}"
+                      />
+                    </Button>
+                  {/if}
+
+                  <!-- The row's menu, findable without a right-click. -->
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger
+                      data-slot-menu={slot.id}
+                      class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors
+                             hover:bg-surface-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      aria-label="More for {slot.label}"
+                    >
+                      <Ellipsis class="size-4" />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      <DropdownMenu.Item onclick={() => startSlotRename(slot)}>
+                        <Pencil class="size-4" />
+                        Rename
+                        <DropdownMenu.Shortcut>F2</DropdownMenu.Shortcut>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item variant="destructive" onclick={() => deleteSlot(slot)}>
+                        <Trash2 class="size-4" />
+                        Remove from scene
+                        <DropdownMenu.Shortcut>Del</DropdownMenu.Shortcut>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
                 </div>
               </ContextMenu.Trigger>
               <ContextMenu.Content>
                 <ContextMenu.Item onclick={() => startSlotRename(slot)}>
                   <Pencil class="size-4" />
                   Rename
+                  <ContextMenu.Shortcut>F2</ContextMenu.Shortcut>
                 </ContextMenu.Item>
                 <ContextMenu.Separator />
-                <ContextMenu.Item variant="destructive" onclick={() => (deleteSlotTarget = slot)}>
+                <ContextMenu.Item variant="destructive" onclick={() => deleteSlot(slot)}>
                   <Trash2 class="size-4" />
-                  Delete
+                  Remove from scene
+                  <ContextMenu.Shortcut>Del</ContextMenu.Shortcut>
                 </ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
@@ -864,86 +984,16 @@
         <!-- Add track button -->
         <button
           onclick={() => (addDialogOpen = true)}
-          class="w-full mt-3 py-3 rounded-lg border border-dashed border-border/60 text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground transition-colors"
+          class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-3 text-sm text-muted-foreground transition-colors
+                 hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          <Plus class="size-4 inline" />
-          Add Track
+          <Plus class="size-4" />
+          Add track
         </button>
       {/if}
     </div>
   {/if}
 </div>
-
-<!-- Color picker dialog -->
-<Dialog.Root
-  open={colorPickerOpen}
-  onOpenChange={(o) => {
-    colorPickerOpen = o;
-  }}
->
-  <Dialog.Content style="max-width: 18rem">
-    <Dialog.Header>
-      <Dialog.Title>Choose color</Dialog.Title>
-    </Dialog.Header>
-    <div data-color-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ACCENT_PRESETS as preset (preset.name)}
-          <button
-            data-color-swatch={preset.name}
-            aria-label={preset.label}
-            class="size-9 rounded-lg border-2 border-transparent transition-[transform,border-color] hover:scale-110 hover:border-foreground/30"
-            style="background: {preset.swatch}"
-            onclick={() => applyColor(preset.bg)}
-          ></button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyColor(null)}
-      >
-        Reset to default
-      </Button>
-    </div>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Icon picker dialog -->
-<Dialog.Root
-  open={iconPickerOpen}
-  onOpenChange={(o) => {
-    iconPickerOpen = o;
-  }}
->
-  <Dialog.Content style="max-width: 22rem">
-    <Dialog.Header>
-      <Dialog.Title>Choose icon</Dialog.Title>
-    </Dialog.Header>
-    <div data-icon-picker class="flex flex-col gap-3">
-      <div class="grid grid-cols-5 gap-2">
-        {#each ICON_OPTIONS as { name, icon: Icon } (name)}
-          <button
-            data-icon-btn={name}
-            aria-label={name}
-            class="flex size-10 items-center justify-center rounded-lg border border-transparent bg-muted/50 transition-colors hover:border-primary/30 hover:bg-muted"
-            onclick={() => applyIcon(name)}
-          >
-            <Icon class="size-5 text-foreground/70" />
-          </button>
-        {/each}
-      </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="self-start text-muted-foreground"
-        onclick={() => applyIcon(null)}
-      >
-        Reset to default
-      </Button>
-    </div>
-  </Dialog.Content>
-</Dialog.Root>
 
 <!-- Add Track dialog -->
 <Dialog.Root
@@ -954,159 +1004,139 @@
 >
   <Dialog.Content style="max-width: 28rem">
     <Dialog.Header>
-      <Dialog.Title>Add Track</Dialog.Title>
+      <Dialog.Title>Add track</Dialog.Title>
     </Dialog.Header>
 
-    <!-- Tab buttons -->
-    <div class="flex border-b border-border">
-      <button
-        class="flex-1 px-4 py-2 text-sm transition-colors {addTab === 'local'
-          ? 'border-b-2 border-primary text-primary font-medium'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (addTab = "local")}
-      >
-        Local File
-      </button>
-      <button
-        class="flex-1 px-4 py-2 text-sm transition-colors {addTab === 'spotify'
-          ? 'border-b-2 border-primary text-primary font-medium'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => (addTab = "spotify")}
-      >
-        Spotify
-      </button>
-    </div>
+    <!-- Source. The shared tabs primitive rather than hand-built buttons: it is a real
+         tablist to assistive tech, and its selected tab is not crimson text, which the
+         Signal Rule keeps off small type (3.1:1 on the dialog). -->
+    <Tabs.Root bind:value={addTab}>
+      <Tabs.List class="w-full">
+        <Tabs.Trigger value="local">Local file</Tabs.Trigger>
+        <Tabs.Trigger value="spotify">Spotify</Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
 
-    <!-- Tab content -->
-    {#if addTab === "local"}
-      <div
-        class="space-y-4 pt-4"
-        role="presentation"
-        ondragover={handleAudioDragOver}
-        ondragleave={() => (isAudioDropTarget = false)}
-        ondrop={handleAudioDrop}
-      >
-        {#if addFileName}
-          <div
-            class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors {isAudioDropTarget
-              ? 'ring-2 ring-primary/50'
-              : ''}"
-          >
-            <Music2 class="size-4 text-primary/60" />
-            <span class="flex-1 truncate text-foreground">{addFileName}</span>
-            <Button variant="ghost" size="xs" onclick={handleFilePick}>Change</Button>
-          </div>
-        {:else}
-          <button
-            onclick={handleFilePick}
-            class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors {isAudioDropTarget
-              ? 'border-primary/50 bg-primary/5 ring-2 ring-primary/40'
-              : 'border-border hover:border-primary/50 hover:bg-primary/5'}"
-          >
-            <Music2
-              class="size-6 mx-auto mb-2 text-muted-foreground/60 transition-colors group-hover:text-primary/70"
-            />
-            <div class="text-sm font-medium text-foreground">
-              {isAudioDropTarget ? "Drop to add" : "Click to choose an audio file"}
-            </div>
-            <div class="text-xs text-muted-foreground/60 mt-1">
-              or drag &amp; drop · mp3, wav, ogg, flac
-            </div>
-          </button>
-        {/if}
-      </div>
-    {:else}
-      <div class="space-y-4 pt-4">
-        {#if !spotifyAuthChecked}
-          <div class="flex items-center justify-center py-6">
-            <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
-          </div>
-        {:else if !spotifyAuth?.is_connected}
-          <div
-            class="flex flex-col items-center gap-3 rounded-lg bg-card/50 border border-border p-6 text-center"
-          >
-            <span class="text-sm text-foreground font-medium"> Connect Spotify to add tracks </span>
-            <span class="text-xs text-muted-foreground max-w-[280px]">
-              Link your Spotify Premium account to add tracks and playlists to your scenes.
-            </span>
-            <Button size="sm" onclick={handleInlineSpotifyConnect} disabled={isSpotifyConnecting}>
-              {#if isSpotifyConnecting}
-                <LoaderCircle class="size-3.5 animate-spin" />
-                Connecting...
-              {:else}
-                Connect Spotify
-              {/if}
-            </Button>
-            <span class="text-[10px] text-muted-foreground">
-              Open Settings from the icon rail to manage integrations.
-            </span>
-          </div>
-        {:else}
-          <div>
-            <label for="add-spotify-uri" class="text-xs text-muted-foreground mb-1.5 block">
-              Spotify URI
-            </label>
-            <Input
-              id="add-spotify-uri"
-              bind:value={addSpotifyUri}
-              placeholder="Paste Spotify link or URI..."
-            />
-          </div>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Shared fields -->
-    <div class="space-y-3 pt-3">
-      <div>
-        <label for="add-track-label" class="text-xs text-muted-foreground mb-1.5 block">Label</label
+    <!-- One height for both tabs, so switching does not make the dialog jump. -->
+    <div class="flex min-h-56 flex-col gap-4">
+      {#if addTab === "local"}
+        <div
+          role="presentation"
+          ondragover={handleAudioDragOver}
+          ondragleave={() => (isAudioDropTarget = false)}
+          ondrop={handleAudioDrop}
         >
-        <Input id="add-track-label" bind:value={addLabel} placeholder="Track name" />
-      </div>
-      <div class="flex items-center gap-4">
-        <label class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" bind:checked={addLoop} class="accent-primary" />
-          Loop
-        </label>
-        <label class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" bind:checked={addShuffle} class="accent-primary" />
-          Shuffle
-        </label>
-      </div>
+          {#if addFileName}
+            <div
+              class="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm transition-colors {isAudioDropTarget
+                ? 'ring-2 ring-foreground/30'
+                : ''}"
+            >
+              <Music2 class="size-4 shrink-0 text-muted-foreground" />
+              <span class="flex-1 truncate text-foreground">{addFileName}</span>
+              <Button variant="ghost" size="xs" onclick={handleFilePick}>Change</Button>
+            </div>
+          {:else}
+            <button
+              type="button"
+              onclick={handleFilePick}
+              class="group w-full cursor-pointer rounded-lg border border-dashed p-6 text-center transition-colors
+                     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring {isAudioDropTarget
+                ? 'border-foreground/40 bg-muted/60'
+                : 'border-border hover:border-foreground/30 hover:bg-surface-hover'}"
+            >
+              <Music2
+                class="mx-auto mb-2 size-6 text-muted-foreground transition-colors group-hover:text-foreground"
+              />
+              <div class="text-sm font-medium text-foreground">
+                {isAudioDropTarget ? "Drop to add" : "Choose an audio file"}
+              </div>
+              <div class="mt-1 text-xs text-muted-foreground">
+                or drop one here · MP3, WAV, OGG, FLAC, M4A or AAC
+              </div>
+            </button>
+          {/if}
+        </div>
+      {:else if !spotifyAuthChecked}
+        <div class="flex flex-1 items-center justify-center">
+          <LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+        </div>
+      {:else if !spotifyAuth?.is_connected}
+        <div
+          class="flex flex-col items-center gap-3 rounded-lg border border-border bg-card/50 p-6 text-center"
+        >
+          <span class="text-sm font-medium text-foreground">Connect Spotify to add tracks</span>
+          <span class="max-w-[280px] text-xs text-muted-foreground">
+            Link a Spotify Premium account to add tracks, albums and playlists to your scenes.
+          </span>
+          <Button size="sm" onclick={handleInlineSpotifyConnect} disabled={isSpotifyConnecting}>
+            {#if isSpotifyConnecting}
+              <LoaderCircle class="size-3.5 animate-spin" />
+              Connecting…
+            {:else}
+              Connect Spotify
+            {/if}
+          </Button>
+          <span class="text-xs text-muted-foreground">
+            You can manage the connection in Settings → Integrations.
+          </span>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-1.5">
+          <label for="add-spotify-uri" class="text-xs font-semibold text-muted-foreground">
+            Link or URI
+          </label>
+          <Input
+            id="add-spotify-uri"
+            bind:value={addSpotifyUri}
+            placeholder="https://open.spotify.com/playlist/…"
+            aria-invalid={spotifyInputInvalid}
+            aria-describedby={spotifyInputInvalid ? "add-spotify-uri-error" : undefined}
+          />
+          {#if spotifyInputInvalid}
+            <p id="add-spotify-uri-error" class="flex items-center gap-1.5 text-xs text-error">
+              <CircleX class="size-3.5 shrink-0" />
+              That isn't a Spotify track, album or playlist link.
+            </p>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Name and options, once there is something to name. -->
+      {#if addTab === "local" || spotifyAuth?.is_connected}
+        <div class="flex flex-col gap-1.5">
+          <label for="add-track-label" class="text-xs font-semibold text-muted-foreground">
+            Name
+          </label>
+          <Input
+            id="add-track-label"
+            bind:value={addLabel}
+            placeholder={addTab === "spotify" ? "Uses the name on Spotify if left blank" : "Track name"}
+          />
+        </div>
+        <div class="flex items-center gap-5">
+          <label class="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" bind:checked={addLoop} class="accent-primary" />
+            Loop
+          </label>
+          {#if addTab === "spotify" && parsedSpotifyInput?.type === "playlist"}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" bind:checked={addShuffle} class="accent-primary" />
+              Shuffle
+            </label>
+          {/if}
+        </div>
+      {/if}
     </div>
 
-    <Dialog.Footer>
-      <Dialog.Close>
-        <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
-      </Dialog.Close>
+    <Dialog.Footer class="items-center">
+      {#if addBlockedReason}
+        <p class="mr-auto text-xs text-muted-foreground">{addBlockedReason}</p>
+      {/if}
+      <Button variant="ghost" onclick={resetAddDialog}>Cancel</Button>
       <Button onclick={handleAddTrack} disabled={!canAdd || isAdding}>
-        {#if isAdding}Adding...{:else}Add{/if}
+        {#if isAdding}Adding…{:else}Add{/if}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-<!-- Delete slot confirmation -->
-<AlertDialog.Root
-  open={deleteSlotTarget !== null}
-  onOpenChange={(o) => {
-    if (!o) deleteSlotTarget = null;
-  }}
->
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete track</AlertDialog.Title>
-      <AlertDialog.Description>
-        Are you sure you want to delete
-        <span class="font-medium text-foreground">{deleteSlotTarget?.label}</span>? This action
-        cannot be undone.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" onclick={confirmDeleteSlot}>
-        Delete
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

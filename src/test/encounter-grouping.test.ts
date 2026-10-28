@@ -36,9 +36,20 @@ function statblocks(editor: Editor): HTMLElement[] {
   return [...dom(editor).querySelectorAll<HTMLElement>(".statblock-block")];
 }
 
-/** One control inside one statblock, addressed the way a GM points at it. */
+/**
+ * One control inside one statblock, addressed the way a GM points at it. A row's pool and
+ * a row's marks are found by the hooks the block draws for them ("Row 1 current value",
+ * "Row 2 mark 1"): their names carry the creature's name and label, not a row number.
+ */
 function control(editor: Editor, index: number, label: string): HTMLElement {
-  const found = statblocks(editor)[index]?.querySelector<HTMLElement>(`[aria-label="${label}"]`);
+  const poolRow = /^Row (\d+) current value$/.exec(label);
+  const markRow = /^Row (\d+) mark (\d+)/.exec(label);
+  const selector = poolRow
+    ? `[data-pool-row="${Number(poolRow[1]) - 1}"]`
+    : markRow
+      ? `[data-mark="${Number(markRow[1]) - 1}-${Number(markRow[2]) - 1}"]`
+      : `[aria-label="${label}"]`;
+  const found = statblocks(editor)[index]?.querySelector<HTMLElement>(selector);
   expect(found, `statblock ${index + 1} has a "${label}"`).toBeTruthy();
   return found!;
 }
@@ -235,6 +246,15 @@ describe("the structure-scoped mode works on a nested statblock", () => {
     expect(statblocks(editor)[1].className).not.toContain("statblock-editing");
   });
 
+  it("opening a second creature's structure closes the first's (2026-10 design review)", async () => {
+    const editor = note(ambush(2));
+    await fireEvent.click(control(editor, 0, "Edit statblock structure"));
+    await fireEvent.click(control(editor, 1, "Edit statblock structure"));
+
+    expect(statblocks(editor)[0].className).not.toContain("statblock-editing");
+    expect(statblocks(editor)[1].className).toContain("statblock-editing");
+  });
+
   it("never writes the mode to the file", async () => {
     const editor = note(ONE_KOBOLD);
     await fireEvent.click(control(editor, 0, "Edit statblock structure"));
@@ -354,7 +374,9 @@ describe("collapsing the group and collapsing one creature", () => {
     const editor = note(AMBUSH);
     await fireEvent.click(dom(editor).querySelector('[aria-label="Collapse callout"]')!);
 
-    expect(dom(editor).querySelector("[data-node-view-content]")).toHaveAttribute("hidden");
+    // Shut is `inert` on the section around it (jsdom keeps it as a property).
+    const body = dom(editor).querySelector("[data-node-view-content]")!;
+    expect(body.closest<HTMLElement>(".grid")?.inert).toBe(true);
     // Hidden, not deleted: the fences are real document content, and a collapse that
     // removed them would be a collapse that edited the note.
     expect(statblocks(editor)).toHaveLength(2);
@@ -477,8 +499,8 @@ describe("the sample world's fight carries a real statblock fence", () => {
     expect(rows[0]).toHaveTextContent("The Lurker");
     // A pool and a mark track, so the shipped example shows what a Statblock is *for*
     // rather than being an Infobox that happens to describe a monster.
-    expect(rows[0].querySelector('[aria-label="Row 1 current value"]')).toBeTruthy();
-    expect(rows[0].querySelector('[aria-label^="Row 4 mark"]')).toBeTruthy();
+    expect(rows[0].querySelector('[data-pool-row="0"]')).toBeTruthy();
+    expect(rows[0].querySelector('[data-mark^="3-"]')).toBeTruthy();
   });
 
   it("survives an autosave byte for byte, which opening the note performs", () => {

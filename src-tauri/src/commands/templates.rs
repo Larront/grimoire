@@ -1,29 +1,42 @@
+use crate::commands::frontmatter;
+use crate::commands::names::check_file_name;
 use crate::ledger::{ledger_path, AppLedger};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
-#[derive(serde::Serialize, specta::Type)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 pub struct TemplateEntry {
     pub display_name: String,
     pub path: String,
+    /// The tags a note made from it starts with — what the template gives
+    /// besides its text, so a list can say so without opening each one.
+    pub tags: Vec<String>,
+}
+
+/// The entry for a template file, given its ledger-relative path.
+fn entry_for(file: &Path, display_name: String, relative: String) -> TemplateEntry {
+    let tags = std::fs::read_to_string(file)
+        .map(|c| frontmatter::read_tags(&c))
+        .unwrap_or_default();
+    TemplateEntry { display_name, path: relative, tags }
 }
 
 static BUILTIN_TEMPLATES: &[(&str, &str)] = &[
     (
         "NPC.md",
-        "---\ntags: [npc]\n---\n\n# Name\n\n## Description\n\n## Personality\n\n## Background\n\n## Notes\n",
+        "---\ntags: [npc]\n---\n\n## Description\n\n## Personality\n\n## Background\n\n## Notes\n",
     ),
     (
         "Location.md",
-        "---\ntags: [location]\n---\n\n# Name\n\n## Description\n\n## Notable Features\n\n## NPCs\n\n## Notes\n",
+        "---\ntags: [location]\n---\n\n## Description\n\n## Notable Features\n\n## NPCs\n\n## Notes\n",
     ),
     (
         "Session Log.md",
-        "---\ntags: [session]\n---\n\n# Session — Date\n\n## Summary\n\n## Events\n\n## NPCs Met\n\n## Loot & Rewards\n\n## Notes\n",
+        "---\ntags: [session]\n---\n\n## Summary\n\n## Events\n\n## NPCs Met\n\n## Loot & Rewards\n\n## Notes\n",
     ),
     (
         "Encounter.md",
-        "---\ntags: [encounter]\n---\n\n# Name\n\n## Description\n\n## Monsters\n\n## Loot\n\n## Notes\n",
+        "---\ntags: [encounter]\n---\n\n## Description\n\n## Monsters\n\n## Loot\n\n## Notes\n",
     ),
 ];
 
@@ -104,14 +117,13 @@ pub fn list_templates_for_ledger(ledger_path: &Path) -> Result<Vec<TemplateEntry
                 .to_string_lossy()
                 .replace('\\', "/");
 
-            Some(TemplateEntry {
-                display_name,
-                path: relative,
-            })
+            Some(entry_for(&canonical_file, display_name, relative))
         })
         .collect();
 
-    entries.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+    // Case-insensitively, like the Files tree. The frontend sorts again by its own
+    // natural order ("Annal 2" before "Annal 10"), which is the one the GM sees.
+    entries.sort_by_key(|e| e.display_name.to_lowercase());
 
     Ok(entries)
 }
@@ -151,13 +163,7 @@ pub fn rename_template_for_ledger(
     path: &str,
     new_name: &str,
 ) -> Result<(), String> {
-    let new_name = new_name.trim();
-    if new_name.is_empty() {
-        return Err("Template name cannot be empty".to_string());
-    }
-    if new_name.contains('/') || new_name.contains('\\') || new_name.contains("..") {
-        return Err("Invalid template name".to_string());
-    }
+    let new_name = check_file_name(new_name, "template")?;
 
     let (canonical_file, canonical_dir) = resolve_template_path(ledger_path, path)?;
     let new_path = canonical_dir.join(format!("{new_name}.md"));
@@ -183,49 +189,76 @@ pub(crate) fn read_template_content(ledger_path: &Path, template_path: &str) -> 
         .map_err(|e| format!("Failed to read template: {e}"))
 }
 
-pub fn create_template_for_ledger(ledger_path: &Path) -> Result<TemplateEntry, String> {
+/// Make an empty template called `name`.
+///
+/// Named before it exists, rather than made as "Untitled" and renamed: a template
+/// is found by its name in every list that offers it, and an "Untitled" left
+/// behind is a real file offered as a choice (2026-10 design review).
+pub fn create_template_for_ledger(ledger_path: &Path, name: &str) -> Result<TemplateEntry, String> {
+    let name = check_file_name(name, "template")?;
     let dir = templates_dir(ledger_path);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("Failed to create templates directory: {e}"))?;
 
-    let mut resolved_name = "Untitled".to_string();
-    let mut counter = 2u32;
-    loop {
-        let candidate = dir.join(format!("{resolved_name}.md"));
-        if !candidate.exists() {
-            std::fs::write(&candidate, "")
-                .map_err(|e| format!("Failed to create template: {e}"))?;
-
-            let canonical_ledger = ledger_path
-                .canonicalize()
-                .map_err(|e| format!("Invalid ledger root: {e}"))?;
-            let canonical_file = candidate
-                .canonicalize()
-                .map_err(|e| format!("Cannot resolve new template path: {e}"))?;
-            let relative = canonical_file
-                .strip_prefix(&canonical_ledger)
-                .map_err(|_| "Template path escapes ledger root".to_string())?
-                .to_string_lossy()
-                .replace('\\', "/");
-
-            return Ok(TemplateEntry {
-                display_name: resolved_name,
-                path: relative,
-            });
-        }
-        resolved_name = format!("Untitled {counter}");
-        counter += 1;
+    let candidate = dir.join(format!("{name}.md"));
+    if candidate.exists() {
+        return Err(format!("ERR_NAME_TAKEN: A template named '{name}' already exists"));
     }
+    std::fs::write(&candidate, "").map_err(|e| format!("Failed to create template: {e}"))?;
+
+    let canonical_ledger = ledger_path
+        .canonicalize()
+        .map_err(|e| format!("Invalid ledger root: {e}"))?;
+    let canonical_file = candidate
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve new template path: {e}"))?;
+    let relative = canonical_file
+        .strip_prefix(&canonical_ledger)
+        .map_err(|_| "Template path escapes ledger root".to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    Ok(entry_for(&canonical_file, name.to_string(), relative))
 }
 
+/// Save a template's body. `content` is body-only — the pane splits the
+/// frontmatter off before seeding the editor, exactly as a note's does — so the
+/// block on disk is put back in front of it, and keys the pane never shows (a
+/// note's aliases, carried over by "Save note as template") survive the edit.
 pub fn write_template_content_for_ledger(
     ledger_path: &Path,
     path: &str,
     content: &str,
 ) -> Result<(), String> {
     let (canonical_file, _) = resolve_template_path(ledger_path, path)?;
+    let content = frontmatter::body_save_content(&canonical_file, content);
     std::fs::write(&canonical_file, content)
         .map_err(|e| format!("Failed to write template: {e}"))
+}
+
+/// Set the tags a template gives the notes made from it, leaving its other
+/// frontmatter keys and its body as they are.
+pub fn write_template_tags_for_ledger(
+    ledger_path: &Path,
+    path: &str,
+    tags: &[String],
+) -> Result<(), String> {
+    let (canonical_file, _) = resolve_template_path(ledger_path, path)?;
+    let content = std::fs::read_to_string(&canonical_file)
+        .map_err(|e| format!("Failed to read template: {e}"))?;
+    std::fs::write(&canonical_file, frontmatter::apply_tags(&content, tags))
+        .map_err(|e| format!("Failed to write template: {e}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn write_template_tags(
+    path: String,
+    tags: Vec<String>,
+    ledger: State<AppLedger>,
+) -> Result<(), String> {
+    let ledger_path = ledger_path(&ledger)?;
+    write_template_tags_for_ledger(&ledger_path, &path, &tags)
 }
 
 #[tauri::command]
@@ -247,9 +280,9 @@ pub fn delete_template_for_ledger(ledger_path: &Path, path: &str) -> Result<(), 
 
 #[tauri::command]
 #[specta::specta]
-pub fn create_template(ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
+pub fn create_template(name: String, ledger: State<AppLedger>) -> Result<TemplateEntry, String> {
     let ledger_path = ledger_path(&ledger)?;
-    create_template_for_ledger(&ledger_path)
+    create_template_for_ledger(&ledger_path, &name)
 }
 
 #[tauri::command]
@@ -315,10 +348,7 @@ pub fn save_note_as_template_for_ledger(ledger_path: &Path, note_path: &str) -> 
                 .to_string_lossy()
                 .replace('\\', "/");
 
-            return Ok(TemplateEntry {
-                display_name: resolved_name,
-                path: relative,
-            });
+            return Ok(entry_for(&canonical_file, resolved_name, relative));
         }
         resolved_name = format!("{} {}", base_name, counter);
         counter += 1;
@@ -572,42 +602,108 @@ mod tests {
     }
 
     #[test]
-    fn create_template_creates_file_in_templates_dir() {
+    fn create_template_creates_the_named_file_in_templates_dir() {
         let tmp = tempdir().unwrap();
         inject_builtin_templates(tmp.path()).unwrap();
-        let entry = create_template_for_ledger(tmp.path()).unwrap();
+        let entry = create_template_for_ledger(tmp.path(), "  Faction ").unwrap();
         let dir = templates_dir(tmp.path());
-        assert!(dir.join(format!("{}.md", entry.display_name)).exists());
-        assert_eq!(entry.display_name, "Untitled");
+        assert_eq!(entry.display_name, "Faction");
+        assert!(dir.join("Faction.md").exists());
+        assert!(entry.tags.is_empty());
     }
 
     #[test]
-    fn create_template_resolves_conflicts() {
+    fn create_template_refuses_a_name_already_taken() {
         let tmp = tempdir().unwrap();
-        let dir = templates_dir(tmp.path());
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("Untitled.md"), "").unwrap();
-        let entry = create_template_for_ledger(tmp.path()).unwrap();
-        assert_eq!(entry.display_name, "Untitled 2");
-        assert!(dir.join("Untitled 2.md").exists());
+        inject_builtin_templates(tmp.path()).unwrap();
+        let err = create_template_for_ledger(tmp.path(), "NPC").unwrap_err();
+        assert!(err.starts_with("ERR_NAME_TAKEN"), "got: {err}");
+    }
+
+    #[test]
+    fn create_template_refuses_a_name_windows_cannot_hold() {
+        let tmp = tempdir().unwrap();
+        let err = create_template_for_ledger(tmp.path(), "Who? What:").unwrap_err();
+        assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
+        assert!(!templates_dir(tmp.path()).exists() || list_templates_for_ledger(tmp.path()).unwrap().is_empty());
     }
 
     #[test]
     fn create_template_creates_templates_dir_if_missing() {
         let tmp = tempdir().unwrap();
-        let entry = create_template_for_ledger(tmp.path()).unwrap();
+        create_template_for_ledger(tmp.path(), "Faction").unwrap();
         let dir = templates_dir(tmp.path());
-        assert!(dir.exists());
-        assert!(dir.join(format!("{}.md", entry.display_name)).exists());
+        assert!(dir.join("Faction.md").exists());
     }
 
     #[test]
-    fn write_template_content_updates_file() {
+    fn list_templates_carries_each_templates_tags() {
         let tmp = tempdir().unwrap();
         inject_builtin_templates(tmp.path()).unwrap();
-        write_template_content_for_ledger(tmp.path(), ".grimoire/templates/NPC.md", "new content").unwrap();
-        let content = std::fs::read_to_string(templates_dir(tmp.path()).join("NPC.md")).unwrap();
+        let entries = list_templates_for_ledger(tmp.path()).unwrap();
+        let npc = entries.iter().find(|e| e.display_name == "NPC").unwrap();
+        assert_eq!(npc.tags, vec!["npc".to_string()]);
+    }
+
+    #[test]
+    fn rename_template_refuses_a_name_windows_cannot_hold() {
+        let tmp = tempdir().unwrap();
+        inject_builtin_templates(tmp.path()).unwrap();
+        let err = rename_template_for_ledger(tmp.path(), ".grimoire/templates/NPC.md", "NPC: Allies")
+            .unwrap_err();
+        assert!(err.starts_with("ERR_BAD_NAME"), "got: {err}");
+    }
+
+    #[test]
+    fn write_template_content_keeps_the_frontmatter_on_disk() {
+        let tmp = tempdir().unwrap();
+        let dir = templates_dir(tmp.path());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Hero.md"), "---\ntags: [hero]\naliases: [Champion]\n---\nold body").unwrap();
+
+        write_template_content_for_ledger(tmp.path(), ".grimoire/templates/Hero.md", "new body").unwrap();
+
+        let content = std::fs::read_to_string(dir.join("Hero.md")).unwrap();
+        assert_eq!(content, "---\ntags: [hero]\naliases: [Champion]\n---\nnew body");
+    }
+
+    #[test]
+    fn write_template_content_without_frontmatter_writes_the_body() {
+        let tmp = tempdir().unwrap();
+        create_template_for_ledger(tmp.path(), "Plain").unwrap();
+        write_template_content_for_ledger(tmp.path(), ".grimoire/templates/Plain.md", "new content").unwrap();
+        let content = std::fs::read_to_string(templates_dir(tmp.path()).join("Plain.md")).unwrap();
         assert_eq!(content, "new content");
+    }
+
+    #[test]
+    fn write_template_tags_changes_only_the_tags() {
+        let tmp = tempdir().unwrap();
+        let dir = templates_dir(tmp.path());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Hero.md"), "---\ntags: [hero]\naliases: [Champion]\n---\nbody").unwrap();
+
+        write_template_tags_for_ledger(
+            tmp.path(),
+            ".grimoire/templates/Hero.md",
+            &["hero".to_string(), "npc".to_string()],
+        )
+        .unwrap();
+
+        let content = std::fs::read_to_string(dir.join("Hero.md")).unwrap();
+        assert_eq!(frontmatter::read_tags(&content), vec!["hero", "npc"]);
+        assert_eq!(frontmatter::read_aliases(&content), vec!["Champion"]);
+        assert!(content.ends_with("---\nbody"), "body untouched: {content:?}");
+    }
+
+    #[test]
+    fn write_template_tags_gives_a_bare_template_its_first_tag() {
+        let tmp = tempdir().unwrap();
+        create_template_for_ledger(tmp.path(), "Faction").unwrap();
+        write_template_tags_for_ledger(tmp.path(), ".grimoire/templates/Faction.md", &["faction".to_string()])
+            .unwrap();
+        let entries = list_templates_for_ledger(tmp.path()).unwrap();
+        assert_eq!(entries[0].tags, vec!["faction".to_string()]);
     }
 
     #[test]

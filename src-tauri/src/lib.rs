@@ -1,4 +1,4 @@
-﻿mod commands;
+mod commands;
 mod db;
 mod fence_scan;
 mod format_migration;
@@ -15,6 +15,7 @@ use commands::app_prefs::*;
 use commands::graph::*;
 use commands::graph_styles::*;
 use commands::ledger::*;
+use commands::link_targets::*;
 use commands::links::*;
 use commands::maps::*;
 use commands::media::*;
@@ -51,6 +52,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             add_recent_ledger,
             adopt_sample_ledger,
             apply_backlink_rewrite,
+            apply_link_repairs,
+            plan_link_repairs,
             assign_map_image,
             close_ledger,
             copy_audio_bytes,
@@ -85,6 +88,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             delete_scene_slot,
             delete_statblock_preset,
             delete_template,
+            existing_sample_ledger,
             explore_sample_ledger,
             get_accent_preset,
             get_alias_collisions,
@@ -96,6 +100,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_file_tree,
             get_graph_data,
             get_image_absolute_path,
+            resolve_image_embed,
             get_ledger_path,
             get_map_image_data_url,
             get_maps,
@@ -127,6 +132,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             move_map,
             move_pdf,
             open_ledger,
+            reread_notes,
             plan_format_migration,
             read_note_content,
             read_note_tags,
@@ -140,6 +146,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             rename_pdf,
             rename_statblock_preset,
             retag_tag,
+            undo_retag,
             rename_template,
             reorder_scene_slots,
             resolve_note_target,
@@ -154,9 +161,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             save_statblock_preset_default,
             search_all,
             search_notes,
+            search_link_targets,
             set_note_aliases,
             set_pin_tags,
-            set_tag_graph_style,
+            set_tag_graph_color,
+            set_tag_graph_hidden,
             spotify_exchange_code,
             spotify_get_access_token,
             spotify_get_auth_status,
@@ -178,6 +187,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             write_note_content,
             write_note_tags,
             write_template,
+            write_template_tags,
         ])
 }
 
@@ -251,6 +261,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_ledger_path,
             open_ledger,
+            reread_notes,
             plan_format_migration,
             migrate_ledger_format,
             rebuild_ledger_db,
@@ -271,9 +282,12 @@ pub fn run() {
             get_recent_ledgers,
             add_recent_ledger,
             remove_recent_ledger,
+            existing_sample_ledger,
             explore_sample_ledger,
             adopt_sample_ledger,
             apply_backlink_rewrite,
+            apply_link_repairs,
+            plan_link_repairs,
             create_note,
             create_note_from_template,
             get_notes,
@@ -282,6 +296,7 @@ pub fn run() {
             write_note_content,
             delete_note,
             search_notes,
+            search_link_targets,
             search_all,
             rebuild_search_index,
             get_note_by_path,
@@ -290,6 +305,7 @@ pub fn run() {
             list_all_tags,
             get_tag_usage_counts,
             retag_tag,
+            undo_retag,
             get_pin_tags,
             set_pin_tags,
             get_file_tree,
@@ -337,6 +353,7 @@ pub fn run() {
             copy_image_file,
             save_image_bytes,
             get_image_absolute_path,
+            resolve_image_embed,
             get_pdf_absolute_path,
             rename_pdf,
             move_pdf,
@@ -371,6 +388,7 @@ pub fn run() {
             create_template,
             read_template,
             write_template,
+            write_template_tags,
             save_note_as_template,
             // Links
             get_backlinks,
@@ -384,7 +402,8 @@ pub fn run() {
             get_graph_data,
             // Graph styles
             get_tag_graph_styles,
-            set_tag_graph_style,
+            set_tag_graph_color,
+            set_tag_graph_hidden,
             // Quick Notes (ADR-0018 — rows, invisible to every derived index)
             list_quick_notes,
             create_quick_note,
@@ -396,8 +415,17 @@ pub fn run() {
             disable_webview_pinch_zoom(_app);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // Quitting is a close too: back the open world up on the way out.
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                if let Ok(mut state) = app.state::<ledger::AppLedger>().lock() {
+                    state.snapshot_before_close();
+                }
+            }
+        });
 }
 
 /// Turn off WebView2's built-in pinch-zoom ("Page Scale" zoom). By default a

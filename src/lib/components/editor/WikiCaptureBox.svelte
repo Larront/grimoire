@@ -17,21 +17,18 @@
   // delegated calls.
   import { onDestroy, tick } from "svelte";
   import { portal } from "$lib/utils/portal";
-  import {
-    findWikiTrigger,
-    readWikiSuggestKey,
-    searchWikiTargets,
-    wikiMenuAnchor,
-    type NoteSearchResult,
-    type WikiMenuAnchor,
-  } from "$lib/editor/wiki-suggest";
+  import { createFieldWikiSuggest } from "$lib/editor/wiki-field-suggest.svelte";
   import WikiLinkSuggestion from "$lib/components/editor/WikiLinkSuggestion.svelte";
 
   let {
     onCommit,
+    onEmptyEnter,
     ariaLabel,
+    ariaDescribedby,
     placeholder = "",
     commitOnTeardown = false,
+    variant = "boxed",
+    value: draft = $bindable(""),
     class: className = "",
   }: {
     /**
@@ -39,8 +36,16 @@
      * blank one — the box clears itself either way, so a caller never has to.
      */
     onCommit: (body: string) => void | Promise<void>;
+    /**
+     * Enter on an empty box. The [[Quick Notes Dialog]] closes on it, so parking
+     * a run of thoughts is Enter per line and one more to finish; the pane's box,
+     * which is not a way in to anything, leaves it unset and Enter does nothing.
+     */
+    onEmptyEnter?: () => void;
     /** Names the box for a screen reader. */
     ariaLabel: string;
+    /** What else a screen reader should say about the box — the dialog's key hints. */
+    ariaDescribedby?: string;
     placeholder?: string;
     /**
      * Commit whatever is in the box when it goes away.
@@ -58,11 +63,18 @@
      * catches is the way out nobody announced.
      */
     commitOnTeardown?: boolean;
+    /**
+     * `boxed` — a field among other things, as in the pane. `bare` — the box *is*
+     * the surface it sits on, as the palette's input is: no border and no fill of
+     * its own, so a dialog holding one box is not a box drawn inside a box.
+     */
+    variant?: "boxed" | "bare";
+    /** What is in the box. Bindable so an owner can say what Enter would do. */
+    value?: string;
     class?: string;
   } = $props();
 
-  let draft = $state("");
-  let input = $state<HTMLInputElement>();
+  let input = $state<HTMLTextAreaElement>();
 
   /**
    * Take the caret. For an owner whose surface *is* this box — a dialog opened by
@@ -98,7 +110,7 @@
    */
   export async function commit(): Promise<boolean> {
     const body = draft.trim();
-    closeSuggestions();
+    wiki.close();
     draft = "";
     if (!body) return true;
     try {
@@ -112,112 +124,66 @@
 
   // ── `[[` autocomplete ───────────────────────────────────────────────────────
 
-  interface BoxSuggestion extends WikiMenuAnchor {
-    items: NoteSearchResult[];
-    selectedIndex: number;
-    /** Where the `[[` sits in the draft, so accepting replaces from there. */
-    triggerStart: number;
-  }
-
-  let suggestion = $state<BoxSuggestion | null>(null);
-
-  /**
-   * Which query is the current one. The box outlives every one of its searches —
-   * unlike a Linked Text Field's input, which unmounts on blur and takes its
-   * pending result with it — so a slow `search_notes` that lands after the line
-   * was committed would otherwise open a menu over an empty box, and the next
-   * Enter would be claimed by that menu instead of committing.
-   */
-  let queryGeneration = 0;
-
-  /** Close the dropdown and disown whatever search is still in flight. */
-  function closeSuggestions() {
-    queryGeneration++;
-    suggestion = null;
-  }
-
-  async function offerSuggestions(el: HTMLInputElement) {
-    const mine = ++queryGeneration;
-    const trigger = findWikiTrigger(el.value, el.selectionStart ?? el.value.length);
-    if (!trigger) {
-      suggestion = null;
-      return;
-    }
-    const items = await searchWikiTargets(trigger.query);
-    if (mine !== queryGeneration) return;
-    suggestion = {
-      items,
-      selectedIndex: 0,
-      ...wikiMenuAnchor(el.getBoundingClientRect()),
-      triggerStart: trigger.start,
-    };
-  }
-
-  /** Whether the key belonged to the dropdown. */
-  function handleSuggestionKeydown(e: KeyboardEvent): boolean {
-    if (!suggestion) return false;
-    const verdict = readWikiSuggestKey(e.key, {
-      itemCount: suggestion.items.length,
-      selectedIndex: suggestion.selectedIndex,
-    });
-    if (!verdict) return false;
-
-    e.preventDefault();
-    if (verdict.kind === "move") {
-      suggestion.selectedIndex = verdict.selectedIndex;
-    } else if (verdict.kind === "dismiss") {
-      // The dropdown's Escape is the dropdown's alone — it closes the menu and
-      // leaves the line, and never reaches whatever else Escape means here.
-      e.stopPropagation();
-      closeSuggestions();
-    } else {
-      accept(suggestion.items[verdict.selectedIndex]);
-    }
-    return true;
-  }
-
-  function accept(item: NoteSearchResult) {
-    if (!suggestion) return;
-    const { triggerStart } = suggestion;
-    const caret = input?.selectionStart ?? draft.length;
-    const inserted = `[[${item.path}]]`;
-    draft = draft.slice(0, triggerStart) + inserted + draft.slice(caret);
-    closeSuggestions();
-
-    const next = triggerStart + inserted.length;
-    tick().then(() => {
-      input?.focus();
-      input?.setSelectionRange(next, next);
-    });
-  }
+  // The menu, shared with a block's Linked Text Field. The box outlives every one of its
+  // searches — unlike a field's input, which unmounts on blur — so the helper's guard
+  // against a slow search landing late matters most here: one landing after the line was
+  // committed would open a menu over an empty box and claim the next Enter.
+  const wiki = createFieldWikiSuggest({
+    input: () => input,
+    value: () => draft,
+    setValue: (next) => (draft = next),
+  });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (handleSuggestionKeydown(e)) return;
+    if (wiki.keydown(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      void commit();
+      if (!draft.trim() && onEmptyEnter) onEmptyEnter();
+      else void commit();
     }
   }
+
+  /**
+   * A Quick Note is one line. The box wraps — a thought longer than the box used to
+   * scroll sideways and hide its own beginning while the GM was still writing it,
+   * though the pane draws the same line wrapped — but Enter commits, so the only way
+   * a line break gets in is a paste, and it goes in as a space.
+   */
+  function onInput(el: HTMLTextAreaElement) {
+    if (/[\r\n]/.test(el.value)) {
+      const caret = el.selectionStart;
+      draft = el.value.replace(/\r?\n/g, " ");
+      el.value = draft;
+      el.setSelectionRange(caret, caret);
+    }
+    void wiki.offer(el);
+  }
+
+  const look = {
+    boxed: `rounded-lg border border-border bg-card/60 px-3 py-2
+            focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/40`,
+    bare: "border-0 bg-transparent p-0",
+  };
 </script>
 
-<input
+<textarea
   bind:this={input}
   bind:value={draft}
   data-wiki-capture
-  type="text"
+  rows="1"
   aria-label={ariaLabel}
+  aria-describedby={ariaDescribedby}
+  aria-autocomplete="list"
   {placeholder}
   autocomplete="off"
-  class="w-full rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-foreground
-         outline-none placeholder:text-muted-foreground/60
-         focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/40
-         {className}"
-  oninput={(e) => void offerSuggestions(e.currentTarget)}
+  class="block max-h-32 w-full resize-none overflow-y-auto text-sm leading-5 text-foreground outline-none
+         field-sizing-content placeholder:text-muted-foreground
+         {look[variant]} {className}"
+  oninput={(e) => onInput(e.currentTarget)}
   onkeydown={handleKeydown}
-  onblur={closeSuggestions}
-/>
+  onblur={wiki.close}></textarea>
 
-{#if suggestion}
+{#if wiki.current}
   <!-- `mousedown` swallowed so choosing a note with the pointer does not blur the
        box first — the blur would close the menu under the click. That is also why
        leaving the box closes it: this input, unlike a Linked Text Field's, is always
@@ -228,12 +194,14 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div use:portal onmousedown={(e) => e.preventDefault()}>
     <WikiLinkSuggestion
-      items={suggestion.items}
-      selectedIndex={suggestion.selectedIndex}
-      x={suggestion.x}
-      y={suggestion.y}
-      anchorTop={suggestion.anchorTop}
-      onSelect={accept}
+      items={wiki.current.items}
+      selectedIndex={wiki.current.selectedIndex}
+      x={wiki.current.x}
+      y={wiki.current.y}
+      anchorTop={wiki.current.anchorTop}
+      onSelect={wiki.accept}
+      onHover={wiki.hover}
+      onReposition={wiki.reposition}
     />
   </div>
 {/if}

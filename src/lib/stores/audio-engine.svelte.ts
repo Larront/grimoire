@@ -1,3 +1,4 @@
+import { untrack } from "svelte";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api } from "$lib/api";
 import { ledger } from "./ledger.svelte";
@@ -36,6 +37,9 @@ interface SlotPlayer {
   fadeTo(targetVolume: number, durationSec: number): Promise<void>;
   setVolume(volume: number): void;
   setMasterVolume(volume: number): void;
+  /** Loop on or off for the sound already playing. Optional: a Spotify track takes its
+   *  repeat setting when it is next played. */
+  setLoop?(loop: boolean): void;
 }
 
 interface PlaylistSlotPlayer extends SlotPlayer {
@@ -48,17 +52,12 @@ interface PlaylistSlotPlayer extends SlotPlayer {
 class LocalAudioContext {
   readonly ctx: AudioContext;
   private readonly masterGain: GainNode;
-  readonly analyser: AnalyserNode;
 
   constructor() {
     this.ctx = new AudioContext();
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 1;
-    this.analyser = this.ctx.createAnalyser();
-    this.analyser.fftSize = 256;
-    this.analyser.smoothingTimeConstant = 0.8;
-    this.masterGain.connect(this.analyser);
-    this.analyser.connect(this.ctx.destination);
+    this.masterGain.connect(this.ctx.destination);
   }
 
   get destination(): GainNode {
@@ -81,6 +80,16 @@ class LocalSlotPlayer implements SlotPlayer {
   private gain: GainNode | null = null;
   private currentSlot: SceneSlot | null = null;
   private currentVolume = 0;
+  // Pausing is stopping and resuming is starting again — an AudioBufferSourceNode can be
+  // played only once — so the player keeps what a resume needs: the decoded audio, and
+  // where in it playback had reached. It used to keep neither: resume() fetched and
+  // decoded the file again and started it from the top, so Pause then Play restarted
+  // every track, a second or more late.
+  private buffer: AudioBuffer | null = null;
+  /** Seconds into the file the current source began at. */
+  private offset = 0;
+  /** The context time the current source began. */
+  private startedAt = 0;
 
   constructor(private readonly localCtx: LocalAudioContext) {}
 
@@ -92,18 +101,24 @@ class LocalSlotPlayer implements SlotPlayer {
     const absolutePath = await api.getAudioAbsolutePath(slot.source_id);
     const assetUrl = convertFileSrc(absolutePath);
     const response = await fetch(assetUrl);
-    const buffer = await this.localCtx.ctx.decodeAudioData(await response.arrayBuffer());
+    this.buffer = await this.localCtx.ctx.decodeAudioData(await response.arrayBuffer());
+    this.offset = 0;
+    this.play(initialVolume);
+  }
 
+  private play(volume: number): void {
+    if (!this.buffer || !this.currentSlot) return;
     const source = this.localCtx.ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = slot.loop;
+    source.buffer = this.buffer;
+    source.loop = this.currentSlot.loop;
 
     const gain = this.localCtx.ctx.createGain();
-    gain.gain.value = initialVolume;
+    gain.gain.value = volume;
 
     source.connect(gain);
     gain.connect(this.localCtx.destination);
-    source.start();
+    source.start(0, this.offset);
+    this.startedAt = this.localCtx.ctx.currentTime;
 
     this.source = source;
     this.gain = gain;
@@ -111,6 +126,7 @@ class LocalSlotPlayer implements SlotPlayer {
 
   async stop(): Promise<void> {
     if (this.source) {
+      this.offset = this.positionNow();
       try {
         this.source.stop();
       } catch {
@@ -123,11 +139,40 @@ class LocalSlotPlayer implements SlotPlayer {
     this.gain = null;
   }
 
-  async resume(): Promise<void> {
-    if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
+  // Where playback has reached. A looping track wraps; one that played to its end and
+  // stopped starts again from the top when resumed.
+  private positionNow(): number {
+    const duration = this.buffer?.duration ?? 0;
+    const reached = this.offset + (this.localCtx.ctx.currentTime - this.startedAt);
+    if (duration <= 0) return 0;
+    if (this.currentSlot?.loop) return reached % duration;
+    return reached >= duration ? 0 : reached;
   }
 
+  async resume(): Promise<void> {
+    if (this.buffer) this.play(this.currentVolume);
+    else if (this.currentSlot) await this.start(this.currentSlot, this.currentVolume);
+  }
+
+  // Loop changed while the track plays. Where it has reached is first counted from the
+  // loop it is in, so turning loop off mid-way plays out this pass rather than reading
+  // as already past the end.
+  setLoop(loop: boolean): void {
+    if (!this.currentSlot || this.currentSlot.loop === loop) return;
+    if (this.source) {
+      this.offset = this.positionNow();
+      this.startedAt = this.localCtx.ctx.currentTime;
+      this.source.loop = loop;
+    }
+    this.currentSlot = { ...this.currentSlot, loop };
+  }
+
+  // A fade is where the slot's volume is decided, so it is also what a resume must
+  // return to. Every slot starts at 0 and fades up; when only start() and setVolume()
+  // recorded the volume, a paused local track resumed at the 0 it was started at —
+  // playing, by every indicator in the app, and silent.
   fadeTo(targetVolume: number, durationSec: number): Promise<void> {
+    this.currentVolume = targetVolume;
     if (!this.gain) return Promise.resolve();
     this.gain.gain.linearRampToValueAtTime(
       targetVolume,
@@ -367,6 +412,22 @@ function createSlotPlayer(
   }
 }
 
+// ---- SceneState --------------------------------------------------------------------
+
+/**
+ * Where one scene stands, for any surface that shows or plays it. Every surface used to
+ * work this out for itself from the engine's flags, and they disagreed: the engine's
+ * playing flag stays up through a pause, so a paused scene drew the playing bars on a
+ * PDF passage and kept the mini player crimson, while the in-note player had learned to
+ * subtract the pause. One answer, asked by scene:
+ *
+ * - `loading` — starting: its tracks are loading or fading in.
+ * - `playing` — sounding.
+ * - `paused` — the active scene, with every track paused.
+ * - `idle` — anything else, including the scene a crossfade is leaving.
+ */
+export type SceneState = "idle" | "loading" | "playing" | "paused";
+
 // ---- SlotPlaybackState -------------------------------------------------------------
 
 interface SlotPlaybackState {
@@ -389,15 +450,33 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
   let loadingSceneId = $state<number | null>(null);
   let slotStates = $state(new Map<number, SlotPlaybackState>());
   let pendingSceneId = $state<number | null>(null);
+  // The slot a queued preview is for, so a preview that waits behind a crossfade is still
+  // a preview when it runs.
+  let pendingSoloSlotId: number | null = null;
   let masterVolume = $state(1);
   let preMuteVolume = $state<number | null>(null);
+  // Muted tracks, by slot id. The engine's rather than each surface's, so a track muted
+  // in the mini player is muted in the note's mixer too; and kept for a scene that is not
+  // playing, so a track muted before its scene starts starts silent. A mute is for the
+  // session: it is not saved, and a track's volume is untouched by it.
+  let mutedSlotIds = $state(new Set<number>());
 
   // Non-reactive player state — not exposed to components
   let localCtx: LocalAudioContext | null = null;
   let spotifyCtx: SpotifyContext | null = null;
   const slotPlayers = new Map<number, SlotPlayer>();
+  // The players a crossfade is bringing in, before it commits them. They sound from the
+  // moment they start, so a Stop mid-crossfade has to reach them as well as the
+  // committed ones — otherwise the incoming scene plays on with nothing left to stop it.
+  const incomingPlayers = new Set<SlotPlayer>();
   let activePlaylistPlayer: PlaylistSlotPlayer | null = null;
-  let crossfadeAborted = false;
+  // Bumped by every stopAll. A crossfade remembers the value it started under and treats
+  // any change as "stopped while I was working": a boolean reset by the next crossfade let
+  // a stopped one carry on and commit when the GM pressed Play again straight after Stop.
+  let stopGeneration = 0;
+  // The tracks a scene Pause silenced, so Resume brings back those and not the ones the
+  // GM had already paused by hand (or a preview had parked).
+  let pausedBySceneIds = new Set<number>();
 
   function getOrCreateLocalCtx(): LocalAudioContext {
     if (!localCtx) localCtx = new LocalAudioContext();
@@ -419,14 +498,29 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     await crossfadeTo(sceneId);
   }
 
+  // Play one track of a scene that is not playing, so a GM building a scene can hear a
+  // track on its own. It is the scene starting with every other slot parked — loaded,
+  // paused at its own volume — so the rest of the transport works as it does for any
+  // playing scene: each parked row's play button brings that track in, Pause and Stop
+  // act on the whole scene, and playing another scene crossfades away from it.
+  async function previewSlot(sceneId: number, slotId: number): Promise<void> {
+    await crossfadeTo(sceneId, slotId);
+  }
+
   function stopAll(): void {
-    crossfadeAborted = true;
+    stopGeneration++;
     pendingSceneId = null;
+    pendingSoloSlotId = null;
     loadingSceneId = null;
     for (const player of slotPlayers.values()) {
       void player.stop();
     }
+    for (const player of incomingPlayers) {
+      void player.stop();
+    }
     slotPlayers.clear();
+    incomingPlayers.clear();
+    pausedBySceneIds = new Set();
     slotStates = new Map<number, SlotPlaybackState>();
     isPlaying = false;
     isCrossfading = false;
@@ -435,13 +529,33 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     preMuteVolume = null;
   }
 
+  // Moving a track's level unmutes it: the GM is setting what they want to hear.
   function setSlotVolume(slotId: number, volume: number): void {
+    if (mutedSlotIds.has(slotId)) {
+      const next = new Set(mutedSlotIds);
+      next.delete(slotId);
+      mutedSlotIds = next;
+    }
     const state = slotStates.get(slotId);
     if (!state) return;
     slotPlayers.get(slotId)?.setVolume(volume);
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, volume });
     slotStates = updated;
+  }
+
+  function toggleSlotMute(slotId: number): void {
+    const next = new Set(mutedSlotIds);
+    const muted = !next.has(slotId);
+    if (muted) next.add(slotId);
+    else next.delete(slotId);
+    mutedSlotIds = next;
+    const state = slotStates.get(slotId);
+    if (state) slotPlayers.get(slotId)?.setVolume(muted ? 0 : state.volume);
+  }
+
+  function isSlotMuted(slotId: number): boolean {
+    return mutedSlotIds.has(slotId);
   }
 
   function applyMasterVolume(v: number): void {
@@ -479,31 +593,95 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 
   async function resumeSlot(slotId: number): Promise<void> {
     const state = slotStates.get(slotId);
-    if (!state) return;
+    if (!state) {
+      await joinSlot(slotId);
+      return;
+    }
     await slotPlayers.get(slotId)?.resume();
     const updated = new Map(slotStates);
     updated.set(slotId, { ...state, playing: true });
     slotStates = updated;
   }
 
-  async function pauseScene(): Promise<void> {
-    for (const [slotId, state] of slotStates) {
-      if (state.playing) await pauseSlot(slotId);
+  // Play on a track of the playing scene that the engine never started: one added while
+  // the scene played, or one whose file failed to load. Its play button used to do
+  // nothing at all. It starts now and joins the scene, or says why it cannot.
+  async function joinSlot(slotId: number): Promise<void> {
+    const sceneId = activeSceneId;
+    if (sceneId === null) return;
+    const slot = (await scenes.getSlots(sceneId)).find((s) => s.id === slotId);
+    if (!slot || activeSceneId !== sceneId || slotStates.has(slotId)) return;
+    const generation = stopGeneration;
+    const player = slotPlayerFactory(slot);
+    try {
+      await player.start(slot, 0);
+    } catch (e) {
+      logError(`[audio-engine] failed to start slot ${slot.id}:`, e);
+      toastError(`Couldn't play ${slotDisplayName(slot)}`);
+      return;
     }
+    if (generation !== stopGeneration || activeSceneId !== sceneId) {
+      void player.stop();
+      return;
+    }
+    player.setMasterVolume(masterVolume);
+    void player.fadeTo(mutedSlotIds.has(slot.id) ? 0 : slot.volume, FADE_SEC_COLD);
+    slotPlayers.set(slot.id, player);
+    if (isPlaylistSlot(slot)) activePlaylistPlayer = player as PlaylistSlotPlayer;
+    const updated = new Map(slotStates);
+    updated.set(slot.id, { slot, volume: slot.volume, playing: true });
+    slotStates = updated;
+  }
+
+  async function pauseScene(): Promise<void> {
+    const silenced = new Set<number>();
+    for (const [slotId, state] of slotStates) {
+      if (state.playing) {
+        silenced.add(slotId);
+        await pauseSlot(slotId);
+      }
+    }
+    pausedBySceneIds = silenced;
   }
 
   async function resumeScene(): Promise<void> {
+    // Nothing recorded (every track was paused by hand): Resume means all of them.
+    const bringBack = pausedBySceneIds.size > 0 ? pausedBySceneIds : new Set(slotStates.keys());
+    pausedBySceneIds = new Set();
     for (const [slotId, state] of slotStates) {
-      if (!state.playing) await resumeSlot(slotId);
+      if (!state.playing && bringBack.has(slotId)) await resumeSlot(slotId);
     }
+  }
+
+  // Pause the active scene, or resume it if paused: what the mini player's button, the
+  // collapsed strip's, the command palette's and the keyboard's play/pause all mean. A
+  // scene still starting is left to start.
+  async function togglePauseScene(): Promise<void> {
+    const id = loadingSceneId ?? activeSceneId;
+    const state = sceneState(id);
+    if (state === "paused") await resumeScene();
+    else if (state === "playing") await pauseScene();
   }
 
   function isSceneActive(id: number): boolean {
     return activeSceneId === id;
   }
 
-  function isScenePlaying(id: number): boolean {
-    return activeSceneId === id && isPlaying;
+  function allSlotsPaused(): boolean {
+    return (
+      activeSceneId !== null &&
+      slotStates.size > 0 &&
+      [...slotStates.values()].every((s) => !s.playing)
+    );
+  }
+
+  function sceneState(id: number | null): SceneState {
+    if (id === null) return "idle";
+    if (loadingSceneId === id) return "loading";
+    // Being crossfaded away from: the GM has already chosen the next scene.
+    if (loadingSceneId !== null) return "idle";
+    if (activeSceneId !== id || !isPlaying) return "idle";
+    return allSlotsPaused() ? "paused" : "playing";
   }
 
   function isSlotPlaying(slotId: number): boolean {
@@ -522,19 +700,22 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     await activePlaylistPlayer?.skipPrev();
   }
 
-  async function crossfadeTo(newSceneId: number): Promise<void> {
+  async function crossfadeTo(newSceneId: number, soloSlotId?: number): Promise<void> {
     if (newSceneId === activeSceneId) return;
     if (isCrossfading) {
       pendingSceneId = newSceneId;
+      pendingSoloSlotId = soloSlotId ?? null;
       return;
     }
 
-    crossfadeAborted = false;
+    const generation = stopGeneration;
+    const stopped = () => generation !== stopGeneration;
     isCrossfading = true;
     loadingSceneId = newSceneId;
 
     try {
       const newSlots = await scenes.getSlots(newSceneId);
+      if (stopped()) return;
 
       if (newSlots.filter((s) => s.source === "spotify").length > 1) {
         console.warn("[audio-engine] scene has multiple Spotify slots; only first will play");
@@ -556,12 +737,29 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       for (const slot of newSlots) {
         try {
           const player = slotPlayerFactory(slot);
+          incomingPlayers.add(player);
           await player.start(slot, 0);
+          // Stopped while this one was loading. stopAll reached it (it was registered
+          // above), but before it had begun to sound, so stop it again now that it has;
+          // and start none of the rest.
+          if (stopped()) {
+            void player.stop();
+            return;
+          }
           // setMasterVolume must be called before fadeTo so streaming players
           // scale to the correct final volume
           player.setMasterVolume(masterVolume);
-          void player.fadeTo(slot.volume, fadeSec);
-          newStates.set(slot.id, { slot, volume: slot.volume, playing: true });
+          const sounding = soloSlotId === undefined || slot.id === soloSlotId;
+          const level = mutedSlotIds.has(slot.id) ? 0 : slot.volume;
+          if (sounding) {
+            void player.fadeTo(level, fadeSec);
+          } else {
+            // Parked: started at 0 and stopped before it is heard, with its own volume
+            // recorded for the resume that brings it in.
+            await player.stop();
+            player.setVolume(level);
+          }
+          newStates.set(slot.id, { slot, volume: slot.volume, playing: sounding });
           newPlayers.set(slot.id, player);
           if (isPlaylistSlot(slot)) newPlaylistPlayer = player as PlaylistSlotPlayer;
         } catch (e) {
@@ -584,7 +782,7 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       await Promise.all(fadeOuts);
 
       // stopAll() may have fired during the await — bail without committing state
-      if (crossfadeAborted) return;
+      if (stopped()) return;
 
       // Stop outgoing players now that their fades have completed
       for (const player of outgoing) {
@@ -593,6 +791,8 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 
       // Commit new state
       slotPlayers.clear();
+      incomingPlayers.clear();
+      pausedBySceneIds = new Set();
       for (const [id, player] of newPlayers) slotPlayers.set(id, player);
       slotStates = newStates;
       activePlaylistPlayer = newPlaylistPlayer;
@@ -601,38 +801,68 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
     } catch (e) {
       console.error("[audio-engine] crossfadeTo failed:", e);
     } finally {
-      isCrossfading = false;
-      loadingSceneId = null;
+      // A stopped crossfade's state belongs to whatever started since; leave it alone.
+      if (!stopped()) {
+        isCrossfading = false;
+        loadingSceneId = null;
+      }
     }
 
+    if (stopped()) return;
     if (pendingSceneId !== null && pendingSceneId !== activeSceneId) {
       const next = pendingSceneId;
+      const solo = pendingSoloSlotId ?? undefined;
       pendingSceneId = null;
-      crossfadeTo(next);
+      pendingSoloSlotId = null;
+      crossfadeTo(next, solo);
     }
   }
 
-  // Ledger teardown — on a close, and on a switch to another ledger.
+  // Ledger teardown — on a close, and on every open, a switch to another ledger or not.
   //
-  // Keyed on the path rather than on `isOpen`, which never lowers when a second
+  // Keyed on the open rather than on `isOpen`, which never lowers when a second
   // ledger is opened from inside the first: watching the flag alone leaves the
   // previous campaign's scene playing under the new one's notes, with no scene in
-  // the open ledger that the mini player's stop button belongs to. The contexts
-  // are built lazily on the next play, so tearing them down costs nothing.
+  // the open ledger that the mini player's stop button belongs to. Nor on the path:
+  // re-exploring the Example World reopens the same sandbox path over a fresh
+  // database, where the playing scene's id may name nothing or another scene. The
+  // contexts are built lazily on the next play, so tearing them down costs nothing.
   //
   // `undefined` until the first ledger is observed, which is not the same as `null`: the
   // first run has nothing bound and so nothing to tear down. Treating it as a change
   // would fire a teardown during start-up, whose only reachable effect is to stop audio
   // something else had already begun.
-  let boundLedgerPath: string | null | undefined;
+  let boundLedgerOpen: number | null | undefined;
   $effect.root(() => {
+    // A track of the playing scene changed on some surface: take its new settings. A
+    // loop turned on or off reaches a local track that is already playing.
     $effect(() => {
-      const path = ledger.isOpen ? ledger.path : null;
-      if (path === boundLedgerPath) return;
-      const firstBinding = boundLedgerPath === undefined;
-      boundLedgerPath = path;
+      void scenes.slotsRevision;
+      const sceneId = untrack(() => activeSceneId);
+      if (sceneId === null) return;
+      void scenes.getSlots(sceneId).then((fresh) => {
+        if (activeSceneId !== sceneId) return;
+        const updated = new Map(slotStates);
+        let changed = false;
+        for (const slot of fresh) {
+          const state = updated.get(slot.id);
+          if (!state || state.slot === slot) continue;
+          if (state.slot.loop !== slot.loop) slotPlayers.get(slot.id)?.setLoop?.(slot.loop);
+          updated.set(slot.id, { ...state, slot });
+          changed = true;
+        }
+        if (changed) slotStates = updated;
+      });
+    });
+
+    $effect(() => {
+      const open = ledger.isOpen ? ledger.openGeneration : null;
+      if (open === boundLedgerOpen) return;
+      const firstBinding = boundLedgerOpen === undefined;
+      boundLedgerOpen = open;
       if (firstBinding) return;
       stopAll();
+      mutedSlotIds = new Set();
       localCtx?.close();
       localCtx = null;
       spotifyCtx?.disconnect();
@@ -663,26 +893,27 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
       return preMuteVolume !== null;
     },
     get isScenePaused() {
-      return (
-        activeSceneId !== null &&
-        slotStates.size > 0 &&
-        [...slotStates.values()].every((s) => !s.playing)
-      );
+      return allSlotsPaused();
     },
-    get analyserNode(): AnalyserNode | null {
-      return localCtx?.analyser ?? null;
+    /** Something is audible: a scene is playing and not every track of it is paused. */
+    get isSounding() {
+      return isPlaying && !allSlotsPaused();
     },
     playScene,
+    previewSlot,
     stopAll,
     setSlotVolume,
+    toggleSlotMute,
+    isSlotMuted,
     setMasterVolume,
     toggleMasterMute,
     pauseScene,
     resumeScene,
+    togglePauseScene,
     pauseSlot,
     resumeSlot,
     isSceneActive,
-    isScenePlaying,
+    sceneState,
     isSlotPlaying,
     slotVolume,
     skipNext,
@@ -694,6 +925,9 @@ function createAudioEngine({ makeSlotPlayer }: { makeSlotPlayer?: MakeSlotPlayer
 // Exported for unit tests, which inject a fake slot-player factory to drive the
 // crossfade state machine. Production code uses the singleton below.
 export { createAudioEngine };
+// The local player is exported for its own tests: the fake factory above stands in for
+// it, so the engine's tests cannot see what it remembers between a stop and a resume.
+export { LocalSlotPlayer };
 export type { SlotPlayer, MakeSlotPlayer };
 
 export const audioEngine = createAudioEngine();

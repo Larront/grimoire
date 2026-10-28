@@ -37,10 +37,10 @@ vi.mock("$lib/stores/link-resolver.svelte", () => ({
 }));
 
 // What the `[[` dropdown offers — the capture box takes the same autocomplete
-// every other free-text surface does, so its query goes through `search_notes`.
+// every other free-text surface does, so its query goes through `search_link_targets`.
 const SEARCH_RESULTS = [
-  { id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md" },
-  { id: 43, title: "Marsh Road", path: "Places/Marsh Road.md" },
+  { id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md", folder: "People", alias: null },
+  { id: 43, title: "Marsh Road", path: "Places/Marsh Road.md", folder: "Places", alias: null },
 ];
 
 let rows: QuickNote[] = [];
@@ -60,10 +60,10 @@ beforeEach(() => {
   resolve.mockReset();
   vi.mocked(invoke).mockClear();
   vi.mocked(toastUndo).mockClear();
-  resolve.mockResolvedValue({ id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md" });
+  resolve.mockResolvedValue({ id: 42, title: "Mira Ashvale", path: "People/Mira Ashvale.md", folder: "People", alias: null });
   vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
     if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
-    if (cmd === "search_notes") return Promise.resolve(SEARCH_RESULTS);
+    if (cmd === "search_link_targets") return Promise.resolve(SEARCH_RESULTS);
     if (cmd === "create_quick_note") {
       const created = note(
         rows.length + 1,
@@ -288,7 +288,7 @@ describe("Quick Notes Pane — the `[[` dropdown's exits", () => {
     let landSearch: (items: unknown[]) => void = () => {};
     vi.mocked(invoke).mockImplementation((cmd: string, args?: unknown) => {
       if (cmd === "list_quick_notes") return Promise.resolve([...rows]);
-      if (cmd === "search_notes")
+      if (cmd === "search_link_targets")
         return new Promise((resolveSearch) => {
           landSearch = resolveSearch as (items: unknown[]) => void;
         });

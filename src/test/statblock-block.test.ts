@@ -872,7 +872,7 @@ describe("/statblock", () => {
 
 describe("a hit is its own undo step", () => {
   function poolControl(ed: Editor): HTMLElement {
-    const el = ed.view.dom.querySelector<HTMLElement>('[aria-label="Row 1 current value"]');
+    const el = ed.view.dom.querySelector<HTMLElement>('[data-pool-row="0"]');
     if (!el) throw new Error("the pool's current half is not on screen");
     return el;
   }

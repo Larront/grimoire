@@ -7,7 +7,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { api } from "$lib/api";
   import type { Core, Layouts, LayoutOptions, StylesheetJson } from "cytoscape";
   import { tabs } from "$lib/stores/tabs.svelte";
@@ -16,7 +16,11 @@
   import Filter from "@lucide/svelte/icons/filter";
   import Search from "@lucide/svelte/icons/search";
 
-  import { assignTagSlots, resolveTagColor, mutedColor } from "$lib/graph-palette";
+  import { resolveTagColor, mutedColor } from "$lib/graph-palette";
+  import { tagsTick } from "$lib/stores/tags-tick.svelte";
+  import { Switch } from "$lib/components/ui/switch";
+  import { appPrefs } from "$lib/stores/app-prefs.svelte";
+  import { ARRIVE, ms } from "$lib/motion";
 
   /*
     Tags are told apart by COLOUR ALONE, and that is a decision rather than an oversight.
@@ -50,6 +54,7 @@
     kind: "note" | "map" | "stub";
     entity_id?: number;
     primary_tag?: string | null;
+    tags?: string[];
     backlink_count?: number;
   }
 
@@ -67,6 +72,7 @@
   interface TagStyle {
     color: string | null;
     hidden: boolean;
+    slot?: number | null;
   }
 
   let container: HTMLDivElement;
@@ -74,6 +80,7 @@
   // The running d3-force layout. Held at component scope (not just inside
   // onMount) so onDestroy can stop it explicitly — see the teardown note there.
   let sim: Layouts | null = null;
+  let settleFitTimer: ReturnType<typeof setTimeout> | undefined;
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -89,16 +96,27 @@
   // Stored in closure so reapplyStyles() can reference them
   // tagStylesMap is $state so the filter panel template reacts to changes
   let tagStylesMap = $state(new Map<string, TagStyle>());
-  let slotAssignments = new Map<string, number>();
 
   let observer: MutationObserver | null = null;
 
   // Undirected adjacency built from edges, used for neighbor-dimming on hover.
   let adjacency = new Map<string, Set<string>>();
 
+  /**
+   * A tag's stored style. Tags match case-insensitively everywhere else in the app
+   * (`npc` and `NPC` are one tag), so a note's own casing still finds its row.
+   */
+  function styleOf(tag: string): TagStyle | undefined {
+    const exact = tagStylesMap.get(tag);
+    if (exact) return exact;
+    const lower = tag.toLowerCase();
+    for (const [name, style] of tagStylesMap) if (name.toLowerCase() === lower) return style;
+    return undefined;
+  }
+
   /** The colour a tag is drawn in — shared with the Tag Manager so the two agree. */
   function tagColor(tag: string): string {
-    return resolveTagColor(tag, tagStylesMap.get(tag)?.color, slotAssignments);
+    return resolveTagColor(styleOf(tag));
   }
 
   /**
@@ -195,7 +213,7 @@
         style: {
           "transition-property": "opacity",
           // Bare numbers are milliseconds (cytoscape's implicit time unit).
-          "transition-duration": DIM_FADE_MS,
+          "transition-duration": ms(DIM_FADE_MS),
         },
       },
       {
@@ -237,29 +255,60 @@
 
   /** Whether a tag is currently hidden in the filter. Uses "" for untagged. */
   function isFilterTagHidden(tag: string): boolean {
-    return tagStylesMap.get(tag)?.hidden ?? false;
+    return styleOf(tag)?.hidden ?? false;
   }
 
   /**
-   * Toggle a tag's visibility in the filter panel.
-   * Writes to set_tag_graph_style (same as Settings) so they stay in sync.
-   * Uses "" (empty string) as the sentinel key for untagged notes.
+   * Show or hide a tag's notes from the filter panel — the same flag the Tag
+   * Manager's switch writes. Writes the flag ALONE: this used to send back the
+   * colour loaded when the graph opened, quietly undoing any colour the GM had
+   * set in the Tag Manager since. Uses "" (empty string) for untagged notes.
    */
-  async function toggleFilterTag(tag: string) {
+  async function toggleFilterTag(tag: string, show: boolean) {
     const current = tagStylesMap.get(tag) ?? { color: null, hidden: false };
-    const hidden = !current.hidden;
-    tagStylesMap = new Map(tagStylesMap).set(tag, {
-      color: current.color,
-      hidden,
-    });
-    await api.setTagGraphStyle(tag, current.color, hidden);
+    tagStylesMap = new Map(tagStylesMap).set(tag, { ...current, hidden: !show });
+    updateCyVisibility();
+    await api.setTagGraphHidden(tag, !show);
+  }
+
+  /**
+   * The Tag Manager renamed, merged or recoloured a tag, or hid one: fetch the
+   * styles and tag list again, and give every node its new tags. Patched onto the
+   * live graph rather than rebuilt, so the layout stays where the GM left it — a
+   * retag changes what nodes are tagged, never which nodes there are.
+   */
+  async function refreshTags() {
+    const [styles, tags, data] = await Promise.all([
+      api.getTagGraphStyles(),
+      api.listAllTags(),
+      api.getGraphData(),
+    ]);
+    tagStylesMap = new Map(Object.entries(styles ?? {}));
+    allTags = tags ?? [];
+    if (!cy) return;
+    for (const n of data.nodes) {
+      const node = cy.getElementById(n.id);
+      if (node.empty()) continue;
+      node.data("primary_tag", n.primary_tag ?? null);
+      node.data("tags", n.tags ?? []);
+    }
+    reapplyStyles();
     updateCyVisibility();
   }
 
+  // Skip the tick as it stands at mount: onMount has just fetched all of this.
+  const mountTick = tagsTick.value;
+  $effect(() => {
+    if (tagsTick.value === mountTick) return;
+    untrack(() => void refreshTags().catch(() => {}));
+  });
+
   /**
    * Update cytoscape node and edge display based on the current tagStylesMap.
-   * Nodes whose primary_tag is hidden (or untagged with "" hidden) get display:none.
-   * Edges involving a hidden node are also set to display:none.
+   * A note is hidden when ANY of its tags is hidden — hiding "secret" hides every
+   * secret note, not only those it happens to colour (it used to go by the primary
+   * tag alone, so a note tagged `npc` and `secret` stayed on screen). An untagged
+   * note goes by "". Edges involving a hidden node are hidden with it.
    * Cytoscape treats display:none as full removal from the layout.
    */
   function updateCyVisibility() {
@@ -275,14 +324,13 @@
     cy.nodes().forEach((n: unknown) => {
       const node = n as CyElem;
       const kind = node.data("kind") as string;
-      const primaryTag = node.data("primary_tag") as string | null | undefined;
+      const tags = (node.data("tags") as string[] | undefined) ?? [];
 
       // Stub nodes are not tag-filtered; always keep them visible
       if (kind === "stub") return;
 
       // Use "" as the untagged sentinel
-      const lookupTag = primaryTag ?? "";
-      const hidden = tagStylesMap.get(lookupTag)?.hidden ?? false;
+      const hidden = (tags.length ? tags : [""]).some(isFilterTagHidden);
       node.style("display", hidden ? "none" : "element");
     });
 
@@ -343,7 +391,7 @@
     const cyAny = cy as any;
     const matched = cyAny.getElementById(firstMatchId);
     if (matched && matched.length > 0) {
-      cyAny.animate({ fit: { eles: matched, padding: 80 }, duration: 400 });
+      cyAny.animate({ fit: { eles: matched, padding: 80 }, duration: ms(ARRIVE) });
     }
   }
 
@@ -425,15 +473,13 @@
       // Store ledger tags for the filter panel
       allTags = tags ?? [];
 
-      // Slots come from the LEDGER'S tag list, not from the nodes on screen, so the
-      // colour a tag wears here is the colour the Tag Manager shows for it — see
-      // `graph-palette.ts`. `allTags` is already resolved above, which is what makes
-      // this orderable rather than a race.
+      // Each tag's ramp step arrives with its style (`slot`), pinned by the backend,
+      // so the colour a tag wears here is the colour the Tag Manager shows for it —
+      // see `graph-palette.ts`.
       //
       // Generated node `kind` is `string`; the local GraphNodeData refines it to
       // a "map"|"note"|"stub" union. The backend only ever emits those values.
       const graphNodes = rawData.nodes as GraphNodeData[];
-      slotAssignments = assignTagSlots(allTags, (tag) => !!tagStylesMap.get(tag)?.color);
 
       // Compute max backlink count for proportional sizing
       const maxBacklinks = rawData.nodes.reduce(
@@ -541,6 +587,32 @@
 
       cy.fit(undefined, 60);
 
+      // FIT AGAIN ONCE IT SETTLES. The fit above frames the seed ring, and the sim then
+      // pulls the nodes in to a fraction of it — so a small ledger opened on a tight
+      // cluster in the middle of an empty canvas, its labels too small to read. Once
+      // the sim has done most of its work, frame what is actually there; unless the GM
+      // has already taken the camera (wheel, drag, pan), which this never overrides.
+      // Capped at 1.75x so a five-node graph frames rather than fills.
+      let viewTouched = false;
+      const touch = () => (viewTouched = true);
+      container.addEventListener("wheel", touch, { passive: true, once: true });
+      container.addEventListener("pointerdown", touch, { once: true });
+      settleFitTimer = setTimeout(() => {
+        if (!cy || viewTouched) return;
+        const visible = cy.elements(":visible");
+        if (visible.empty()) return;
+        cy.animate({
+          fit: { eles: visible, padding: 72 },
+          duration: appPrefs.reduceMotion ? 0 : 450,
+          easing: "ease-out-cubic",
+          complete: () => {
+            if (cy && cy.zoom() > 1.75) {
+              cy.zoom({ level: 1.75, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+            }
+          },
+        });
+      }, 1800);
+
       // Apply initial visibility from tag_graph_styles (hidden tags are hidden at load)
       updateCyVisibility();
 
@@ -575,11 +647,12 @@
 
       // Re-apply styles when the user switches accent preset or theme (light/dark).
       // ThemeWatcher sets inline style properties in dark mode and class names in light
-      // mode, so we observe both the style attribute and the class attribute.
+      // mode, so we observe both the style attribute and the class attribute — and
+      // Reduce Motion's attribute, which the hover dim's fade reads.
       observer = new MutationObserver(reapplyStyles);
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["class", "style"],
+        attributeFilter: ["class", "style", "data-reduce-motion"],
       });
     } catch (e) {
       error = String(e);
@@ -589,6 +662,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(settleFitTimer);
     observer?.disconnect();
     // Stop the d3-force simulation ourselves rather than trusting the plugin's
     // own `destroy` handler: it deregisters that handler the first time the sim
@@ -637,11 +711,9 @@
   {#if filterOpen}
     <div
       data-testid="filter-panel"
-      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-background/95 border border-border p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto backdrop-blur-sm"
+      class="absolute top-10 right-2 z-20 w-64 rounded-lg bg-popover border border-border shadow-float p-3 flex flex-col gap-2 max-h-[80%] overflow-y-auto"
     >
-      <p class="text-xs font-semibold text-foreground-muted uppercase tracking-wider">
-        Filter by tag
-      </p>
+      <p class="text-(length:--font-ui) font-medium text-foreground-muted">Filter by tag</p>
 
       {#each allTags as tag (tag)}
         <div class="flex items-center gap-2 min-w-0">
@@ -652,7 +724,7 @@
           ></span>
 
           <!-- Tag label -->
-          <span class="flex-1 text-sm text-foreground truncate">{tag}</span>
+          <span class="min-w-0 flex-1 text-sm text-foreground truncate" title={tag}>{tag}</span>
 
           <!-- Edit color link -->
           <a
@@ -667,27 +739,12 @@
           >
 
           <!-- Show/hide toggle -->
-          <button
-            type="button"
-            role="switch"
+          <Switch
             data-testid="filter-tag-toggle-{tag}"
-            aria-checked={!isFilterTagHidden(tag)}
+            checked={!isFilterTagHidden(tag)}
+            onCheckedChange={(show) => toggleFilterTag(tag, show)}
             aria-label="Show {tag} in graph"
-            onclick={() => toggleFilterTag(tag)}
-            class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(
-              tag,
-            )
-              ? 'bg-primary'
-              : 'bg-input'}"
-          >
-            <span
-              class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background ring-0 transition-transform {!isFilterTagHidden(
-                tag,
-              )
-                ? 'translate-x-3'
-                : 'translate-x-0'}"
-            ></span>
-          </button>
+          />
         </div>
       {/each}
 
@@ -704,27 +761,12 @@
         <span class="flex-1 text-sm text-foreground-muted truncate">Untagged</span>
 
         <!-- Show/hide toggle for untagged notes -->
-        <button
-          type="button"
-          role="switch"
+        <Switch
           data-testid="filter-untagged-toggle"
-          aria-checked={!isFilterTagHidden("")}
+          checked={!isFilterTagHidden("")}
+          onCheckedChange={(show) => toggleFilterTag("", show)}
           aria-label="Show untagged notes in graph"
-          onclick={() => toggleFilterTag("")}
-          class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background {!isFilterTagHidden(
-            '',
-          )
-            ? 'bg-primary'
-            : 'bg-input'}"
-        >
-          <span
-            class="pointer-events-none inline-block h-3 w-3 rounded-full bg-background ring-0 transition-transform {!isFilterTagHidden(
-              '',
-            )
-              ? 'translate-x-3'
-              : 'translate-x-0'}"
-          ></span>
-        </button>
+        />
       </div>
     </div>
   {/if}

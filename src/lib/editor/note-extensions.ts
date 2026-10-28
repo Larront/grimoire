@@ -23,6 +23,7 @@ import { TimelineBlock } from "$lib/editor/timeline-block";
 import { WikiLink } from "$lib/editor/wiki-link";
 import { SlashCommand } from "$lib/editor/slash-command";
 import { BlockHandle, type BlockTarget } from "$lib/editor/block-handle";
+import { SearchHit } from "$lib/editor/search-hit";
 import type { SlashCommandSuggestionState } from "$lib/editor/slash-command";
 import type { WikiLinkSuggestionState } from "$lib/editor/wiki-link";
 
@@ -31,6 +32,8 @@ export interface NoteExtensionOptions {
   onSlashCommand?: (state: SlashCommandSuggestionState | null) => void;
   /** Pushes the wikilink autocomplete's state to the surface drawing it. */
   onWikiSuggestion?: (state: WikiLinkSuggestionState | null) => void;
+  /** The note being edited, which the wikilink menu's recent notes leave out. */
+  notePath?: () => string | null;
   /**
    * Pushes the block under the pointer to the surface drawing the handle. Null as the
    * pointer leaves the prose. The extension holds no markup — where the handle sits and
@@ -61,6 +64,7 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
     TimelineBlock,
     WikiLink.configure({
       onSuggestion: options.onWikiSuggestion ?? (() => {}),
+      notePath: options.notePath ?? (() => null),
     }),
     // Callout *is* the blockquote — the ordinary quote carrying two optional
     // attributes (#180) — so StarterKit must not register a second one under the
@@ -74,5 +78,6 @@ export function noteExtensions(options: NoteExtensionOptions = {}): Extensions {
       onTarget: options.onBlockTarget ?? (() => {}),
       onGrab: options.onBlockGrab ?? (() => {}),
     }),
+    SearchHit,
   ];
 }

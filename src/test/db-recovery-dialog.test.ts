@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import DbRecoveryDialog from "../lib/components/DbRecoveryDialog.svelte";
 import { ledger } from "../lib/stores/ledger.svelte";
+import { toast as sonner } from "svelte-sonner";
 
 vi.mock("svelte-sonner", () => ({
   toast: Object.assign(vi.fn(), {
@@ -47,12 +48,38 @@ describe("DB recovery dialog (issue #116)", () => {
     await waitFor(() => {
       // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
       // the formatter's business, not this assertion's.
+      const text = getByTestId("db-recovery-dialog").textContent?.replace(/\s+/g, " ");
+      // It names the world it is about — over another world it read as that one.
+      expect(text).toContain("“damaged-world” can't open as it is");
       // Quick Notes are database-only (ADR-0018), so a rebuild takes them too — a GM
-      // deciding whether to rebuild has to be told that before they choose.
-      expect(getByTestId("db-recovery-dialog").textContent?.replace(/\s+/g, " ")).toContain(
-        "scenes, pins, map details, and Quick Notes will be lost",
-      );
+      // deciding whether to rebuild has to be told that before they choose. And maps
+      // come back from their images, but without their pins.
+      expect(text).toContain("each map from its image, without its pins");
+      expect(text).toContain("Scenes and Quick Notes can't be brought back");
     });
+  });
+
+  it("says it in the dialog only — no toast repeating its title", async () => {
+    render(DbRecoveryDialog);
+    vi.mocked(sonner.error).mockClear();
+    await triggerCorrupt();
+    expect(sonner.error).not.toHaveBeenCalled();
+  });
+
+  it("says a failed rebuild in the dialog, which stays to try again", async () => {
+    const { getByTestId, findByTestId } = render(DbRecoveryDialog);
+    await triggerCorrupt();
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "rebuild_ledger_db") throw "Failed to move damaged database aside: denied";
+      return null;
+    });
+    await waitFor(() => getByTestId("db-recovery-rebuild"));
+    await fireEvent.click(getByTestId("db-recovery-rebuild"));
+
+    const error = await findByTestId("db-recovery-error");
+    expect(error.textContent).toContain("Couldn't rebuild it");
+    expect(error.textContent).not.toContain("Failed to move");
+    expect(ledger.corruptLedgerPath).toBe(CORRUPT_PATH);
   });
 
   it("Rebuild calls rebuild_ledger_db and opens the ledger", async () => {
@@ -69,9 +96,12 @@ describe("DB recovery dialog (issue #116)", () => {
           failed_imports: [],
           unlinked_pins: [],
           recovered_from_backup: null,
+          damaged_file: "/worlds/damaged-world/.grimoire/ledger.db.corrupt-1",
+          rebuilt: { maps_recovered: 2 },
         };
       return null;
     });
+    vi.mocked(sonner).mockClear();
 
     await waitFor(() => getByTestId("db-recovery-rebuild"));
     await fireEvent.click(getByTestId("db-recovery-rebuild"));
@@ -83,6 +113,98 @@ describe("DB recovery dialog (issue #116)", () => {
     expect(rebuild?.[1]).toMatchObject({ path: CORRUPT_PATH });
     expect(ledger.isOpen).toBe(true);
     expect(ledger.corruptLedgerPath).toBeNull();
+    // And it says what came back, and what didn't, where the GM can read it.
+    const [title, opts] = vi.mocked(sonner).mock.calls.at(-1) as unknown as [
+      string,
+      { description: string; closeButton: boolean; action: { label: string } },
+    ];
+    expect(title).toBe("“damaged-world” was rebuilt from its notes");
+    expect(opts.description).toContain("Its 2 maps came back from their images, without pins");
+    expect(opts.closeButton).toBe(true);
+    expect(opts.action.label).toBe("Show damaged file");
+  });
+
+  it("says what a salvage brought back, and that the damaged part could not come", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "open_ledger"
+        ? {
+            path: CORRUPT_PATH,
+            note_count: 7,
+            scene_count: 3,
+            map_count: 3,
+            failed_imports: [],
+            unlinked_pins: [],
+            recovered_from_backup: null,
+            damaged_file: "/worlds/damaged-world/.grimoire/ledger.db.corrupt-1",
+            salvaged: { scenes: 3, maps: 2, pins: 14, quick_notes: 1, maps_from_images: 1 },
+            rebuilt: null,
+          }
+        : null,
+    );
+    vi.mocked(sonner).mockClear();
+    await ledger.openLedger(CORRUPT_PATH);
+
+    // No dialog: the salvage was used without asking.
+    expect(ledger.corruptLedgerPath).toBeNull();
+    expect(ledger.isOpen).toBe(true);
+    const [title, opts] = vi.mocked(sonner).mock.calls.at(-1) as unknown as [
+      string,
+      { description: string; closeButton: boolean; action: { label: string } },
+    ];
+    expect(title).toBe("“damaged-world” was recovered from its damaged database");
+    expect(opts.description).toBe(
+      "3 scenes, 2 maps, 14 pins and 1 Quick Note came back; anything on the damaged part of the file couldn't. 1 more map came back from its image, without pins. Your notes are unaffected.",
+    );
+    expect(opts.closeButton).toBe(true);
+    expect(opts.action.label).toBe("Show damaged file");
+  });
+
+  it("names a restore lastingly but closably, and the next open takes it down", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "open_ledger"
+        ? {
+            path: CORRUPT_PATH,
+            note_count: 1,
+            scene_count: 0,
+            map_count: 0,
+            failed_imports: [],
+            unlinked_pins: [],
+            recovered_from_backup: "2026-10-21T19:30:00Z",
+            damaged_file: null,
+            rebuilt: null,
+          }
+        : null,
+    );
+    vi.mocked(sonner).mockClear();
+    await ledger.openLedger(CORRUPT_PATH);
+    const [title, opts] = vi.mocked(sonner).mock.calls.at(-1) as unknown as [
+      string,
+      { description: string; closeButton: boolean; id: string },
+    ];
+    expect(title).toBe("“damaged-world” was restored from its last backup");
+    expect(opts.description).toContain("Your notes are unaffected");
+    expect(opts.closeButton).toBe(true);
+
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "open_ledger"
+        ? {
+            path: "/worlds/other",
+            note_count: 1,
+            scene_count: 0,
+            map_count: 0,
+            failed_imports: [],
+            unlinked_pins: [],
+            recovered_from_backup: null,
+          }
+        : null,
+    );
+    await ledger.openLedger("/worlds/other");
+    expect(sonner.dismiss).toHaveBeenCalledWith(opts.id);
+
+    // And closing a world takes it down too — it used to sit on over the Splash.
+    vi.mocked(sonner.dismiss).mockClear();
+    await ledger.closeLedger();
+    expect(sonner.dismiss).toHaveBeenCalledWith(opts.id);
   });
 
   it("Cancel dismisses without touching the database", async () => {

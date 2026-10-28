@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import ScenePane from "../lib/components/panes/ScenePane.svelte";
 import { audioEngine } from "../lib/stores/audio-engine.svelte";
+import { toastUndo } from "../lib/toast";
 import type { Scene, SceneSlot } from "../lib/types/ledger";
 
 let mockScenes: Scene[] = [];
@@ -52,6 +53,7 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
   isPlaylistSlot: (slot: { source_id: string }) => slot.source_id.startsWith("spotify:playlist:"),
   audioEngine: {
     playScene: vi.fn(),
+    previewSlot: vi.fn().mockResolvedValue(undefined),
     stopAll: vi.fn(),
     setMasterVolume: vi.fn(),
     setSlotVolume: vi.fn(),
@@ -63,7 +65,9 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     skipNext: vi.fn(),
     skipPrev: vi.fn(),
     isSceneActive: vi.fn((id: number) => id === mockActiveSceneId),
-    isScenePlaying: vi.fn((id: number) => id === mockActiveSceneId),
+    sceneState: vi.fn((id: number | null) =>
+      id !== null && id === mockActiveSceneId ? (mockIsScenePaused ? "paused" : "playing") : "idle",
+    ),
     isSlotPlaying: vi.fn((id: number) => mockSlotPlayingMap.get(id) ?? false),
     slotVolume: vi.fn((_id: number) => undefined),
     get activeSceneId() {
@@ -84,11 +88,16 @@ vi.mock("../lib/stores/audio-engine.svelte", () => ({
     get isScenePaused() {
       return mockIsScenePaused;
     },
+    get isSounding() {
+      return mockActiveSceneId !== null && !mockIsScenePaused;
+    },
     get isMasterMuted() {
       return mockIsMasterMuted;
     },
   },
 }));
+
+vi.mock("../lib/toast", () => ({ toastUndo: vi.fn(), toastError: vi.fn() }));
 
 vi.mock("../lib/utils/spotify-auth", () => ({
   getSpotifyStatus: vi.fn().mockResolvedValue({ is_connected: false, expires_at: "" }),
@@ -142,15 +151,16 @@ describe("ScenePane hero header", () => {
     expect(container.querySelector("[data-hero-header]")).toBeTruthy();
   });
 
-  it("hero header uses derived accent color when no thumbnail_path or thumbnail_color", () => {
-    // id=1, 1%5=1 → arcane: rgba(155,107,191,0.18)
+  it("hero header is neutral, not a hue picked by id, when no colour is chosen", () => {
+    // The dashboard card and the in-note player draw an uncoloured scene in Iron Raised;
+    // the editor used to cycle the accent presets by id (id 1 → Arcane's purple).
     mockScenes = [makeScene({ id: 1, thumbnail_color: null, thumbnail_path: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
     const hero = container.querySelector("[data-hero-header]") as HTMLElement;
-    // JSDOM normalizes rgba(r,g,b,a) → rgba(r, g, b, a) with spaces
-    expect(hero?.getAttribute("style")).toMatch(/155.*107.*191/);
+    expect(hero?.getAttribute("style")).toContain("var(--background-elevated)");
+    expect(hero?.getAttribute("style")).not.toMatch(/155.*107.*191/);
   });
 
   it("hero header uses thumbnail_color when set and no thumbnail_path", () => {
@@ -195,9 +205,11 @@ describe("ScenePane hero header", () => {
     });
   });
 
-  it("shows skip controls in the slot row for a Spotify playlist slot", async () => {
+  it("shows skip controls in the slot row while a Spotify playlist slot plays", async () => {
     mockScenes = [makeScene()];
     mockSlots = [makeSlot({ source: "spotify", source_id: "spotify:playlist:abc123" })];
+    mockActiveSceneId = 1;
+    mockSlotPlayingMap = new Map([[1, true]]);
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
@@ -228,43 +240,43 @@ describe("ScenePane hero header — thumbnail pickers", () => {
     vi.clearAllMocks();
   });
 
-  it("hero header has a color picker button", () => {
+  // Picture, colour and icon live in one Appearance popover. They used to be three
+  // buttons shown only on hover, which a keyboard user met as invisible Tab stops.
+  it("hero header has an always-present Appearance button", () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-color-btn]")).toBeTruthy();
+    const btn = container.querySelector("[data-appearance-btn]") as HTMLElement;
+    expect(btn).toBeTruthy();
+    expect(btn.className).not.toMatch(/opacity-0/);
   });
 
-  it("hero header has an icon picker button", () => {
+  it("Appearance opens the colour and icon pickers together", async () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-icon-btn]")).toBeTruthy();
-  });
-
-  it("clicking the color button opens a color picker", async () => {
-    mockScenes = [makeScene()];
-    const { container } = render(ScenePane, {
-      props: { sceneId: 1, pane: "left" },
-    });
-    const btn = container.querySelector("[data-edit-color-btn]") as HTMLElement;
-    await fireEvent.click(btn);
+    await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
     await waitFor(() => {
       expect(document.body.querySelector("[data-color-picker]")).toBeTruthy();
+      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
     });
   });
 
-  it("clicking the icon button opens an icon picker", async () => {
-    mockScenes = [makeScene()];
+  it("the pickers mark the current choice", async () => {
+    mockScenes = [makeScene({ thumbnail_icon: "Skull", thumbnail_color: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-edit-icon-btn]") as HTMLElement;
-    await fireEvent.click(btn);
+    await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
     await waitFor(() => {
-      expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy();
+      expect(
+        document.body.querySelector('[data-icon-btn="Skull"]')?.getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        document.body.querySelector("[data-color-default]")?.getAttribute("aria-pressed"),
+      ).toBe("true");
     });
   });
 
@@ -285,6 +297,11 @@ describe("ScenePane hero header — thumbnail pickers", () => {
   });
 });
 
+async function openAppearance(container: HTMLElement) {
+  await fireEvent.click(container.querySelector("[data-appearance-btn]") as HTMLElement);
+  await waitFor(() => expect(document.body.querySelector("[data-icon-picker]")).toBeTruthy());
+}
+
 describe("ScenePane hero header — thumbnail image upload", () => {
   beforeEach(() => {
     mockScenes = [];
@@ -295,12 +312,13 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     vi.clearAllMocks();
   });
 
-  it("hero header has a change thumbnail button", () => {
+  it("Appearance has a change picture button", async () => {
     mockScenes = [makeScene()];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-edit-thumbnail-btn]")).toBeTruthy();
   });
 
   it("clicking change thumbnail opens file picker filtered to image types", async () => {
@@ -309,7 +327,8 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-edit-thumbnail-btn]") as HTMLElement;
+    await openAppearance(container);
+    const btn = document.body.querySelector("[data-edit-thumbnail-btn]") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
       expect(vi.mocked(open)).toHaveBeenCalledWith(
@@ -324,20 +343,22 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     });
   });
 
-  it("remove thumbnail button not visible when thumbnail_path is null", () => {
+  it("remove thumbnail button not visible when thumbnail_path is null", async () => {
     mockScenes = [makeScene({ thumbnail_path: null })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-remove-thumbnail-btn]")).toBeNull();
   });
 
-  it("remove thumbnail button visible when thumbnail_path is set", () => {
+  it("remove thumbnail button visible when thumbnail_path is set", async () => {
     mockScenes = [makeScene({ thumbnail_path: ".grimoire/thumbnails/img.jpg" })];
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    expect(container.querySelector("[data-remove-thumbnail-btn]")).toBeTruthy();
+    await openAppearance(container);
+    expect(document.body.querySelector("[data-remove-thumbnail-btn]")).toBeTruthy();
   });
 
   it("clicking remove thumbnail calls update_scene_thumbnail with thumbnailPath null", async () => {
@@ -345,7 +366,8 @@ describe("ScenePane hero header — thumbnail image upload", () => {
     const { container } = render(ScenePane, {
       props: { sceneId: 1, pane: "left" },
     });
-    const btn = container.querySelector("[data-remove-thumbnail-btn]") as HTMLElement;
+    await openAppearance(container);
+    const btn = document.body.querySelector("[data-remove-thumbnail-btn]") as HTMLElement;
     await fireEvent.click(btn);
     await waitFor(() => {
       expect(vi.mocked(invoke)).toHaveBeenCalledWith(
@@ -423,5 +445,119 @@ describe("ScenePane — scene-level pause/resume (engine interface)", () => {
       expect(btns.some((b) => b.textContent?.trim() === "Pause")).toBe(true);
       expect(btns.some((b) => b.textContent?.trim() === "Stop")).toBe(true);
     });
+  });
+});
+
+describe("ScenePane — transport reflects this scene only", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene({ id: 1 }), makeScene({ id: 2, name: "Town Market" })];
+    mockSlots = [makeSlot()];
+    vi.clearAllMocks();
+  });
+
+  it("another scene's pause does not offer Resume here", async () => {
+    // Boss Battle (1) is paused; Town Market's (2) editor must offer Play, not Resume —
+    // Resume would bring back the boss music.
+    mockActiveSceneId = 1;
+    mockIsScenePaused = true;
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
+    await waitFor(() => {
+      const labels = getAllByRole("button").map((b) => b.textContent?.trim());
+      expect(labels).toContain("Play scene");
+      expect(labels).not.toContain("Resume");
+    });
+  });
+
+  it("Play Scene is disabled on a scene with no tracks", async () => {
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlots = [];
+    const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
+    await waitFor(() => {
+      const play = getAllByRole("button").find((b) => b.textContent?.trim() === "Play scene");
+      expect(play?.hasAttribute("disabled")).toBe(true);
+    });
+  });
+});
+
+describe("ScenePane — track rows", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene()];
+    mockSlots = [
+      makeSlot({ id: 1, label: "Heavy Rain" }),
+      makeSlot({ id: 2, label: "Thunder", slot_order: 1 }),
+    ];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    mockSlotPlayingMap = new Map();
+    vi.clearAllMocks();
+  });
+
+  it("a track's play button previews it on its own while the scene is stopped", async () => {
+    const { findByLabelText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await fireEvent.click(await findByLabelText("Play Thunder on its own"));
+    expect(audioEngine.previewSlot).toHaveBeenCalledWith(1, 2);
+    expect(audioEngine.playScene).not.toHaveBeenCalled();
+  });
+
+  it("shuffle is offered only for a Spotify playlist", async () => {
+    mockSlots = [
+      makeSlot({ id: 1, label: "Heavy Rain" }),
+      makeSlot({ id: 2, label: "Tavern", source: "spotify", source_id: "spotify:playlist:p1" }),
+    ];
+    const { findByLabelText, queryByLabelText } = render(ScenePane, {
+      props: { sceneId: 1, pane: "left" },
+    });
+    expect(await findByLabelText("Shuffle Tavern")).toBeTruthy();
+    expect(queryByLabelText("Shuffle Heavy Rain")).toBeNull();
+  });
+
+  it("removing a track hides it at once and defers the delete behind an undo toast", async () => {
+    const { findAllByLabelText, queryByText, findByText } = render(ScenePane, {
+      props: { sceneId: 1, pane: "left" },
+    });
+    await findByText("Thunder");
+    const menu = (await findAllByLabelText("More for Thunder"))[0];
+    await fireEvent.keyDown(menu, { key: "Delete" });
+
+    await waitFor(() => expect(queryByText("Thunder")).toBeNull());
+    expect(toastUndo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith("delete_scene_slot", expect.anything());
+
+    // Undo puts it back.
+    const onUndo = vi.mocked(toastUndo).mock.calls[0][2]!;
+    onUndo();
+    expect(await findByText("Thunder")).toBeTruthy();
+  });
+});
+
+describe("ScenePane — Add Track dialog", () => {
+  beforeEach(() => {
+    mockScenes = [makeScene()];
+    mockSlots = [makeSlot()];
+    mockActiveSceneId = null;
+    mockIsScenePaused = false;
+    vi.clearAllMocks();
+  });
+
+  it("says why Add is disabled instead of leaving it to guess", async () => {
+    const { findByText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await fireEvent.click(await findByText("Add track"));
+    expect(await findByText("Choose a file to add.")).toBeTruthy();
+    const add = [...document.body.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Add",
+    );
+    expect(add?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("has one Cancel, not a button nested in a button", async () => {
+    const { findByText } = render(ScenePane, { props: { sceneId: 1, pane: "left" } });
+    await fireEvent.click(await findByText("Add track"));
+    await findByText("Choose a file to add.");
+    const cancels = [...document.body.querySelectorAll("button")].filter(
+      (b) => b.textContent?.trim() === "Cancel",
+    );
+    expect(cancels).toHaveLength(1);
+    expect(document.body.querySelector("button button")).toBeNull();
   });
 });

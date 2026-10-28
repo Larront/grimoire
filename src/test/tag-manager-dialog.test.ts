@@ -5,6 +5,7 @@ import { waitFor } from "@testing-library/svelte";
 import AppShell from "../lib/components/AppShell.svelte";
 import { searchPalette } from "../lib/stores/search.svelte";
 import { dialogs } from "../lib/stores/overlay.svelte";
+import * as toast from "$lib/toast";
 
 afterEach(async () => {
   cleanup();
@@ -16,12 +17,12 @@ afterEach(async () => {
 
 function mockTagUsage(
   entries: Array<{ tag: string; note_count: number; pin_count: number }>,
-  styles: Record<string, { color: string | null; hidden: boolean }> = {},
+  styles: Record<string, { color: string | null; hidden: boolean; slot?: number | null }> = {},
 ) {
+  vi.mocked(invoke).mockClear();
   vi.mocked(invoke).mockImplementation(async (cmd) => {
     if (cmd === "get_tag_usage_counts") return entries;
     if (cmd === "get_tag_graph_styles") return styles;
-    if (cmd === "set_tag_graph_style") return null;
     return null;
   });
 }
@@ -42,7 +43,8 @@ describe("tag manager — usage count aggregate", () => {
       const el = within(dialog).getByTestId("tag-usage-count-npc");
       return el;
     });
-    expect(countEl.textContent?.trim()).toBe("5");
+    expect(countEl.textContent?.trim()).toBe("5 uses");
+    expect(countEl.getAttribute("title")).toBe("3 notes and 2 pins");
   });
 
   it("shows a count of note_count alone when pin_count is zero", async () => {
@@ -55,7 +57,7 @@ describe("tag manager — usage count aggregate", () => {
       return el as HTMLElement;
     });
     const countEl = await waitFor(() => within(dialog).getByTestId("tag-usage-count-creature"));
-    expect(countEl.textContent?.trim()).toBe("4");
+    expect(countEl.textContent?.trim()).toBe("4 uses");
   });
 
   it("lists all tags in the ledger", async () => {
@@ -157,7 +159,7 @@ describe("tag manager — command palette entry point", () => {
 
 async function openTagManager(
   entries: Array<{ tag: string; note_count: number; pin_count: number }>,
-  styles: Record<string, { color: string | null; hidden: boolean }> = {},
+  styles: Record<string, { color: string | null; hidden: boolean; slot?: number | null }> = {},
 ) {
   mockTagUsage(entries, styles);
   render(AppShell);
@@ -177,382 +179,249 @@ async function openTagManager(
   return dialog;
 }
 
+/** Open a row's ⋯ menu and choose an item by its visible name. */
+async function chooseFromMenu(dialog: HTMLElement, tag: string, item: RegExp) {
+  const trigger = within(dialog).getByTestId(`tag-menu-${tag}`);
+  await fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+  const entry = await waitFor(() => {
+    const found = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+      item.test(el.textContent ?? ""),
+    );
+    if (!found) throw new Error(`menu item ${item} not found`);
+    return found;
+  });
+  await fireEvent.click(entry);
+}
+
+const calls = (cmd: string) => vi.mocked(invoke).mock.calls.filter(([c]) => c === cmd);
+
 describe("tag manager — per-tag graph color", () => {
-  it("each tag row shows a color picker input", async () => {
+  it("shows the colour the graph draws, Automatic being the tag's ramp step", async () => {
     const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: "#ff0000", hidden: false },
+      npc: { color: null, hidden: false, slot: 0 },
     });
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="tag-color-npc"]')).toBeTruthy();
-    });
+    const swatch = within(dialog).getByTestId("tag-color-npc");
+    expect(swatch.getAttribute("aria-label")).toBe("Graph colour for npc: Automatic");
   });
 
-  it("color picker value reflects the stored tag color", async () => {
+  it("names an explicit colour, and draws the swatch in it", async () => {
     const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: "#ff0000", hidden: false },
+      npc: { color: "#ff0000", hidden: false, slot: 0 },
     });
-    await waitFor(() => {
-      const input = dialog.querySelector('[data-testid="tag-color-npc"]') as HTMLInputElement;
-      expect(input).toBeTruthy();
-      expect(input.value).toBe("#ff0000");
-    });
+    const swatch = within(dialog).getByTestId("tag-color-npc");
+    expect(swatch.getAttribute("aria-label")).toBe("Graph colour for npc: #ff0000");
+    expect(swatch.style.background).toMatch(/ff0000|255, 0, 0/);
   });
 
-  it("clear button appears when tag has an explicit color", async () => {
+  it("opens the app's colour picker, not the system's, with Automatic to go back", async () => {
     const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: "#ff0000", hidden: false },
+      npc: { color: "#ff0000", hidden: false, slot: 0 },
     });
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="tag-color-clear-npc"]')).toBeTruthy();
+    expect(dialog.querySelector('input[type="color"]')).toBeNull();
+    await fireEvent.click(within(dialog).getByTestId("tag-color-npc"));
+    const picker = await waitFor(() => {
+      const el = document.body.querySelector("[data-color-picker]");
+      if (!el) throw new Error("picker not open");
+      return el as HTMLElement;
     });
-  });
-
-  it("clear button is absent when tag has no explicit color", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {});
-    await waitFor(() => {
-      const rows = dialog.querySelectorAll('[data-testid="tag-manager-row"]');
-      expect(rows.length).toBeGreaterThan(0);
-    });
-    expect(dialog.querySelector('[data-testid="tag-color-clear-npc"]')).toBeFalsy();
-  });
-
-  it("clicking clear calls set_tag_graph_style with color null", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: "#ff0000", hidden: false },
-    });
-    vi.mocked(invoke).mockClear();
-    const clearBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-color-clear-npc"]') as HTMLElement;
-      if (!el) throw new Error("clear btn not found");
-      return el;
-    });
-    await fireEvent.click(clearBtn);
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
-        tag: "npc",
-        color: null,
-        hidden: false,
-      });
-    });
+    await fireEvent.click(within(picker).getByRole("button", { name: /Automatic/ }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_color", { tag: "npc", color: null }),
+    );
   });
 });
+
+// ── Per-tag graph visibility ──────────────────────────────────────────────────
 
 describe("tag manager — per-tag graph visibility", () => {
-  it("each tag row shows a visibility toggle", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }]);
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="tag-visibility-npc"]')).toBeTruthy();
-    });
+  it("each tag row shows a visibility switch, on when the tag is shown", async () => {
+    const dialog = await openTagManager([{ tag: "npc", note_count: 1, pin_count: 0 }]);
+    const toggle = within(dialog).getByTestId("tag-visibility-npc");
+    expect(toggle.getAttribute("role")).toBe("switch");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("visibility toggle aria-checked is true when tag is visible", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: null, hidden: false },
-    });
-    await waitFor(() => {
-      const toggle = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
-      expect(toggle.getAttribute("aria-checked")).toBe("true");
-    });
-  });
-
-  it("visibility toggle aria-checked is false when tag is hidden", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
+  it("is off when the tag is hidden", async () => {
+    const dialog = await openTagManager([{ tag: "npc", note_count: 1, pin_count: 0 }], {
       npc: { color: null, hidden: true },
     });
-    await waitFor(() => {
-      const toggle = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
-      expect(toggle.getAttribute("aria-checked")).toBe("false");
-    });
+    const toggle = within(dialog).getByTestId("tag-visibility-npc");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
   });
 
-  it("toggling a visible tag calls set_tag_graph_style with hidden: true", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
+  it("writes the hidden flag alone, never a colour with it", async () => {
+    const dialog = await openTagManager([{ tag: "npc", note_count: 1, pin_count: 0 }], {
       npc: { color: "#ff0000", hidden: false },
     });
-    vi.mocked(invoke).mockClear();
-    const toggle = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
-      if (!el) throw new Error("toggle not found");
-      return el;
-    });
-    await fireEvent.click(toggle);
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
-        tag: "npc",
-        color: "#ff0000",
-        hidden: true,
-      });
-    });
-  });
-
-  it("toggling a hidden tag calls set_tag_graph_style with hidden: false", async () => {
-    const dialog = await openTagManager([{ tag: "npc", note_count: 3, pin_count: 0 }], {
-      npc: { color: null, hidden: true },
-    });
-    vi.mocked(invoke).mockClear();
-    const toggle = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-visibility-npc"]') as HTMLElement;
-      if (!el) throw new Error("toggle not found");
-      return el;
-    });
-    await fireEvent.click(toggle);
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("set_tag_graph_style", {
-        tag: "npc",
-        color: null,
-        hidden: false,
-      });
-    });
+    await fireEvent.click(within(dialog).getByTestId("tag-visibility-npc"));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_tag_graph_hidden", { tag: "npc", hidden: true }),
+    );
+    expect(calls("set_tag_graph_color")).toHaveLength(0);
   });
 });
 
-// ── Per-tag retag: ⋯ menu ────────────────────────────────────────────────────
+// ── Rename, merge, delete ─────────────────────────────────────────────────────
 
-function mockTagUsageWithRetag(
+const UNDO = { from_tag: "npc", to_tag: "person", notes: [], pins: [], styles: [] };
+
+function mockRetag(
   entries: Array<{ tag: string; note_count: number; pin_count: number }>,
-  retagResult: { note_count: number; pin_count: number } = {
-    note_count: 1,
-    pin_count: 0,
+  result: { note_count: number; pin_count: number; merged: boolean } = {
+    note_count: 3,
+    pin_count: 1,
+    merged: false,
   },
 ) {
   vi.mocked(invoke).mockImplementation(async (cmd) => {
     if (cmd === "get_tag_usage_counts") return entries;
     if (cmd === "get_tag_graph_styles") return {};
-    if (cmd === "set_tag_graph_style") return null;
-    if (cmd === "retag_tag") return retagResult;
+    if (cmd === "retag_tag") return { ...result, undo: UNDO };
     return null;
   });
 }
 
-describe("tag manager — retag ⋯ menu", () => {
-  it("each tag row has a ⋯ menu button", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
+async function openWithRetag(
+  entries: Array<{ tag: string; note_count: number; pin_count: number }>,
+  result?: { note_count: number; pin_count: number; merged: boolean },
+) {
+  const dialog = await openTagManager(entries);
+  mockRetag(entries, result);
+  return dialog;
+}
+
+describe("tag manager — rename and merge", () => {
+  it("each tag row has a ⋯ menu with Rename, Merge into… and Delete", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    await fireEvent.pointerDown(within(dialog).getByTestId("tag-menu-npc"), {
+      button: 0,
+      pointerType: "mouse",
     });
-    await waitFor(() => {
-      const btn = dialog.querySelector('[data-testid="tag-menu-npc"]');
-      if (!btn) throw new Error("menu button not found");
+    const items = await waitFor(() => {
+      const found = [...document.querySelectorAll('[role="menuitem"]')].map((el) =>
+        el.textContent?.trim(),
+      );
+      if (found.length < 3) throw new Error("menu not open");
+      return found;
     });
+    expect(items).toEqual(["Rename", "Merge into…", "Delete"]);
   });
 
-  it("⋯ menu contains Rename, Merge into…, Delete options", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="tag-menu-rename-npc"]')).toBeTruthy();
-      expect(dialog.querySelector('[data-testid="tag-menu-merge-npc"]')).toBeTruthy();
-      expect(dialog.querySelector('[data-testid="tag-menu-delete-npc"]')).toBeTruthy();
-    });
-  });
+  it("renames at once, offering Undo rather than asking first", async () => {
+    const undo = vi.spyOn(toast, "toastUndo");
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    await chooseFromMenu(dialog, "npc", /Rename/);
 
-  it("clicking Rename opens an input for the new tag name", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 0 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    const renameItem = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-rename-npc"]') as HTMLElement;
-      if (!el) throw new Error("rename item not found");
-      return el;
-    });
-    await fireEvent.click(renameItem);
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="retag-input-npc"]')).toBeTruthy();
-    });
-  });
+    const input = (await waitFor(() =>
+      within(dialog).getByTestId("retag-input-npc"),
+    )) as HTMLInputElement;
+    expect(input.value).toBe("npc");
+    await fireEvent.input(input, { target: { value: "person" } });
+    await fireEvent.submit(input.form!);
 
-  it("clicking Delete opens a confirmation dialog with impact count", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 3, pin_count: 2 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    const deleteItem = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement;
-      if (!el) throw new Error("delete item not found");
-      return el;
-    });
-    await fireEvent.click(deleteItem);
-    await waitFor(() => {
-      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
-    });
-    // Impact count shown: 3 notes + 2 pins = 5
-    const confirmDialog = document.body.querySelector(
-      '[data-testid="retag-confirm-dialog"]',
-    ) as HTMLElement;
-    // Whitespace collapsed: the copy wraps in the markup, and where it wraps is
-    // the formatter's business, not this assertion's.
-    const copy = confirmDialog.textContent?.replace(/\s+/g, " ");
-    expect(copy).toMatch(/3 note/);
-    expect(copy).toMatch(/2 pin/);
-  });
-
-  it("confirming rename calls retag_tag with from and to", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 2, pin_count: 0 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-
-    // Open menu → Rename
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    await fireEvent.click(
-      dialog.querySelector('[data-testid="tag-menu-rename-npc"]') as HTMLElement,
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("retag_tag", { fromTag: "npc", toTag: "person" }),
     );
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    await waitFor(() => expect(undo).toHaveBeenCalled());
+    expect(undo.mock.calls[0][0]).toBe("Renamed “npc” to “person” on 3 notes and 1 pin");
 
-    // Fill in new name
-    const input = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="retag-input-npc"]') as HTMLInputElement;
-      if (!el) throw new Error("input not found");
-      return el;
-    });
-    await fireEvent.input(input, { target: { value: "villain" } });
-
-    // Submit (e.g. press Enter or click Apply)
-    await fireEvent.keyDown(input, { key: "Enter" });
-
-    // Confirm dialog should appear
-    await waitFor(() => {
-      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
-    });
-
-    vi.mocked(invoke).mockClear();
-    const confirmBtn = document.body.querySelector(
-      '[data-testid="retag-confirm-btn"]',
-    ) as HTMLElement;
-    await fireEvent.click(confirmBtn);
-
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("retag_tag", {
-        fromTag: "npc",
-        toTag: "villain",
-      });
-    });
+    undo.mock.calls[0][2]!();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("undo_retag", { undo: UNDO }));
+    undo.mockRestore();
   });
 
-  it("confirming delete calls retag_tag with toTag null", async () => {
-    mockTagUsageWithRetag([{ tag: "npc", note_count: 1, pin_count: 0 }]);
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    await fireEvent.click(
-      dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement,
+  it("says Merged when the name was already a tag", async () => {
+    const undo = vi.spyOn(toast, "toastUndo");
+    const dialog = await openWithRetag(
+      [
+        { tag: "npc", note_count: 2, pin_count: 0 },
+        { tag: "person", note_count: 5, pin_count: 0 },
+      ],
+      { note_count: 2, pin_count: 0, merged: true },
     );
+    await chooseFromMenu(dialog, "npc", /Merge into/);
+    const input = await waitFor(() => within(dialog).getByTestId("retag-input-npc"));
+    await fireEvent.input(input, { target: { value: "per" } });
 
-    await waitFor(() => {
-      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
-    });
-
-    vi.mocked(invoke).mockClear();
-    const confirmBtn = document.body.querySelector(
-      '[data-testid="retag-confirm-btn"]',
-    ) as HTMLElement;
-    await fireEvent.click(confirmBtn);
-
-    await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("retag_tag", {
-        fromTag: "npc",
-        toTag: null,
-      });
-    });
+    // Existing tags are offered; choosing one merges into it.
+    await fireEvent.click(
+      await waitFor(() => within(dialog).getByTestId("retag-suggestion-person")),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("retag_tag", { fromTag: "npc", toTag: "person" }),
+    );
+    await waitFor(() => expect(undo).toHaveBeenCalled());
+    expect(undo.mock.calls[0][0]).toBe("Merged “npc” into “person” on 2 notes");
+    undo.mockRestore();
   });
 
-  it("after successful retag the tag list refreshes", async () => {
-    let callCount = 0;
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
-      if (cmd === "get_tag_graph_styles") return {};
-      if (cmd === "retag_tag") return { note_count: 1, pin_count: 0 };
-      if (cmd === "get_tag_usage_counts") {
-        callCount++;
-        // First load returns 'npc'; after retag returns 'villain'
-        if (callCount === 1) return [{ tag: "npc", note_count: 1, pin_count: 0 }];
-        return [{ tag: "villain", note_count: 1, pin_count: 0 }];
-      }
-      return null;
-    });
-    render(AppShell);
-    dialogs.tagManagerOpen = true;
+  it("refuses a name tags can't have, keeping what was typed", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 1, pin_count: 0 }]);
+    await chooseFromMenu(dialog, "npc", /Rename/);
+    const input = (await waitFor(() =>
+      within(dialog).getByTestId("retag-input-npc"),
+    )) as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: "bad tag!" } });
 
-    const dialog = await waitFor(() => {
-      const el = document.body.querySelector('[data-testid="tag-manager-dialog"]');
-      if (!el) throw new Error("dialog not found");
-      return el as HTMLElement;
-    });
-    // Trigger delete on npc
-    const menuBtn = await waitFor(() => {
-      const el = dialog.querySelector('[data-testid="tag-menu-npc"]') as HTMLElement;
-      if (!el) throw new Error("menu button not found");
-      return el;
-    });
-    await fireEvent.click(menuBtn);
-    await fireEvent.click(
-      dialog.querySelector('[data-testid="tag-menu-delete-npc"]') as HTMLElement,
-    );
-    await waitFor(() => {
-      expect(document.body.querySelector('[data-testid="retag-confirm-dialog"]')).toBeTruthy();
-    });
-    await fireEvent.click(
-      document.body.querySelector('[data-testid="retag-confirm-btn"]') as HTMLElement,
-    );
+    expect(within(dialog).getByText(/letters, numbers, - _ and \/ only/)).toBeTruthy();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(within(dialog).getByTestId("retag-apply-npc")).toBeDisabled();
+    await fireEvent.submit(input.form!);
+    expect(calls("retag_tag")).toHaveLength(0);
+    expect(input.value).toBe("bad tag!");
+  });
 
-    // After retag, list should show 'villain' instead of 'npc'
-    await waitFor(() => {
-      expect(dialog.querySelector('[data-testid="tag-menu-villain"]')).toBeTruthy();
-    });
+  it("Escape closes the name field, not the dialog", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 1, pin_count: 0 }]);
+    await chooseFromMenu(dialog, "npc", /Rename/);
+    const input = await waitFor(() => within(dialog).getByTestId("retag-input-npc"));
+    await fireEvent.keyDown(input, { key: "Escape" });
+    await waitFor(() => expect(within(dialog).queryByTestId("retag-input-npc")).toBeNull());
+    expect(dialogs.tagManagerOpen).toBe(true);
+  });
+});
+
+describe("tag manager — delete", () => {
+  it("asks inside the row, naming what the tag is on", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    await chooseFromMenu(dialog, "npc", /Delete/);
+    const group = await waitFor(() =>
+      within(dialog).getByRole("group", { name: "Confirm deleting npc" }),
+    );
+    expect(group.textContent).toContain("Remove “npc” from 3 notes and 1 pin?");
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it("deletes with retag_tag(to: null) once confirmed", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    await chooseFromMenu(dialog, "npc", /Delete/);
+    await fireEvent.click(
+      await waitFor(() => within(dialog).getByTestId("tag-delete-confirm-npc")),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("retag_tag", { fromTag: "npc", toTag: null }),
+    );
+  });
+
+  it("Cancel leaves the tag alone", async () => {
+    const dialog = await openWithRetag([{ tag: "npc", note_count: 3, pin_count: 1 }]);
+    await chooseFromMenu(dialog, "npc", /Delete/);
+    await fireEvent.click(await waitFor(() => within(dialog).getByTestId("tag-delete-cancel-npc")));
+    await waitFor(() =>
+      expect(within(dialog).queryByRole("group", { name: "Confirm deleting npc" })).toBeNull(),
+    );
+    expect(calls("retag_tag")).toHaveLength(0);
+  });
+
+  it("refreshes the list after a retag", async () => {
+    const entries = [{ tag: "npc", note_count: 3, pin_count: 1 }];
+    const dialog = await openWithRetag(entries);
+    await chooseFromMenu(dialog, "npc", /Delete/);
+    entries.length = 0;
+    await fireEvent.click(
+      await waitFor(() => within(dialog).getByTestId("tag-delete-confirm-npc")),
+    );
+    await waitFor(() => within(dialog).getByTestId("tag-manager-empty"));
   });
 });

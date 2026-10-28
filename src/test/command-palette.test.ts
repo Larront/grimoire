@@ -486,7 +486,7 @@ describe("command palette – excerpt and match chip", () => {
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
     // The matched word should be inside a styled span
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
   });
@@ -577,11 +577,11 @@ describe("command palette – excerpt and match chip", () => {
 
     const excerpt = document.body.querySelector('[data-testid="note-excerpt"]');
     expect(excerpt).toBeTruthy();
-    const matchSpan = excerpt?.querySelector("span.text-primary");
+    const matchSpan = excerpt?.querySelector("span.font-semibold");
     expect(matchSpan).toBeTruthy();
     expect(matchSpan?.textContent).toBe("harbor");
     // tag:npc must never appear as a highlighted span
-    const allSpans = excerpt?.querySelectorAll("span.text-primary") ?? [];
+    const allSpans = excerpt?.querySelectorAll("span.font-semibold") ?? [];
     const spanTexts = Array.from(allSpans).map((s) => s.textContent);
     expect(spanTexts.every((t) => t !== "tag:npc")).toBe(true);
   });
@@ -1151,6 +1151,8 @@ describe("command palette – Commands group wiring", () => {
       '[data-testid="cmd-capture-quick-note"]',
     ) as HTMLElement;
     expect(item).toBeTruthy();
+    // ...and it teaches the key, which the palette is where a GM looks for.
+    expect(item.querySelector('[data-slot="command-shortcut"]')?.textContent).toBe("Ctrl+Shift+N");
     await fireEvent.click(item);
     await flush();
 
@@ -1198,7 +1200,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Switch ledger closes palette and calls ledger.openLedger", async () => {
+  it("Open a ledger folder… closes palette and calls ledger.openLedger", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -1242,9 +1244,68 @@ describe("command palette – Commands group wiring", () => {
 
 describe("command palette – Create note from template", () => {
   const fakeTemplates = [
-    { display_name: "NPC", path: ".grimoire/templates/NPC.md" },
-    { display_name: "Location", path: ".grimoire/templates/Location.md" },
+    { display_name: "NPC", path: ".grimoire/templates/NPC.md", tags: ["npc"] },
+    { display_name: "Location", path: ".grimoire/templates/Location.md", tags: ["location"] },
   ];
+
+  async function openPicker() {
+    render(AppSearch);
+    await openPalette();
+    const input = getSearchInput();
+    input.value = "template";
+    await fireEvent.input(input);
+    await flush();
+    const item = document.body.querySelector(
+      '[data-testid="cmd-create-note-from-template"]',
+    ) as HTMLElement;
+    await fireEvent.click(item);
+    await flush();
+    // The picker asks for a template rather than a command.
+    return document.body.querySelector(
+      'input[placeholder="Choose a template…"]',
+    ) as HTMLInputElement;
+  }
+
+  const resultNames = () =>
+    [...document.body.querySelectorAll('[data-testid="cmd-template-result"]')].map((r) =>
+      r.querySelector("span")?.textContent?.trim(),
+    );
+
+  // It used to show every template whatever was typed (2026-10 design review).
+  it("narrows the picker by what is typed, by name or by tag", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    const input = await openPicker();
+
+    input.value = "loc";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual(["Location"]);
+
+    input.value = "npc";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual(["NPC"]);
+  });
+
+  it("says so when nothing matches, and still offers the way to the templates", async () => {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "list_templates") return Promise.resolve(fakeTemplates);
+      return Promise.resolve(null);
+    });
+    const input = await openPicker();
+
+    input.value = "dragon";
+    await fireEvent.input(input);
+    await flush();
+    expect(resultNames()).toEqual([]);
+    expect(document.body.querySelector('[data-testid="cmd-template-none"]')?.textContent).toContain(
+      "dragon",
+    );
+    expect(document.body.querySelector('[data-testid="cmd-template-manage"]')).toBeTruthy();
+  });
 
   afterEach(() => {
     searchPalette.open = false;
@@ -1328,9 +1389,9 @@ describe("command palette – Create note from template", () => {
     await fireEvent.click(cmdItem);
     await flush();
 
-    const templateItem = document.body.querySelector(
-      '[data-testid="cmd-template-result"]',
-    ) as HTMLElement;
+    const templateItem = [
+      ...document.body.querySelectorAll<HTMLElement>('[data-testid="cmd-template-result"]'),
+    ].find((r) => r.textContent?.includes("NPC"))!;
     await fireEvent.click(templateItem);
     await flush();
 
@@ -2176,11 +2237,6 @@ describe("command palette – Save note as template", () => {
 // ── Create new template (issue #48) ──────────────────────────────────────────
 
 describe("command palette – Create new template", () => {
-  const fakeEntry = {
-    display_name: "Untitled",
-    path: ".grimoire/templates/Untitled.md",
-  };
-
   afterEach(() => {
     searchPalette.open = false;
   });
@@ -2195,31 +2251,14 @@ describe("command palette – Create new template", () => {
     expect(document.body.querySelector('[data-testid="cmd-create-template"]')).toBeTruthy();
   });
 
-  it("selecting it invokes create_template and closes palette", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "create_template") return Promise.resolve(fakeEntry);
-      return Promise.resolve(null);
-    });
-    render(AppSearch);
-    await openPalette();
-    const input = getSearchInput();
-    input.value = "template";
-    await fireEvent.input(input);
-    await flush();
-
-    const item = document.body.querySelector('[data-testid="cmd-create-template"]') as HTMLElement;
-    await fireEvent.click(item);
-    await flush();
-
-    expect(invoke).toHaveBeenCalledWith("create_template");
-    expect(searchPalette.open).toBe(false);
+  afterEach(() => {
+    dialogs.templatesOpen = false;
+    dialogs.templatesNaming = false;
   });
 
-  it("selecting it opens a template tab with badge 'Template'", async () => {
-    vi.mocked(invoke).mockImplementation((cmd: string) => {
-      if (cmd === "create_template") return Promise.resolve(fakeEntry);
-      return Promise.resolve(null);
-    });
+  // A template is named before it exists (2026-10 design review): the command opens
+  // the Templates dialog at its name field, and no "Untitled" file is made.
+  it("selecting it opens the Templates dialog ready for a name, and makes nothing yet", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();
@@ -2231,10 +2270,10 @@ describe("command palette – Create new template", () => {
     await fireEvent.click(item);
     await flush();
 
-    const activeTab = tabs.activeTab;
-    expect(activeTab?.type).toBe("template");
-    expect(activeTab?.badge).toBe("Template");
-    expect((activeTab as any)?.templatePath).toBe(fakeEntry.path);
+    expect(searchPalette.open).toBe(false);
+    expect(dialogs.templatesOpen).toBe(true);
+    expect(dialogs.templatesNaming).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith("create_template", expect.anything());
   });
 });
 
@@ -2346,5 +2385,59 @@ describe("command palette – Open Quick Notes", () => {
       (t) => t.type === "quickNotes",
     );
     expect(panes.length).toBe(1);
+  });
+});
+
+// A search that finds nothing offers to make the note it was looking for (2026-10
+// design review); it was a dead end, "No results found.".
+describe("command palette – a search that finds nothing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    searchPalette.open = false;
+    vi.useRealTimers();
+  });
+
+  const offer = () =>
+    document.body.querySelector('[data-testid="cmd-create-named-note"]') as HTMLElement | null;
+
+  it("offers to create a note with that name, and creating it opens it", async () => {
+    searchReturns(NO_RESULTS);
+    await searchFor("zzqx dragon");
+
+    expect(offer()?.textContent).toContain("Create note “zzqx dragon”");
+
+    vi.mocked(invoke).mockImplementation((cmd: string) =>
+      Promise.resolve(
+        cmd === "create_note"
+          ? { ...testNote, id: 9, title: "zzqx dragon", path: "zzqx dragon.md" }
+          : cmd === "get_notes"
+            ? []
+            : null,
+      ),
+    );
+    await fireEvent.click(offer()!);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("create_note", {
+      noteTitle: "zzqx dragon",
+      notePath: "zzqx dragon.md",
+      noteParentPath: null,
+    });
+  });
+
+  it("offers nothing while there are results, or before the search is back", async () => {
+    searchReturns({ notes: [RESULT_KINDS[0].hit(1)], maps: [], scenes: [] });
+    await searchFor("note");
+    expect(offer()).toBeNull();
+
+    cleanup();
+    searchReturns(NO_RESULTS);
+    render(AppSearch);
+    await openPalette();
+    await typeQuery("zzqx dragon");
+    // The debounce hasn't fired: the search for this text isn't back yet.
+    expect(offer()).toBeNull();
   });
 });

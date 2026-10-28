@@ -1,22 +1,20 @@
 ---
 tags: [lore]
 ---
-# The War of Embers
-
-A coalition war fought three centuries ago against [[The Order of Embers]] — the arcane order that built and held the [[Locations/The Ember Keep.md]].
+The war three city-states fought, three centuries ago, against [[The Order of Embers]]: the arcane order that built [[Locations/The Ember Keep.md]] and held it.
 
 ## Background
 
-The Order had accumulated too much knowledge and too little accountability. When three city-states agreed the library was a threat, they were not entirely wrong — but none of them have since explained what they were afraid of specifically.
+The Order had gathered a great deal of knowledge and answered to no one for it. When the three cities agreed that its library was a danger, they were not entirely wrong. None of them ever said what, exactly, they were afraid of.
 
 ## The Siege
 
-The keep's upper towers fell after a seven-year siege. The Order sealed the library behind a puzzle lock before the final breach. Some accounts say the Order's survivors escaped into the [[Lore/The Ashfen Marshes.md]]. Others say they did not escape — they became part of the marsh itself.
+The siege lasted seven years before the upper towers fell. In its last days the Order sealed the library behind a puzzle lock. Some accounts say the Order's survivors escaped into [[Lore/The Ashfen Marshes.md]]. Others say they never escaped at all, and that the marsh took them in and kept them.
 
 ## Aftermath
 
-The coalition appointed no administrator for the ruins. Within a generation, the keep was left to the marsh and to rumour. The puzzle lock has never been opened.
+Having won, the coalition appointed no one to hold the ruins. Within a generation the keep belonged to the marsh and to rumour. The puzzle lock has never been opened.
 
 ## Notes
 
-[[Characters/Mira Ashvale.md]]'s ancestor was reportedly inside the keep during the sealing and knew the lock's answer. [[Characters/Aldric Vane.md]]'s family served the coalition. They have never agreed on what the war was actually for.
+[[Characters/Mira Ashvale.md]]'s ancestor is said to have been inside the keep when the library was sealed, and to have known the answer to the lock. [[Characters/Aldric Vane.md]]'s family fought for the coalition. Mira and Aldric have never agreed on what the war was for.

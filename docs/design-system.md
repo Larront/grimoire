@@ -141,7 +141,7 @@ Hover states are achieved with a transparent overlay on whichever background sur
 
 | Variable    | Dark      | Light     |
 | ----------- | --------- | --------- |
-| `--error`   | `#d4645a` | `#a02020` |
+| `--error`   | `#dc6e64` | `#a02020` |
 | `--success` | `#6ab187` | `#2e6e4a` |
 
 Both are muted and warm-adjacent — they read as semantic signals without clashing against the palette.
@@ -445,14 +445,15 @@ Never use a modal for a destructive confirmation — it is disproportionate and 
 
 ### Required Keyboard Shortcuts
 
-| Action               | Mac           | Windows        |
-| -------------------- | ------------- | -------------- |
-| Open Command Palette | `Cmd+K`       | `Ctrl+K`       |
-| Close tab            | `Cmd+W`       | `Ctrl+W`       |
-| Toggle sidebar       | `Cmd+\`       | `Ctrl+\`       |
-| New note             | `Cmd+N`       | `Ctrl+N`       |
-| Capture a Quick Note | `Cmd+Shift+N` | `Ctrl+Shift+N` |
-| Save (notes)         | `Cmd+S`       | `Ctrl+S`       |
+| Action               | Mac               | Windows            |
+| -------------------- | ----------------- | ------------------ |
+| Open Command Palette | `Cmd+K`           | `Ctrl+K`           |
+| Close tab            | `Cmd+W`           | `Ctrl+W`           |
+| Toggle sidebar       | `Cmd+\`           | `Ctrl+\`           |
+| New note             | `Cmd+N`           | `Ctrl+N`           |
+| Capture a Quick Note | `Cmd+Shift+N`     | `Ctrl+Shift+N`     |
+| Pause/resume scene   | `Cmd+Shift+Space` | `Ctrl+Shift+Space` |
+| Save (notes)         | `Cmd+S`           | `Ctrl+S`           |
 
 All keyboard shortcuts must be documented in a Settings help section and discoverable via the Command Palette (typing "/" surfaces command list).
 

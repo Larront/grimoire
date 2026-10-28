@@ -29,18 +29,11 @@
   role="none"
 >
   {#if !activeTab || activeTab.type === "empty"}
-    {#if !notes.isLoading && notes.noteCount === 0}
-      <!-- Brand-new ledger: first-note home instead of the bare placeholder -->
-      <LedgerHome />
-    {:else}
-      <div class="flex flex-1 items-center justify-center text-muted-foreground">
-        <div class="text-center space-y-2">
-          <p class="text-sm font-medium">No tab open</p>
-          <p class="text-xs text-muted-foreground/60">
-            Open a note, map, or scene from the sidebar
-          </p>
-        </div>
-      </div>
+    <!-- The world's home, in every empty pane — not only while it has no notes; an
+         empty pane used to say "No tab open" and never show the world's name again. -->
+    <!-- Wait only for the first read; a later reload must not blink it away. -->
+    {#if !(notes.isLoading && notes.noteCount === 0)}
+      <LedgerHome {pane} />
     {/if}
   {:else if activeTab.type === "note"}
     {#key activeTab.id}
@@ -48,7 +41,7 @@
     {/key}
   {:else if activeTab.type === "map"}
     {#key activeTab.id}
-      <MapPane mapId={activeTab.id} {pane} />
+      <MapPane mapId={activeTab.id} rename={activeTab.rename} {pane} tabIndex={activeIndex} />
     {/key}
   {:else if activeTab.type === "scenes"}
     <ScenesDashboard />
@@ -58,7 +51,13 @@
     {/key}
   {:else if activeTab.type === "template" && activeTab.templatePath}
     {#key activeTab.templatePath}
-      <TemplatePane templatePath={activeTab.templatePath} templateTitle={activeTab.title} />
+      <TemplatePane
+        templatePath={activeTab.templatePath}
+        templateTitle={activeTab.title}
+        fresh={activeTab.rename}
+        {pane}
+        tabIndex={activeIndex}
+      />
     {/key}
   {:else if activeTab.type === "pdf" && activeTab.pdfPath}
     {#key activeTab.pdfPath}

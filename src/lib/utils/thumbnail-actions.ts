@@ -15,7 +15,7 @@ async function deleteOldThumbnailFile(path: string | null): Promise<void> {
 
 export async function changeThumbnail(sceneId: number): Promise<void> {
   const picked = await open({
-    title: "Choose Thumbnail Image",
+    title: "Choose a thumbnail image",
     filters: [{ name: "Image", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }],
   });
   if (!picked || typeof picked !== "string") return;

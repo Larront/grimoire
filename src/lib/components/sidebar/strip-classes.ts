@@ -25,3 +25,12 @@ export const ROW_ICON = "size-4 group-data-[collapsible=icon]:size-(--strip-icon
 /** Hidden on the 48px strip: a row's label, or a surface that cannot narrow to
  *  it. One name, because "not on the strip" is one decision. */
 export const EXPANDED_ONLY = "group-data-[collapsible=icon]:hidden";
+
+/** Every rail button alike: muted at rest, full on hover, the current one marked by
+ *  `data-active` (Crimson Tint, the active row's treatment). */
+export const RAIL_BUTTON =
+  "text-muted-foreground hover:text-sidebar-foreground data-active:text-sidebar-accent-foreground";
+
+/** A footer row in a short window (the `short` variant, app.css): a bare icon beside
+ *  the ledger's name, its label gone, a square the size of the ledger menu's row. */
+export const SHORT_ICON_BUTTON = "short:size-8 short:justify-center short:p-0";

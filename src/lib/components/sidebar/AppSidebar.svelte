@@ -4,7 +4,8 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { useSidebar } from "$lib/components/ui/sidebar/context.svelte.js";
   import { cn } from "$lib/utils";
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { shortcut } from "$lib/utils/keyboard";
   import { onMount, setContext, type ComponentProps } from "svelte";
   import { onLedgerEvents } from "$lib/ledger/events";
   import AppSearch from "../AppSearch.svelte";
@@ -14,22 +15,31 @@
     MapPinPlus,
     ChevronDown,
     Music2,
-    Inbox,
+    Plus,
+    NotebookPen,
     Network,
     Settings,
     Search,
     Files,
+    LayoutTemplate,
+    SquarePen,
+    FileUp,
   } from "@lucide/svelte";
-  import { Button, buttonVariants } from "../ui/button";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import { buttonVariants } from "../ui/button";
   import type { FileNode, Note, Map as LedgerMap } from "$lib/types/ledger";
-  import { ledger, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
+  import { ledger } from "$lib/stores/ledger.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { notes } from "$lib/stores/notes.svelte";
   import { maps } from "$lib/stores/maps.svelte";
   import { quickNotes } from "$lib/stores/quick-notes.svelte";
+  import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { toastExternalMoveLinks, toastSuccess, toastUnlinkedPins } from "$lib/toast";
-  import { slide } from "svelte/transition";
-  import { importPdfFromHandle, isPdfFile } from "$lib/pdf/import";
+  import { staleLinks } from "$lib/stores/stale-links.svelte";
+  import { linkRepairs } from "$lib/stores/link-repairs.svelte";
+  import Disclosure from "$lib/components/Disclosure.svelte";
+  import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
+  import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
   import {
     canDrop,
     dropIntoFolder,
@@ -38,17 +48,49 @@
     treeDrag,
   } from "$lib/stores/tree-move.svelte";
   import { treeExpansion } from "$lib/stores/tree-expansion.svelte";
+  import { treeRename, freeName } from "$lib/stores/tree-rename.svelte";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { shell } from "$lib/utils/shell-actions";
-  import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY } from "./strip-classes";
+  import {
+    STRIP_ICON,
+    ROW_ICON,
+    EXPANDED_ONLY,
+    RAIL_BUTTON,
+    SHORT_ICON_BUTTON,
+  } from "./strip-classes";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
   import SidebarScenes from "./SidebarScenes.svelte";
-  import SidebarTemplates from "./SidebarTemplates.svelte";
+  import RailScenes from "./RailScenes.svelte";
+  import { createUntitledNote } from "$lib/utils/note-actions";
+  import { scrollBehavior } from "$lib/motion";
 
   let { ref = $bindable(null), ...restProps }: ComponentProps<typeof Sidebar.Root> = $props();
 
   let tree = $state<FileNode | null>(null);
+  let filesOpen = $state(true);
+
+  // What the open tab is, as the rail says it: the icon standing for it is marked as
+  // the current one, as a row is in the expanded sidebar. The rail marked nothing,
+  // and drew some of its icons full-strength and some muted for no reason a GM could
+  // see (2026-10 design review).
+  const showing = $derived.by(() => {
+    const type = tabs.activeTab?.type;
+    if (type === "note" || type === "map" || type === "pdf" || type === "template") return "files";
+    if (type === "scene" || type === "scenes") return "scenes";
+    if (type === "graph") return "graph";
+    return null;
+  });
+
+  // The row holding the tree's one Tab stop may go — deleted, moved, another world
+  // opened — and with it every way into the tree by Tab. The first row takes it back.
+  $effect(() => {
+    const stop = treeRename.tabStop;
+    if (stop === null || !tree) return;
+    const has = (n: FileNode): boolean => n.path === stop || (n.children ?? []).some(has);
+    if (!tree.children.some(has)) treeRename.tabStop = null;
+  });
   let treeLoading = $state(false);
   let noteMap = $state(new Map<number, Note>());
 
@@ -67,7 +109,9 @@
   function reveal(sectionId: string) {
     sidebarState.setOpen(true);
     requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document
+        .getElementById(sectionId)
+        ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     });
   }
 
@@ -108,25 +152,14 @@
       // and unlinks every pin holding it (#224). The open-time repair reports
       // this through `open_ledger`'s result; mid-session there is no result to
       // ride on, so it arrives as its own event.
-      "pins:unlinked": (pins) => {
-        unlinkedPinsModal.pins = pins;
-        toastUnlinkedPins(pins.length, () => {
-          unlinkedPinsModal.open = true;
-        });
-      },
+      "pins:unlinked": (pins) => unlinkedPins.add(pins),
       // A targeted external move left other notes linking to the old path. Offer
-      // a non-destructive heal — never silent, never auto-dismissing (ADR-0014).
-      // The count is display-only; the command recomputes the real set on Update.
-      "note:external-move-links-stale": ({ from, to, count }) => {
-        const oldName = from.split("/").pop()?.replace(/\.md$/, "") ?? from;
-        toastExternalMoveLinks(oldName, count, () => {
-          void api.applyBacklinkRewrite(from, to).then((n) => {
-            if (n > 0) {
-              toastSuccess(`${n} ${n === 1 ? "note" : "notes"} updated`);
-            }
-          });
-        });
-      },
+      // a non-destructive heal — never silent (ADR-0014): it waits in the world's
+      // "needs attention" place until the GM updates the links or leaves them.
+      "note:external-move-links-stale": ({ from, to, count }) => staleLinks.add(from, to, count),
+      // A bulk change brought notes to new places; links written as paths may
+      // point where they were. Listed, never healed unasked (ADR-0014).
+      "notes:arrived": () => void linkRepairs.check(),
     }),
   );
 
@@ -201,10 +234,26 @@
 
   async function handleNewMap(parentNode: FileNode | null = null) {
     try {
+      // In a folder, a map is its picture, so the picture is chosen first and saved
+      // there. The folder used to be ignored: the map was made with no picture and
+      // never appeared in the tree at all (2026-10 design review).
+      let picture: string | null = null;
+      if (parentNode) {
+        const picked = await open({
+          title: "Choose a map image",
+          filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+        });
+        if (!picked || typeof picked !== "string") return;
+        picture = picked;
+      }
       const newMap = await api.createMapEmpty("Untitled Map");
+      if (parentNode && picture) {
+        await api.assignMapImage(newMap.id, picture, parentNode.path);
+        treeExpansion.reveal(parentNode.path);
+      }
       await maps.load();
       refresh();
-      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map" });
+      tabs.openTab({ type: "map", id: newMap.id, title: "Untitled Map", rename: true });
     } catch (e) {
       console.error("create map failed:", e);
     }
@@ -229,10 +278,33 @@
     }
   }
 
+  async function handleNewScene() {
+    try {
+      const scene = await scenes.createScene("New Scene");
+      tabs.openTab({ type: "scene", id: scene.id, title: scene.name });
+    } catch (e) {
+      console.error("create scene failed:", e);
+    }
+  }
+
+  async function importPdfToRoot() {
+    if ((await pickPdfsInto("")) > 0) await refresh();
+  }
+
   async function handleNewFolder(parentNode: FileNode | null) {
     try {
-      await api.createFolder(`${parentNode ? parentNode.path + "/New Folder" : "New Folder"}`);
+      // A free name, because making a folder that already exists does nothing: a
+      // second New folder used to leave the first one where it was and add nothing.
+      const siblings = (parentNode ?? tree)?.children ?? [];
+      const name = freeName(
+        "New folder",
+        siblings.map((n) => n.name),
+      );
+      const path = parentNode ? `${parentNode.path}/${name}` : name;
+      await api.createFolder(path);
       if (parentNode) treeExpansion.reveal(parentNode.path);
+      // The row starts naming itself once the rebuilt tree draws it.
+      treeRename.path = path;
       refresh();
     } catch (e) {
       console.error("create folder failed:", e);
@@ -241,18 +313,32 @@
 </script>
 
 <!--
-  One entry on the collapsed strip: its own group, so it is spaced exactly as
-  Graph and Quick Notes are, and its own button. Rendered only when collapsed —
+  One entry on the collapsed strip: its own group, so every entry is spaced
+  alike, and its own button. Rendered only when collapsed —
   these stand in for surfaces the expanded sidebar draws in full.
 -->
-{#snippet strip(testid: string, label: string, Icon: typeof Search, onclick: () => void)}
+{#snippet strip(
+  testid: string,
+  label: string,
+  Icon: typeof Search,
+  onclick: () => void,
+  active = false,
+)}
   <Sidebar.Group class="hidden group-data-[collapsible=icon]:block">
     <Sidebar.GroupContent>
       <Sidebar.Menu>
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton>
+          <Sidebar.MenuButton isActive={active}>
             {#snippet child({ props })}
-              <button type="button" {...props} data-testid={testid} aria-label={label} {onclick}>
+              <button
+                type="button"
+                {...props}
+                class={cn(String(props.class ?? ""), RAIL_BUTTON)}
+                data-testid={testid}
+                aria-label={label}
+                aria-current={active ? "true" : undefined}
+                {onclick}
+              >
                 <Icon class={STRIP_ICON} strokeWidth={1.5} />
               </button>
             {/snippet}
@@ -275,7 +361,9 @@
   Files and Scenes — leave an icon behind.
 -->
 <Sidebar.Root collapsible="icon" bind:ref {...restProps}>
-  <Sidebar.Header>
+  <!-- In a short window the wordmark stays, smaller: the owner kept it over the room
+       hiding it would have given the tree (2026-10 design review). -->
+  <Sidebar.Header class="short:py-1">
     <!-- The wordmark is the one element whose *content* changes rather than its
          width, so it is the one that needs a beat: everything else rides the
          library's width transition. Nothing replaces it collapsed — a 48px
@@ -283,15 +371,20 @@
          button, is a decoy, and the toggle it used to carry lives in the tab bar
          and on Ctrl/Cmd+\. -->
     <div
-      class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-200 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
+      class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-(--motion-base) group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
     >
-      <span class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
+      <span
+        class="font-heading text-3xl mt-3 tracking-tight text-primary select-none short:mt-0 short:text-xl"
         >Grimoire</span
       >
     </div>
   </Sidebar.Header>
 
-  <Sidebar.Content>
+  <!-- A short window tightens the space between sections, the one thing above the tree
+       that is spacing rather than something the GM reaches for (2026-10 design review). -->
+  <Sidebar.Content
+    class="short:[&_[data-sidebar=group]]:py-0.5 short:[&_[data-sidebar=group-label]]:h-7"
+  >
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <!-- Search + quick-actions keep the default sidebar width and center as
@@ -304,65 +397,66 @@
             <AppSearch />
           </div>
           <!-- Creating is an expanded-sidebar act. `Ctrl/Cmd+N` (#227) covers the
-               common case from anywhere, and four more icons would be the least
-               session-critical controls doubling the strip's weight. -->
-          <div
-            class="flex items-center justify-between mx-3 mt-1.5 px-1.5 py-1 rounded-lg bg-muted/50 {EXPANDED_ONLY}"
-          >
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
+               common case from anywhere. ONE labelled menu rather than four bare
+               icons: the icons were unlabelled behind a 600ms tooltip, sat at the
+               weight of the session-critical rows below them, and the New Scene one
+               had no handler at all. A word a GM can read beats four glyphs to
+               decode, and the four acts are still one click and a choice away. -->
+          <div class="mx-3 mt-1.5 {EXPANDED_ONLY}">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                data-testid="sidebar-new"
                 class="{buttonVariants({
                   variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Note"
-                onclick={() => handleNewNote(null)}
+                  size: 'sm',
+                })} w-full justify-start gap-2 px-2 text-(length:--font-ui) text-foreground-muted hover:text-foreground"
               >
-                <FilePlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Note</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Folder"
-                onclick={() => handleNewFolder(null)}
-              >
-                <FolderPlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Folder</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Map"
-                onclick={() => handleNewMap(null)}
-              >
-                <MapPinPlus strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Map</Tooltip.Content>
-            </Tooltip.Root>
-
-            <Tooltip.Root delayDuration={600}>
-              <Tooltip.Trigger
-                class="{buttonVariants({
-                  variant: 'ghost',
-                  size: 'icon-sm',
-                })} text-primary/70 hover:text-primary"
-                aria-label="New Scene"
-              >
-                <Music2 strokeWidth={1.5} />
-              </Tooltip.Trigger>
-              <Tooltip.Content side="bottom">New Scene</Tooltip.Content>
-            </Tooltip.Root>
+                <Plus class="size-4" strokeWidth={1.75} />
+                New
+                <ChevronDown class="ms-auto size-3.5 opacity-60" />
+              </DropdownMenu.Trigger>
+              <!-- Note and Note from template go beside the open note, as Ctrl+N does
+                   (see `newNoteFolder`). The template items are the sidebar's only
+                   templates: the footer list they replace pushed Files out of sight
+                   when opened (2026-10 design review). -->
+              <DropdownMenu.Content align="start" class="w-(--bits-dropdown-menu-anchor-width)">
+                <DropdownMenu.Item
+                  onSelect={() =>
+                    void createUntitledNote().catch((e) => console.error("create note failed:", e))}
+                >
+                  <FilePlus strokeWidth={1.5} />
+                  Note
+                  <DropdownMenu.Shortcut>{shortcut(["N"])}</DropdownMenu.Shortcut>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  data-testid="sidebar-new-from-template"
+                  onSelect={shell.openTemplatePicker}
+                >
+                  <LayoutTemplate strokeWidth={1.5} />
+                  Note from template…
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => handleNewFolder(null)}>
+                  <FolderPlus strokeWidth={1.5} />
+                  Folder
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => handleNewMap(null)}>
+                  <MapPinPlus strokeWidth={1.5} />
+                  Map
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={handleNewScene}>
+                  <Music2 strokeWidth={1.5} />
+                  Scene
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item
+                  data-testid="sidebar-manage-templates"
+                  onSelect={shell.openTemplates}
+                >
+                  <SquarePen strokeWidth={1.5} />
+                  Templates…
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
           </div>
         </div>
       </Sidebar.GroupContent>
@@ -383,125 +477,22 @@
       to the All Scenes tab, which is still a row away once expanded.
     -->
     {@render strip("sidebar-search-icon", "Search", Search, shell.openSearch)}
-    {@render strip("sidebar-files-standin", "Files", Files, () => reveal("sidebar-files-section"))}
-    {@render strip("sidebar-scenes-standin", "Scenes", Music2, () =>
-      reveal("sidebar-scenes-section"),
+    {@render strip(
+      "sidebar-files-standin",
+      "Files",
+      Files,
+      () => reveal("sidebar-files-section"),
+      showing === "files",
     )}
+    <!-- Scenes is its own component: while a scene plays it carries the playing bars
+         and, under it, that scene's pause — the mini player cannot be 48px wide. -->
+    <RailScenes onReveal={() => reveal("sidebar-scenes-section")} active={showing === "scenes"} />
 
-    <!-- Files section -->
-    <div id="sidebar-files-section" class={EXPANDED_ONLY}>
-      <Collapsible.Root open class="group/collapsible">
-        <Sidebar.Group>
-          <Sidebar.GroupLabel>
-            {#snippet child({ props })}
-              <Collapsible.Trigger {...props}>
-                Files
-                <ChevronDown
-                  class="ms-auto transition-transform group-data-[state=open]/collapsible:rotate-180"
-                />
-              </Collapsible.Trigger>
-            {/snippet}
-          </Sidebar.GroupLabel>
-          <Collapsible.Content forceMount>
-            {#snippet child({ props, open })}
-              {#if open}
-                <div {...props} transition:slide>
-                  <Sidebar.GroupContent>
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <div
-                      ondragover={handleRootDragOver}
-                      ondragleave={() => (isRootDropTarget = false)}
-                      ondrop={handleRootDrop}
-                      class="rounded-md {isRootDropTarget ? 'ring-1 ring-primary/40' : ''}"
-                    >
-                      {#if treeLoading && !tree}
-                        <div class="space-y-1 px-2">
-                          <Sidebar.MenuSkeleton showIcon />
-                          <Sidebar.MenuSkeleton showIcon />
-                          <Sidebar.MenuSkeleton showIcon />
-                        </div>
-                      {:else if tree && tree.children.length > 0}
-                        <Sidebar.Menu>
-                          {#each tree.children as treeNode (treeNode.path)}
-                            <FileTree
-                              node={treeNode}
-                              {noteMap}
-                              {refresh}
-                              {handleNewNote}
-                              {handleNewFolder}
-                              {handleNewMap}
-                            />
-                          {/each}
-                        </Sidebar.Menu>
-                      {:else if tree}
-                        <div class="flex flex-col items-center gap-3 px-4 py-6 text-center">
-                          <div
-                            class="flex size-10 items-center justify-center rounded-lg bg-primary/10"
-                          >
-                            <FilePlus class="size-5 text-primary" strokeWidth={1.5} />
-                          </div>
-                          <div class="space-y-1">
-                            <p class="text-(--font-body) font-medium">No notes yet</p>
-                            <p class="text-(--font-ui) text-muted-foreground">
-                              Create your first note to start building your world.
-                            </p>
-                          </div>
-                          <Button variant="outline" size="sm" onclick={() => handleNewNote(null)}>
-                            <FilePlus strokeWidth={1.5} />
-                            New Note
-                          </Button>
-                        </div>
-                      {/if}
-                    </div>
-                  </Sidebar.GroupContent>
-                </div>
-              {/if}
-            {/snippet}
-          </Collapsible.Content>
-        </Sidebar.Group>
-      </Collapsible.Root>
-    </div>
-    <SidebarScenes />
-
-    <!-- Graph sits under the Scenes group rather than inside it (#235). It opens
-         a tab as those rows do, but it is not a scene and does not belong to
-         their list — a peer of the groups, like Quick Notes below it. -->
-    <Sidebar.Group>
-      <Sidebar.GroupContent>
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton>
-              {#snippet child({ props })}
-                <button
-                  type="button"
-                  {...props}
-                  data-testid="sidebar-graph"
-                  aria-label="Graph"
-                  onclick={shell.openGraph}
-                >
-                  <Network class={ROW_ICON} strokeWidth={1.5} />
-                  <span class={EXPANDED_ONLY}>Graph</span>
-                </button>
-              {/snippet}
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
-
-    <!-- Quick Notes: one button, and deliberately no list (#233). The pane and
-         the dialog are already the two surfaces a Quick Note has; a third list
-         here would want its own edit and delete affordances, or be a tease
-         without them. The badge is absent — never a `0` — when the pen is empty.
-
-         Expanded only, unlike Graph and Settings beside it. The strip is 48px
-         and the count has to be legible on it, which means a pill small enough
-         to clear a 20px glyph inside a 32px button — about 14px, carrying two
-         digits. That is a number a GM squints at, so the honest version of it is
-         no number at all: `Ctrl/Cmd+Shift+N` still catches a thought from
-         anywhere, so nothing is unreachable while collapsed, only unlisted —
-         which is what Templates already accepts. Diverges from #226's collapsed
-         order and its "legible collapsed and expanded" criterion, on purpose. -->
+    <!-- Quick Notes directly under search: the inbox a GM empties between
+         sessions, with a count worth seeing at a glance. Expanded-only — see #233
+         for why its count can't be on the strip. Graph used to share this group,
+         but it is an occasional look across the world rather than a place a GM
+         returns to, so it sits subdued in the footer beside Settings. -->
     <Sidebar.Group class={EXPANDED_ONLY}>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
@@ -515,8 +506,8 @@
                   aria-label="Quick Notes"
                   onclick={shell.openQuickNotes}
                 >
-                  <Inbox class="size-4" strokeWidth={1.5} />
-                  <span class={EXPANDED_ONLY}>Quick Notes</span>
+                  <NotebookPen class="size-4" strokeWidth={1.5} />
+                  <span>Quick Notes</span>
                 </button>
               {/snippet}
             </Sidebar.MenuButton>
@@ -529,47 +520,190 @@
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
+
+    <!-- Scenes before Files: switching the room's sound is the live-session act, so it
+         sits above the tree that grows longest. -->
+    <SidebarScenes />
+
+    <!-- Files section -->
+    <!-- In a short window the tree scrolls in place below its label, with room for three
+         rows whatever sits above it; the sections above stay put while it scrolls
+         (2026-10 design review). At other heights the whole sidebar scrolls, as before. -->
+    <div
+      id="sidebar-files-section"
+      class="{EXPANDED_ONLY} short:flex short:min-h-[calc(var(--row-h)*3+1.25rem)] short:flex-1 short:flex-col"
+    >
+      <Collapsible.Root
+        bind:open={filesOpen}
+        class="group/collapsible short:flex short:min-h-0 short:flex-1 short:flex-col"
+      >
+        <Sidebar.Group class="short:min-h-0 short:flex-1">
+          <Sidebar.GroupLabel>
+            {#snippet child({ props })}
+              <Collapsible.Trigger {...props}>
+                Files
+                <DisclosureChevron open={filesOpen} class="ms-auto" />
+              </Collapsible.Trigger>
+            {/snippet}
+          </Sidebar.GroupLabel>
+          <Collapsible.Content forceMount>
+            {#snippet child({ props, open })}
+              <div
+                {...props}
+                data-pane-scroll
+                class={cn(String(props.class ?? ""), "short:min-h-0 short:overflow-y-auto")}
+              >
+                <Disclosure {open}>
+                  <Sidebar.GroupContent>
+                    <!-- The world's root, as a folder's row is that folder: its own
+                         menu for making things there, and room under the last row to
+                         right-click or drop on. A right-click there used to fall through
+                         to the webview's own menu (2026-10 design review). -->
+                    <ContextMenu.Root>
+                      <ContextMenu.Trigger>
+                        {#snippet child({ props })}
+                          <!-- svelte-ignore a11y_no_static_element_interactions -->
+                          <div
+                            {...props}
+                            data-testid="files-root"
+                            ondragover={handleRootDragOver}
+                            ondragleave={() => (isRootDropTarget = false)}
+                            ondrop={handleRootDrop}
+                            class="rounded-md pb-6 {isRootDropTarget
+                              ? 'ring-1 ring-primary/40'
+                              : ''}"
+                          >
+                            {#if treeLoading && !tree}
+                              <div class="space-y-1 px-2">
+                                <Sidebar.MenuSkeleton showIcon />
+                                <Sidebar.MenuSkeleton showIcon />
+                                <Sidebar.MenuSkeleton showIcon />
+                              </div>
+                            {:else if tree && tree.children.length > 0}
+                              <Sidebar.Menu>
+                                {#each tree.children as treeNode, i (treeNode.path)}
+                                  <FileTree
+                                    node={treeNode}
+                                    first={i === 0}
+                                    {noteMap}
+                                    {refresh}
+                                    {handleNewNote}
+                                    {handleNewFolder}
+                                    {handleNewMap}
+                                  />
+                                {/each}
+                              </Sidebar.Menu>
+                            {:else if tree}
+                              <!-- One quiet line, not a second "make your first note" beside
+                             the world's home, which already offers it (as does New ▾
+                             above). It had a crimson tile and a button of its own
+                             (2026-10 design review). -->
+                              <p
+                                class="px-2 py-1.5 text-(length:--font-ui) text-muted-foreground"
+                                data-testid="files-empty"
+                              >
+                                Your notes will be listed here.
+                              </p>
+                            {/if}
+                          </div>
+                        {/snippet}
+                      </ContextMenu.Trigger>
+                      <ContextMenu.Content>
+                        <ContextMenu.Item onSelect={() => handleNewNote(null)}>
+                          <FilePlus />
+                          New note
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => shell.openTemplatePickerIn("")}>
+                          <LayoutTemplate />
+                          New note from template…
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => handleNewFolder(null)}>
+                          <FolderPlus />
+                          New folder
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={() => handleNewMap(null)}>
+                          <MapPinPlus />
+                          New map
+                        </ContextMenu.Item>
+                        <ContextMenu.Item onSelect={importPdfToRoot}>
+                          <FileUp />
+                          Import PDF…
+                        </ContextMenu.Item>
+                      </ContextMenu.Content>
+                    </ContextMenu.Root>
+                  </Sidebar.GroupContent>
+                </Disclosure>
+              </div>
+            {/snippet}
+          </Collapsible.Content>
+        </Sidebar.Group>
+      </Collapsible.Root>
+    </div>
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <!-- Templates keeps its own hiding rule; see `SidebarTemplates`. The mini
-         player and the ledger selector are both rows of text and controls with
-         nothing to narrow to, so they go when the strip does. -->
-    <SidebarTemplates />
+    <!-- The mini player and the ledger selector are both rows of text and controls
+         with nothing to narrow to, so they go when the strip does. -->
     <div class={EXPANDED_ONLY}>
       <MiniPlayer />
-      <LedgerSelector />
     </div>
-    <!-- Settings, subdued, at the foot of the sidebar as it is at the foot of the
-         rail (#235). A dialog opener rather than a place, so it is the last thing
-         here rather than a row among the groups. -->
-    <Sidebar.Menu>
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton>
-          {#snippet child({ props })}
-            <!-- `class` merged into the button's own rather than set beside it:
-                 an attribute after `{...props}` replaces what the spread put
-                 there, which cost this button every `MenuButton` style it has —
-                 including the `overflow-hidden` that keeps a label out of a 48px
-                 square. The label is hidden outright now regardless. -->
-            <button
-              type="button"
-              {...props}
-              data-testid="sidebar-settings"
-              aria-label="Settings"
-              class={cn(
-                String(props.class ?? ""),
-                "text-sidebar-foreground/60 hover:text-sidebar-foreground",
-              )}
-              onclick={shell.openSettings}
-            >
-              <Settings class={ROW_ICON} strokeWidth={1.5} />
-              <span class={EXPANDED_ONLY}>Settings</span>
-            </button>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
+    <!-- In a short window the world's name, Graph and Settings share one row, the two
+         as bare icons: three rows were a third of a 560px window (2026-10 design
+         review). -->
+    <div class="flex flex-col gap-2 short:flex-row short:items-center short:gap-1">
+      <div class="{EXPANDED_ONLY} short:min-w-0 short:flex-1">
+        <LedgerSelector />
+      </div>
+      <!-- Graph and Settings, subdued, at the foot of the sidebar as Settings is at
+         the foot of the rail (#235). Neither is reached for mid-session: Graph is
+         an occasional overview (also in the command palette), Settings a dialog
+         opener rather than a place, so they are the last things here rather than
+         rows among the groups. -->
+      <Sidebar.Menu class="short:w-auto short:flex-row short:gap-0.5">
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton isActive={showing === "graph"}>
+            {#snippet child({ props })}
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-graph"
+                aria-label="Graph"
+                title="Graph"
+                aria-current={showing === "graph" ? "true" : undefined}
+                class={cn(String(props.class ?? ""), RAIL_BUTTON, SHORT_ICON_BUTTON)}
+                onclick={shell.openGraph}
+              >
+                <Network class={ROW_ICON} strokeWidth={1.5} />
+                <span class="{EXPANDED_ONLY} short:hidden">Graph</span>
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <!-- `class` merged into the button's own rather than set beside it:
+                   an attribute after `{...props}` replaces what the spread put
+                   there, which cost this button every `MenuButton` style it has —
+                   including the `overflow-hidden` that keeps a label out of a 48px
+                   square. The label is hidden outright now regardless. -->
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-settings"
+                aria-label="Settings"
+                title="Settings"
+                class={cn(String(props.class ?? ""), RAIL_BUTTON, SHORT_ICON_BUTTON)}
+                onclick={shell.openSettings}
+              >
+                <Settings class={ROW_ICON} strokeWidth={1.5} />
+                <span class="{EXPANDED_ONLY} short:hidden">Settings</span>
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
+    </div>
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

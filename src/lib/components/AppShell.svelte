@@ -2,21 +2,30 @@
   import AppSidebar from "./sidebar/AppSidebar.svelte";
   import SettingsDialog from "./SettingsDialog.svelte";
   import TagManagerDialog from "./TagManagerDialog.svelte";
+  import TemplatesDialog from "./TemplatesDialog.svelte";
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
+  import LinkRepairDialog from "./LinkRepairDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import QuickNoteDialog from "./QuickNoteDialog.svelte";
+  import AdoptDialog from "./AdoptDialog.svelte";
   import TabBar from "./TabBar.svelte";
   import PaneContent from "./PaneContent.svelte";
-  import SampleBanner from "./SampleBanner.svelte";
   import SampleEffects from "./SampleEffects.svelte";
   import * as Sidebar from "./ui/sidebar";
   import { paneSurface } from "$lib/details/pane-detail-surface.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
-  import { dialogs } from "$lib/stores/overlay.svelte";
-  import { ledger, failedImportsModal, unlinkedPinsModal } from "$lib/stores/ledger.svelte";
-  import { createUntitledNoteAtRoot } from "$lib/utils/note-actions";
+  import { audioEngine } from "$lib/stores/audio-engine.svelte";
+  import { untrack } from "svelte";
+  import { dialogs, overlay } from "$lib/stores/overlay.svelte";
+  import { searchPalette } from "$lib/stores/search.svelte";
+  import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
+  import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+  import { linkRepairs } from "$lib/stores/link-repairs.svelte";
+  import { ledger } from "$lib/stores/ledger.svelte";
+  import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
+  import { focusPane } from "$lib/utils/pane-focus";
   import { readSidebarOpen, persistSidebarOpen } from "$lib/utils/sidebar-state";
   import PanelRightIcon from "@lucide/svelte/icons/panel-right";
   import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
@@ -35,12 +44,30 @@
   // settling into it (#226).
   let sidebarOpen = $state(readSidebarOpen());
 
+  // A shell dialog opening closes the sheet it may have been opened from. In a narrow
+  // window Settings, from the sidebar's sheet, opened under it, dimmed by the sheet's
+  // scrim (2026-10 design review). Only the dialogs mounted here, which outlive the
+  // sheet: one whose root is inside a sheet would close along with it.
+  $effect(() => {
+    const opening =
+      dialogs.settingsOpen ||
+      dialogs.tagManagerOpen ||
+      dialogs.templatesOpen ||
+      dialogs.quickNoteOpen ||
+      dialogs.adoptOpen ||
+      unreadableNotes.open ||
+      unlinkedPins.open ||
+      linkRepairs.open ||
+      searchPalette.open;
+    if (opening) untrack(() => overlay.dismiss());
+  });
+
   // The palette's _Create note_ path, unchanged (#227). The GM has been told by
   // the toast the write already raised; this is the shell, with nowhere of its
   // own to say it again.
   async function createNote() {
     try {
-      await createUntitledNoteAtRoot();
+      await createUntitledNote();
     } catch (e) {
       console.error("create_note failed:", e);
     }
@@ -52,7 +79,7 @@
     <button
       onclick={() => tabs.navigateBack(pane)}
       disabled={!tabs.canGoBack(pane)}
-      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
       aria-label="Go back"
     >
       <ArrowLeftIcon class="size-3.5" />
@@ -60,7 +87,7 @@
     <button
       onclick={() => tabs.navigateForward(pane)}
       disabled={!tabs.canGoForward(pane)}
-      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+      class="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
       aria-label="Go forward"
     >
       <ArrowRightIcon class="size-3.5" />
@@ -70,9 +97,51 @@
 
 <svelte:window
   onkeydown={(e) => {
+    // Pause or resume the playing scene from anywhere, typing included — no text field
+    // means anything by it. A keyboard's own play/pause key does the same while the
+    // window has focus.
+    if (
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === "Space") ||
+      e.key === "MediaPlayPause"
+    ) {
+      if (audioEngine.activeSceneId === null && audioEngine.loadingSceneId === null) return;
+      e.preventDefault();
+      void audioEngine.togglePauseScene();
+      return;
+    }
+    // Ctrl/Cmd+, — Settings, where every desktop app keeps it.
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === ",") {
+      e.preventDefault();
+      dialogs.settingsOpen = true;
+      return;
+    }
+    // Along the focused pane's tabs, as a browser's: Ctrl+Tab and Ctrl+Shift+Tab step
+    // (round from the end), Ctrl+1–8 go to that tab and Ctrl+9 to the last. There was no
+    // key to change tab at all (2026-10 design review).
+    if (e.ctrlKey && !e.altKey && e.key === "Tab") {
+      const pane = tabs.focusedPane;
+      const strip = pane === "left" ? tabs.left : tabs.right;
+      if (!strip || strip.tabs.length < 2) return;
+      e.preventDefault();
+      const n = strip.tabs.length;
+      tabs.activateTab(pane, (strip.activeIndex + (e.shiftKey ? n - 1 : 1)) % n);
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+      const pane = tabs.focusedPane;
+      const strip = pane === "left" ? tabs.left : tabs.right;
+      const at = e.key === "9" ? (strip?.tabs.length ?? 0) - 1 : Number(e.key) - 1;
+      if (!strip || at < 0 || at >= strip.tabs.length) return;
+      e.preventDefault();
+      tabs.activateTab(pane, at);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === "w") {
       e.preventDefault();
+      const pane = tabs.focusedPane;
       tabs.closeActiveTab();
+      // Focus goes on with what the pane shows now; it fell to the page.
+      void focusPane(pane, tabs.activeTab?.type === "note");
     }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "n") {
       // `Ctrl+N` without a modifier is emacs-style "next line" in a native text
@@ -95,23 +164,27 @@
   <Sidebar.Provider bind:open={sidebarOpen} onOpenChange={persistSidebarOpen}>
     <SettingsDialog bind:open={dialogs.settingsOpen} />
     <TagManagerDialog bind:open={dialogs.tagManagerOpen} />
-    <FailedImportsDialog
-      bind:open={failedImportsModal.open}
-      failures={failedImportsModal.failures}
-    />
-    <UnlinkedPinsDialog bind:open={unlinkedPinsModal.open} pins={unlinkedPinsModal.pins} />
+    <TemplatesDialog />
+    <FailedImportsDialog />
+    <UnlinkedPinsDialog />
+    <LinkRepairDialog />
     <SearchPalette />
     <QuickNoteDialog />
+    <AdoptDialog bind:open={dialogs.adoptOpen} />
     <SampleEffects />
-    <div class="flex min-h-svh flex-1">
+    <!-- The shell is exactly the window's height, not at least it. With only a minimum,
+         any pane whose content was taller than the window — a PDF's pages, a long track
+         list — grew the shell instead of scrolling inside itself, and the whole app
+         scrolled: tab bar, toolbar and all. Bounded here, every pane's `flex-1 min-h-0`
+         chain gets a height to divide and its own scroll area does the scrolling. -->
+    <div class="flex h-svh min-h-0 flex-1 overflow-hidden">
       <AppSidebar />
-      <main class="flex min-w-0 flex-1 flex-col">
-        <Sidebar.Inset>
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <Sidebar.Inset class="min-h-0">
           <!-- Split pane content area -->
           <div class="flex flex-1 min-h-0 overflow-hidden">
             <!-- Left pane (always present) -->
             <div class="relative flex flex-col flex-1 min-w-0 min-h-0" role="none">
-              <SampleBanner />
               <div class="flex items-center border-b border-sidebar-border">
                 <div class="flex items-center shrink-0 h-(--tab-bar-h) pl-1">
                   <Sidebar.Trigger class="-ml-1" />
@@ -123,7 +196,7 @@
                     <button
                       data-testid="left-rail-trigger"
                       onclick={leftSurface.toggle}
-                      class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                       aria-label="Toggle details panel"
                     >
                       <PanelRightIcon class="size-4" />
@@ -169,7 +242,7 @@
                       <button
                         data-testid="right-rail-trigger"
                         onclick={rightSurface.toggle}
-                        class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        class="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                         aria-label="Toggle details panel"
                       >
                         <PanelRightIcon class="size-4" />

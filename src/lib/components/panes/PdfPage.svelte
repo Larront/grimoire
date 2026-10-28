@@ -11,6 +11,7 @@
   import {
     offsetsFromRange,
     quoteForOffsets,
+    snapToWords,
     type SceneLinkSelection,
   } from "$lib/pdf/scene-link-anchor";
   import PdfSceneLinkLayer from "./PdfSceneLinkLayer.svelte";
@@ -41,7 +42,7 @@
     scenesList: SceneWithCount[];
     onSceneLinkSelect: (selection: SceneLinkSelection) => void;
     onChangeSceneLink: (linkId: number, sceneId: number) => void;
-    onNewSceneForLink: (linkId: number) => void;
+    onNewSceneForLink: (linkId: number, name: string) => void;
     onRemoveSceneLink: (linkId: number) => void;
   }
   let {
@@ -277,13 +278,23 @@
   // Scene-link range. The offset math lives in the anchoring module; here we just
   // gate to selections that actually land on this page and pass along the rect
   // the action bubble anchors to.
+  // While a selection is being dragged, the scene-link underlines let it pass through,
+  // so linked text can be selected across like any other text.
+  let selecting = $state(false);
+  function handleTextPointerDown() {
+    selecting = true;
+    window.addEventListener("pointerup", () => (selecting = false), { once: true });
+  }
+
   function handleTextMouseUp() {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
     if (!textLayerEl || !textLayerEl.contains(range.commonAncestorContainer)) return;
-    const offsets = offsetsFromRange(textDivs, range);
-    if (!offsets) return;
+    const raw = offsetsFromRange(textDivs, range);
+    if (!raw) return;
+    // Whole words: a drag that stops mid-word would otherwise link "…not th".
+    const offsets = snapToWords(itemStrings, raw.start, raw.end);
     const rect = range.getBoundingClientRect();
     onSceneLinkSelect({
       page: pageNumber,
@@ -298,12 +309,17 @@
 <div
   bind:this={wrapperEl}
   data-page-number={pageNumber}
-  class="relative mx-auto bg-white shadow-sm ring-1 ring-black/5"
+  class="relative mx-auto bg-white ring-1 ring-black/5"
   style="--total-scale-factor: {scale}; --scale-round-x: 1px; --scale-round-y: 1px; width: {displayWidth}px; height: {displayHeight}px;"
 >
   <canvas bind:this={canvasEl} class="block h-full w-full"></canvas>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div bind:this={textLayerEl} class="textLayer" onmouseup={handleTextMouseUp}></div>
+  <div
+    bind:this={textLayerEl}
+    class="textLayer"
+    onpointerdown={handleTextPointerDown}
+    onmouseup={handleTextMouseUp}
+  ></div>
   <PdfSceneLinkLayer
     links={sceneLinks}
     {scenesList}
@@ -312,6 +328,7 @@
     {wrapperEl}
     {scale}
     {textReady}
+    {selecting}
     onChangeScene={onChangeSceneLink}
     onNewScene={onNewSceneForLink}
     onRemove={onRemoveSceneLink}
@@ -363,8 +380,10 @@
     display: contents;
   }
 
+  /* The app's selection tint is 12% — fine on iron, nearly invisible on a cream page —
+     so the page takes the 24% step. */
   .textLayer :global(::selection) {
-    background: var(--primary-subtle, rgb(138 46 38 / 0.16));
+    background: var(--primary-muted);
   }
 
   /* Find-match highlight. Sits inside a transparent text span, so its tint

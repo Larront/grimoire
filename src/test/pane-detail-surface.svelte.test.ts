@@ -6,14 +6,15 @@ import {
   resetPaneSurfaces,
 } from "$lib/details/pane-detail-surface.svelte";
 import { overlay } from "$lib/stores/overlay.svelte";
+import { appPrefs } from "$lib/stores/app-prefs.svelte";
 
-// One stub for both queries the surface reads, told apart by the query text:
-// the ≤1023px sheet breakpoint and prefers-reduced-motion.
-function stubMatchMedia({ mobile = false, reducedMotion = false } = {}) {
+// The surface's one query: the ≤1023px sheet breakpoint. (Reduce Motion is the app's
+// setting, read through $lib/motion.)
+function stubMatchMedia({ mobile = false } = {}) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
-      matches: query.includes("prefers-reduced-motion") ? reducedMotion : mobile,
+      matches: mobile,
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -65,6 +66,7 @@ function measuredAt(width: number, policy = NOTE_POLICY) {
 beforeEach(() => {
   overlay.active = null;
   stubMatchMedia();
+  appPrefs.setMotionChoice("off");
 });
 
 afterEach(() => {
@@ -72,6 +74,7 @@ afterEach(() => {
   globalThis.ResizeObserver = originalResizeObserver;
   resetPaneSurfaces();
   stubMatchMedia();
+  appPrefs.setMotionChoice("off");
 });
 
 // ── Presentation mode ─────────────────────────────────────────────────────────
@@ -279,12 +282,12 @@ describe("PaneDetailSurface — float transition", () => {
   });
 
   it("snaps when reduced motion is on", () => {
-    stubMatchMedia({ reducedMotion: true });
+    appPrefs.setMotionChoice("on");
     expect(measuredAt(600).transition.duration).toBe(0);
   });
 
   it("snaps for an always-float surface too — the map panels obey it as well", () => {
-    stubMatchMedia({ reducedMotion: true });
+    appPrefs.setMotionChoice("on");
     expect(measuredAt(600, MAP_POLICY).transition.duration).toBe(0);
   });
 });

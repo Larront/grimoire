@@ -6,7 +6,7 @@
 // The Row List's own controls are tested in row-list.test.ts. What these tests assert
 // is that the Infobox is a working consumer of them — which is why the block went
 // first among the new three.
-import { render, fireEvent, cleanup, waitFor } from "@testing-library/svelte";
+import { render, fireEvent, cleanup, waitFor, screen } from "@testing-library/svelte";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -47,6 +47,23 @@ function panel(
   return { ...rendered, onCommit };
 }
 
+/**
+ * Picks an item from a row's "⋯" menu, as the GM does — the Row List's Move up, Move
+ * down, Insert below and Delete sit behind one button per row in an Infobox, which is
+ * too narrow to give each row a strip of three.
+ */
+async function rowAction(label: string, verb: string) {
+  await fireEvent.pointerDown(screen.getByLabelText(`Row actions: ${label}`), {
+    button: 0,
+    pointerType: "mouse",
+  });
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+    el.textContent?.trim().startsWith(verb),
+  );
+  expect(item, `a "${verb}" item in the row's menu`).toBeTruthy();
+  await fireEvent.click(item!);
+}
+
 /** The panel as the block last handed it to the document. */
 function committed(onCommit: ReturnType<typeof vi.fn>, call = 0): Infobox {
   return onCommit.mock.calls[call][0] as Infobox;
@@ -79,9 +96,35 @@ describe("an Infobox draws its facts", () => {
     expect(container.querySelectorAll("[data-wiki-link]")).toHaveLength(1);
   });
 
-  it("draws an empty title as nothing but its placeholder", () => {
-    const { getByLabelText } = panel({ title: "" });
-    expect(getByLabelText("Infobox title")).toHaveTextContent("Untitled panel");
+  it("draws no title line at all for a panel without one", () => {
+    // A panel under a note's own heading is usually untitled, and an empty title row kept
+    // a line at the top of every one of them for a prompt shown only on hover. The offer
+    // to add one floats above the panel instead, with Add image and Add row.
+    const { queryByLabelText, getByLabelText } = panel({ title: "" });
+
+    expect(queryByLabelText("Infobox title")).toBeNull();
+    expect(getByLabelText("Add a title")).toBeTruthy();
+  });
+
+  it("offers no title to add when the panel has one", () => {
+    const { queryByLabelText } = panel();
+    expect(queryByLabelText("Add a title")).toBeNull();
+  });
+
+  it("is named by its title, for a screen reader moving between blocks", () => {
+    const titled = panel();
+    expect(titled.getByRole("group", { name: "Harbor's End" })).toBeTruthy();
+    cleanup();
+
+    const untitled = panel({ title: "" });
+    expect(untitled.getByRole("group", { name: "Infobox" })).toBeTruthy();
+  });
+
+  it("ends with no Add of the Row List's own, which floats above the panel instead", () => {
+    const { container, getAllByLabelText } = panel();
+
+    expect(container.querySelector("[data-row-add]")).toBeNull();
+    expect(getAllByLabelText("Add row")).toHaveLength(1);
   });
 
   it("says so when there are no rows yet", () => {
@@ -257,9 +300,9 @@ describe("an Infobox's thumbnail", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelector("[data-infobox-image-replace]")).toBeTruthy();
+      expect(container.querySelector("[data-infobox-image-missing] [data-replace-btn]")).toBeTruthy();
     });
-    await fireEvent.click(container.querySelector("[data-infobox-image-replace]")!);
+    await fireEvent.click(container.querySelector("[data-infobox-image-missing] [data-replace-btn]")!);
 
     await waitFor(() => expect(onCommit).toHaveBeenCalled());
     expect(committed(onCommit).image).toBe(".grimoire/images/portrait.png");
@@ -282,14 +325,42 @@ describe("an Infobox's thumbnail", () => {
     expect(committed(onCommit).rows).toEqual(HARBOR);
   });
 
-  it("keeps the thumbnail when a row changes", async () => {
+  it("hands focus to Add image once the image is removed, and says what happened", async () => {
+    // The Remove button goes with the image it removed; left there, focus would fall to
+    // the page and the GM would be told nothing.
     imagesResolve();
-    const { getAllByLabelText, onCommit } = panel({
+    const { getByLabelText, getByText } = panel({
       image: "images/harbor.png",
       imageAlt: "The harbour",
     });
 
-    await fireEvent.click(getAllByLabelText("Delete row")[0]);
+    await fireEvent.click(getByLabelText("Remove image"));
+
+    await waitFor(() => expect(document.activeElement).toBe(getByLabelText("Add image")));
+    expect(getByText("Image removed. Ctrl+Z to undo")).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("offers View and Replace only for an image it can draw", async () => {
+    // A missing image has its own Replace in the notice, so the tray keeps only Remove.
+    imagesMissing();
+    const { findByText, queryByLabelText, getByLabelText } = panel({
+      image: "images/gone.png",
+      imageAlt: "",
+    });
+
+    await findByText("This image was moved or deleted");
+    expect(queryByLabelText("View full size")).toBeNull();
+    expect(getByLabelText("Remove image")).toBeTruthy();
+  });
+
+  it("keeps the thumbnail when a row changes", async () => {
+    imagesResolve();
+    const { onCommit } = panel({
+      image: "images/harbor.png",
+      imageAlt: "The harbour",
+    });
+
+    await rowAction("Population", "Delete");
 
     expect(committed(onCommit).image).toBe("images/harbor.png");
     expect(committed(onCommit).imageAlt).toBe("The harbour");
@@ -329,23 +400,54 @@ describe("an Infobox's thumbnail", () => {
 // ─── Rows ─────────────────────────────────────────────────────────────────────
 
 describe("Infobox rows", () => {
+  it("offers each row's moves and delete through one menu", () => {
+    const { getByLabelText, queryByLabelText } = panel();
+
+    expect(getByLabelText("Row actions: Population")).toBeTruthy();
+    expect(getByLabelText("Row actions: Ruler")).toBeTruthy();
+    expect(queryByLabelText("Move row up")).toBeNull();
+    expect(queryByLabelText("Delete row")).toBeNull();
+  });
+
   it("moving a row up reorders it and commits", async () => {
-    const { getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getAllByLabelText("Move row up")[1]);
+    const { onCommit } = panel();
+    await rowAction("Ruler", "Move up");
 
     expect(committed(onCommit).rows.map((r) => r.label)).toEqual(["Ruler", "Population"]);
   });
 
   it("moving a row down reorders it and commits", async () => {
-    const { getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getAllByLabelText("Move row down")[0]);
+    const { onCommit } = panel();
+    await rowAction("Population", "Move down");
 
     expect(committed(onCommit).rows.map((r) => r.label)).toEqual(["Ruler", "Population"]);
   });
 
+  it("moves a row from the keyboard too, without opening the menu", async () => {
+    const { getByLabelText, onCommit } = panel();
+    await fireEvent.keyDown(getByLabelText("Row 2 label"), { key: "ArrowUp", altKey: true });
+
+    expect(committed(onCommit).rows.map((r) => r.label)).toEqual(["Ruler", "Population"]);
+  });
+
+  it("inserts a row below from the menu", async () => {
+    const { getByLabelText, onCommit } = panel();
+    await rowAction("Population", "Insert row below");
+
+    const label = getByLabelText("Row 2 label");
+    await fireEvent.input(label, { target: { value: "Founded" } });
+    await fireEvent.blur(label);
+
+    expect(committed(onCommit).rows.map((r) => r.label)).toEqual([
+      "Population",
+      "Founded",
+      "Ruler",
+    ]);
+  });
+
   it("deleting a row removes it and commits", async () => {
-    const { getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getAllByLabelText("Delete row")[0]);
+    const { onCommit } = panel();
+    await rowAction("Population", "Delete");
 
     expect(committed(onCommit).rows).toEqual([{ label: "Ruler", value: "[[Captain Ash]]" }]);
   });
@@ -356,7 +458,7 @@ describe("Infobox rows", () => {
     const { getByLabelText, onCommit } = panel();
     await fireEvent.click(getByLabelText("Add row"));
 
-    expect(getByLabelText("Row 3 label").tagName).toBe("INPUT");
+    expect(getByLabelText("Row 3 label").tagName).toBe("TEXTAREA");
     expect(onCommit).not.toHaveBeenCalled();
   });
 
@@ -372,8 +474,9 @@ describe("Infobox rows", () => {
   });
 
   it("inserts a row between two others", async () => {
-    const { getByLabelText, getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getByLabelText("Insert row after position 1"));
+    const { getAllByLabelText, onCommit } = panel();
+    // The insert point between rows 1 and 2.
+    await fireEvent.click(getAllByLabelText("Insert row here")[1]);
 
     const label = getAllByLabelText("Row 2 label")[0];
     await fireEvent.input(label, { target: { value: "Founded" } });
@@ -387,8 +490,8 @@ describe("Infobox rows", () => {
   });
 
   it("keeps the panel's title when a row changes", async () => {
-    const { getAllByLabelText, onCommit } = panel();
-    await fireEvent.click(getAllByLabelText("Delete row")[0]);
+    const { onCommit } = panel();
+    await rowAction("Population", "Delete");
 
     expect(committed(onCommit).title).toBe("Harbor's End");
   });
@@ -463,9 +566,21 @@ describe("editing an Infobox", () => {
     });
   });
 
+  it("puts the title line away again if the GM adds one and leaves it empty", async () => {
+    const { getByLabelText, queryByLabelText, onCommit } = panel({ title: "" });
+    await fireEvent.click(getByLabelText("Add a title"));
+    await waitFor(() => expect(document.activeElement).toBe(getByLabelText("Infobox title")));
+    // A real blur, which raises the focusout the panel listens for.
+    getByLabelText("Infobox title").blur();
+
+    await waitFor(() => expect(queryByLabelText("Infobox title")).toBeNull());
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
   it("takes a title the GM adds to a panel that had none", async () => {
     const { getByLabelText, onCommit } = panel({ title: "" });
-    await fireEvent.click(getByLabelText("Infobox title"));
+    await fireEvent.click(getByLabelText("Add a title"));
+    await waitFor(() => expect(document.activeElement).toBe(getByLabelText("Infobox title")));
     await fireEvent.input(getByLabelText("Infobox title"), {
       target: { value: "Harbor's End" },
     });
@@ -506,10 +621,10 @@ describe("an Infobox has nothing that plays", () => {
     expect(getByLabelText("Row 1 value")).toHaveTextContent("[ ][x][ ]");
   });
 
-  it("offers no control beyond the fields and the Row List's own", () => {
-    // Every button in the panel is either a field opened for typing or one of the Row
-    // List's order controls. Nothing mutates a value in place.
-    const { container, getAllByLabelText } = panel({
+  it("offers no control beyond the fields, the panel's adds and the Row List's own", () => {
+    // Every button in the panel is a field opened for typing, one of the floating adds,
+    // or one of the Row List's controls. Nothing mutates a value in place.
+    const { container } = panel({
       rows: [{ label: "HP", value: "3/12" }],
     });
     const labels = [...container.querySelectorAll("button")].map((b) =>
@@ -520,16 +635,13 @@ describe("an Infobox has nothing that plays", () => {
       [
         "Add image",
         "Add row",
-        "Delete row",
         "Infobox title",
-        "Insert row at top",
-        "Move row down",
-        "Move row up",
+        "Insert row here",
         "Row 1 label",
         "Row 1 value",
+        "Row actions: HP",
       ].sort(),
     );
-    expect(getAllByLabelText("Delete row")).toHaveLength(1);
   });
 
   it("draws no removal control of its own", () => {
@@ -542,15 +654,19 @@ describe("an Infobox has nothing that plays", () => {
     expect(queryByLabelText("Remove infobox")).toBeNull();
   });
 
-  it("offers the image control only while there is no image, and never both", () => {
-    // The two controls share the title's row, so the row cannot grow: a panel with a
-    // thumbnail has Replace and Remove on the thumbnail itself.
+  it("offers the image control only while there is no image, and never both", async () => {
+    // A panel with a thumbnail has Replace and Remove on the thumbnail itself.
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) =>
+      cmd === "get_image_absolute_path"
+        ? `/ledger/${(args as { relativePath: string }).relativePath}`
+        : null,
+    );
     const withImage = panel({
       image: "images/harbor.png",
       imageAlt: "The harbour",
     });
     expect(withImage.queryByLabelText("Add image")).toBeNull();
-    expect(withImage.getByLabelText("Replace image")).toBeTruthy();
+    expect(await withImage.findByLabelText("Replace image")).toBeTruthy();
     cleanup();
 
     const without = panel();
@@ -586,6 +702,6 @@ describe("an Infobox follows the document", () => {
     (component as unknown as { focusRow: (i: number) => void }).focusRow(0);
     await Promise.resolve();
 
-    expect(getByLabelText("Row 1 label").tagName).toBe("INPUT");
+    expect(getByLabelText("Row 1 label").tagName).toBe("TEXTAREA");
   });
 });

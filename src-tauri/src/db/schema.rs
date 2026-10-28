@@ -171,6 +171,7 @@ diesel::table! {
         tag -> Text,
         color -> Nullable<Text>,
         hidden -> Integer,
+        slot -> Nullable<Integer>,
     }
 }
 

@@ -330,13 +330,12 @@ describe("PinDetails — appearance section", () => {
     expect(container.querySelector('[data-section="appearance"]')).toBeTruthy();
   });
 
-  it("renders ColorSwatches in the appearance section", async () => {
+  it("renders the colour picker in the appearance section", async () => {
     const { container } = render(PinDetails, {
       props: { pin: basePin, onUpdate: vi.fn(), onDelete: vi.fn() },
     });
     await flush();
-    // ColorSwatches uses data-slot="color-swatches"
-    expect(container.querySelector('[data-slot="color-swatches"]')).toBeTruthy();
+    expect(container.querySelector("[data-color-picker]")).toBeTruthy();
   });
 });
 
@@ -414,5 +413,69 @@ describe("PinDetails — delete", () => {
     await flush();
     await fireEvent.click(getByTestId("pin-delete"));
     expect(onDelete).toHaveBeenCalledWith(basePin.id);
+  });
+});
+
+// ── Colour falls back as the map draws it ─────────────────────────────────────
+
+describe("PinDetails — colour picker fallback", () => {
+  it("a categorised pin with no colour of its own shows its category's", async () => {
+    const ruin: PinCategory = {
+      id: 7,
+      map_id: 5,
+      name: "Ruin",
+      icon: "landmark",
+      color: "#5b9ec9",
+      shape: "shield",
+    };
+    const { container } = render(PinDetails, {
+      props: {
+        pin: { ...basePin, category_id: 7 },
+        categories: [ruin],
+        onUpdate: vi.fn(),
+        onDelete: vi.fn(),
+      },
+    });
+    await flush();
+    const hex = container.querySelector('[aria-label="Hex colour"]') as HTMLInputElement;
+    expect(hex.placeholder).toBe("#5b9ec9");
+    const btn = container.querySelector("[data-color-default]") as HTMLElement;
+    expect(btn.textContent?.trim()).toBe("Category");
+    expect(btn.getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+// ── A pin a repair unlinked (2026-10 design review) ──────────────────────────
+
+describe("PinDetails — a pin a repair unlinked", () => {
+  it("names the note it used to open and starts the search with it; Enter links the first match", async () => {
+    const { unlinkedPins } = await import("$lib/stores/unlinked-pins.svelte");
+    const { notes } = await import("$lib/stores/notes.svelte");
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockImplementation(async (cmd: string) =>
+      cmd === "get_notes" ? [linkedNote] : null,
+    );
+    await notes.load();
+    unlinkedPins.replace([
+      { pin_id: 1, pin_title: "Test Pin", map_id: 5, map_title: "Map", was_note_title: "Aldric" },
+    ]);
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+
+    const view = render(PinDetails, {
+      props: { pin: basePin, onUpdate, onDelete: vi.fn() },
+    });
+    await flush();
+
+    expect(view.getByTestId("pin-was-note").textContent).toContain("Was linked to “Aldric”");
+    const search = view.getByLabelText("Search notes to link") as HTMLInputElement;
+    expect(search.value).toBe("Aldric");
+
+    await fireEvent.keyDown(search, { key: "Enter" });
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ note_id: 42 }));
+
+    unlinkedPins.replace([]);
+    vi.mocked(invoke).mockResolvedValue([]);
+    await notes.load();
+    vi.mocked(invoke).mockResolvedValue(null);
   });
 });

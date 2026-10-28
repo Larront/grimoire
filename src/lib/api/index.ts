@@ -14,8 +14,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { commands } from "$lib/bindings.gen";
 import type { MapAnnotation } from "$lib/bindings.gen";
 import { toastError } from "$lib/toast";
+import { recycleBin } from "$lib/utils/platform";
 import { logError } from "$lib/log";
 import { linksTick } from "$lib/stores/links-tick.svelte";
+import { tagsTick } from "$lib/stores/tags-tick.svelte";
 
 // ── Friendly-message resolution ──────────────────────────────────────────────
 // Commands stamp genuinely user-actionable failures with a stable `ERR_CODE:`
@@ -24,8 +26,9 @@ import { linksTick } from "$lib/stores/links-tick.svelte";
 const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_NAME_TAKEN: "That name is already taken.",
   ERR_EMPTY_NAME: "That needs a name.",
-  ERR_BAD_NAME: "That name can't contain / or \\.",
+  ERR_BAD_NAME: "A name can't contain / \\ : * ? \" < > | or end with a full stop.",
   ERR_MOVE_INTO_SELF: "A folder can't be moved inside itself.",
+  ERR_RECYCLE: `Couldn't move it to the ${recycleBin}, so it's still here.`,
   ERR_UNSUPPORTED_IMAGE: "That image format isn't supported — use PNG, JPG, GIF, or WebP.",
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
@@ -105,7 +108,21 @@ const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
   "renameFolder",
   "moveFolder",
   "applyBacklinkRewrite",
+  "applyLinkRepairs",
   "updateScene",
+]);
+
+// ── Tag freshness ────────────────────────────────────────────────────────────
+// Commands that change a tag for the whole ledger. Each bumps [[tagsTick]], so
+// open Details reload their tags and the Graph Pane its colours and filter.
+// Deliberately absent: `write_note_tags` and `set_pin_tags`, which change one
+// entity's tags from that entity's own Details — the writer is already showing
+// the result, and a refetch racing the GM's next keystroke would undo it.
+const TAG_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
+  "retagTag",
+  "undoRetag",
+  "setTagGraphColor",
+  "setTagGraphHidden",
 ]);
 
 // ── Surface construction ─────────────────────────────────────────────────────
@@ -118,10 +135,12 @@ function wrap<C extends Record<string, AnyFn>>(source: C, onError: (error: unkno
     // `name` widens to string through Object.entries; the Set stays narrowly
     // typed so the literals above are the thing being checked.
     const bumpsLinks = LINK_WRITING_COMMANDS.has(name as keyof typeof commands);
+    const bumpsTags = TAG_WRITING_COMMANDS.has(name as keyof typeof commands);
     out[name] = async (...args: unknown[]) => {
       try {
         const result = await fn(...args);
         if (bumpsLinks) linksTick.bump();
+        if (bumpsTags) tagsTick.bump();
         return result;
       } catch (error) {
         onError(error);

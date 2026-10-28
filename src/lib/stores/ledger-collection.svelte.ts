@@ -45,11 +45,17 @@ export function createLedgerCollection<T>({ fetch, onClose }: LedgerCollectionOp
 
   $effect.root(() => {
     $effect(() => {
-      // Keyed on the *path*, not on `isOpen`: opening a second ledger from inside
-      // the first never lowers that flag, so a collection watching it would keep
-      // serving the ledger the GM left — a whole sidebar of the wrong vault's
-      // notes. The tabs store already keys on the path; this is the same rule.
+      // Keyed on the *open*, not on `isOpen` or the path. Opening a second ledger
+      // from inside the first never lowers the flag, so a collection watching it
+      // would keep serving the ledger the GM left. And re-exploring the Example
+      // World reopens the same path over a reset database, so a collection
+      // watching the path would keep serving rows that no longer exist.
+      ledger.openGeneration;
       if (ledger.isOpen && ledger.path) {
+        // Emptied first: until the new world's list lands, the old one's rows would
+        // answer for it — a restored tab found the left world's note with its own id
+        // and reported its file unreadable (2026-10 design review).
+        items = [];
         load();
       } else {
         generation++;

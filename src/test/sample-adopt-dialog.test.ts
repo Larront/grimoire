@@ -1,8 +1,11 @@
-import { render, cleanup, act, fireEvent } from "@testing-library/svelte";
+import { render, cleanup, act, fireEvent, waitFor } from "@testing-library/svelte";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import LedgerSelector from "../lib/components/sidebar/LedgerSelector.svelte";
+import AdoptDialog from "../lib/components/AdoptDialog.svelte";
+import { dialogs } from "../lib/stores/overlay.svelte";
+import * as toasts from "../lib/toast";
 import { ledger } from "../lib/stores/ledger.svelte";
 
 const SAMPLE_PATH = "/app-data/sample-world";
@@ -38,7 +41,7 @@ async function flush() {
   });
 }
 
-describe("adopt dialog — LedgerSelector", () => {
+describe("adopt dialog", () => {
   beforeEach(async () => {
     await ledger.closeLedger();
     vi.mocked(invoke).mockReset();
@@ -49,147 +52,126 @@ describe("adopt dialog — LedgerSelector", () => {
 
   afterEach(async () => {
     cleanup();
+    dialogs.adoptOpen = false;
     await ledger.closeLedger();
     vi.mocked(invoke).mockResolvedValue(null);
   });
 
-  it("clicking 'Make this world mine' shows the adopt dialog", async () => {
+  /** The dialog open, as the shell mounts it. */
+  async function openDialog() {
+    const view = render(AdoptDialog, { props: { open: true } });
+    await flush();
+    return view;
+  }
+
+  async function fill(view: Awaited<ReturnType<typeof openDialog>>, name = ADOPT_NAME) {
+    await fireEvent.input(view.getByPlaceholderText("Name your ledger"), { target: { value: name } });
+    vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
+    await fireEvent.click(view.getByTestId("new-ledger-location"));
+    await flush();
+  }
+
+  it("'Make this ledger mine' in the sidebar opens the shell's dialog", async () => {
     const { getByTestId } = render(LedgerSelector);
     await flush();
-
-    fireEvent.click(getByTestId("make-mine-btn"));
+    // It sits in the ledger menu, with the GM's recent ledgers (2026-10 design review).
+    await fireEvent.click(getByTestId("sample-world-marker"));
     await flush();
-
-    expect(getByTestId("adopt-dialog")).toBeTruthy();
+    await fireEvent.click(getByTestId("make-mine-btn"));
+    expect(dialogs.adoptOpen).toBe(true);
   });
 
-  it("adopt dialog name field starts empty", async () => {
-    const { getByTestId, getByPlaceholderText } = render(LedgerSelector);
-    await flush();
-
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    const input = getByPlaceholderText("My World");
-    expect((input as HTMLInputElement).value).toBe("");
+  it("starts with an empty name", async () => {
+    const view = await openDialog();
+    expect((view.getByPlaceholderText("Name your ledger") as HTMLInputElement).value).toBe("");
   });
 
-  it("adopt dialog shows error when name is empty on confirm", async () => {
-    const { getByTestId, getByText } = render(LedgerSelector);
-    await flush();
+  it("keeps Make it mine pressable, and says what is missing beside each field", async () => {
+    const view = await openDialog();
+    const confirm = view.getByTestId("adopt-confirm-btn");
+    expect(confirm).not.toBeDisabled();
 
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    await flush();
-
-    expect(getByText("Please enter a ledger name.")).toBeTruthy();
+    await fireEvent.click(confirm);
+    expect(view.getByText("Give it a name.")).toBeTruthy();
+    expect(view.getByText("Choose where to save it.")).toBeTruthy();
+    expect(view.getByPlaceholderText("Name your ledger")).toHaveAttribute("aria-invalid", "true");
+    expect(vi.mocked(invoke).mock.calls.map(([c]) => c)).not.toContain("adopt_sample_ledger");
   });
 
-  it("adopt dialog rejects invalid characters in name", async () => {
-    const { getByTestId, getByPlaceholderText, getByText } = render(LedgerSelector);
-    await flush();
+  it("follows the typing once shown — a fixed name loses its message", async () => {
+    const view = await openDialog();
+    await fireEvent.click(view.getByTestId("adopt-confirm-btn"));
+    const input = view.getByPlaceholderText("Name your ledger");
 
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.input(getByPlaceholderText("My World"), {
-      target: { value: "bad/name" },
-    });
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    await flush();
-
-    expect(getByText(/invalid characters/)).toBeTruthy();
+    await fireEvent.input(input, { target: { value: "Ash/fen" } });
+    expect(view.getByText(/can't contain/)).toBeTruthy();
+    await fireEvent.input(input, { target: { value: "Ashfen Vale" } });
+    expect(view.queryByText(/can't contain/)).toBeNull();
+    expect(view.queryByText("Give it a name.")).toBeNull();
   });
 
-  it("adopt dialog requires a location", async () => {
-    const { getByTestId, getByPlaceholderText, getByText } = render(LedgerSelector);
-    await flush();
-
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.input(getByPlaceholderText("My World"), {
-      target: { value: ADOPT_NAME },
-    });
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    await flush();
-
-    expect(getByText("Please choose a storage location.")).toBeTruthy();
+  it("says where the world will live once there is a name and a folder", async () => {
+    const view = await openDialog();
+    await fill(view);
+    expect(view.getByTestId("new-ledger-destination").textContent).toContain(
+      "Saved as …/Worlds/Ashfen Chronicles",
+    );
   });
 
-  it("confirming valid name + location calls adopt_sample_ledger", async () => {
-    vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
-    const { getByTestId, getByPlaceholderText } = render(LedgerSelector);
-    await flush();
+  it("adopts into the chosen folder and names the world in a toast", async () => {
+    const success = vi.spyOn(toasts, "toastSuccess");
+    const view = await openDialog();
+    await fill(view);
+    await fireEvent.click(view.getByTestId("adopt-confirm-btn"));
 
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.input(getByPlaceholderText("My World"), {
-      target: { value: ADOPT_NAME },
-    });
-    fireEvent.click(getByTestId("adopt-choose-location-btn"));
-    await flush();
-
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    await flush();
-    await flush();
-
-    const calls = vi.mocked(invoke).mock.calls.map(([cmd]) => cmd);
-    expect(calls).toContain("adopt_sample_ledger");
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("adopt_sample_ledger", {
+        parent: ADOPT_PARENT,
+        name: ADOPT_NAME,
+      }),
+    );
+    await waitFor(() => expect(ledger.isSample).toBe(false));
+    expect(success.mock.calls[0][0]).toBe("“Ashfen Chronicles” is yours. It's saved in …/gm/Worlds.");
+    success.mockRestore();
   });
 
-  it("after adopting, isSample is false", async () => {
-    vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
-    const { getByTestId, getByPlaceholderText } = render(LedgerSelector);
-    await flush();
-
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.input(getByPlaceholderText("My World"), {
-      target: { value: ADOPT_NAME },
-    });
-    fireEvent.click(getByTestId("adopt-choose-location-btn"));
-    await flush();
-
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    // Three settle rounds: adopt → (flush pending saves) → open → isSample.
-    await flush();
-    await flush();
-    await flush();
-
-    expect(ledger.isSample).toBe(false);
-  });
-
-  it("a failed adopt keeps the dialog open and shows the error", async () => {
-    vi.mocked(dialogOpen).mockResolvedValueOnce(ADOPT_PARENT);
-    const { getByTestId, getByPlaceholderText } = render(LedgerSelector);
-    await flush();
-
-    fireEvent.click(getByTestId("make-mine-btn"));
-    await flush();
-
-    fireEvent.input(getByPlaceholderText("My World"), {
-      target: { value: ADOPT_NAME },
-    });
-    fireEvent.click(getByTestId("adopt-choose-location-btn"));
-    await flush();
-
-    // Make the backend adopt fail
+  it("refuses a folder that already exists, under the name, and leaves the dialog open", async () => {
+    const view = await openDialog();
+    await fill(view);
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-      if (cmd === "adopt_sample_ledger") throw "No sample sandbox found to adopt";
+      if (cmd === "adopt_sample_ledger") throw "LEDGER_EXISTS: '/Users/gm/Worlds/Ashfen Chronicles' already exists";
       return null;
     });
 
-    fireEvent.click(getByTestId("adopt-confirm-btn"));
-    await flush();
-    await flush();
+    await fireEvent.click(view.getByTestId("adopt-confirm-btn"));
+    await waitFor(() =>
+      expect(view.getByText(/already a folder called “Ashfen Chronicles” there/)).toBeTruthy(),
+    );
+    expect(view.getByTestId("adopt-dialog")).toBeTruthy();
+    expect(ledger.isSample).toBe(true);
 
-    expect(getByTestId("adopt-dialog")).toBeTruthy();
-    expect(getByTestId("adopt-error").textContent).toContain("No sample sandbox found");
+    // A different name is a different question.
+    await fireEvent.input(view.getByPlaceholderText("Name your ledger"), {
+      target: { value: "Ashfen Chronicles 2" },
+    });
+    expect(view.queryByText(/already a folder/)).toBeNull();
+  });
+
+  it("puts any other failure in words, not the raw error", async () => {
+    const view = await openDialog();
+    await fill(view);
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "adopt_sample_ledger") throw "Failed to copy \"grimoire.db\": (os error 32)";
+      return null;
+    });
+
+    await fireEvent.click(view.getByTestId("adopt-confirm-btn"));
+    await waitFor(() =>
+      expect(view.getByTestId("adopt-error").textContent).toContain(
+        "Couldn't copy the ledger there. Try another folder.",
+      ),
+    );
+    expect(view.getByTestId("adopt-error").textContent).not.toContain("os error");
     expect(ledger.isSample).toBe(true);
   });
 });

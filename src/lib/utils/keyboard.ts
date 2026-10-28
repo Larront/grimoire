@@ -1,3 +1,5 @@
+import { isMac } from "./platform";
+
 /**
  * Whether a keystroke landed somewhere the GM is typing.
  *
@@ -11,4 +13,15 @@ export function isTypingIn(target: EventTarget | null): boolean {
   if (!el) return false;
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
+/**
+ * A modifier shortcut as the GM's platform writes it: `Ctrl+Shift+N`, or `⌘⇧N` on
+ * a Mac. The one way a key is spelled in a menu or the palette, which had grown
+ * "Ctrl+N" beside "Ctrl 0" (2026-10 design review).
+ */
+export function shortcut(keys: string[]): string {
+  return isMac
+    ? "⌘" + keys.map((k) => (k === "Shift" ? "⇧" : k)).join("")
+    : ["Ctrl", ...keys].join("+");
 }

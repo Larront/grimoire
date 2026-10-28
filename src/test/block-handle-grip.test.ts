@@ -353,7 +353,7 @@ describe("placing the handle beside a block", () => {
     firstLine: { top: 204, height: 16 },
     handle: { width: 18, height: 18 },
     gap: 6,
-    columnLeft: 40,
+    gutterLeft: 40,
     ...over,
   });
 

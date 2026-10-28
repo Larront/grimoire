@@ -26,6 +26,13 @@ const testMap: LedgerMap = {
   modified_at: "2026-01-01T00:00:00Z",
 };
 
+/** The pin a panel describes, read from its name field. The panel's header says
+    "Pin" and the name lives once, in the field the GM edits (the header used to repeat it). */
+function panelPinName(root: Element): string | undefined {
+  const panel = root.querySelector('[data-slot="detail-panel"]');
+  return panel?.querySelector<HTMLInputElement>('input[placeholder="Name this pin"]')?.value;
+}
+
 function pin(id: number, title: string): Pin {
   return {
     id,
@@ -135,9 +142,8 @@ describe("MapPane — selection persists to the per-pane store", () => {
     await fireEvent.click(getByTestId("stub-pin-2"));
     await flush();
 
-    const panel = container.querySelector('[data-slot="detail-panel"]');
-    expect(panel).toBeTruthy();
-    expect(panel!.textContent).toContain("Keep");
+    expect(container.querySelector('[data-slot="detail-panel"]')).toBeTruthy();
+    expect(panelPinName(container)).toContain("Keep");
   });
 
   it("selecting an annotation persists annotationId and clears any pin", async () => {
@@ -164,8 +170,7 @@ describe("MapPane — restore on mount", () => {
     const { getByTestId, container } = await renderPane("left");
 
     expect(getByTestId("map-canvas-stub").getAttribute("data-selected-pin")).toBe("2");
-    const panel = container.querySelector('[data-slot="detail-panel"]');
-    expect(panel!.textContent).toContain("Keep");
+    expect(panelPinName(container)).toContain("Keep");
   });
 
   it("retains the selection across an unmount/remount (tab switch away and back)", async () => {
@@ -179,9 +184,7 @@ describe("MapPane — restore on mount", () => {
 
     const second = await renderPane("left");
     expect(second.getByTestId("map-canvas-stub").getAttribute("data-selected-pin")).toBe("1");
-    expect(second.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
-      "Harbor",
-    );
+    expect(panelPinName(second.container)).toContain("Harbor");
   });
 });
 
@@ -199,11 +202,7 @@ describe("MapPane — same map in both panes holds independent selections", () =
     expect(paneDetailState.getMapSelection("right", MAP_ID).pinId).toBe(2);
 
     // Each pane shows its own floating panel — two open at once.
-    expect(left.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
-      "Harbor",
-    );
-    expect(right.container.querySelector('[data-slot="detail-panel"]')!.textContent).toContain(
-      "Keep",
-    );
+    expect(panelPinName(left.container)).toContain("Harbor");
+    expect(panelPinName(right.container)).toContain("Keep");
   });
 });
