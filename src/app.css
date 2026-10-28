@@ -194,14 +194,9 @@
 }
 
 /* ── Motion tokens ────────────────────────────────────────────── */
-/* The app's durations (DESIGN.md §5 Motion), mirrored for script in `$lib/motion`.
-   Easings are in the theme block below, as Tailwind's `ease-out` / `ease-in`. */
-:root {
-  --motion-quick: 100ms;
-  --motion-base: 150ms;
-  --motion-arrive: 300ms;
-  --motion-attention: 600ms;
-}
+/* The durations (--motion-quick / base / arrive / attention) and the `ease-out` /
+   `ease-in` curves live in shared/tokens.css, so the website moves as the app does.
+   They are mirrored for script in `$lib/motion`. */
 
 /* ── Reduce Motion ────────────────────────────────────────────── */
 /*
@@ -475,13 +470,9 @@
   --color-scrim: var(--scrim);
 
   /* Motion — DESIGN.md §5 Motion. Before the 2026-10 review there were no tokens and
-     five durations and five easings in use. Every Tailwind transition now defaults to
-     `base` easing out; floating surfaces use `quick`; `attention` is for a search hit.
-     The easing utilities (`ease-out`, `ease-in`) take these curves, not Tailwind's. */
-  --default-transition-duration: var(--motion-base);
-  --default-transition-timing-function: var(--ease-out);
-  --ease-out: cubic-bezier(0.2, 0, 0, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+     five durations and five easings in use. The default transition and the `ease-out` /
+     `ease-in` curves are set in shared/tokens.css; floating surfaces use `quick`;
+     `attention` is for a search hit. */
 
   /* Shadcn compat */
   --color-card: var(--background-elevated);

@@ -1,5 +1,5 @@
 /* ── Grimoire Design Tokens ───────────────────────────────────────────────
-   THE SINGLE SOURCE OF TRUTH FOR COLOUR, TYPE, AND RADIUS.
+   THE SINGLE SOURCE OF TRUTH FOR COLOUR, TYPE, RADIUS AND MOTION.
 
    Imported by both products: the desktop app (src/app.css) and the website
    (site/src/styles/global.css). The app's vocabulary is canonical — the site
@@ -9,7 +9,7 @@
 
    Only what BOTH products need lives here. Anything app-only — shadcn
    aliases, the density scale, accent presets, editor prose — stays in
-   src/app.css. Anything site-only — scroll reveals, the CTA ember — stays in
+   src/app.css. Anything site-only — the scroll reveals — stays in
    site/src/styles/global.css. If you are tempted to add something here for
    one consumer, it belongs in that consumer's file.
 
@@ -19,6 +19,7 @@
      primary     — accent / interactive states
      error       — destructive feedback
      success     — confirmatory feedback
+     motion      — four durations and one curve (DESIGN.md §5 Motion)
 
    The fonts are imported HERE, not by each consumer, and that is deliberate.
    These @fontsource packages register the families as "Nunito Variable" /
@@ -73,6 +74,14 @@
   --radius-structural: 6px;
   --radius-elevated: 8px;
   --radius-pill: 100px;
+
+  /* Motion — DESIGN.md §5 Motion, mirrored for script in the app's
+     `$lib/motion`. Shared since the site was found rising at 700ms on its own
+     expo curve beside an app whose Splash says the same line at 300ms. */
+  --motion-quick: 100ms;
+  --motion-base: 150ms;
+  --motion-arrive: 300ms;
+  --motion-attention: 600ms;
 }
 
 /* Light mode values. In the app these are applied by mode-watcher via the
@@ -153,4 +162,11 @@
   --radius-xl: var(--radius-elevated);
   --radius-2xl: var(--radius-pill);
   --radius-full: var(--radius-pill);
+
+  /* Motion. Every Tailwind transition defaults to `base` easing out, and the
+     `ease-out` / `ease-in` utilities take these curves, not Tailwind's. */
+  --default-transition-duration: var(--motion-base);
+  --default-transition-timing-function: var(--ease-out);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
 }

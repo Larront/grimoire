@@ -3,38 +3,40 @@ import Layout from "../layouts/Layout.astro";
 import { withBase } from "../lib/base";
 import { getLatestRelease } from "../lib/releases";
 
-const GITHUB = "https://github.com/larront/grimoire";
+const GITHUB = "https://github.com/Larront/grimoire";
 const RELEASES = `${GITHUB}/releases/latest`;
 
-const { version, publishedAt, platforms, resolved } = await getLatestRelease();
+const { version, publishedAt, platforms } = await getLatestRelease();
 
+// British dates, as the app spells what a GM reads (DESIGN.md §6): "21 August 2026".
 const releaseDate = publishedAt
-  ? new Date(publishedAt).toLocaleDateString("en-US", {
+  ? new Date(publishedAt).toLocaleDateString("en-GB", {
       year: "numeric",
       month: "long",
       day: "numeric",
     })
   : null;
 
-// Shared focus-visible treatment: an accent ring offset against the dark
-// ground, per DESIGN.md's requirement for a visible keyboard focus state.
-const focusRing =
-  "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background-subtle focus-visible:outline-none";
+// Quiet links in running text: full foreground with an accent underline, as the app
+// marks a link (DESIGN.md, The Signal Rule) — the underline is the signal, not the words.
+const textLink =
+  "rounded-sm text-foreground underline decoration-primary decoration-1 underline-offset-[3px] transition-colors hover:decoration-2";
 
-// Marquee features (Maps, Audio) get bespoke showcase blocks in the markup.
-// Notes and the Ledger are the foundation underneath — a compact supporting pair.
+// Notes and the ledger are the foundation under the two showcase features, with the
+// tools a GM reaches for mid-session and the project's own terms beside them. Every
+// claim here is in the release the page links to (site/PRODUCT.md).
 const pillars = [
   {
-    num: "03",
-    label: "NOTES",
     title: "Plain Markdown, never locked in",
-    body: "A distraction-free editor for lore, NPCs, and session logs. Every note is a plain .md file in a folder you own — wiki-links resolve by name, backlinks track who mentions whom, and unwritten pages appear as stubs waiting to be filled.",
+    body: "A distraction-free editor for lore, NPCs and session logs. Every note is a plain .md file: wiki-links resolve by name, backlinks show who mentions whom, and a link to a page you haven't written yet is waiting to be filled. Start from a template for an NPC, a location, a session log or an encounter.",
   },
   {
-    num: "04",
-    label: "LEDGER",
+    title: "Built for the table",
+    body: "Statblocks you play from mid-fight, ticking off hit points and conditions as they change. Timelines answer “when?”, infoboxes hold the facts, and one shortcut parks a passing thought as a Quick Note without leaving the scene. One palette finds any note, map or scene.",
+  },
+  {
     title: "Local-first, portable, yours",
-    body: "A campaign is a Ledger: one portable folder on your disk. Move it, sync it, back it up — nothing breaks. Full-text search across everything, no account, no cloud, no subscription.",
+    body: "A campaign is a ledger: one folder on your disk. Notes are plain Markdown; maps, pins and scenes are kept in a small database inside the same folder. Move it or back it up and your links come with it. No account, no cloud, no subscription.",
   },
 ];
 ---
@@ -45,29 +47,24 @@ const pillars = [
   ogDescription="A spellbook of record for tabletop RPG worldbuilders. Notes, maps, and audio scenes in one local-first desktop app."
 >
   <div class="min-h-screen bg-background-subtle text-foreground">
-    <!-- Nav -->
-    <header
-      class="sticky top-0 z-10 border-b border-background-border bg-background-subtle/95 backdrop-blur-sm"
-    >
+    <!-- Nav. Solid, not blurred: the app has no backdrop blur anywhere (DESIGN.md §4). -->
+    <header class="sticky top-0 z-10 border-b border-background-border bg-background-subtle">
       <nav class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <a href={withBase("/")} class={`rounded-sm font-heading text-xl text-primary ${focusRing}`}
-          >Grimoire</a
-        >
+        <a href={withBase("/")} class="rounded-sm font-heading text-xl text-primary">Grimoire</a>
         <div class="flex items-center gap-1 text-sm font-medium">
           <a
             href="#features"
-            class={`hidden rounded-sm px-3 py-1.5 text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground sm:block ${focusRing}`}
+            class="hidden rounded-sm px-3 py-1.5 text-foreground-muted transition-colors hover:bg-hover-overlay hover:text-foreground sm:block"
             >Features</a
           >
           <a
             href={GITHUB}
-            rel="noopener"
-            class={`rounded-sm px-3 py-1.5 text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground ${focusRing}`}
+            class="rounded-sm px-3 py-1.5 text-foreground-muted transition-colors hover:bg-hover-overlay hover:text-foreground"
             >GitHub</a
           >
           <a
             href="#download"
-            class={`ml-2 rounded-sm bg-primary px-4 py-1.5 text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 ${focusRing}`}
+            class="ml-2 rounded-sm bg-primary px-4 py-1.5 text-primary-foreground transition-colors hover:bg-primary/80"
             >Download</a
           >
         </div>
@@ -77,71 +74,59 @@ const pillars = [
     <main>
       <!-- Hero -->
       <section class="mx-auto max-w-6xl px-6 pt-20 pb-16 sm:pt-28">
-        <p
-          class="reveal-hero font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase"
-          style="--i: 0"
-        >
-          Local-first · Open source · Windows / macOS / Linux
-        </p>
         <h1
-          class="reveal-hero mt-6 max-w-3xl font-heading text-[clamp(2.25rem,5vw,3rem)] leading-[1.15] text-balance"
-          style="--i: 1"
+          class="reveal-hero max-w-3xl font-heading text-[clamp(2.25rem,5vw,3rem)] leading-[1.15] text-balance"
+          style="--i: 0"
         >
           A spellbook of record for the world you're building.
         </h1>
         <p
           class="reveal-hero mt-6 max-w-xl text-lg leading-relaxed text-foreground-muted"
-          style="--i: 2"
+          style="--i: 1"
         >
           Grimoire unifies lore notes, interactive maps, and ambient audio scenes into one local
-          ledger — a focused instrument for Game Masters, from session prep to the live table.
+          ledger: a focused instrument for Game Masters, from session prep to the live table.
         </p>
-        <div class="reveal-hero mt-10 flex flex-wrap items-center gap-3" style="--i: 3">
+        <div class="reveal-hero mt-10 flex flex-wrap items-center gap-3" style="--i: 2">
           <a
             href="#download"
-            class={`ember-cta rounded-sm bg-primary px-6 py-3 font-semibold text-primary-foreground ease-out hover:bg-primary/80 ${focusRing}`}
-            >Download Grimoire</a
+            class="rounded-sm bg-primary px-6 py-3 font-semibold text-primary-foreground transition-colors hover:bg-primary/80"
+            ><span data-cta-label>Download Grimoire</span></a
           >
           <a
             href={GITHUB}
-            rel="noopener"
-            class={`rounded-sm px-6 py-3 font-semibold text-foreground-muted transition-colors duration-150 ease-out hover:bg-hover-overlay hover:text-foreground ${focusRing}`}
+            class="rounded-sm px-6 py-3 font-semibold text-foreground-muted transition-colors hover:bg-hover-overlay hover:text-foreground"
             >View on GitHub</a
           >
         </div>
         <p
-          class="reveal-hero mt-6 max-w-xl font-mono text-xs leading-relaxed text-foreground-muted"
-          style="--i: 4"
+          class="reveal-hero mt-6 max-w-xl text-sm leading-relaxed text-foreground-muted"
+          style="--i: 3"
         >
-          Free and GPL-3.0 —
-          <a
-            href={GITHUB}
-            rel="noopener"
-            class={`rounded-sm text-foreground underline decoration-background-border underline-offset-2 transition-colors duration-150 ease-out hover:decoration-primary ${focusRing}`}
-            >read every line on GitHub</a
-          >. No account, no cloud, no subscription; your notes stay plain Markdown in a folder you
-          own.
+          Free and open source (GPL-3.0) for Windows, macOS and Linux. No account, no cloud, no
+          subscription. Still early: releases are numbered 0.x and come often.
         </p>
       </section>
 
-      <!-- Screenshot -->
+      <!-- Screenshot. Eager: it is the page's largest paint. -->
       <section class="mx-auto max-w-6xl px-6 pb-24">
-        <figure class="reveal-scale" data-reveal>
+        <figure class="reveal" data-reveal>
           <div
             class="overflow-hidden rounded-md border border-background-border bg-background-elevated"
           >
             <img
               src={withBase("/screenshot.png")}
-              alt="Grimoire showing a sample world: the Start Here note open in the editor, beside a sidebar of characters, encounters, locations, lore, maps, sessions and scenes"
-              class="block w-full"
+              alt="Grimoire with the example ledger, The Ashfen Vale, open: its Start Here note in the editor, beside a sidebar of characters, encounters, locations, lore, maps, sessions and scenes"
+              class="block h-auto w-full"
               width="3832"
               height="2220"
-              loading="lazy"
+              loading="eager"
+              fetchpriority="high"
               decoding="async"
             />
           </div>
-          <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
-            Your notes, your maps, your world — every byte a plain file in a folder you chose.
+          <figcaption class="mt-3 text-sm text-foreground-muted">
+            The Ashfen Vale, the example ledger Grimoire opens with the first time.
           </figcaption>
         </figure>
       </section>
@@ -149,129 +134,140 @@ const pillars = [
       <!-- Features -->
       <section id="features" class="border-t border-background-border bg-background">
         <div class="mx-auto max-w-6xl px-6 py-24">
-          <p class="font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase">
-            The instrument
-          </p>
           <h2
-            class="mt-4 max-w-2xl font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug text-balance"
+            class="max-w-2xl font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug text-balance"
           >
             The tool disappears. The world remains.
           </h2>
           <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
-            During a live session the interface competes with your imagination — the moment it
+            During a live session the interface competes with your imagination; the moment it
             demands attention, it has already lost. Everything in Grimoire is built to stay out of
             the way.
           </p>
 
-          <!-- 01 · Maps — the world you can read -->
+          <!-- Maps: the world you can read -->
           <div
             class="reveal mt-20 grid items-center gap-10 lg:mt-28 lg:grid-cols-2 lg:gap-16"
             data-reveal
           >
             <div>
-              <p class="font-mono text-xs tracking-[0.15em] text-primary">01 · MAPS</p>
               <h3
-                class="mt-3 max-w-md font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
+                class="max-w-md font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
               >
-                The map isn't a picture of your world — it's another way to read it.
+                The map isn't a picture of your world. It's another way to read it.
               </h3>
-              <p class="mt-4 max-w-md leading-relaxed text-foreground-muted">
-                Drop pins for settlements, dungeons, and quests — each one bound to the location
-                note it marks, so a click on the map opens the lore behind it. Nest maps inside maps
-                and move from continent to crypt; the world stays coherent at every scale.
+              <p class="mt-4 max-w-md leading-relaxed text-pretty text-foreground-muted">
+                Drop pins for settlements, dungeons and quests, each bound to the location note it
+                marks, so a click on the map opens the lore behind it. Sort pins into categories,
+                outline regions, and label the land in your own words.
               </p>
-              <ul
-                class="mt-6 flex flex-wrap gap-x-6 gap-y-2 font-mono text-xs text-foreground-muted"
-              >
+              <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-foreground-muted">
                 <li>Pins linked to notes</li>
-                <li>Nested, continent to crypt</li>
-                <li>Categories &amp; journeys</li>
+                <li>Pin categories</li>
+                <li>Text, rectangle and circle markings</li>
               </ul>
             </div>
             <figure>
               <div
-                class="aspect-[16/10] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+                class="overflow-hidden rounded-md border border-background-border bg-background-elevated"
               >
                 <img
                   src={withBase("/maps.webp")}
                   alt="Grimoire's map view: the hand-drawn Ashfen Region map with pins for Thornhaven, a camp out in the marsh, and the Ember Keep. The keep's pin is selected, and a panel beside it shows the location note that pin links to."
-                  class="block h-full w-full object-cover object-center"
+                  class="block h-auto w-full"
+                  width="3827"
+                  height="2220"
                   loading="lazy"
                   decoding="async"
                 />
               </div>
-              <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
-                The Ember Keep's pin, selected — linked straight to its location note.
+              <figcaption class="mt-3 text-sm text-foreground-muted">
+                The Ember Keep's pin, selected, with the location note it links to.
               </figcaption>
             </figure>
           </div>
 
-          <!-- 02 · Scenes — sound where the story is -->
+          <!-- Scenes: sound where the story is -->
           <div class="reveal mt-20 lg:mt-28" data-reveal>
             <div class="max-w-2xl">
-              <p class="font-mono text-xs tracking-[0.15em] text-primary">02 · SCENES</p>
               <h3
-                class="mt-3 max-w-xl font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
+                class="max-w-xl font-heading text-[clamp(1.5rem,3vw,2rem)] leading-snug text-balance"
               >
                 Sound that lives where the story does.
               </h3>
-              <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
-                Layer local files and Spotify into named scenes — a storm over the keep, a crowded
-                tavern, the last stand. Then place the sound where the moment lives: embedded in a
-                note, or pinned to a highlighted passage in a PDF. Start the soundtrack without
-                breaking the fiction or leaving the page.
+              <p class="mt-4 max-w-xl leading-relaxed text-pretty text-foreground-muted">
+                Layer your own audio files and Spotify into named scenes: a storm over the keep, a
+                crowded tavern, the last stand. Then put the sound where the moment lives, embedded
+                in a note or linked to a passage in a PDF, and start it without breaking the fiction
+                or leaving the page.
               </p>
+              <ul class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-foreground-muted">
+                <li>Local audio and Spotify (Premium)</li>
+                <li>Embedded in notes</li>
+                <li>Linked to PDF passages</li>
+              </ul>
             </div>
             <div class="mt-10 grid gap-8 sm:grid-cols-2">
               <figure>
                 <div
-                  class="aspect-[4/3] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+                  class="overflow-hidden rounded-md border border-background-border bg-background-elevated"
                 >
                   <img
                     src={withBase("/audio-note.webp")}
                     alt="A Grimoire note open in the editor with an ambient audio scene embedded inline in the Markdown"
-                    class="block h-full w-full object-cover object-top"
+                    class="block h-auto w-full"
+                    width="3840"
+                    height="2210"
                     loading="lazy"
                     decoding="async"
                   />
                 </div>
-                <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
-                  In a note — a scene sits inline with your prep.
+                <figcaption class="mt-3 text-sm text-foreground-muted">
+                  In a note: a scene sits inline with your prep.
                 </figcaption>
               </figure>
               <figure>
                 <div
-                  class="aspect-[4/3] overflow-hidden rounded-md border border-background-border bg-background-elevated"
+                  class="overflow-hidden rounded-md border border-background-border bg-background-elevated"
                 >
                   <img
                     src={withBase("/audio-pdf.webp")}
-                    alt="A PDF open in Grimoire with a highlighted passage that has an ambient audio scene pinned to it"
-                    class="block h-full w-full object-cover object-top"
+                    alt="A PDF open in Grimoire with a passage linked to an ambient audio scene"
+                    class="block h-auto w-full"
+                    width="3840"
+                    height="2212"
                     loading="lazy"
                     decoding="async"
                   />
                 </div>
-                <figcaption class="mt-3 font-mono text-xs text-foreground-muted">
-                  Over a PDF — pin a scene to any highlighted passage.
+                <figcaption class="mt-3 text-sm text-foreground-muted">
+                  In a PDF: a scene linked to the passage that calls for it.
                 </figcaption>
               </figure>
             </div>
           </div>
 
-          <!-- Foundation: Notes + Ledger -->
+          <!-- Foundation: notes, the table, the ledger, the project -->
           <div class="mt-20 border-t border-background-border pt-14 lg:mt-28">
-            <div class="grid gap-x-16 gap-y-10 sm:grid-cols-2">
+            <div class="grid gap-x-16 gap-y-12 sm:grid-cols-2">
               {
                 pillars.map((pillar, i) => (
                   <article class="reveal" style={`--i: ${i}`} data-reveal>
-                    <p class="font-mono text-xs tracking-[0.15em] text-primary">
-                      {pillar.num} · {pillar.label}
+                    <h3 class="font-heading text-xl leading-snug">{pillar.title}</h3>
+                    <p class="mt-3 leading-relaxed text-pretty text-foreground-muted">
+                      {pillar.body}
                     </p>
-                    <h3 class="mt-3 text-lg font-semibold">{pillar.title}</h3>
-                    <p class="mt-2 leading-relaxed text-foreground-muted">{pillar.body}</p>
                   </article>
                 ))
               }
+              <article class="reveal" style="--i: 3" data-reveal>
+                <h3 class="font-heading text-xl leading-snug">Open, and early</h3>
+                <p class="mt-3 leading-relaxed text-pretty text-foreground-muted">
+                  Grimoire is free and GPL-3.0. It's a 0.x release, so it changes often, and every
+                  release says what changed. Read every line, report a bug or send a fix{" "}
+                  <a href={GITHUB} class={textLink}>on GitHub</a>.
+                </p>
+              </article>
             </div>
           </div>
         </div>
@@ -279,105 +275,146 @@ const pillars = [
 
       <!-- Download -->
       <section id="download" class="border-t border-background-border">
-        <div class="mx-auto max-w-6xl px-6 py-24">
-          <p class="font-mono text-xs tracking-[0.15em] text-foreground-faint uppercase">
-            Free · GPL-3.0
-          </p>
-          <h2 class="mt-4 font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug">
-            Take up the ledger.
-          </h2>
-          <p class="mt-4 max-w-xl leading-relaxed text-foreground-muted">
-            Download the latest build for your platform. On first launch, pick any folder to become
-            your Ledger — Grimoire keeps everything there, and only there. Uninstalling leaves your
-            files exactly where they are.
-          </p>
-          {
-            version && releaseDate && (
-              <p class="mt-3 font-mono text-xs text-foreground-muted">
-                Latest release {version} · {releaseDate}
-              </p>
-            )
-          }
+        <div
+          class="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:gap-16"
+        >
+          <div>
+            <h2 class="font-heading text-[clamp(1.875rem,4vw,2.25rem)] leading-snug">
+              Take up the ledger.
+            </h2>
+            <p class="mt-4 leading-relaxed text-pretty text-foreground-muted">
+              The first time Grimoire opens, it shows you The Ashfen Vale, an example ledger to
+              explore. Make your own when you're ready, in a folder you choose. Uninstalling leaves
+              your files exactly where they are.
+            </p>
+            {
+              version && releaseDate && (
+                <p class="mt-4 text-sm text-foreground-muted">
+                  <span class="font-mono">{version}</span> · early release · {releaseDate}
+                </p>
+              )
+            }
+            <p
+              class="mt-4 hidden text-sm leading-relaxed text-foreground in-data-[device=mobile]:block"
+            >
+              Grimoire is a desktop app. Open this page on your Windows, macOS or Linux computer to
+              download it.
+            </p>
+            <p class="mt-6 text-sm leading-relaxed text-pretty text-foreground-muted">
+              Builds aren't code-signed yet, so the first launch shows a warning. How to get past
+              it is beside each download. Rather check first?{" "}
+              <a href={GITHUB} class={textLink}>Read the source on GitHub</a>.
+            </p>
+          </div>
 
           <ul
-            class="mt-10 max-w-2xl divide-y divide-background-border border-y border-background-border"
+            data-platforms
+            class="divide-y divide-background-border border-y border-background-border"
           >
             {
               platforms.map((platform, i) => (
                 <li
-                  class="reveal flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between"
+                  data-os={platform.key}
+                  class="group/row reveal py-6"
                   style={`--i: ${i}`}
                   data-reveal
                 >
-                  <div class="flex flex-col gap-1">
-                    <span class="font-semibold">{platform.os}</span>
-                    <span class="font-mono text-xs text-foreground-muted">{platform.note}</span>
+                  <div class="flex flex-wrap items-baseline gap-x-3">
+                    <h3 class="font-semibold">{platform.os}</h3>
+                    <span class="hidden text-sm text-foreground-muted group-data-[yours]/row:inline">
+                      Your computer
+                    </span>
                   </div>
-                  <div class="flex flex-wrap items-center gap-2">
+                  <p class="mt-1 text-sm text-foreground-muted">{platform.note}</p>
+                  <div class="mt-4 flex flex-wrap items-center gap-2">
                     {platform.assets.map((asset, j) => (
                       <a
                         href={asset.url}
-                        rel="noopener"
-                        aria-label={`Download Grimoire for ${platform.os} — ${asset.label} (${asset.detail})`}
-                        class={`group inline-flex items-center gap-2 rounded-sm px-3 py-2 text-sm font-semibold transition-colors duration-150 ease-out ${focusRing} ${
+                        aria-label={
+                          asset.direct
+                            ? `Download Grimoire for ${platform.os}: ${asset.label}, ${asset.detail}${asset.size ? `, ${asset.size}` : ""}`
+                            : `Get Grimoire for ${platform.os} from the GitHub releases page`
+                        }
+                        class:list={[
+                          "group inline-flex items-center gap-2 rounded-sm border px-3 py-2 text-sm font-semibold transition-colors",
                           j === 0
-                            ? "border border-background-border bg-background-elevated text-foreground hover:bg-hover-overlay"
-                            : "text-foreground-muted hover:bg-hover-overlay hover:text-foreground"
-                        }`}
+                            ? [
+                                "border-background-border bg-background-elevated text-foreground hover:border-foreground-faint",
+                                "group-data-[yours]/row:border-transparent group-data-[yours]/row:bg-primary group-data-[yours]/row:text-primary-foreground group-data-[yours]/row:hover:bg-primary/80",
+                              ]
+                            : "border-transparent text-foreground-muted hover:bg-hover-overlay hover:text-foreground",
+                        ]}
                       >
                         <span>{asset.label}</span>
-                        <span class="font-mono text-xs text-foreground-muted">{asset.detail}</span>
                         <span
-                          class="text-foreground-muted transition duration-150 ease-out group-hover:translate-y-0.5 group-hover:text-primary"
-                          aria-hidden="true"
+                          class:list={[
+                            "font-mono text-xs font-normal text-foreground-muted",
+                            j === 0 && "group-data-[yours]/row:text-primary-foreground",
+                          ]}
                         >
-                          {resolved ? "↓" : "↗"}
+                          {asset.detail}
+                          {asset.size && ` · ${asset.size}`}
                         </span>
+                        {asset.direct ? (
+                          <svg
+                            aria-hidden="true"
+                            class:list={[
+                              "size-3.5 text-foreground-muted transition-colors group-hover:text-primary",
+                              j === 0 && "group-data-[yours]/row:text-primary-foreground group-data-[yours]/row:group-hover:text-primary-foreground",
+                            ]}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M12 5v14" />
+                            <path d="m19 12-7 7-7-7" />
+                          </svg>
+                        ) : (
+                          <svg
+                            aria-hidden="true"
+                            class="size-3.5 text-foreground-muted transition-colors group-hover:text-primary"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M7 7h10v10" />
+                            <path d="M7 17 17 7" />
+                          </svg>
+                        )}
                       </a>
                     ))}
                   </div>
+                  <p class="mt-3 text-sm leading-relaxed text-pretty text-foreground-muted">
+                    {platform.firstRun}
+                  </p>
                 </li>
               ))
             }
           </ul>
-
-          <p class="mt-6 max-w-2xl text-sm leading-relaxed text-foreground-muted">
-            Builds aren't code-signed yet, so on first launch your OS may warn about an unidentified
-            developer. It's safe to continue: on <span class="text-foreground">macOS</span>,
-            right-click the app and choose <span class="text-foreground">Open</span>; on
-            <span class="text-foreground">Windows</span>, choose
-            <span class="text-foreground">More info → Run anyway</span>. Prefer to verify first?
-            Every line is open source — read it on GitHub before you run it.
-          </p>
         </div>
       </section>
     </main>
 
     <footer class="border-t border-background-border">
       <div
-        class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-10 text-sm text-foreground-muted"
+        class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-foreground-muted"
       >
         <p>
           <span class="font-heading text-primary">Grimoire</span>
           <span class="ml-3">© Aaron Lamont · GPL-3.0</span>
         </p>
-        <div class="flex gap-6">
-          <a
-            href={GITHUB}
-            rel="noopener"
-            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
-            >GitHub</a
-          >
-          <a
-            href={`${GITHUB}/issues`}
-            rel="noopener"
-            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
+        <div class="flex gap-4">
+          <a href={GITHUB} class="rounded-sm py-2 transition-colors hover:text-foreground">GitHub</a>
+          <a href={`${GITHUB}/issues`} class="rounded-sm py-2 transition-colors hover:text-foreground"
             >Report a bug</a
           >
-          <a
-            href={RELEASES}
-            rel="noopener"
-            class={`rounded-sm transition-colors duration-150 ease-out hover:text-foreground ${focusRing}`}
+          <a href={RELEASES} class="rounded-sm py-2 transition-colors hover:text-foreground"
             >Releases</a
           >
         </div>
@@ -385,3 +422,47 @@ const pillars = [
     </footer>
   </div>
 </Layout>
+
+<script>
+  /*
+    Lead with the visitor's own platform. Without this script every row is shown
+    equal, in a fixed order, which is the no-JS page and a complete one.
+
+    A phone or tablet gets a line saying Grimoire is a desktop app instead: an iPad
+    reports itself as a Mac, so a touch screen on "Mac" counts as a tablet. Which Mac
+    chip it has is not something a browser will say, so macOS keeps both buttons and
+    its note says which to pick.
+  */
+  type UAData = { platform?: string; mobile?: boolean };
+  const nav = navigator as Navigator & { userAgentData?: UAData };
+  const ua = navigator.userAgent;
+  const platform = (nav.userAgentData?.platform || navigator.platform || "").toLowerCase();
+
+  const isMac = platform.includes("mac");
+  const mobile =
+    nav.userAgentData?.mobile ||
+    /Android|iPhone|iPad|iPod/.test(ua) ||
+    (isMac && navigator.maxTouchPoints > 1);
+
+  const key = mobile
+    ? null
+    : platform.includes("win")
+      ? "windows"
+      : isMac
+        ? "macos"
+        : platform.includes("linux") || platform.includes("x11")
+          ? "linux"
+          : null;
+
+  if (mobile) document.documentElement.dataset.device = "mobile";
+
+  const row = key ? document.querySelector<HTMLElement>(`[data-os="${key}"]`) : null;
+  if (row) {
+    row.dataset.yours = "";
+    row.style.setProperty("--i", "0");
+    row.parentElement?.prepend(row);
+    const os = row.querySelector("h3")?.textContent;
+    const label = document.querySelector("[data-cta-label]");
+    if (os && label) label.textContent = `Download for ${os}`;
+  }
+</script>
