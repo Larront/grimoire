@@ -50,7 +50,8 @@ const WIKI_LINK_RE = /^\[\[([^[\]]+)\]\]/;
 /**
  * True when the `[[` about to be read is the second character of `![[…]]` — an
  * Obsidian transclusion, which Grimoire renders as the text the GM typed rather
- * than as a link.
+ * than as a link. (An image's, `![[map.png]]`, never gets here: the Image block
+ * reads it first and draws the picture.)
  *
  * The `!` is not part of what the tokenizer is offered: the reader hands over the
  * source from `[[` onwards, having already taken the `!` as text. So the evidence

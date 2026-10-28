@@ -122,6 +122,7 @@ export const commands = {
 	getFileTree: () => __TAURI_INVOKE<FileNode>("get_file_tree"),
 	getGraphData: () => __TAURI_INVOKE<GraphData_Serialize>("get_graph_data"),
 	getImageAbsolutePath: (relativePath: string) => __TAURI_INVOKE<string>("get_image_absolute_path", { relativePath }),
+	resolveImageEmbed: (target: string) => __TAURI_INVOKE<string | null>("resolve_image_embed", { target }),
 	getLedgerPath: () => __TAURI_INVOKE<string | null>("get_ledger_path"),
 	getMapImageDataUrl: (mapId: number) => __TAURI_INVOKE<string>("get_map_image_data_url", { mapId }),
 	getMaps: () => __TAURI_INVOKE<Map[]>("get_maps"),

@@ -569,6 +569,7 @@ An image in a note: a map, a handout, a portrait.
 - **Placement:** left and right float the image beside the prose that follows (at the Infobox's 640px threshold; below it, the image stands at its side); centre never floats. Width is a percentage of the column.
 - **Selected:** a crimson outline on the image, a floating toolbar above it (never over it) — align left, centre, right, View full size, Replace — 28px with tooltips, and a resize handle with a grip on the side the image grows toward, showing the width while it moves. The caption is a Linked Text Field.
 - **Missing:** the shared notice — "This image was moved or deleted", the file name, Replace — with no error toast.
+- **Obsidian's embeds:** `![[map.png]]` draws as an image like any other, its file found by name in the world as Obsidian finds it, and a `|300` drawn 300px wide. The note keeps the embed as written until the GM changes the image (aligns, resizes, captions, replaces it), which writes it Grimoire's way at the path it was found at. A note's embed, `![[Some Note]]`, stays the text the GM typed.
 
 ### Image Viewer
 
