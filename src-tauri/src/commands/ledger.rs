@@ -78,6 +78,9 @@ pub struct OpenLedgerResult {
     pub salvaged: Option<db::SalvageSummary>,
     /// Set only by a rebuild: what it brought back besides the notes.
     pub rebuilt: Option<RebuildSummary>,
+    /// Notes turned up at paths the records didn't hold, so some links may point at
+    /// where a note used to be: the frontend asks `plan_link_repairs`.
+    pub notes_arrived: bool,
 }
 
 /// What a rebuild recovered besides the notes. See `rebuild_ledger_db`.
@@ -428,6 +431,7 @@ fn finish_open(
         damaged_file: recovery.damaged_file.map(|p| p.to_string_lossy().to_string()),
         salvaged: recovery.salvaged,
         rebuilt: recovery.rebuilt,
+        notes_arrived: import_report.arrived,
     })
 }
 

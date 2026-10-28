@@ -104,6 +104,9 @@ pub struct ImportReport {
     /// Empty on the ordinary open, where the repair finds nothing to do. Non-empty
     /// only when rows were deleted and pins were pointing at them.
     pub unlinked_pins: Vec<UnlinkedPin>,
+    /// Notes were found at paths the records didn't hold: new files, or moved ones.
+    /// What tells the open that links may need repairing.
+    pub arrived: bool,
 }
 
 /// Walk `ledger_path`, sync the `notes` table to match disk, and return
@@ -199,6 +202,7 @@ pub fn reconcile_notes_with_disk(
     Ok(ImportReport {
         failed,
         unlinked_pins,
+        arrived: !to_insert.is_empty(),
     })
 }
 
@@ -710,6 +714,7 @@ mod tests {
                 reason: "permission denied".to_string(),
             }],
             unlinked_pins: Vec::new(),
+            arrived: false,
         };
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].path, "bad.md");

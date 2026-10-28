@@ -200,6 +200,19 @@ struct NoteExternalMoveLinksStale {
     count: u32,
 }
 
+/// Tell open notes that Grimoire itself rewrote their files — another note's links,
+/// healed. The watcher drops the app's own writes as echoes, so without this a note
+/// open beside the change kept the old text, and its next save put the old links back.
+/// The same event an outside edit raises, so the pane's answer is the same: a clean
+/// buffer reloads, an unsaved one is never overwritten.
+pub fn announce_rewritten(app: &AppHandle, paths: &[String]) {
+    for path in paths {
+        if let Err(e) = app.emit("note:content-changed", NoteContentChanged { path: path.clone() }) {
+            log::warn!("[ledger_watch] failed to emit note:content-changed: {e}");
+        }
+    }
+}
+
 /// Start (or re-root) the ledger watcher on `ledger_path`, replacing any watcher
 /// from a previously-open ledger. Best-effort: a watcher that can't be built or
 /// rooted is logged and skipped — live-sync degrades, the app keeps working.
@@ -884,7 +897,7 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
         return;
     }
 
-    let (rebuilt, unlinked_pins) = {
+    let (rebuilt, unlinked_pins, arrived) = {
         let Ok(crate::ledger::OpenLedger { conn, .. }) = guard.open() else {
             return;
         };
@@ -897,9 +910,9 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
         // same one the open path runs, reached mid-session — and it was the
         // sibling silence: an open at least ends with a screen the GM is looking
         // at, whereas here their map simply stops working under them.
-        let unlinked_pins =
+        let (unlinked_pins, arrived) =
             match crate::commands::import::reconcile_notes_with_disk(&ledger_path, conn) {
-                Ok(report) => report.unlinked_pins,
+                Ok(report) => (report.unlinked_pins, report.arrived),
                 Err(e) => {
                     log::warn!("[ledger_watch] bulk notes reconcile failed: {e}");
                     return;
@@ -912,7 +925,7 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
             .load::<crate::db::models::Scene>(conn)
             .unwrap_or_default();
         match crate::note_index::rebuild_all_from_ledger(&ledger_path, conn, &maps, &scenes) {
-            Ok(index) => (index, unlinked_pins),
+            Ok(index) => (index, unlinked_pins, arrived),
             Err(e) => {
                 log::warn!("[ledger_watch] bulk rebuild failed: {e}");
                 return;
@@ -935,6 +948,14 @@ fn rebuild_all(app: &AppHandle, canonical_root: &Path) {
         && let Err(e) = app.emit("pins:unlinked", unlinked_pins)
     {
         log::warn!("[ledger_watch] failed to emit pins:unlinked: {e}");
+    }
+
+    // Notes turned up at paths the records didn't hold — a reorganisation, most
+    // likely — so links written as paths may point at where they used to be. The
+    // frontend asks `plan_link_repairs` and lists any it can heal; this path never
+    // rewrites a link itself (ADR-0014).
+    if arrived && let Err(e) = app.emit("notes:arrived", ()) {
+        log::warn!("[ledger_watch] failed to emit notes:arrived: {e}");
     }
 }
 

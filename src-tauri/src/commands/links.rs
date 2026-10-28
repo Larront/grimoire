@@ -350,6 +350,125 @@ fn collect_rewrites_with(
     Ok(rewrites)
 }
 
+// ── Link repair ───────────────────────────────────────────────────────────────
+//
+// The escape hatch ADR-0014 left for the bulk path. A reorganisation too big for the
+// Ledger Watcher to follow file by file (a branch switch, a sync, folders dragged in
+// Explorer) re-creates the moved notes' rows, so nothing remembers where each one
+// went, and a link written as a path — `[[Places/Thornhaven]]` — stops resolving.
+// The note is usually still there under its own name, so the name is what finds it.
+// A bare `[[Thornhaven]]` never needs this: it resolves by name wherever the note
+// went, and one that doesn't resolve names no note at all (a renamed file, or one
+// not written yet), which is nothing a name can find.
+
+/// One broken link and the notes it could mean now.
+#[derive(Serialize, specta::Type, Debug, Clone)]
+pub struct LinkRepair {
+    /// The link as the notes write it, e.g. `Places/Thornhaven`.
+    pub target: String,
+    /// Notes with the file name the link ends in, shortest path first. One is the
+    /// usual case; more and the GM chooses.
+    pub candidates: Vec<ResolvedNote>,
+    /// The notes holding the link, by title.
+    pub sources: Vec<ResolvedNote>,
+}
+
+/// What the GM chose for one broken link: the note it should point at now.
+#[derive(serde::Deserialize, specta::Type, Debug, Clone)]
+pub struct LinkRepairChoice {
+    pub target: String,
+    pub note_id: i32,
+}
+
+/// Every link that resolves to nothing but whose file name a note still has.
+/// Computed from the indexes alone: no file is read, so it is cheap enough to run
+/// after every bulk change.
+pub fn plan_link_repairs_on_conn(conn: &mut SqliteConnection) -> Result<Vec<LinkRepair>, String> {
+    let resolver = TargetResolver::load(conn)?;
+    let link_rows: Vec<(i32, String)> = nl::note_links
+        .select((nl::source_id, nl::target_path))
+        .load(conn)
+        .map_err(|e| e.to_string())?;
+
+    let by_id: HashMap<i32, &ResolvedNote> = resolver.notes.iter().map(|n| (n.id, n)).collect();
+    let mut by_stem: HashMap<String, Vec<&ResolvedNote>> = HashMap::new();
+    for note in &resolver.notes {
+        by_stem.entry(path_stem(&note.path).to_lowercase()).or_default().push(note);
+    }
+
+    // Keyed lowercase, as resolution is: `Places/Thornhaven` and `places/thornhaven`
+    // are one broken link, shown as the first spelling met.
+    let mut repairs: Vec<LinkRepair> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+    for (source_id, target) in link_rows {
+        let key = target.to_lowercase();
+        let i = match index.get(&key) {
+            Some(&i) => i,
+            None => {
+                if resolver.resolve(&target).is_some() {
+                    continue;
+                }
+                let Some(found) = by_stem.get(&path_stem(&key).to_string()) else {
+                    continue;
+                };
+                let mut candidates: Vec<ResolvedNote> = found.iter().map(|n| (*n).clone()).collect();
+                candidates.sort_by(|a, b| (a.path.len(), &a.path).cmp(&(b.path.len(), &b.path)));
+                repairs.push(LinkRepair { target, candidates, sources: Vec::new() });
+                index.insert(key, repairs.len() - 1);
+                repairs.len() - 1
+            }
+        };
+        if let Some(source) = by_id.get(&source_id) {
+            repairs[i].sources.push((*source).clone());
+        }
+    }
+
+    for repair in &mut repairs {
+        // A note can hold both spellings; the id in the key puts its copies together.
+        repair.sources.sort_by_key(|n| (n.title.to_lowercase(), n.id));
+        repair.sources.dedup_by_key(|n| n.id);
+    }
+    repairs.sort_by_key(|r| r.target.to_lowercase());
+    Ok(repairs)
+}
+
+/// The rewrites the GM's choices imply — computed, never written, like the other
+/// collectors. Recomputed from the choices rather than trusting the plan the dialog
+/// showed: a link healed since (or a note gone) is skipped, never forced.
+///
+/// A link keeps its form: written as a path, it is rewritten as the note's path now,
+/// with `.md` if it had one; the `|display` and `#heading` after it stay.
+pub fn collect_link_repairs_on_conn(
+    ledger_path: &Path,
+    conn: &mut SqliteConnection,
+    choices: &[LinkRepairChoice],
+) -> Result<Vec<(crate::db::models::Note, String)>, String> {
+    let resolver = TargetResolver::load(conn)?;
+    let by_id: HashMap<i32, &ResolvedNote> = resolver.notes.iter().map(|n| (n.id, n)).collect();
+
+    let mut targets: HashMap<String, String> = HashMap::with_capacity(choices.len());
+    for choice in choices {
+        if resolver.resolve(&choice.target).is_some() {
+            continue;
+        }
+        let Some(note) = by_id.get(&choice.note_id) else {
+            continue;
+        };
+        let with_ext = choice.target.to_lowercase().ends_with(".md");
+        let new = if with_ext {
+            note.path.clone()
+        } else {
+            note.path.strip_suffix(".md").unwrap_or(&note.path).to_string()
+        };
+        targets.insert(choice.target.to_lowercase(), new);
+    }
+    if targets.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    collect_rewrites_with(ledger_path, conn, |target| targets.get(&target.to_lowercase()).cloned())
+}
+
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Debug, Clone, specta::Type)]
@@ -468,6 +587,30 @@ pub fn resolve_note_target(
     ledger: State<AppLedger>,
 ) -> Result<Option<ResolvedNote>, String> {
     with_open_ledger(&ledger, |l| resolve_note_target_on_conn(l.conn, &target))
+}
+
+/// The broken links in the open world that a note's name can still place.
+#[tauri::command]
+#[specta::specta]
+pub fn plan_link_repairs(ledger: State<AppLedger>) -> Result<Vec<LinkRepair>, String> {
+    with_open_ledger(&ledger, |l| plan_link_repairs_on_conn(l.conn))
+}
+
+/// Point the chosen broken links at the notes the GM chose, through the same
+/// batched write the backlink rewrite uses. Returns how many notes were rewritten.
+#[tauri::command]
+#[specta::specta]
+pub fn apply_link_repairs(
+    choices: Vec<LinkRepairChoice>,
+    app: tauri::AppHandle,
+    ledger: State<AppLedger>,
+) -> Result<u32, String> {
+    let rewritten = with_open_ledger(&ledger, |l| {
+        let rewrites = collect_link_repairs_on_conn(l.path, l.conn, &choices)?;
+        crate::note_mutation::commit_backlink_rewrites(l.conn, l.index, l.path, rewrites)
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    Ok(rewritten.len() as u32)
 }
 
 #[derive(Serialize, Debug, Clone, specta::Type)]
@@ -1479,5 +1622,117 @@ mod tests {
         assert!(rewrites.is_empty(), "links resolving to the other Plan note must not be rewritten");
         let content = fs::read_to_string(dir.path().join("a.md")).unwrap();
         assert_eq!(content, "See [[Plan]].");
+    }
+
+    // ── link repair ────────────────────────────────────────────────────────
+
+    /// A world after a bulk move: Thornhaven went from `Places/` to `Locations/`, and
+    /// two notes still link to it at its old place.
+    fn moved_world(dir: &Path) -> SqliteConnection {
+        fs::create_dir_all(dir.join("Locations")).unwrap();
+        fs::write(dir.join("Locations/Thornhaven.md"), "A village.").unwrap();
+        fs::write(dir.join("Mira.md"), "Born in [[Places/Thornhaven|the village]].").unwrap();
+        fs::write(dir.join("Harbor.md"), "Road to [[places/thornhaven#Gate]], and [[Nowhere Yet]].")
+            .unwrap();
+        let mut conn = test_conn();
+        insert_note(&mut conn, 1, "Locations/Thornhaven.md", "Thornhaven");
+        insert_note(&mut conn, 2, "Mira.md", "Mira");
+        insert_note(&mut conn, 3, "Harbor.md", "Harbor");
+        seed_note_links(&mut conn, 2, &["Places/Thornhaven".to_string()]).unwrap();
+        seed_note_links(&mut conn, 3, &["places/thornhaven".to_string(), "Nowhere Yet".to_string()])
+            .unwrap();
+        conn
+    }
+
+    #[test]
+    fn repair_plan_finds_a_moved_note_by_its_name() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+
+        let plan = plan_link_repairs_on_conn(&mut conn).unwrap();
+
+        assert_eq!(plan.len(), 1, "one broken link, however it is spelled");
+        assert_eq!(plan[0].target, "Places/Thornhaven");
+        let candidates: Vec<&str> = plan[0].candidates.iter().map(|n| n.path.as_str()).collect();
+        assert_eq!(candidates, ["Locations/Thornhaven.md"]);
+        let sources: Vec<&str> = plan[0].sources.iter().map(|n| n.title.as_str()).collect();
+        assert_eq!(sources, ["Harbor", "Mira"]);
+    }
+
+    #[test]
+    fn repair_plan_leaves_links_to_notes_not_written_yet() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        let plan = plan_link_repairs_on_conn(&mut conn).unwrap();
+        assert!(plan.iter().all(|r| r.target != "Nowhere Yet"));
+    }
+
+    #[test]
+    fn repair_plan_leaves_links_that_still_resolve() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        seed_note_links(&mut conn, 2, &["Thornhaven".to_string(), "Locations/Thornhaven".to_string()])
+            .unwrap();
+        seed_note_links(&mut conn, 3, &[]).unwrap();
+        assert!(plan_link_repairs_on_conn(&mut conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn repair_plan_offers_every_note_of_the_name_shortest_first() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        insert_note(&mut conn, 4, "Archive/Old Maps/Thornhaven.md", "Thornhaven");
+        let plan = plan_link_repairs_on_conn(&mut conn).unwrap();
+        let candidates: Vec<&str> = plan[0].candidates.iter().map(|n| n.path.as_str()).collect();
+        assert_eq!(candidates, ["Locations/Thornhaven.md", "Archive/Old Maps/Thornhaven.md"]);
+    }
+
+    #[test]
+    fn repair_rewrites_the_link_keeping_its_form_and_what_follows_it() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        let choices =
+            [LinkRepairChoice { target: "Places/Thornhaven".to_string(), note_id: 1 }];
+
+        let mut rewrites = collect_link_repairs_on_conn(dir.path(), &mut conn, &choices).unwrap();
+        rewrites.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+
+        let texts: Vec<(&str, &str)> =
+            rewrites.iter().map(|(n, c)| (n.path.as_str(), c.as_str())).collect();
+        assert_eq!(
+            texts,
+            [
+                ("Harbor.md", "Road to [[Locations/Thornhaven#Gate]], and [[Nowhere Yet]]."),
+                ("Mira.md", "Born in [[Locations/Thornhaven|the village]]."),
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("Mira.md")).unwrap(),
+            "Born in [[Places/Thornhaven|the village]].",
+            "collecting writes nothing",
+        );
+    }
+
+    #[test]
+    fn repair_keeps_the_extension_a_link_was_written_with() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        fs::write(dir.path().join("Mira.md"), "[[Places/Thornhaven.md]]").unwrap();
+        seed_note_links(&mut conn, 2, &["Places/Thornhaven.md".to_string()]).unwrap();
+        let choices =
+            [LinkRepairChoice { target: "Places/Thornhaven.md".to_string(), note_id: 1 }];
+        let rewrites = collect_link_repairs_on_conn(dir.path(), &mut conn, &choices).unwrap();
+        assert_eq!(rewrites[0].1, "[[Locations/Thornhaven.md]]");
+    }
+
+    #[test]
+    fn repair_skips_a_link_healed_since_it_was_offered() {
+        let dir = TempDir::new().unwrap();
+        let mut conn = moved_world(dir.path());
+        // The note went back where the links expect it before the GM chose.
+        conn.batch_execute("UPDATE notes SET path = 'Places/Thornhaven.md' WHERE id = 1").unwrap();
+        let choices =
+            [LinkRepairChoice { target: "Places/Thornhaven".to_string(), note_id: 1 }];
+        assert!(collect_link_repairs_on_conn(dir.path(), &mut conn, &choices).unwrap().is_empty());
     }
 }

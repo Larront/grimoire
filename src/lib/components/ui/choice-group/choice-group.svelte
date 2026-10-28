@@ -27,6 +27,10 @@
 
   let buttons: (HTMLButtonElement | null)[] = [];
 
+  // With nothing chosen yet, Tab still has to reach the group: the first choice holds
+  // the stop, as in any radio group.
+  const noneChosen = $derived(!options.some((o) => o.value === value));
+
   function onKeydown(e: KeyboardEvent, i: number) {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
     if (!step) return;
@@ -46,7 +50,7 @@
       role="radio"
       aria-checked={selected}
       aria-label={option ? item.label : undefined}
-      tabindex={selected ? 0 : -1}
+      tabindex={selected || (noneChosen && i === 0) ? 0 : -1}
       class={optionClass(selected)}
       onclick={() => onChange(item.value)}
       onkeydown={(e) => onKeydown(e, i)}

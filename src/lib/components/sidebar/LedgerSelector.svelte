@@ -39,6 +39,7 @@
     pins: MapPinOff,
     notes: FileWarning,
     links: Link2Off,
+    repairs: Link2Off,
   };
 
   async function onOpenChange(next: boolean) {

@@ -310,6 +310,12 @@ changes — whose next autosave writes the old name back. This is the edge the p
 repair-backlinks tool exists for, and it is now reachable by one more gesture. A future writer
 reading §7 should know the guarantee is echo-suppression, not exclusion.
 
+> **2026-10 design review.** Paid, in the way §7 asked for: every command that rewrites other
+> notes (note and folder rename, scene rename, _Update links_, _Repair links_) now announces the
+> notes it rewrote as `note:content-changed`. An open note reloads, or, with unsaved changes,
+> raises its Conflict Banner, so neither side is overwritten. The guarantee is still not
+> exclusion: the write lands first and the banner follows it.
+
 **Image was left alone.** The `atom` flag question above was answered by not needing an answer: a
 childless node is already an atom, so setting the flag would change no behaviour, and Image's
 on-disk form is unchanged.

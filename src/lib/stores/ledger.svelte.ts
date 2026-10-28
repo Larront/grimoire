@@ -13,6 +13,7 @@ import {
 import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { staleLinks } from "$lib/stores/stale-links.svelte";
+import { linkRepairs } from "$lib/stores/link-repairs.svelte";
 import { pendingSaves } from "$lib/stores/pending-saves";
 import { LocalStorageTabPersistence } from "$lib/stores/tab-persistence";
 import { appPrefs, type DensityLevel } from "$lib/stores/app-prefs.svelte";
@@ -53,6 +54,8 @@ interface OpenLedgerResult {
   salvaged?: SalvageSummary | null;
   /** Set only by a rebuild: what came back besides the notes. */
   rebuilt?: { maps_recovered: number } | null;
+  /** Notes turned up at paths the records didn't hold: links may need repairing. */
+  notes_arrived?: boolean;
 }
 
 /** The example world's own name, as its Start Here note gives it. */
@@ -133,6 +136,10 @@ function createLedgerStore() {
     // list, and its toast, down.
     unreadableNotes.replace(result.failed_imports);
     staleLinks.clear();
+    linkRepairs.clear();
+    // Notes turned up at new places while the world was closed: links written as
+    // paths may point where they were. Listed if any can be healed, never healed here.
+    if (result.notes_arrived) void linkRepairs.check();
 
     // A repair that changed nothing says nothing — the common case, and the
     // silence there is correct. When it did act, the pins it cost the GM are
@@ -518,6 +525,7 @@ function createLedgerStore() {
     unreadableNotes.replace([]);
     unlinkedPins.replace([]);
     staleLinks.clear();
+    linkRepairs.clear();
   }
 
   async function checkExistingLedger(): Promise<void> {

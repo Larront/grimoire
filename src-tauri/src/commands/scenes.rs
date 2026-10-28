@@ -64,12 +64,17 @@ pub fn create_scene(name: String, ledger: State<AppLedger>) -> Result<Scene, Str
 /// The propagation is best-effort **after** the rename has landed: the scene is
 /// renamed either way, and failing the command over a note that could not be written
 /// would leave the GM's gesture looking rejected when the database took it. What is
-/// left behind in that case is a stale name in a note, which is what the planned
-/// repair-backlinks tool is for.
+/// left behind in that case is a stale name in a note, corrected by the scene's next
+/// rename. The notes it did rewrite are announced, so a pane holding one reloads.
 #[tauri::command]
 #[specta::specta]
-pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<Scene, String> {
-    with_open_ledger(&ledger, |l| {
+pub fn update_scene(
+    id: i32,
+    name: String,
+    app: tauri::AppHandle,
+    ledger: State<AppLedger>,
+) -> Result<Scene, String> {
+    let (updated, rewritten) = with_open_ledger(&ledger, |l| {
         let updated: Scene = diesel::update(scenes::table.find(id))
             .set(UpdateScene { name })
             .returning(Scene::as_returning())
@@ -78,20 +83,29 @@ pub fn update_scene(id: i32, name: String, ledger: State<AppLedger>) -> Result<S
 
         crate::search::scene_indexed(l.index, &updated);
 
-        match crate::scene_fence::propagate_rename(
+        let rewritten = match crate::scene_fence::propagate_rename(
             l.conn,
             l.index,
             l.path,
             updated.id,
             &updated.name,
         ) {
-            Ok(0) => {}
-            Ok(n) => log::info!("[update_scene] renamed scene {id} in {n} note(s)"),
-            Err(e) => log::warn!("[update_scene] could not update the scene name in notes: {e}"),
-        }
+            Ok(paths) => {
+                if !paths.is_empty() {
+                    log::info!("[update_scene] renamed scene {id} in {} note(s)", paths.len());
+                }
+                paths
+            }
+            Err(e) => {
+                log::warn!("[update_scene] could not update the scene name in notes: {e}");
+                Vec::new()
+            }
+        };
 
-        Ok(updated)
-    })
+        Ok((updated, rewritten))
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    Ok(updated)
 }
 
 #[tauri::command]

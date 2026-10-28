@@ -108,6 +108,7 @@ const LINK_WRITING_COMMANDS: ReadonlySet<keyof typeof commands> = new Set([
   "renameFolder",
   "moveFolder",
   "applyBacklinkRewrite",
+  "applyLinkRepairs",
   "updateScene",
 ]);
 

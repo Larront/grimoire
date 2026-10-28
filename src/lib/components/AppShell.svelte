@@ -5,6 +5,7 @@
   import TemplatesDialog from "./TemplatesDialog.svelte";
   import FailedImportsDialog from "./FailedImportsDialog.svelte";
   import UnlinkedPinsDialog from "./UnlinkedPinsDialog.svelte";
+  import LinkRepairDialog from "./LinkRepairDialog.svelte";
   import SearchPalette from "./SearchPalette.svelte";
   import QuickNoteDialog from "./QuickNoteDialog.svelte";
   import AdoptDialog from "./AdoptDialog.svelte";
@@ -20,6 +21,7 @@
   import { searchPalette } from "$lib/stores/search.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
+  import { linkRepairs } from "$lib/stores/link-repairs.svelte";
   import { ledger } from "$lib/stores/ledger.svelte";
   import { createUntitledNote } from "$lib/utils/note-actions";
   import { isTypingIn } from "$lib/utils/keyboard";
@@ -55,6 +57,7 @@
       dialogs.adoptOpen ||
       unreadableNotes.open ||
       unlinkedPins.open ||
+      linkRepairs.open ||
       searchPalette.open;
     if (opening) untrack(() => overlay.dismiss());
   });
@@ -164,6 +167,7 @@
     <TemplatesDialog />
     <FailedImportsDialog />
     <UnlinkedPinsDialog />
+    <LinkRepairDialog />
     <SearchPalette />
     <QuickNoteDialog />
     <AdoptDialog bind:open={dialogs.adoptOpen} />
