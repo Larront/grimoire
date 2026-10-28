@@ -10,6 +10,7 @@
      so typing "town" ⏎ links Town Market. The highlight is announced through
      `aria-activedescendant` rather than by moving focus out of the search. -->
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { Search, Plus, Check } from "@lucide/svelte";
   import { scenes } from "$lib/stores/scenes.svelte";
   import { sceneIcon, sceneLinkHue, sceneThumbColors } from "./thumbnail-presets";
@@ -155,7 +156,7 @@
           >
             <RowIcon class="size-3.5" style="color: {colors.fg}" strokeWidth={1.75} />
           </span>
-          <span class="flex-1 truncate text-sm font-medium">{scene.name}</span>
+          <MiddleTruncate text={scene.name} class="flex-1 text-sm font-medium" />
           {#if current}
             <Check class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
           {/if}

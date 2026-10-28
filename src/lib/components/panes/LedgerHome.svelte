@@ -19,6 +19,7 @@
 </script>
 
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { onMount } from "svelte";
   import { api } from "$lib/api";
   import type { Note } from "$lib/types/ledger";
@@ -224,9 +225,11 @@
                 onclick={() => openNote(note.id, note.title)}
               >
                 <FileText class="size-4 shrink-0 text-foreground-muted" strokeWidth={1.5} />
-                <span class="min-w-0 flex-1 truncate text-(length:--font-body) text-foreground" title={note.title}
-                  >{note.title}</span
-                >
+                <MiddleTruncate
+                  text={note.title}
+                  title={note.title}
+                  class="min-w-0 flex-1 text-(length:--font-body) text-foreground"
+                />
                 <span class="shrink-0 text-(length:--font-ui) text-foreground-muted"
                   >{timeAgo(note.modified_at)}</span
                 >

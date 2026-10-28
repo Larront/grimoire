@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { api } from "$lib/api";
   import type { FileNode, Note } from "$lib/types/ledger";
   import * as ContextMenu from "$lib/components/ui/context-menu";
@@ -613,7 +614,7 @@
               onCancel={() => (renamingPath = null)}
             />
           {:else}
-            <span class="truncate {unreadable ? 'text-muted-foreground' : ''}">{node.name}</span>
+            <MiddleTruncate text={node.name} class={unreadable ? "text-muted-foreground" : ""} />
           {/if}
         </Sidebar.MenuButton>
         {@render more()}

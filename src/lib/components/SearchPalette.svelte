@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { api } from "$lib/api";
   import { shortcut } from "$lib/utils/keyboard";
   import { setMode, userPrefersMode } from "mode-watcher";
@@ -1002,7 +1003,7 @@
               class="flex items-center gap-2"
             >
               <Icon class="size-4 shrink-0 text-muted-foreground" />
-              <span class="text-sm font-medium flex-1 truncate">{entity.title}</span>
+              <MiddleTruncate text={entity.title} class="text-sm font-medium flex-1" />
               <span data-testid="recent-time-hint" class="shrink-0 text-xs text-muted-foreground"
                 >{relativeTime(entity.accessed_at)}</span
               >

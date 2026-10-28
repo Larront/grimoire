@@ -194,8 +194,10 @@ Not fixed yet; pick them up when they fit a pass above:
   - Map keyboard use hasn't landed: `MapCanvas.svelte` still has `keyboard: false`;
     pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one
     shows Leaflet's white tooltip.
-  - Long names still truncate at the end in lists (a middle cut would keep "Volume 13"
-    visible); the tab and title now show the full name on hover.
+  - A note's title, at the top of its page, is still cut at its end in a narrow pane
+    ("Annals of the Iron Hand, V…"), with the full name on hover. It is a text field,
+    which can't be cut in the middle; letting it wrap to a second line is the
+    alternative, and the owner's call. (Lists cut long names in the middle now.)
 - **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
   map badge, the colour picker's empty state, sentence-case panel labels, a menu for the
   tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New

@@ -8,6 +8,7 @@
     its path — the folder that matters, not "C:/Users/…" — and offers Find it, for a
     folder that has moved, and Look again, for a drive that has just been plugged back in.
   */
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import type { RecentLedger } from "$lib/stores/ledger.svelte";
   import { FolderSearch, LoaderCircle, RotateCw, X } from "@lucide/svelte";
   import { shortPath } from "$lib/utils/ledger-name";
@@ -41,10 +42,13 @@
 <li class="group/world relative flex items-center rounded-md hover:bg-surface-hover focus-within:bg-surface-hover">
   {#if world.missing}
     <div class="min-w-0 flex-1 px-3 py-2.5" data-testid="recent-missing">
-      <div class="truncate text-foreground-muted {nameClass}" title={world.name}>{world.name}</div>
-      <div class="mt-0.5 truncate text-(length:--font-ui) text-foreground-muted" title={world.path}>
-        Folder not found · {shortPath(world.path)}
-      </div>
+      <MiddleTruncate text={world.name} title={world.name} class="text-foreground-muted {nameClass}" />
+      <MiddleTruncate
+        path
+        text="Folder not found · {shortPath(world.path)}"
+        title={world.path}
+        class="mt-0.5 text-(length:--font-ui) text-foreground-muted"
+      />
     </div>
     {#if opening}
       <LoaderCircle class="me-2 size-3.5 shrink-0 animate-spin text-foreground-muted" />
@@ -85,7 +89,7 @@
           {#if opening}
             <LoaderCircle class="size-3.5 shrink-0 animate-spin text-foreground-muted" />
           {/if}
-          <span class="truncate text-foreground {nameClass}" title={world.name}>{world.name}</span>
+          <MiddleTruncate text={world.name} title={world.name} class="text-foreground {nameClass}" />
         </span>
         <span class="mt-0.5 block truncate text-(length:--font-ui) text-foreground-muted">
           {worldContents(world)}

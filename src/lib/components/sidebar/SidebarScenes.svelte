@@ -13,6 +13,7 @@
   Graph is deliberately NOT here: it is not a scene (#235).
 -->
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { LayoutList, Music2, Pause, Play, Volume2 } from "@lucide/svelte";
@@ -101,7 +102,7 @@
                             {:else}
                               <Music2 class="size-4 text-muted-foreground" />
                             {/if}
-                            <span class="truncate pe-6">{scene.name}</span>
+                            <MiddleTruncate text={scene.name} class="pe-6" />
                           </button>
                         {/snippet}
                       </Sidebar.MenuButton>
