@@ -18,6 +18,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* A short window with the sidebar open (2026-10 design review). At 560px tall, the
+   wordmark, the mini player and the footer rows left the Files tree no room at all,
+   so below 720px the sidebar gives some back: a smaller wordmark, Graph and Settings
+   beside the world's name, and a tree that scrolls in place. Never on the 48px rail,
+   which has nothing to give. */
+@custom-variant short {
+  @media (max-height: 720px) {
+    &:not([data-collapsible="icon"] *) {
+      @slot;
+    }
+  }
+}
+
 /* ── Grimoire Design Tokens ──────────────────────────────────── */
 /*
   The token values themselves live in shared/tokens.css, imported above and
