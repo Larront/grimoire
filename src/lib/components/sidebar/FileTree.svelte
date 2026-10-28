@@ -108,7 +108,29 @@
     return rows[at + 1] ?? rows[at - 1] ?? null;
   }
 
-  async function recycle(target: FileNode, remove: () => Promise<void>) {
+  /**
+   * What a folder holds, as its toast says it: "5 notes and 1 map". Empty when it
+   * holds nothing a GM made. Counted from the tree, which is what the GM saw go.
+   */
+  function contentsOf(folder: FileNode): string {
+    const count = { note: 0, map: 0, PDF: 0 };
+    const walk = (n: FileNode) => {
+      for (const c of n.children) {
+        if (c.is_dir) walk(c);
+        else if (c.note_id !== null) count.note++;
+        else if (c.map_id !== null) count.map++;
+        else if (c.path.toLowerCase().endsWith(".pdf")) count.PDF++;
+      }
+    };
+    walk(folder);
+    const parts = Object.entries(count)
+      .filter(([, n]) => n > 0)
+      .map(([kind, n]) => `${n} ${kind}${n === 1 ? "" : "s"}`);
+    if (parts.length < 2) return parts.join("");
+    return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  }
+
+  async function recycle(target: FileNode, remove: () => Promise<void>, said?: string) {
     // Found first: focus goes to the row that takes this one's place, not to the
     // search box, which is where it fell when the row went.
     const next = neighbourRow();
@@ -118,7 +140,7 @@
       // The api's toast has said why; the row stays, because the file did.
       return;
     }
-    toastSuccess(`“${target.name}” is in the ${recycleBin}`);
+    toastSuccess(said ?? `“${target.name}” is in the ${recycleBin}`);
     await refresh();
     if (next?.isConnected) next.focus();
   }
@@ -142,11 +164,20 @@
 
   function deleteFolder(target: FileNode) {
     const inside = [...noteMap].filter(([, n]) => n.path.startsWith(`${target.path}/`));
-    void recycle(target, async () => {
-      await api.deleteFolder(target.path);
-      for (const [id] of inside) tabs.closeTabByTypeAndId("note", id);
-      await notes.load();
-    });
+    // What went with it, said: "“Lore” is in the Recycle Bin" read the same for an
+    // empty folder and one holding forty notes (2026-10 design review).
+    const held = contentsOf(target);
+    void recycle(
+      target,
+      async () => {
+        await api.deleteFolder(target.path);
+        for (const [id] of inside) tabs.closeTabByTypeAndId("note", id);
+        await notes.load();
+      },
+      held
+        ? `“${target.name}” and the ${held} in it are in the ${recycleBin}`
+        : undefined,
+    );
   }
 
   function deleteMap(target: FileNode) {
@@ -514,13 +545,14 @@
   }
 </script>
 
-<!-- The row's "⋯": the same menu, findable without a right-click. Out of the Tab
-     order — every row would be two stops — since Shift+F10, F2 and Delete reach the
-     same actions from the row itself. -->
+<!-- The row's "⋯": the same menu, findable without a right-click. Only the current
+     row's is in the Tab order, as the row is: the tree is two stops, the row and its
+     "⋯", not two per row (2026-10 design review). It was out of the order entirely,
+     leaving a keyboard user only Shift+F10 to find the menu. -->
 {#snippet more()}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
-      tabindex={-1}
+      tabindex={tabStop}
       aria-label="More for {node.name}"
       class="absolute top-1/2 right-1 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity
              group-hover/tree-row:opacity-100 group-focus-within/tree-row:opacity-100 data-[state=open]:opacity-100

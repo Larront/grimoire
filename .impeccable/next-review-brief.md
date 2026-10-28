@@ -194,15 +194,15 @@ Not fixed yet; pick them up when they fit a pass above:
   - Map keyboard use hasn't landed: `MapCanvas.svelte` still has `keyboard: false`;
     pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one
     shows Leaflet's white tooltip.
-  - A note's title, at the top of its page, is still cut at its end in a narrow pane
-    ("Annals of the Iron Hand, V…"), with the full name on hover. It is a text field,
-    which can't be cut in the middle; letting it wrap to a second line is the
-    alternative, and the owner's call. (Lists cut long names in the middle now.)
+  - Long names: lists cut them in the middle, and a note's title wraps to a second line
+    rather than being cut (the owner's choice).
+  - The owner chose to leave the rest of these: map keyboard use, the World Home's
+    "Untitled" template note and nested `<main>`, and the Splash's launch size.
 - **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
   map badge, the colour picker's empty state, sentence-case panel labels, a menu for the
-  tree's root and no webview menu). Still open: buttons elsewhere are Title Case ("New
-  Scene"); a "⋯" isn't in the Tab order (Shift+F10 reaches the same menu); a folder
-  deleted to the Recycle Bin doesn't say how many notes went with it.
+  tree's root and no webview menu). The last three followed: the remaining Title Case
+  labels are sentence case, the current tree row's "⋯" is a Tab stop, and a folder sent
+  to the Recycle Bin says what went with it.
 - **Animation**: both leftovers were fixed after the merge (a shell dialog closes the
   narrow window's sheet; toasts follow the app's Reduce Motion, not only the computer's).
 

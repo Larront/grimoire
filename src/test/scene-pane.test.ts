@@ -463,7 +463,7 @@ describe("ScenePane — transport reflects this scene only", () => {
     const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
     await waitFor(() => {
       const labels = getAllByRole("button").map((b) => b.textContent?.trim());
-      expect(labels).toContain("Play Scene");
+      expect(labels).toContain("Play scene");
       expect(labels).not.toContain("Resume");
     });
   });
@@ -474,7 +474,7 @@ describe("ScenePane — transport reflects this scene only", () => {
     mockSlots = [];
     const { getAllByRole } = render(ScenePane, { props: { sceneId: 2, pane: "left" } });
     await waitFor(() => {
-      const play = getAllByRole("button").find((b) => b.textContent?.trim() === "Play Scene");
+      const play = getAllByRole("button").find((b) => b.textContent?.trim() === "Play scene");
       expect(play?.hasAttribute("disabled")).toBe(true);
     });
   });

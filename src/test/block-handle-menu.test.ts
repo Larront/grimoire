@@ -146,13 +146,13 @@ describe("the section offering what a text block can become", () => {
       },
       {
         command: { turnInto: "bulletList" },
-        label: "Bullet List",
+        label: "Bullet list",
         icon: "List",
         current: false,
       },
       {
         command: { turnInto: "orderedList" },
-        label: "Numbered List",
+        label: "Numbered list",
         icon: "ListOrdered",
         current: false,
       },
@@ -202,7 +202,7 @@ describe("the section offering what a text block can become", () => {
     const editor = note("1. first light");
     const { items } = section(menuFor(editor, "paragraph"), "Turn into");
 
-    expect(items.filter((i) => i.current).map((i) => i.label)).toEqual(["Numbered List"]);
+    expect(items.filter((i) => i.current).map((i) => i.label)).toEqual(["Numbered list"]);
   });
 
   it("marks a callout's own prose as a paragraph, the callout being a container", () => {

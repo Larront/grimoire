@@ -135,7 +135,7 @@ function createTabsStore() {
   }
 
   function addEmptyTab(pane: "left" | "right") {
-    const newTab: Tab = { type: "empty", id: --_nextEmptyId, title: "New Tab" };
+    const newTab: Tab = { type: "empty", id: --_nextEmptyId, title: "New tab" };
     if (pane === "right") {
       if (!right) {
         right = { tabs: [newTab], activeIndex: 0 };

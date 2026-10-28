@@ -88,7 +88,7 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     expect(titleInput).toBeTruthy();
 
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
@@ -119,7 +119,7 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -139,7 +139,7 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -159,7 +159,7 @@ describe("note rename — auto-rewrite (toggle off)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -182,7 +182,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -198,7 +198,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
 
@@ -222,7 +222,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
     await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
@@ -258,7 +258,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
     await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
@@ -290,7 +290,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     await fireEvent.blur(titleInput!);
     await waitFor(() => expect(document.body.querySelector('[role="alertdialog"]')).toBeTruthy());
@@ -316,7 +316,7 @@ describe("note rename — confirmation dialog (toggle on)", () => {
       return null;
     });
 
-    const titleInput = container.querySelector<HTMLInputElement>('input[placeholder="Untitled"]');
+    const titleInput = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]');
     await fireEvent.input(titleInput!, { target: { value: "Aldric 2" } });
     invokeSpy.mockClear();
     await fireEvent.blur(titleInput!);
@@ -374,5 +374,14 @@ describe("settings dialog — editing section", () => {
     await fireEvent.click(toggle!);
     expect(appPrefs.confirmRenameLinks).toBe(true);
     expect(toggle?.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("note title", () => {
+  it("wraps a long title rather than cutting it, and takes no line break", async () => {
+    const { container } = await openNotePane(async (cmd) => (cmd === "get_notes" ? [testNote] : null));
+    const title = container.querySelector<HTMLTextAreaElement>('textarea[placeholder="Untitled"]')!;
+    await fireEvent.input(title, { target: { value: "Annals of the Iron Hand,\nVolume 13" } });
+    expect(title.value).toBe("Annals of the Iron Hand, Volume 13");
   });
 });

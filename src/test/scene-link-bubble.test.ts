@@ -102,7 +102,7 @@ describe("SceneLinkBubble — change Scene", () => {
   it("re-links to a different Scene picked from the change dropdown", async () => {
     const onChangeScene = vi.fn();
     const { getByLabelText, getByText } = renderBubble({ onChangeScene });
-    await fireEvent.click(getByLabelText("Change Scene"));
+    await fireEvent.click(getByLabelText("Change scene"));
     // Pick the other Scene from the now-open picker.
     await fireEvent.click(getByText("Forest Path"));
     expect(onChangeScene).toHaveBeenCalledWith(7);
@@ -111,7 +111,7 @@ describe("SceneLinkBubble — change Scene", () => {
   it("creates and links a new Scene from the change dropdown's footer", async () => {
     const onNewScene = vi.fn();
     const { getByLabelText, getByText } = renderBubble({ onNewScene });
-    await fireEvent.click(getByLabelText("Change Scene"));
+    await fireEvent.click(getByLabelText("Change scene"));
     await fireEvent.click(getByText("New scene"));
     expect(onNewScene).toHaveBeenCalledOnce();
   });
@@ -154,7 +154,7 @@ describe("SceneLinkBubble — at the table", () => {
   it("marks the current scene in the change dropdown, and Enter picks the highlighted match", async () => {
     const onChangeScene = vi.fn();
     const { getByLabelText } = renderBubble({ onChangeScene });
-    await fireEvent.click(getByLabelText("Change Scene"));
+    await fireEvent.click(getByLabelText("Change scene"));
     const search = getByLabelText("Search scenes") as HTMLInputElement;
     const current = document.body.querySelector('[role="option"][aria-selected="true"]');
     expect(current?.textContent).toContain("Tavern Brawl");

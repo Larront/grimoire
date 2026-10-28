@@ -2,7 +2,7 @@
   import type { AnnotationKind } from "$lib/types/ledger";
 
   export const KIND_LABELS: Record<AnnotationKind, string> = {
-    text: "Text Label",
+    text: "Text label",
     rect: "Rectangle",
     circle: "Circle",
   };

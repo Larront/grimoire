@@ -112,7 +112,7 @@
         onclick={() => (changeOpen = !changeOpen)}
         class="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-surface-hover
                focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-        aria-label="Change Scene"
+        aria-label="Change scene"
         aria-expanded={changeOpen}
       >
         <ChevronDown class="size-3.5 text-muted-foreground" />
