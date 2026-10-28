@@ -68,11 +68,10 @@ circles.
 
 **Terminology (owner's decision, 2026-10-29).** _Ledger_ is the visitor-facing word for
 the folder a GM keeps their campaign in: "a portable ledger", "your ledger", lower case
-in running text. _World_
-is the fiction they build in it: "the world you're building". The site uses ledger
-for the thing on disk and never calls it a world. The app's Splash and menus still
-say "world" for the folder (from the 2026-10 design review); bringing the app into
-line is app work, not a reason for the site to drift.
+in running text. _World_ is the fiction they build in it: "the world you're building".
+The site uses ledger for the thing on disk and never calls it a world. The app says the
+same: its Splash, menus and dialogs were changed from "world" to "ledger" for the folder
+on the same day (root `DESIGN.md` and `CONTEXT.md` carry the rule).
 
 Constraints: free and GPL-3.0; Windows, macOS and Linux; builds are unsigned; no
 account, no cloud, no subscription.
