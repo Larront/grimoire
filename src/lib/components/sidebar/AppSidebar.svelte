@@ -51,7 +51,13 @@
   import { treeRename, freeName } from "$lib/stores/tree-rename.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { shell } from "$lib/utils/shell-actions";
-  import { STRIP_ICON, ROW_ICON, EXPANDED_ONLY, RAIL_BUTTON } from "./strip-classes";
+  import {
+    STRIP_ICON,
+    ROW_ICON,
+    EXPANDED_ONLY,
+    RAIL_BUTTON,
+    SHORT_ICON_BUTTON,
+  } from "./strip-classes";
   import FileTree from "./FileTree.svelte";
   import MiniPlayer from "./MiniPlayer.svelte";
   import LedgerSelector from "./LedgerSelector.svelte";
@@ -355,7 +361,9 @@
   Files and Scenes — leave an icon behind.
 -->
 <Sidebar.Root collapsible="icon" bind:ref {...restProps}>
-  <Sidebar.Header>
+  <!-- In a short window the wordmark stays, smaller: the owner kept it over the room
+       hiding it would have given the tree (2026-10 design review). -->
+  <Sidebar.Header class="short:py-1">
     <!-- The wordmark is the one element whose *content* changes rather than its
          width, so it is the one that needs a beat: everything else rides the
          library's width transition. Nothing replaces it collapsed — a 48px
@@ -365,13 +373,18 @@
     <div
       class="flex items-center justify-center px-1 overflow-hidden transition-opacity duration-(--motion-base) group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:opacity-0"
     >
-      <span class="font-heading text-3xl mt-3 tracking-tight text-primary select-none"
+      <span
+        class="font-heading text-3xl mt-3 tracking-tight text-primary select-none short:mt-0 short:text-xl"
         >Grimoire</span
       >
     </div>
   </Sidebar.Header>
 
-  <Sidebar.Content>
+  <!-- A short window tightens the space between sections, the one thing above the tree
+       that is spacing rather than something the GM reaches for (2026-10 design review). -->
+  <Sidebar.Content
+    class="short:[&_[data-sidebar=group]]:py-0.5 short:[&_[data-sidebar=group-label]]:h-7"
+  >
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <!-- Search + quick-actions keep the default sidebar width and center as
@@ -513,9 +526,18 @@
     <SidebarScenes />
 
     <!-- Files section -->
-    <div id="sidebar-files-section" class={EXPANDED_ONLY}>
-      <Collapsible.Root bind:open={filesOpen} class="group/collapsible">
-        <Sidebar.Group>
+    <!-- In a short window the tree scrolls in place below its label, with room for three
+         rows whatever sits above it; the sections above stay put while it scrolls
+         (2026-10 design review). At other heights the whole sidebar scrolls, as before. -->
+    <div
+      id="sidebar-files-section"
+      class="{EXPANDED_ONLY} short:flex short:min-h-[calc(var(--row-h)*3+1.25rem)] short:flex-1 short:flex-col"
+    >
+      <Collapsible.Root
+        bind:open={filesOpen}
+        class="group/collapsible short:flex short:min-h-0 short:flex-1 short:flex-col"
+      >
+        <Sidebar.Group class="short:min-h-0 short:flex-1">
           <Sidebar.GroupLabel>
             {#snippet child({ props })}
               <Collapsible.Trigger {...props}>
@@ -526,7 +548,11 @@
           </Sidebar.GroupLabel>
           <Collapsible.Content forceMount>
             {#snippet child({ props, open })}
-              <div {...props}>
+              <div
+                {...props}
+                data-pane-scroll
+                class={cn(String(props.class ?? ""), "short:min-h-0 short:overflow-y-auto")}
+              >
                 <Disclosure {open}>
                   <Sidebar.GroupContent>
                     <!-- The world's root, as a folder's row is that folder: its own
@@ -620,55 +646,64 @@
          with nothing to narrow to, so they go when the strip does. -->
     <div class={EXPANDED_ONLY}>
       <MiniPlayer />
-      <LedgerSelector />
     </div>
-    <!-- Graph and Settings, subdued, at the foot of the sidebar as Settings is at
+    <!-- In a short window the world's name, Graph and Settings share one row, the two
+         as bare icons: three rows were a third of a 560px window (2026-10 design
+         review). -->
+    <div class="flex flex-col gap-2 short:flex-row short:items-center short:gap-1">
+      <div class="{EXPANDED_ONLY} short:min-w-0 short:flex-1">
+        <LedgerSelector />
+      </div>
+      <!-- Graph and Settings, subdued, at the foot of the sidebar as Settings is at
          the foot of the rail (#235). Neither is reached for mid-session: Graph is
          an occasional overview (also in the command palette), Settings a dialog
          opener rather than a place, so they are the last things here rather than
          rows among the groups. -->
-    <Sidebar.Menu>
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton isActive={showing === "graph"}>
-          {#snippet child({ props })}
-            <button
-              type="button"
-              {...props}
-              data-testid="sidebar-graph"
-              aria-label="Graph"
-              aria-current={showing === "graph" ? "true" : undefined}
-              class={cn(String(props.class ?? ""), RAIL_BUTTON)}
-              onclick={shell.openGraph}
-            >
-              <Network class={ROW_ICON} strokeWidth={1.5} />
-              <span class={EXPANDED_ONLY}>Graph</span>
-            </button>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton>
-          {#snippet child({ props })}
-            <!-- `class` merged into the button's own rather than set beside it:
-                 an attribute after `{...props}` replaces what the spread put
-                 there, which cost this button every `MenuButton` style it has —
-                 including the `overflow-hidden` that keeps a label out of a 48px
-                 square. The label is hidden outright now regardless. -->
-            <button
-              type="button"
-              {...props}
-              data-testid="sidebar-settings"
-              aria-label="Settings"
-              class={cn(String(props.class ?? ""), RAIL_BUTTON)}
-              onclick={shell.openSettings}
-            >
-              <Settings class={ROW_ICON} strokeWidth={1.5} />
-              <span class={EXPANDED_ONLY}>Settings</span>
-            </button>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
+      <Sidebar.Menu class="short:w-auto short:flex-row short:gap-0.5">
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton isActive={showing === "graph"}>
+            {#snippet child({ props })}
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-graph"
+                aria-label="Graph"
+                title="Graph"
+                aria-current={showing === "graph" ? "true" : undefined}
+                class={cn(String(props.class ?? ""), RAIL_BUTTON, SHORT_ICON_BUTTON)}
+                onclick={shell.openGraph}
+              >
+                <Network class={ROW_ICON} strokeWidth={1.5} />
+                <span class="{EXPANDED_ONLY} short:hidden">Graph</span>
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton>
+            {#snippet child({ props })}
+              <!-- `class` merged into the button's own rather than set beside it:
+                   an attribute after `{...props}` replaces what the spread put
+                   there, which cost this button every `MenuButton` style it has —
+                   including the `overflow-hidden` that keeps a label out of a 48px
+                   square. The label is hidden outright now regardless. -->
+              <button
+                type="button"
+                {...props}
+                data-testid="sidebar-settings"
+                aria-label="Settings"
+                title="Settings"
+                class={cn(String(props.class ?? ""), RAIL_BUTTON, SHORT_ICON_BUTTON)}
+                onclick={shell.openSettings}
+              >
+                <Settings class={ROW_ICON} strokeWidth={1.5} />
+                <span class="{EXPANDED_ONLY} short:hidden">Settings</span>
+              </button>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
+    </div>
   </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>

@@ -145,6 +145,8 @@ reason one fails.
   file tree, where it fits). Database recovery and note format updates stay calm,
   closable toasts that name the world and go when it closes. Follow it for anything
   similar. (DESIGN.md §5 Needs attention; ADR-0014 amended.)
+- **The collapsed rail stays as it is** (the owner's call, 2026-10): no Quick Notes, New
+  or Templates on it. The palette reaches all three.
 - **Focus** uses the app's global 2px outline with a 2px offset; components don't add
   their own rings.
 
@@ -192,8 +194,6 @@ Not fixed yet; pick them up when they fit a pass above:
   - Map keyboard use hasn't landed: `MapCanvas.svelte` still has `keyboard: false`;
     pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one
     shows Leaflet's white tooltip.
-  - The rail has no Quick Notes, New or Templates (the palette reaches all three).
-  - With the mini player up in a 560px window, the Files tree has almost no room.
   - Long names still truncate at the end in lists (a middle cut would keep "Volume 13"
     visible); the tab and title now show the full name on hover.
 - **Context menus**: the leftovers were done in the same pass (the Recycle Bin, the
