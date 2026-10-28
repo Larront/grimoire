@@ -106,7 +106,7 @@
            opacity-0 group-hover/world:opacity-100 focus-visible:opacity-100
            hover:bg-surface-hover hover:text-foreground
            {world.missing ? 'opacity-100' : ''}"
-    aria-label="Remove {world.name} from recent worlds"
+    aria-label="Remove {world.name} from recent ledgers"
     title="Remove from this list — the folder stays where it is"
     data-testid="recent-remove-btn"
     onclick={() => onRemove(world.path)}

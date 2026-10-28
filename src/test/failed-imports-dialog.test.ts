@@ -126,7 +126,7 @@ describe("FailedImportsDialog", () => {
   it("says the files are safe, in the singular for one", async () => {
     const view = await open([sampleFailures[0]]);
     expect(view.getByText("A note Grimoire couldn't open")).toBeTruthy();
-    expect(view.getByText(/It's still in your world's folder, untouched/)).toBeTruthy();
+    expect(view.getByText(/It's still in your ledger's folder, untouched/)).toBeTruthy();
   });
 
   it("shows a note in its folder on disk", async () => {

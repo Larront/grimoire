@@ -1,10 +1,10 @@
 <script lang="ts">
   /*
-    Making a world from the Splash: a name and a folder (NewLedgerFields, shared with
-    the Adopt dialog), then Create world. It takes the right-hand column, where the
-    worlds were, so the left side — and the wordmark — stays where it is. Its title is
+    Making a ledger from the Splash: a name and a folder (NewLedgerFields, shared with
+    the Adopt dialog), then Create ledger. It takes the right-hand column, where the
+    ledgers were, so the left side — and the wordmark — stays where it is. Its title is
     a heading, not a small label stacked over the Name label, and Cancel or Escape
-    gives focus back to New world.
+    gives focus back to New ledger.
   */
   import { Button } from "$lib/components/ui/button";
   import { LoaderCircle } from "@lucide/svelte";
@@ -28,11 +28,11 @@
 </script>
 
 <section class="flex max-w-[24rem] flex-col gap-4 splash-fade" aria-labelledby="splash-new-world">
-  <h2 id="splash-new-world" class="text-base font-semibold text-foreground">New world</h2>
+  <h2 id="splash-new-world" class="text-base font-semibold text-foreground">New ledger</h2>
   <NewLedgerFields
     bind:name
     bind:parent
-    placeholder="Name your world"
+    placeholder="Name your ledger"
     disabled={creating}
     {attempted}
     {onSubmit}
@@ -45,7 +45,7 @@
         <LoaderCircle class="animate-spin" />
         Creating…
       {:else}
-        Create world
+        Create ledger
       {/if}
     </Button>
   </div>

@@ -114,11 +114,11 @@ describe("ledger selector", () => {
 
   it("popover opens on click and lists available ledgers", async () => {
     const { getByRole, findByText } = render(LedgerSelector);
-    const trigger = getByRole("button", { name: /^world:/i });
+    const trigger = getByRole("button", { name: /^ledger:/i });
     await fireEvent.click(trigger);
 
     expect(await findByText("OtherLedger")).toBeTruthy();
-    expect(await findByText("Open a world folder…")).toBeTruthy();
+    expect(await findByText("Open a ledger folder…")).toBeTruthy();
   });
 });
 

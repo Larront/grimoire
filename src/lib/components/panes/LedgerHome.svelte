@@ -131,7 +131,7 @@
            continues, and only "Start it over" on the Splash resets it), and how to keep
            it as theirs. -->
       <p class="mt-3 text-(length:--font-body) text-foreground-muted" data-testid="home-example">
-        An example world · {contents}
+        An example ledger · {contents}
       </p>
       <p class="mt-1 text-(length:--font-body) text-foreground-muted">
         What you change here is kept for next time.
@@ -166,7 +166,7 @@
           class={quietLink}
           onclick={() => (dialogs.adoptOpen = true)}
         >
-          Make this world mine
+          Make this ledger mine
         </button>
       {:else}
         <button
@@ -180,7 +180,7 @@
       {/if}
     </div>
 
-    <!-- What the world needs from the GM, here as in the world menu, each with the one
+    <!-- What the ledger needs from the GM, here as in the ledger menu, each with the one
          thing to do about it. It replaced three lasting toasts (2026-10 design review). -->
     {#if needsAttention.items.length}
       <section class="mt-12" aria-labelledby="home-attention-{pane}" data-testid="home-attention">

@@ -74,7 +74,7 @@ describe("Splash — a returning GM", () => {
     // The most recent world whose folder can be found — the backend lists by recency.
     const hero = getByRole("heading", { level: 2, name: "Gods Ascendant" });
     expect(hero).toBeTruthy();
-    expect(getByText("Other worlds")).toBeTruthy();
+    expect(getByText("Other ledgers")).toBeTruthy();
     expect(document.activeElement?.textContent?.trim()).toBe("Continue");
   });
 
@@ -105,20 +105,20 @@ describe("Splash — a returning GM", () => {
     expect(document.querySelector("main [role='alert']")).toBeNull();
   });
 
-  it("gives focus back to New world when the create form is cancelled", async () => {
+  it("gives focus back to New ledger when the create form is cancelled", async () => {
     mockInvoke([world("Gods Ascendant", "/w/gods", ago(DAY))]);
     const { getByRole } = render(HomePage);
     await flush();
 
-    await fireEvent.click(getByRole("button", { name: "New world" }));
+    await fireEvent.click(getByRole("button", { name: "New ledger" }));
     await flush();
     const name = document.activeElement as HTMLInputElement;
-    expect(name.placeholder).toBe("Name your world");
+    expect(name.placeholder).toBe("Name your ledger");
 
     await fireEvent.keyDown(name, { key: "Escape" });
     await flush();
 
-    expect(document.activeElement?.textContent?.trim()).toBe("New world");
+    expect(document.activeElement?.textContent?.trim()).toBe("New ledger");
   });
 });
 

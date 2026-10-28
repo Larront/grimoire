@@ -318,11 +318,11 @@ Always-visible 48px column on the left edge. Brand mark at top (re-expands sideb
 
 Iron Deep background. The tree is one Tab stop — the row last focused — and the arrow keys move through it: ↑ ↓, Home and End, → to open a folder and step in, ← to close it or step out. Names sort as a person reads them, numbers by value ("Annal 2" before "Annal 10"). File tree rows at `--row-h` height, 12px horizontal padding (balanced density). Active row: Crimson Tint background, Crimson icon, Ember Ash text. Inactive: transparent background, Ember Muted icon, Ember Ash text. Hover: Hover Overlay. Section headers: Field label role (Nunito 600, 12px, Ember Muted).
 
-A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus. Only the current row's "⋯" is a Tab stop, after the row, so the tree is two stops, not two per row. F2 and Delete work from the row itself. A folder sent to the Recycle Bin says what went with it ("“Lore” and the 5 notes and 1 map in it are in the Recycle Bin"). A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus. The empty space under the last row is the world's root: right-click it for the folder menu's making items, or drop on it.
+A tree row's menu is reached three ways: right-click, Shift+F10 or the menu key on the focused row, and a "⋯" at the row's end that shows on hover and focus. Only the current row's "⋯" is a Tab stop, after the row, so the tree is two stops, not two per row. F2 and Delete work from the row itself. A folder sent to the Recycle Bin says what went with it ("“Lore” and the 5 notes and 1 map in it are in the Recycle Bin"). A folder's menu makes things in that folder — New note, New note from template…, New folder (named on the spot, the name selected), New map… (its picture chosen first and saved there), Import PDF… — then Rename, then Delete. A note's, map's or PDF's offers Open in right pane and Rename, then Delete. Rename on a note or map opens it with its name being edited; a renamed row keeps focus. The empty space under the last row is the ledger's root: right-click it for the folder menu's making items, or drop on it.
 
-**A long name is cut in the middle**, in the tree and wherever else a list names a note, map or scene: the tab bar and its overflow menu, the World Home's recent notes, the palette, link suggestions, the sidebar's scenes, the scene picker and the Splash's worlds (`MiddleTruncate`, 2026-10 design review). The head gives way to an ellipsis and the last words stay — "Annals … Volume 13" — because a GM's siblings differ at their end. A path keeps its last folder. Names under 16 characters, and last words over 18, are cut at the end as before.
+**A long name is cut in the middle**, in the tree and wherever else a list names a note, map or scene: the tab bar and its overflow menu, the Ledger Home's recent notes, the palette, link suggestions, the sidebar's scenes, the scene picker and the Splash's ledgers (`MiddleTruncate`, 2026-10 design review). The head gives way to an ellipsis and the last words stay — "Annals … Volume 13" — because a GM's siblings differ at their end. A path keeps its last folder. Names under 16 characters, and last words over 18, are cut at the end as before.
 
-**A short window** (under 720px tall, sidebar open; the `short` variant in `app.css`) gives the tree room, which at 560px it had none of under the mini player (2026-10 design review). The wordmark stays, smaller (the owner kept it); the space between sections tightens; Graph and Settings become bare icons on the world's row; and the tree scrolls in place under its label, at least three rows tall, while Scenes and everything above it stay put. At other heights the whole sidebar scrolls as one, and the 48px strip is never touched.
+**A short window** (under 720px tall, sidebar open; the `short` variant in `app.css`) gives the tree room, which at 560px it had none of under the mini player (2026-10 design review). The wordmark stays, smaller (the owner kept it); the space between sections tightens; Graph and Settings become bare icons on the ledger's row; and the tree scrolls in place under its label, at least three rows tall, while Scenes and everything above it stay put. At other heights the whole sidebar scrolls as one, and the 48px strip is never touched.
 
 ### Command Palette (Signature Component)
 
@@ -338,12 +338,12 @@ Every menu is one design — a right-click, a "⋯", the New menu, the tab bar's
 - **Order:** what the GM came for first (Play on a scene card), then what makes or opens, then what edits, then Delete — last, alone after a rule, naming what it deletes ("Delete “Boss Battle”"). Ember Error with its bin icon; highlighted, the words go Ember Ash on a red tint and the icon stays red, because any tint behind Ember Error takes it under 4.5:1.
 - **Findable:** a right-click menu always has a visible way in too (a "⋯", or the item's own button), and opens from the keyboard on the focused thing with Shift+F10 or the menu key.
 - **Focus:** an item that opens something elsewhere — a note to rename, a popover — hands focus there; otherwise the menu returns it to what opened it.
-- **Deleting:** a note, folder or PDF — the GM's own files — goes to the Recycle Bin (the Trash on a Mac) at once, and a toast says so; restored from there, it comes back into the world. Everything else is an Undo toast that hides the thing at once and commits when the toast closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it. A map is one of those: its pins live in the database, which no bin gives back. Focus goes to what takes the deleted thing's place.
+- **Deleting:** a note, folder or PDF — the GM's own files — goes to the Recycle Bin (the Trash on a Mac) at once, and a toast says so; restored from there, it comes back into the ledger. Everything else is an Undo toast that hides the thing at once and commits when the toast closes (by its timer or its ✕), never on a timer of its own — the toast waits while the pointer rests on it, and Undo must still mean it. A map is one of those: its pins live in the database, which no bin gives back. Focus goes to what takes the deleted thing's place.
 - **Nowhere else:** the webview's own menu (Back, Refresh) never shows; a right-click keeps the native menu only in text the GM can edit or has selected.
 
 ### Toasts
 
-What the app did, said once and then gone: a success with circle-check, a failure with circle-x and a close button, an Undo. They stack **expanded, up to five** — collapsed, sonner hid every toast past the third and tucked the rest behind the front one, so an Undo could run out of sight (2026-10 review). A toast takes clicks over a dialog or the sidebar's sheet without closing it. What a *world* needs is not a toast (Needs attention); the lasting toasts left are a world's own news — a recovery, a note-format update — and go when it closes.
+What the app did, said once and then gone: a success with circle-check, a failure with circle-x and a close button, an Undo. They stack **expanded, up to five** — collapsed, sonner hid every toast past the third and tucked the rest behind the front one, so an Undo could run out of sight (2026-10 review). A toast takes clicks over a dialog or the sidebar's sheet without closing it. What a *ledger* needs is not a toast (Needs attention); the lasting toasts left are a ledger's own news — a recovery, a note-format update — and go when it closes.
 
 ### Note banners
 
@@ -369,53 +369,53 @@ What `/` offers in a note. Floating level, 240px wide and at most 300px tall, at
 
 ### Splash
 
-What a GM sees whenever no world is open. Two columns over Iron Dark, the content starting a sixth of the way down (less on a short window), and nothing else on the canvas — no glow, no rule under the wordmark. Chosen in the 2026-10 design review from three layouts tried in the running app; it was a 280px launcher column that cut the GM's own world names short.
+What a GM sees whenever no ledger is open. Two columns over Iron Dark, the content starting a sixth of the way down (less on a short window), and nothing else on the canvas — no glow, no rule under the wordmark. Chosen in the 2026-10 design review from three layouts tried in the running app; it was a 280px launcher column that cut the GM's own ledger names short.
 
-- **Left: what Grimoire is, and the ways to start.** The wordmark (Title size, the accent — see the Signal Rule's exception), one line in the website's voice ("A spellbook of record for the world you're building: …"), then **New world** and **Open a world folder…** as ghost buttons in Ember Ash, and the example world as a quiet underlined line.
-- **Right: the GM's own world.** The one last opened is the subject: its name in Metamorphous at Title size (three lines at most, whole on hover), what is in it and when it was last opened in words ("205 notes · last opened a week ago"), and **Continue**, the one primary button, **focused on launch** so Enter carries on. The other worlds follow under the field label "Other worlds" as list rows in Nunito: name, contents, time, and a ✕ on hover or focus that takes a world off the list (its folder stays). The list scrolls in its own space with the pane scrollbar.
-- **A world whose folder can't be found** is muted and can't be opened. It shows the end of its path ("Folder not found · …/Old/Ironhold", the whole path on hover), **Find it…** for a folder that has moved, **Look again** for a drive just plugged back in, and its ✕. Find it asks where the world is now and opens it from there, and the entry for the old folder goes once it has opened; a folder that isn't a world yet opens as one, as "Open a world folder…" does.
-- **The first time** (no recent worlds), the right side is the example world: "The Ashfen Vale", its own line ("a fog-bound corner of somebody else's"), what is inside it, and **Explore it**, focused.
-- **The example world continues.** When an earlier exploration exists, the action is **Continue exploring** (or "Continue the example world"), which opens it as it was left; **Start it over** makes a fresh copy. Exploring used to wipe a GM's changes without a word.
-- **New world** puts the create form (New world fields, under a "New world" heading) in the right-hand column, so the left side and the wordmark stay where they are. Cancel or Escape gives focus back to New world.
+- **Left: what Grimoire is, and the ways to start.** The wordmark (Title size, the accent — see the Signal Rule's exception), one line in the website's voice ("A spellbook of record for the world you're building: …"), then **New ledger** and **Open a ledger folder…** as ghost buttons in Ember Ash, and the example as a quiet underlined line ("Wander the example world").
+- **Right: the GM's own ledger.** The one last opened is the subject: its name in Metamorphous at Title size (three lines at most, whole on hover), what is in it and when it was last opened in words ("205 notes · last opened a week ago"), and **Continue**, the one primary button, **focused on launch** so Enter carries on. The other ledgers follow under the field label "Other ledgers" as list rows in Nunito: name, contents, time, and a ✕ on hover or focus that takes a ledger off the list (its folder stays). The list scrolls in its own space with the pane scrollbar.
+- **A ledger whose folder can't be found** is muted and can't be opened. It shows the end of its path ("Folder not found · …/Old/Ironhold", the whole path on hover), **Find it…** for a folder that has moved, **Look again** for a drive just plugged back in, and its ✕. Find it asks where the ledger is now and opens it from there, and the entry for the old folder goes once it has opened; a folder that isn't a ledger yet opens as one, as "Open a ledger folder…" does.
+- **The first time** (no recent ledgers), the right side is the example: "The Ashfen Vale", its own line ("An example world: a fog-bound corner of somebody else's"), what is inside it, and **Explore it**, focused.
+- **The example continues.** When an earlier exploration exists, the action is **Continue exploring** (or "Continue the example ledger"), which opens it as it was left; **Start it over** makes a fresh copy. Exploring used to wipe a GM's changes without a word.
+- **New ledger** puts the create form (New ledger fields, under a "New ledger" heading) in the right-hand column, so the left side and the wordmark stay where they are. Cancel or Escape gives focus back to New ledger.
 - **Failures are said once,** by the toast the call raises. There is no error line under the page.
-- **Words:** "world" throughout; "ledger" is the code's word.
+- **Words:** "ledger" is the folder a campaign lives in — the one the GM makes, opens, finds and keeps — everywhere the app names it, as the website does. "World" is only the fiction they build inside it: "the world you're building", "Every world begins with its first note", wandering or exploring the example's world. Decided by the owner on 2026-10-29, reversing the 2026-10 design review's "world" throughout.
 - **Launch** opens on Iron, not white: the window's own background is set (`tauri.conf.json`), and the page carries Iron Dark (or Parchment, under `.light`) before any stylesheet arrives (`app.html`).
 
-### World Home
+### Ledger Home
 
-What an empty pane shows in an open world — the Splash's right-hand column carried into it, so making a world on the Splash lands on the same page shape (2026-10 design review). One column, 34rem, starting a sixth of the way down the pane, scrolling with the pane scrollbar.
+What an empty pane shows in an open ledger — the Splash's right-hand column carried into it, so making a ledger on the Splash lands on the same page shape (2026-10 design review). One column, 34rem, starting a sixth of the way down the pane, scrolling with the pane scrollbar.
 
-- **The world's name** in Metamorphous at Title size (three lines at most, whole on hover), then one muted line: what is in it ("14 notes · 2 scenes · 1 map", the Splash's words), or, while it has no notes, _"Every world begins with its first note."_
-- **New note** — the primary button, 40px with an arrow, like Continue; it keeps its width while it reads "Creating…". It takes focus once, when a world opens onto this page, so Enter writes the first note; showing the page again later doesn't pull focus. Beside it, _Note from template…_ as a quiet underlined line.
+- **The ledger's name** in Metamorphous at Title size (three lines at most, whole on hover), then one muted line: what is in it ("14 notes · 2 scenes · 1 map", the Splash's words), or, while it has no notes, _"Every world begins with its first note."_
+- **New note** — the primary button, 40px with an arrow, like Continue; it keeps its width while it reads "Creating…". It takes focus once, when a ledger opens onto this page, so Enter writes the first note; showing the page again later doesn't pull focus. Beside it, _Note from template…_ as a quiet underlined line.
 - **Recently edited**: the five notes last written in, under that field label, as list rows (Nunito, the note icon, how long ago). A row opens the note in this pane.
 - **No error line.** A failed New note is said by the toast the call raises.
 - **The sidebar's empty Files group** is one muted line, "Your notes will be listed here." It had a crimson icon tile and a second New Note button beside this page's.
 
-### New world fields
+### New ledger fields
 
-Name and location for a new world, one part (`NewLedgerFields`) in both places a world is made: the Splash's create form and the Adopt dialog.
+Name and location for a new ledger, one part (`NewLedgerFields`) in both places a ledger is made: the Splash's create form and the Adopt dialog.
 
 - **Field labels** above a 32px field and a 32px folder button. The button reads "Choose a folder…" until one is picked, then the end of its path and "Change…"; paths keep their end, not their start, with the whole path on hover.
-- **Where it will live:** once there is a name and a folder, a Meta line says "Saved as …\Campaigns\The Ashfen Vale" — the folder chosen is the parent, and the world gets a folder of its own inside it.
+- **Where it will live:** once there is a name and a folder, a Meta line says "Saved as …\Campaigns\The Ashfen Vale" — the folder chosen is the parent, and the ledger gets a folder of its own inside it. The name field's placeholder is "Name your ledger".
 - **Problems under the field they are about**, with the circle-x, once the GM has tried to go on, and following the typing from then. The confirm button is never disabled to say "not yet": pressed early, it says what is missing.
 
 ### Adopt dialog
 
-"Make this world mine", while the example (The Ashfen Vale) is open: from the sidebar's world menu, or beside New note on its home. 448px. Says what will happen — copied with every change into a new folder, opened as theirs, the example left as it is, to come back to or start over — then the New world fields, then Cancel and **Make it mine**.
+"Make this ledger mine", while the example (The Ashfen Vale) is open: from the sidebar's ledger menu, or beside New note on its home. 448px. Says what will happen — copied with every change into a new folder, opened as theirs, the example left as it is, to come back to or start over — then the New ledger fields, then Cancel and **Make it mine**.
 
-_The example has no banner_ (2026-10 design review). It is named as itself, marked "example" in the world menu and the window title; its home says "An example world · …" and "What you change here is kept for next time."; the world menu keeps the GM's recent worlds, so the way back is where it always is.
+_The example has no banner_ (2026-10 design review). It is named as itself, marked "example" in the ledger menu and the window title; its home says "An example ledger · …" and "What you change here is kept for next time."; the ledger menu keeps the GM's recent ledgers, so the way back is where it always is.
 
 - **Never over an existing folder.** A folder already there by that name is refused, under the name, and left alone.
 - **Can't be closed while copying** ("Copying…"); a failure says what to do, not the raw error.
-- **On success,** the world opens and a toast names it: "“The Ashfen Vale” is yours. It's saved in …\Campaigns."
+- **On success,** the ledger opens and a toast names it: "“The Ashfen Vale” is yours. It's saved in …\Campaigns."
 
 ### Needs attention
 
-What a world needs from the GM, in one quiet place rather than a toast each (the owner's call in the 2026-10 review: three lasting toasts stacked, hid one another, and stayed on the Splash after their world closed). Three things live here: pins that lost their note, notes Grimoire couldn't open, and notes moved outside Grimoire whose links still point where they were.
+What a ledger needs from the GM, in one quiet place rather than a toast each (the owner's call in the 2026-10 review: three lasting toasts stacked, hid one another, and stayed on the Splash after their ledger closed). Three things live here: pins that lost their note, notes Grimoire couldn't open, and notes moved outside Grimoire whose links still point where they were.
 
-- **The world menu** lists them first, under a "Needs attention" field label, each with its one action as a second line ("Show pins", "Show notes", "Update links"); its button carries a small neutral dot while anything waits, and says "needs attention" to a screen reader. Neutral throughout: needing attention is none of the things the accent means, and it isn't a failure.
-- **The World Home** lists them with their actions as quiet links, and a moved note's links can be left there too (**Leave them** — safe: they stay visible and can be healed later, ADR-0014).
-- **They belong to their world.** Each list is cleared as a world opens or closes; nothing waits on the Splash or in the next world.
+- **The ledger menu** lists them first, under a "Needs attention" field label, each with its one action as a second line ("Show pins", "Show notes", "Update links"); its button carries a small neutral dot while anything waits, and says "needs attention" to a screen reader. Neutral throughout: needing attention is none of the things the accent means, and it isn't a failure.
+- **The Ledger Home** lists them with their actions as quiet links, and a moved note's links can be left there too (**Leave them** — safe: they stay visible and can be healed later, ADR-0014).
+- **They belong to their ledger.** Each list is cleared as a ledger opens or closes; nothing waits on the Splash or in the next ledger.
 - One wording, in `needs-attention.svelte.ts`, for both places.
 
 ### Pins to re-link
@@ -426,33 +426,33 @@ What a repair leaves behind: pins whose note row was re-created (usually a folde
 - **The list:** 448px, a heading per map, a row per pin — its name, then "was" and the note it used to open, both truncating rather than squeezing each other.
 - **Choosing a pin** opens its map with the pin selected, its Linked Note search filled with the old note's name and holding the caret: Enter links the first match. Nothing re-links itself — a note with the same name may not be the same note.
 
-### A world that can't open as it is
+### A ledger that can't open as it is
 
-When a world's database is damaged. With a backup, it is restored on the way in, and a closable toast names the world and says when its scenes, maps, pins and Quick Notes are from, with **Show damaged file**. Without one, what SQLite can still read of the damaged file is salvaged on the way in, and used without asking if it brings back any scene, map, pin or Quick Note: the toast counts what came back and says the damaged part couldn't ("3 scenes, 2 maps, 14 pins and 1 Quick Note came back; anything on the damaged part of the file couldn't."), with maps that came back from their images said apart, because they have no pins (ADR-0019). Only when nothing can be salvaged, the one recovery that asks first: an alert dialog, 448px, titled with the world's name ("“Ashfen” can't open as it is").
+When a ledger's database is damaged. With a backup, it is restored on the way in, and a closable toast names the ledger and says when its scenes, maps, pins and Quick Notes are from, with **Show damaged file**. Without one, what SQLite can still read of the damaged file is salvaged on the way in, and used without asking if it brings back any scene, map, pin or Quick Note: the toast counts what came back and says the damaged part couldn't ("3 scenes, 2 maps, 14 pins and 1 Quick Note came back; anything on the damaged part of the file couldn't."), with maps that came back from their images said apart, because they have no pins (ADR-0019). Only when nothing can be salvaged, the one recovery that asks first: an alert dialog, 448px, titled with the ledger's name ("“Ashfen” can't open as it is").
 
 - **Said once.** The dialog is the whole message — no toast repeating its title, no error code under it on the Splash.
 - **What comes back and what doesn't, before the choice:** every note from its file, each map from its image without its pins; scenes and Quick Notes can't be. The damaged file is kept, and **Show damaged file** shows it.
 - **Not now** and **Rebuild from notes** (primary — it deletes nothing; the damage is already done). While rebuilding it can't be closed; a failure is said in the dialog, with the circle-x.
-- **Afterwards,** a lasting, closable toast says what came back and what couldn't. A recovery toast belongs to its world: closing or switching takes it down.
-- **Backups** are taken as a world opens and as it closes, so a restore keeps the last session's work.
+- **Afterwards,** a lasting, closable toast says what came back and what couldn't. A recovery toast belongs to its ledger: closing or switching takes it down.
+- **Backups** are taken as a ledger opens and as it closes, so a restore keeps the last session's work.
 
-### Updating a world's notes
+### Updating a ledger's notes
 
-When a world's notes are written in an older format, it asks before rewriting them: an alert dialog, 448px, titled with the world and the count ("“Ashfen” has 3 notes to update").
+When a ledger's notes are written in an older format, it asks before rewriting them: an alert dialog, 448px, titled with the ledger and the count ("“Ashfen” has 3 notes to update").
 
 - **Reassurance first:** each note is copied before it's rewritten, and a report says what changed. Then one short line per change; why each change was made goes in the report, not the prompt.
 - **The notes by name,** in a scrolling box with a heading per folder, up to eight, then "and N more — the report lists every one". A line of the GM's own writing that changes is said under its note, set off by a rule, and counted above the box.
-- **Don't open** and **Update N** (primary). From inside an open world it's **Not now**, and it will ask again next time. While updating it can't be closed; a failure is said in the dialog, with the circle-x.
-- **Afterwards,** a toast names the world and the notes. A clean update fades. When a line of the GM's own writing changed, it says where and stays until closed. Notes that couldn't be written are a calm, lasting toast naming them — they're untouched — with **Try again**, which replaces the toast where it stands. Like the other repair toasts, it belongs to its world.
+- **Don't open** and **Update N** (primary). From inside an open ledger it's **Not now**, and it will ask again next time. While updating it can't be closed; a failure is said in the dialog, with the circle-x.
+- **Afterwards,** a toast names the ledger and the notes. A clean update fades. When a line of the GM's own writing changed, it says where and stays until closed. Notes that couldn't be written are a calm, lasting toast naming them — they're untouched — with **Try again**, which replaces the toast where it stands. Like the other repair toasts, it belongs to its ledger.
 - **Copies are kept until it's all done.** A Try again adds to the same backup folder and the same report; older backups are only pruned once every note is updated.
 
 ### Notes Grimoire couldn't open
 
 What an open leaves behind when it can't read some files: a cloud-only file with the sync app off, one another program has locked, a folder that won't list. **Nothing is lost** — their records are kept and the files are untouched — so this is a calm report, not an error: "N notes couldn't be opened" waits in Needs attention, with **Show notes** behind it, and the list says they're safe.
 
-- **Lasting, like Pins to re-link:** it counts down as notes come good and leaves at zero. The palette ("Show notes that couldn't open") and the file tree reopen the list. A world that opens cleanly takes the last one's list down.
+- **Lasting, like Pins to re-link:** it counts down as notes come good and leaves at zero. The palette ("Show notes that couldn't open") and the file tree reopen the list. A ledger that opens cleanly takes the last one's list down.
 - **The list:** 448px, a heading per folder, a row per note — its name (not its path), why it wouldn't read in the GM's words (never the OS's text, which is logged), and a **Show in folder** button. A folder that wouldn't list is a row of its own.
-- **Try again** reads the world's notes again without reopening it, and says how many open now.
+- **Try again** reads the ledger's notes again without reopening it, and says how many open now.
 - **In the file tree,** such a note is muted with a warning icon and says so on hover; clicking it opens the list.
 
 ### Quick Notes Dialog
@@ -481,7 +481,7 @@ What `[[` offers — in prose, in a block's field, and in the Quick Notes box. T
 A modal dialog, 672×560, a section rail beside one scrolling panel: Appearance, Content, Statblocks, Integrations, About. Ctrl/Cmd+, opens it. Changes apply at once with no Save, the app retinting behind the scrim.
 
 - **Rows:** a label (Body) and a description (`--font-ui`, Ember Muted) on the left, the control on the right at 32px.
-- **Scope said in words:** the accent is the world's; theme, density and Reduce Motion are every world's, and their descriptions end "Every world."
+- **Scope said in words:** the accent is the ledger's ("This ledger's colour…"); theme, density and Reduce Motion are every ledger's, and their descriptions end "Every ledger."
 - **Destructive actions are never modal:** Restore defaults asks inside its row, with a destructive Restore; deleting a preset is undone from its toast.
 - **Hand-offs come back:** Manage tags opens the Tag Manager, and closing it returns to Settings where the GM left it.
 
@@ -501,7 +501,7 @@ A modal dialog, 448px, from Settings, the command palette ("Manage tags") or the
 
 A template gives a new note two things, its text and its tags, and every surface that shows one says both. One icon everywhere (`LayoutTemplate`). (2026-10 design review: they had a footer accordion that buried the Files tree, tags nobody could see or set, and a name of "Untitled".)
 
-- **Making a note from one:** New → _Note from template…_ (or the palette's _Create note from template_, or the empty world's link) opens the palette's picker, "Choose a template…". Typing narrows it by name or tag; each row shows its tags at the right; _Manage templates…_ ends the list. The note goes beside the open note (CONTEXT.md, Note Placement) and opens with its title selected.
+- **Making a note from one:** New → _Note from template…_ (or the palette's _Create note from template_, or the Ledger Home's link) opens the palette's picker, "Choose a template…". Typing narrows it by name or tag; each row shows its tags at the right; _Manage templates…_ ends the list. The note goes beside the open note (CONTEXT.md, Note Placement) and opens with its title selected.
 - **The Templates dialog:** shaped like the Tag Manager — 448px, from New → _Templates…_ and the palette. Rows are naturally sorted ("Annal 2" before "Annal 10"), name and tags; the row opens the template, ⋯ has Edit, Rename, Delete. **New template asks for a name first**, then opens it with the caret in its text. A name is checked as it is typed — the characters Windows refuses, a trailing full stop, a name already used — and the reason sits under the field, circle-x, with what was typed kept. Delete hides the row at once and is undone from the toast; the file and any open tab go only when the toast does.
 - **The template pane:** the note column and title. Under the name, a field label, _Tags for new notes_, with the tag chip editor — not a label above the title. A refused name stays typed, with the reason under it and "Esc puts the old name back".
 - **The tab:** the template icon and a neutral _Template_ badge (border and muted text, 11px), drawn from the tab's type so it survives a reload. Never crimson — a kind of tab is not a signal.
@@ -573,7 +573,7 @@ An image in a note: a map, a handout, a portrait.
 - **Placement:** left and right float the image beside the prose that follows (at the Infobox's 640px threshold; below it, the image stands at its side); centre never floats. Width is a percentage of the column.
 - **Selected:** a crimson outline on the image, a floating toolbar above it (never over it) — align left, centre, right, View full size, Replace — 28px with tooltips, and a resize handle with a grip on the side the image grows toward, showing the width while it moves. The caption is a Linked Text Field.
 - **Missing:** the shared notice — "This image was moved or deleted", the file name, Replace — with no error toast.
-- **Obsidian's embeds:** `![[map.png]]` draws as an image like any other, its file found by name in the world as Obsidian finds it, and a `|300` drawn 300px wide. The note keeps the embed as written until the GM changes the image (aligns, resizes, captions, replaces it), which writes it Grimoire's way at the path it was found at. A note's embed, `![[Some Note]]`, stays the text the GM typed.
+- **Obsidian's embeds:** `![[map.png]]` draws as an image like any other, its file found by name in the ledger as Obsidian finds it, and a `|300` drawn 300px wide. The note keeps the embed as written until the GM changes the image (aligns, resizes, captions, replaces it), which writes it Grimoire's way at the path it was found at. A note's embed, `![[Some Note]]`, stays the text the GM typed.
 
 ### Image Viewer
 

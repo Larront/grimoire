@@ -3,7 +3,7 @@
 //
 // It was a toast that never closed, with "Update" and "Leave as-is", that outlived
 // its world (2026-10 design review). The owner moved every world-level problem into
-// one "needs attention" place — the world menu and the World Home — so this is the
+// one "needs attention" place — the ledger menu and the Ledger Home — so this is the
 // list, and they draw it. Leaving the links is safe: they stay visible and can be
 // healed later (ADR-0014).
 import { api } from "$lib/api";

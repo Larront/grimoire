@@ -1,6 +1,6 @@
-// What in the open world needs the GM: pins that lost their note, notes Grimoire
+// What in the open ledger needs the GM: pins that lost their note, notes Grimoire
 // couldn't open, and notes moved outside Grimoire whose links point at their old
-// place. One list, worded once, drawn by the world menu and the World Home.
+// place. One list, worded once, drawn by the ledger menu and the Ledger Home.
 //
 // These were three lasting toasts until the 2026-10 design review: they stacked,
 // hid one another, and stayed on the Splash after their world closed. The owner

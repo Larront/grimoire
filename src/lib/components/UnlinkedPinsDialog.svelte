@@ -55,7 +55,7 @@
         {one ? "A pin that needs its note again" : "Pins that need their note again"}
       </Dialog.Title>
       <Dialog.Description class="text-(length:--font-ui) text-foreground-muted">
-        Grimoire repaired this world's records. Your notes are intact, but {one
+        Grimoire repaired this ledger's records. Your notes are intact, but {one
           ? "this pin"
           : "these pins"} lost the link to {one ? "its" : "their"} note. Choose one to go to it on its
         map and link it again.

@@ -471,9 +471,9 @@
       action: cmdToggleTheme,
     },
     {
-      label: "Open a world folder…",
+      label: "Open a ledger folder…",
       testid: "cmd-switch-ledger",
-      also: ["switch world", "open world"],
+      also: ["switch ledger", "open ledger", "switch world", "open world"],
       noteOnly: false,
       icon: FolderOpen,
       action: cmdSwitchLedger,
@@ -988,7 +988,7 @@
         <p class="px-3 pb-3 text-sm text-muted-foreground" data-testid="cmd-template-none">
           {templates.templates.length
             ? `No template matches “${searchQuery.trim()}”.`
-            : "This world has no templates yet."}
+            : "This ledger has no templates yet."}
         </p>
       {/if}
     {:else}

@@ -101,7 +101,7 @@
         >Default preset</span
       >
       <span id="{id}-default-desc" class="text-(length:--font-ui) text-foreground-muted">
-        What <code>/statblock</code> stamps in this world. Presets are shared by every world; this
+        What <code>/statblock</code> stamps in this ledger. Presets are shared by every ledger; this
         choice is not.
       </span>
     </div>

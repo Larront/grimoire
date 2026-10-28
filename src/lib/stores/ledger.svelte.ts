@@ -233,7 +233,7 @@ function createLedgerStore() {
         selectedPath ??
         (await open({
           directory: true,
-          title: "Open a world folder",
+          title: "Open a ledger folder",
         }));
 
       if (!ledgerPath || typeof ledgerPath !== "string") {

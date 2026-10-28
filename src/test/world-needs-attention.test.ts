@@ -4,7 +4,7 @@ import LedgerSelector from "../lib/components/sidebar/LedgerSelector.svelte";
 import { unlinkedPins } from "../lib/stores/unlinked-pins.svelte";
 import { staleLinks } from "../lib/stores/stale-links.svelte";
 
-// What a world needs from the GM is in its menu, with a quiet mark on the button
+// What a ledger needs from the GM is in its menu, with a quiet mark on the button
 // while anything waits (2026-10 design review — they were three lasting toasts).
 
 afterEach(() => {
@@ -21,11 +21,11 @@ const pin = {
   was_note_title: "Waterdeep",
 };
 
-describe("the world menu", () => {
+describe("the ledger menu", () => {
   it("carries no mark while nothing needs attention", () => {
     const { queryByTestId, getByRole } = render(LedgerSelector);
     expect(queryByTestId("world-needs-attention")).toBeNull();
-    expect(getByRole("button", { name: /^World:/ }).getAttribute("aria-label")).not.toMatch(
+    expect(getByRole("button", { name: /^Ledger:/ }).getAttribute("aria-label")).not.toMatch(
       /needs attention/,
     );
   });

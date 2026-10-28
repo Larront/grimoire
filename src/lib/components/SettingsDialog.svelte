@@ -239,7 +239,7 @@
                  the Example World found Crimson in their own, with nothing saying why. -->
             <!-- Theme -->
             <div class="flex items-center justify-between gap-4 py-3 first:pt-0">
-              {@render field("Theme", "Light, dark, or follow the system. Every world.")}
+              {@render field("Theme", "Light, dark, or follow the system. Every ledger.")}
               <ChoiceGroup
                 label="Theme"
                 options={THEME_MODES}
@@ -252,7 +252,7 @@
 
             <!-- Accent -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Accent", "This world's colour for selection, focus and links.")}
+              {@render field("Accent", "This ledger's colour for selection, focus and links.")}
               <div class="flex shrink-0 items-center gap-3">
                 <!-- The chosen preset's name, which the swatches alone never said. -->
                 <span class="text-(length:--font-ui) text-foreground-muted">{accentLabel}</span>
@@ -283,7 +283,7 @@
 
             <!-- Density -->
             <div class="flex items-center justify-between gap-4 py-3">
-              {@render field("Density", "Spacing and text size. Every world.")}
+              {@render field("Density", "Spacing and text size. Every ledger.")}
               <ChoiceGroup
                 label="Density"
                 options={DENSITY_LEVELS}
@@ -298,7 +298,7 @@
             <div class="flex items-center justify-between gap-4 py-3">
               {@render field(
                 "Reduce Motion",
-                "Animations and transitions, stilled. Match my computer follows its own setting. Every world.",
+                "Animations and transitions, stilled. Match my computer follows its own setting. Every ledger.",
               )}
               <ChoiceGroup
                 label="Reduce Motion"

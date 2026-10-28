@@ -4,8 +4,8 @@
 
     One control in every world (2026-10 design review). In the example it used to be
     replaced by an "Example World" marker and Make this world mine, which left a GM no
-    way back to their own worlds but a folder picker. Now the example keeps the same
-    menu — the recent worlds — with Make this world mine added, and is named as itself,
+    way back to their own ledgers but a folder picker. Now the example keeps the same
+    menu — the recent ledgers — with Make this ledger mine added, and is named as itself,
     "The Ashfen Vale", marked as an example. Neutral throughout: the accent is reserved
     for selection, focus, the primary action and what is playing, and "you are in the
     example" is none of those.
@@ -74,7 +74,7 @@
 
 <DropdownMenu.Root bind:open {onOpenChange}>
   <DropdownMenu.Trigger
-    aria-label="World: {ledger.worldName}{ledger.isSample ? ', an example' : ''}{waiting
+    aria-label="Ledger: {ledger.worldName}{ledger.isSample ? ', an example' : ''}{waiting
       ? ', needs attention'
       : ''}"
     data-testid={ledger.isSample ? "sample-world-marker" : undefined}
@@ -116,7 +116,7 @@
         {@const Icon = ICONS[item.kind]}
         <!-- The row does its one thing, so it says what that is: choosing a moved
              note's row rewrites links, and must not look like it only shows them.
-             Leaving them is on the World Home, beside it. -->
+             Leaving them is on the Ledger Home, beside it. -->
         <DropdownMenu.Item data-testid="attention-{item.kind}" onSelect={() => void item.action.run()}>
           <Icon />
           <span class="flex min-w-0 flex-1 flex-col">
@@ -131,7 +131,7 @@
     {#if ledger.isSample}
       <DropdownMenu.Item data-testid="make-mine-btn" onSelect={() => (dialogs.adoptOpen = true)}>
         <Heart />
-        Make this world mine
+        Make this ledger mine
       </DropdownMenu.Item>
       <DropdownMenu.Separator />
     {/if}
@@ -149,7 +149,7 @@
 
     <DropdownMenu.Item onSelect={() => void openNewLedger()}>
       <FolderInput />
-      Open a world folder…
+      Open a ledger folder…
     </DropdownMenu.Item>
   </DropdownMenu.Content>
 </DropdownMenu.Root>

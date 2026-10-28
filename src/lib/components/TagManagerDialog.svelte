@@ -221,7 +221,7 @@
     <Dialog.Header class="px-5 pt-5 pb-3 border-b border-border shrink-0 text-left">
       <Dialog.Title>Tag Manager</Dialog.Title>
       <Dialog.Description class="text-(length:--font-ui) text-foreground-muted">
-        Every tag in this world, its colour in the graph, and whether the graph shows it.
+        Every tag in this ledger, its colour in the graph, and whether the graph shows it.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -236,7 +236,7 @@
           class="p-3 text-(length:--font-ui) text-foreground-muted"
           data-testid="tag-manager-empty"
         >
-          No tags in this world yet. Give a note one under Tags, in its Details.
+          No tags in this ledger yet. Give a note one under Tags, in its Details.
         </p>
       {:else}
         <ul class="flex flex-col" data-testid="tag-manager-list">

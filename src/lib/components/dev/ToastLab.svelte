@@ -52,9 +52,9 @@
         toastUndo("Deleted 'Harbour Watch'", () => console.log("[toast lab] undo window elapsed")),
     },
     // Pins that lost their note, notes that couldn't open and links to moved notes
-    // aren't toasts any more: they wait in the world menu and on the World Home.
+    // aren't toasts any more: they wait in the ledger menu and on the Ledger Home.
     {
-      label: "World restored from backup",
+      label: "Ledger restored from backup",
       hint: "persistent, closable, one action",
       fire: () =>
         toastDbRestored("Ashfen", new Date().toISOString(), () =>
