@@ -22,8 +22,21 @@
 const REPO = "Larront/grimoire";
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 
-export type Asset = { label: string; detail?: string; url: string };
-export type Platform = { os: string; note: string; assets: Asset[] };
+/**
+  `detail` is the file type; `size` is human-readable ("14 MB") when the API gave one;
+  `direct` is false for a link to the releases page rather than an installer.
+*/
+export type Asset = { label: string; detail: string; size?: string; url: string; direct: boolean };
+export type OsKey = "windows" | "macos" | "linux";
+export type Platform = {
+  key: OsKey;
+  os: string;
+  /** What the platform needs and which file to pick. */
+  note: string;
+  /** How to get past the unsigned-build warning, shown beside this OS's downloads. */
+  firstRun: string;
+  assets: Asset[];
+};
 
 export type ReleaseInfo = {
   version: string | null;
@@ -32,85 +45,135 @@ export type ReleaseInfo = {
   resolved: boolean;
 };
 
-type GithubAsset = { name: string; browser_download_url: string };
+type GithubAsset = { name: string; size?: number; browser_download_url: string };
 type GithubRelease = {
   tag_name: string;
   published_at: string;
   assets: GithubAsset[];
 };
 
-function resolvePlatforms(assets: GithubAsset[]): Platform[] {
-  const find = (pred: (name: string) => boolean): string | undefined =>
-    assets.find((a) => pred(a.name))?.browser_download_url;
+/*
+  Everything about a platform that is not a URL, written once. The resolved list and
+  the fallback both read it, so the two cannot drift apart — they used to be two copies.
 
-  const lower = (name: string) => name.toLowerCase();
-  // `.sig` files are the updater's signatures, not something a human downloads.
-  const isInstaller = (name: string) => !name.endsWith(".sig");
+  The first-run steps are the unsigned-build warning each OS shows, said beside that
+  OS's downloads rather than in a paragraph after the list. macOS 15 Sequoia removed
+  the right-click → Open bypass the old copy described; Open Anyway in Privacy &
+  Security is the route on every version since. The .deb is built on ubuntu-24.04
+  (.github/workflows/release.yml), so it needs that release's glibc or newer.
+*/
+const PLATFORMS: Record<OsKey, Omit<Platform, "assets">> = {
+  windows: {
+    key: "windows",
+    os: "Windows",
+    note: "Windows 10 and 11, 64-bit. The .msi suits managed installs.",
+    firstRun: "Windows may say it protected your PC. Choose More info, then Run anyway.",
+  },
+  macos: {
+    key: "macos",
+    os: "macOS",
+    note: "macOS 11 or later. Apple Silicon for M1 and newer, Intel for older Macs.",
+    firstRun:
+      "macOS won't open it the first time. Go to System Settings → Privacy & Security and choose Open Anyway.",
+  },
+  linux: {
+    key: "linux",
+    os: "Linux",
+    note: "x86-64. The AppImage runs on most distributions; the .deb needs Ubuntu 24.04 or newer.",
+    firstRun: "Make the AppImage executable (chmod +x) before you run it.",
+  },
+};
 
-  const msi = find((n) => isInstaller(n) && lower(n).endsWith(".msi"));
-  const exe = find((n) => isInstaller(n) && lower(n).endsWith(".exe"));
-  const dmgArm = find(
-    (n) => isInstaller(n) && lower(n).includes("aarch64") && lower(n).endsWith(".dmg"),
-  );
-  const dmgIntel = find(
-    (n) => isInstaller(n) && lower(n).includes("x64") && lower(n).endsWith(".dmg"),
-  );
-  const deb = find((n) => isInstaller(n) && lower(n).endsWith(".deb"));
-  const appimage = find((n) => isInstaller(n) && lower(n).endsWith(".appimage"));
+const ORDER: OsKey[] = ["windows", "macos", "linux"];
 
-  const platforms: Platform[] = [];
-
-  const windows: Asset[] = [];
-  if (msi) windows.push({ label: "Installer", detail: ".msi", url: msi });
-  if (exe) windows.push({ label: "Setup", detail: ".exe", url: exe });
-  if (windows.length)
-    platforms.push({
-      os: "Windows",
-      note: "Windows 10 & 11 · 64-bit",
-      assets: windows,
-    });
-
-  const macos: Asset[] = [];
-  if (dmgArm) macos.push({ label: "Apple Silicon", detail: ".dmg", url: dmgArm });
-  if (dmgIntel) macos.push({ label: "Intel", detail: ".dmg", url: dmgIntel });
-  if (macos.length)
-    platforms.push({
-      os: "macOS",
-      note: "macOS 11 Big Sur & later",
-      assets: macos,
-    });
-
-  const linux: Asset[] = [];
-  if (deb) linux.push({ label: "Debian / Ubuntu", detail: ".deb", url: deb });
-  if (appimage) linux.push({ label: "AppImage", detail: "universal", url: appimage });
-  if (linux.length) platforms.push({ os: "Linux", note: "x86-64", assets: linux });
-
-  return platforms;
+function formatSize(bytes: number | undefined): string | undefined {
+  if (!bytes) return undefined;
+  const mb = bytes / 1_048_576;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
-const FALLBACK: Platform[] = [
-  {
-    os: "Windows",
-    note: "Windows 10 & 11 · 64-bit",
-    assets: [{ label: "Get on GitHub", detail: ".msi / .exe", url: RELEASES_PAGE }],
-  },
-  {
-    os: "macOS",
-    note: "macOS 11 Big Sur & later",
-    assets: [{ label: "Get on GitHub", detail: ".dmg", url: RELEASES_PAGE }],
-  },
-  {
-    os: "Linux",
-    note: "x86-64",
-    assets: [
-      {
-        label: "Get on GitHub",
-        detail: ".deb / .AppImage",
-        url: RELEASES_PAGE,
-      },
+function resolvePlatforms(assets: GithubAsset[]): Platform[] {
+  const lower = (name: string) => name.toLowerCase();
+  // `.sig` files are the updater's signatures, not something a human downloads.
+  const find = (pred: (name: string) => boolean): GithubAsset | undefined =>
+    assets.find((a) => !a.name.endsWith(".sig") && pred(lower(a.name)));
+
+  const asset = (found: GithubAsset | undefined, label: string, detail: string) =>
+    found
+      ? [
+          {
+            label,
+            detail,
+            size: formatSize(found.size),
+            url: found.browser_download_url,
+            direct: true,
+          },
+        ]
+      : [];
+
+  // The first asset of each platform is the one to recommend.
+  const byOs: Record<OsKey, Asset[]> = {
+    windows: [
+      ...asset(
+        find((n) => n.endsWith(".exe")),
+        "Setup",
+        ".exe",
+      ),
+      ...asset(
+        find((n) => n.endsWith(".msi")),
+        "Installer",
+        ".msi",
+      ),
     ],
-  },
-];
+    macos: [
+      ...asset(
+        find((n) => n.includes("aarch64") && n.endsWith(".dmg")),
+        "Apple Silicon",
+        ".dmg",
+      ),
+      ...asset(
+        find((n) => n.includes("x64") && n.endsWith(".dmg")),
+        "Intel",
+        ".dmg",
+      ),
+    ],
+    linux: [
+      ...asset(
+        find((n) => n.endsWith(".appimage")),
+        "AppImage",
+        ".AppImage",
+      ),
+      ...asset(
+        find((n) => n.endsWith(".deb")),
+        "Debian / Ubuntu",
+        ".deb",
+      ),
+    ],
+  };
+
+  return ORDER.filter((key) => byOs[key].length).map((key) => ({
+    ...PLATFORMS[key],
+    assets: byOs[key],
+  }));
+}
+
+const FALLBACK_DETAIL: Record<OsKey, string> = {
+  windows: ".exe / .msi",
+  macos: ".dmg",
+  linux: ".AppImage / .deb",
+};
+
+/** A platform row that links to the releases page instead of an installer. */
+function fallbackFor(key: OsKey): Platform {
+  return {
+    ...PLATFORMS[key],
+    assets: [
+      { label: "Get on GitHub", detail: FALLBACK_DETAIL[key], url: RELEASES_PAGE, direct: false },
+    ],
+  };
+}
+
+const FALLBACK: Platform[] = ORDER.map(fallbackFor);
 
 /*
   WHICH RELEASE THIS BUILD IS SUPPOSED TO BE ADVERTISING, when anything knows.
@@ -178,8 +241,22 @@ export async function getLatestRelease(): Promise<ReleaseInfo> {
       );
     }
 
-    const platforms = resolvePlatforms(release.assets ?? []);
-    if (!platforms.length) throw new Error("no installable assets resolved");
+    const resolved = resolvePlatforms(release.assets ?? []);
+    if (!resolved.length) throw new Error("no installable assets resolved");
+
+    // A release missing one OS's files used to drop that OS's row without a word, so a
+    // Mac visitor saw no macOS at all. Strict builds refuse; local builds keep the row
+    // and point it at the releases page.
+    const missing = ORDER.filter((key) => !resolved.some((p) => p.key === key));
+    if (missing.length && strict) {
+      throw new Error(`no installers resolved for ${missing.join(", ")}`);
+    }
+    if (missing.length) {
+      console.warn(
+        `[releases] No installers for ${missing.join(", ")}; linking the releases page.`,
+      );
+    }
+    const platforms = ORDER.map((key) => resolved.find((p) => p.key === key) ?? fallbackFor(key));
 
     return {
       version: release.tag_name ?? null,
