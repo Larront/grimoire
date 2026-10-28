@@ -140,10 +140,10 @@ describe("settings dialog — density", () => {
 // ── Scope, names and the panels ───────────────────────────────────
 
 describe("settings dialog — what it says", () => {
-  it("says the accent is this world's and the rest are every world's", async () => {
+  it("says the accent is this ledger's and the rest are every ledger's", async () => {
     const { dialog } = await openSettingsDialog();
-    expect(within(dialog).getByText(/This world's colour/)).toBeTruthy();
-    expect(within(dialog).getAllByText(/Every world\./).length).toBeGreaterThanOrEqual(3);
+    expect(within(dialog).getByText(/This ledger's colour/)).toBeTruthy();
+    expect(within(dialog).getAllByText(/Every ledger\./).length).toBeGreaterThanOrEqual(3);
   });
 
   it("names the chosen accent, and groups the swatches under Accent", async () => {

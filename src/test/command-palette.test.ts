@@ -1200,7 +1200,7 @@ describe("command palette – Commands group wiring", () => {
     expect(searchPalette.open).toBe(false);
   });
 
-  it("Open a world folder… closes palette and calls ledger.openLedger", async () => {
+  it("Open a ledger folder… closes palette and calls ledger.openLedger", async () => {
     render(AppSearch);
     await openPalette();
     const input = getSearchInput();

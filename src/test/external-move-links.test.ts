@@ -79,7 +79,7 @@ async function mount() {
   return utils;
 }
 
-// Waits in the world's "needs attention" place — the world menu and the World Home —
+// Waits in the ledger's "needs attention" place — the ledger menu and the Ledger Home —
 // rather than the lasting toast it was, which outlived its world (2026-10 design review).
 function linksItem() {
   return needsAttention.items.find((i) => i.kind === "links");

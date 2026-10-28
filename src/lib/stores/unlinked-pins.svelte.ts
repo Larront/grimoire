@@ -8,8 +8,8 @@
 // toast's "Show pins" dismissed the toast, choosing a pin closed the dialog, and
 // nothing could open it again, so a GM with five pins to fix could fix one. Now the
 // list is the state, not the dialog's: it shrinks as pins are fixed, and the palette
-// reopens it while any remain. It is said in the world's "needs attention" place (the
-// world menu and the World Home, `needs-attention.svelte.ts`), not a toast that could
+// reopens it while any remain. It is said in the ledger's "needs attention" place (the
+// ledger menu and the Ledger Home, `needs-attention.svelte.ts`), not a toast that could
 // outlive its world.
 import type { UnlinkedPin } from "$lib/bindings.gen";
 

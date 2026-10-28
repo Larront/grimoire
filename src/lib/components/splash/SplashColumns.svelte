@@ -34,7 +34,7 @@
     data-testid="splash-explore-sample"
     disabled={p.busy !== null}
     onclick={p.exampleSaved ? p.onContinueExample : p.onExplore}
-    >{p.exampleSaved ? "Continue the example world" : "Wander the example world"}</button
+    >{p.exampleSaved ? "Continue the example ledger" : "Wander the example world"}</button
   >
   {#if p.exampleSaved}
     ·
@@ -60,7 +60,7 @@
 
     <div class="-ms-2.5 mt-10 flex flex-col items-start gap-1">
       <Button variant="ghost" class="gap-2 text-foreground" data-splash-new onclick={p.onNewWorld}>
-        <Plus /> New world
+        <Plus /> New ledger
       </Button>
       <Button
         variant="ghost"
@@ -69,7 +69,7 @@
         onclick={p.onOpenFolder}
       >
         {#if p.busy === "__folder__"}<LoaderCircle class="animate-spin" />{:else}<FolderOpen />{/if}
-        Open a world folder…
+        Open a ledger folder…
       </Button>
     </div>
 
@@ -149,7 +149,7 @@
     {#if others.length && !p.create}
       <section class={last ? "mt-12" : ""} aria-labelledby="splash-others">
         <h2 id="splash-others" class="text-xs font-semibold text-foreground-muted">
-          {last ? "Other worlds" : "Your worlds"}
+          {last ? "Other ledgers" : "Your ledgers"}
         </h2>
         <!-- Pulled out by the rows' own padding, so names line up with the one above. -->
         <ul data-pane-scroll class="-mx-3 mt-2 flex max-h-[34vh] flex-col overflow-y-auto">

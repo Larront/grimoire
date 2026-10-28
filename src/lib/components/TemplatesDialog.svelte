@@ -285,7 +285,7 @@
           class="p-3 text-(length:--font-ui) text-foreground-muted"
           data-testid="templates-empty"
         >
-          No templates in this world yet. Make one for the kind of note you write again and
+          No templates in this ledger yet. Make one for the kind of note you write again and
           again — an NPC, a location, a session log.
         </p>
       {:else}

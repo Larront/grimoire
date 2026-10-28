@@ -60,12 +60,12 @@ async function flush() {
   }
 }
 
-// ── The example, in the sidebar's world menu ────────────────────────────────
-// 2026-10 design review: the example kept its own marker in place of the world
-// menu, which left no way back to the GM's own worlds but a folder picker. It
-// now keeps the same menu, named as itself, with Make this world mine added.
+// ── The example, in the sidebar's ledger menu ───────────────────────────────
+// 2026-10 design review: the example kept its own marker in place of the ledger
+// menu, which left no way back to the GM's own ledgers but a folder picker. It
+// now keeps the same menu, named as itself, with Make this ledger mine added.
 
-describe("the example in the world menu", () => {
+describe("the example in the ledger menu", () => {
   beforeEach(async () => {
     await ledger.closeLedger();
     vi.mocked(invoke).mockReset();
@@ -93,7 +93,7 @@ describe("the example in the world menu", () => {
     expect(marker.textContent).not.toContain("Example World");
   });
 
-  it("keeps the way back to the GM's own worlds, and offers to make it theirs", async () => {
+  it("keeps the way back to the GM's own ledgers, and offers to make it theirs", async () => {
     mockSampleInvoke();
     await ledger.exploreSample();
     await flush();
@@ -108,7 +108,7 @@ describe("the example in the world menu", () => {
     expect(dialogs.adoptOpen).toBe(true);
   });
 
-  it("offers nothing about the example in a world of the GM's own", async () => {
+  it("offers nothing about the example in a ledger of the GM's own", async () => {
     const { queryByTestId } = render(LedgerSelector);
     await flush();
 
@@ -142,7 +142,7 @@ describe("the example's home", () => {
     await flush();
 
     expect(getByRole("heading", { name: "The Ashfen Vale" })).toBeTruthy();
-    expect(getByTestId("home-example").textContent).toContain("An example world");
+    expect(getByTestId("home-example").textContent).toContain("An example ledger");
     expect(getByText("What you change here is kept for next time.")).toBeTruthy();
     await fireEvent.click(getByTestId("home-make-mine"));
     expect(dialogs.adoptOpen).toBe(true);

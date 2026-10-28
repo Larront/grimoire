@@ -33,17 +33,17 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   ERR_UNSUPPORTED_PDF: "That file isn't a PDF.",
   ERR_SPOTIFY_AUTH: "Couldn't connect to Spotify — please try again.",
   ERR_EMPTY_QUICK_NOTE: "A Quick Note needs some text.",
-  ERR_DB_LOCKED: "Another program is using this world's database — close it and try again.",
-  ERR_DB_CORRUPT: "This world's database is damaged.",
+  ERR_DB_LOCKED: "Another program is using this ledger's database — close it and try again.",
+  ERR_DB_CORRUPT: "This ledger's database is damaged.",
   // [[Ledger Format Version]] refusals (ADR-0017). Both directions of mismatch
   // refuse to open, so this copy is the whole GM-facing story for each.
   ERR_FORMAT_AHEAD:
-    "This world's notes were written by a newer Grimoire — update Grimoire to open it.",
+    "This ledger's notes were written by a newer Grimoire — update Grimoire to open it.",
   // Reached only when the prompt could not be composed: the store suppresses this
   // toast whenever the dialog opens, because a dialog already forcing a decision
   // does not need a line of its own beside it. What survives here is the dead-end
   // case — the refusal stands and nothing else would say so.
-  ERR_FORMAT_MIGRATION_REQUIRED: "This world's notes need updating before it can be opened.",
+  ERR_FORMAT_MIGRATION_REQUIRED: "This ledger's notes need updating before it can be opened.",
   // The backup is the one all-or-nothing step: it failed, so nothing was
   // rewritten, and the ledger is exactly as it was.
   ERR_FORMAT_BACKUP_FAILED:
@@ -52,7 +52,7 @@ const FRIENDLY_BY_CODE: Record<string, string> = {
   // GM owns: the generic "please try again" would be a lie, since a re-open
   // reads the same damaged stamp.
   ERR_FORMAT_STAMP_UNREADABLE:
-    "Grimoire couldn't tell what format this world's notes are in — check .grimoire/format-version.",
+    "Grimoire couldn't tell what format this ledger's notes are in — check .grimoire/format-version.",
 };
 
 // Honest for both reads and writes — "your work is safe" would mislead when a

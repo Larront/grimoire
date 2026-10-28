@@ -75,8 +75,8 @@ describe("Splash — missing recent ledgers (issue #111)", () => {
     const { getByLabelText, queryByTestId } = render(HomePage);
     await flush();
 
-    // Every world can be taken off the list now, not only a missing one.
-    await fireEvent.click(getByLabelText("Remove Lost World from recent worlds"));
+    // Every ledger can be taken off the list now, not only a missing one.
+    await fireEvent.click(getByLabelText("Remove Lost World from recent ledgers"));
     await flush();
 
     const calls = vi.mocked(invoke).mock.calls;

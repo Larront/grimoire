@@ -150,8 +150,8 @@
             >
             folder.
             {alreadyOpen
-              ? "If not now, it will ask again next time this world opens."
-              : "If you'd rather not, the world won't open and nothing is written."}
+              ? "If not now, it will ask again next time this ledger opens."
+              : "If you'd rather not, the ledger won't open and nothing is written."}
           </p>
         {/if}
       </AlertDialog.Description>

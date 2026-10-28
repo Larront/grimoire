@@ -1,6 +1,6 @@
 <script lang="ts">
   /*
-    Make this world mine — keep the Example World, edits and all, as the GM's own.
+    Make this ledger mine — keep the example, edits and all, as the GM's own.
 
     Revised in the 2026-10 design review:
     - It never copies over a folder that exists. It used to delete one with the same
@@ -77,7 +77,7 @@
       if (String(e).includes("LEDGER_EXISTS")) {
         refused = `There's already a folder called “${world}” there. Choose another name or folder.`;
       } else {
-        failed = "Couldn't copy the world there. Try another folder.";
+        failed = "Couldn't copy the ledger there. Try another folder.";
       }
     } finally {
       copying = false;
@@ -99,9 +99,9 @@
   >
     <div data-testid="adopt-dialog" class="flex min-w-0 flex-col gap-5">
       <Dialog.Header>
-        <Dialog.Title>Make this world mine</Dialog.Title>
+        <Dialog.Title>Make this ledger mine</Dialog.Title>
         <Dialog.Description>
-          Grimoire copies this world, with everything you've changed, into a new folder and opens it
+          Grimoire copies this ledger, with everything you've changed, into a new folder and opens it
           as yours. The example stays as it is, to come back to from the Splash or start over.
         </Dialog.Description>
       </Dialog.Header>
@@ -109,7 +109,7 @@
       <NewLedgerFields
         bind:name
         bind:parent
-        placeholder="Name your world"
+        placeholder="Name your ledger"
         disabled={copying}
         {attempted}
         nameRefused={refused}

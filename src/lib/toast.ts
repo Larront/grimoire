@@ -11,10 +11,10 @@ import type { SalvageSummary } from "$lib/bindings.gen";
 // session, that the GM has to act on, and that is non-destructive to ignore —
 // `toastMigrationReport`'s failure branch (notes a [[Format Migration]] left on a
 // format nothing reads, #184) and the database recovery notices. None licenses
-// permanent toasts for work the app has finished. What a *world* needs from the
+// permanent toasts for work the app has finished. What a *ledger* needs from the
 // GM — pins that lost their note, notes that couldn't be opened, links to a note
 // moved outside Grimoire — is not a toast at all (2026-10 design review): it waits
-// in the world menu and on the World Home (`needs-attention.svelte.ts`).
+// in the ledger menu and on the Ledger Home (`needs-attention.svelte.ts`).
 const ERROR_DURATION = 8000;
 
 export function toastError(message: string) {

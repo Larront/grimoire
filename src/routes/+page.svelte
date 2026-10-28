@@ -6,7 +6,8 @@
     and `SplashColumns` draws it. Revised in the 2026-10 design review:
     - Two columns: what Grimoire is and the ways to start; then the GM's last world
       as the subject, with Continue, and the others beneath it.
-    - It says "world", as the rest of the app now does; "ledger" is the code's word.
+    - It says "ledger" for the folder, as the website does; "world" is only the fiction
+      inside it (2026-10-29, reversing the review's "world" throughout).
     - A launch focuses the obvious next step, so Enter carries on.
     - The example world can be continued as it was left, or started over, rather than
       wiped on every visit without a word.

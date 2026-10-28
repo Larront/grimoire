@@ -32,5 +32,5 @@ export const RAIL_BUTTON =
   "text-muted-foreground hover:text-sidebar-foreground data-active:text-sidebar-accent-foreground";
 
 /** A footer row in a short window (the `short` variant, app.css): a bare icon beside
- *  the world's name, its label gone, a square the size of the world menu's row. */
+ *  the ledger's name, its label gone, a square the size of the ledger menu's row. */
 export const SHORT_ICON_BUTTON = "short:size-8 short:justify-center short:p-0";

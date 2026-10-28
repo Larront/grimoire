@@ -63,7 +63,7 @@ function pinsItem() {
 
 // ── What the GM is told ───────────────────────────────────────────
 //
-// In the world's "needs attention" place (the world menu, the World Home), not a
+// In the ledger's "needs attention" place (the ledger menu, the Ledger Home), not a
 // toast: three lasting toasts stacked, hid one another and outlived their world
 // (2026-10 design review).
 

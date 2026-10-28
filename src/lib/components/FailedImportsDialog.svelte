@@ -23,8 +23,8 @@
   let outcome = $state<string | null>(null);
 
   const one = $derived(unreadableNotes.count === 1);
-  // The world as the sidebar names it — the example's folder is "sample-world".
-  const worldName = $derived(ledger.worldName || "World");
+  // The ledger as the sidebar names it — the example's folder is "sample-world".
+  const worldName = $derived(ledger.worldName || "Ledger");
 
   $effect(() => {
     if (!unreadableNotes.open) outcome = null;
@@ -67,7 +67,7 @@
           ? "Still couldn't read them."
           : `${opened} ${opened === 1 ? "opens" : "open"} now.`;
     } catch {
-      outcome = "Couldn't read the world's notes again. Try reopening the world.";
+      outcome = "Couldn't read the ledger's notes again. Try reopening the ledger.";
     }
   }
 </script>
@@ -88,9 +88,9 @@
         {one ? "A note Grimoire couldn't open" : "Notes Grimoire couldn't open"}
       </Dialog.Title>
       <Dialog.Description class="text-(length:--font-ui) text-foreground-muted">
-        {one ? "It's" : "They're"} still in your world's folder, untouched. Grimoire couldn't read
+        {one ? "It's" : "They're"} still in your ledger's folder, untouched. Grimoire couldn't read
         {one ? "it" : "them"} this time, so {one ? "it won't" : "they won't"} open or show up in search
-        until it can. It tries again whenever the world opens.
+        until it can. It tries again whenever the ledger opens.
       </Dialog.Description>
     </Dialog.Header>
 
