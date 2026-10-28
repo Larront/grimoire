@@ -36,6 +36,7 @@
   import { scenes } from "$lib/stores/scenes.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import { staleLinks } from "$lib/stores/stale-links.svelte";
+  import { linkRepairs } from "$lib/stores/link-repairs.svelte";
   import Disclosure from "$lib/components/Disclosure.svelte";
   import DisclosureChevron from "$lib/components/DisclosureChevron.svelte";
   import { importPdfFromHandle, isPdfFile, pickPdfsInto } from "$lib/pdf/import";
@@ -150,6 +151,9 @@
       // a non-destructive heal — never silent (ADR-0014): it waits in the world's
       // "needs attention" place until the GM updates the links or leaves them.
       "note:external-move-links-stale": ({ from, to, count }) => staleLinks.add(from, to, count),
+      // A bulk change brought notes to new places; links written as paths may
+      // point where they were. Listed, never healed unasked (ADR-0014).
+      "notes:arrived": () => void linkRepairs.check(),
     }),
   );
 

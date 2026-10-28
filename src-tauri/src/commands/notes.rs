@@ -8,7 +8,7 @@ use diesel::prelude::*;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 pub use crate::search::{NoteSearchResult, SearchAllResult};
 
@@ -232,6 +232,9 @@ pub struct RenameNoteResult {
     pub note: Note,
     #[specta(type = i32)]
     pub updated_count: usize,
+    /// The notes rewritten, for the command to tell their open panes. Not sent.
+    #[serde(skip)]
+    pub rewritten: Vec<String>,
 }
 
 /// Rename a note (change its filename/path). Always re-keys the moved note's own
@@ -249,9 +252,12 @@ pub struct RenameNoteResult {
 pub fn rename_note(
     note: Note,
     rewrite_backlinks: bool,
+    app: AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<RenameNoteResult, String> {
-    with_open_ledger(&ledger, |l| rename_note_inner(l, &note, rewrite_backlinks))
+    let result = with_open_ledger(&ledger, |l| rename_note_inner(l, &note, rewrite_backlinks))?;
+    crate::ledger_watch::announce_rewritten(&app, &result.rewritten);
+    Ok(result)
 }
 
 fn rename_note_inner(
@@ -291,13 +297,14 @@ fn rename_note_inner(
         rewrite_backlinks,
     )?;
 
-    let updated_count = match renamed.backlinks {
-        note_mutation::RenamedBacklinks::Rewritten(n) => n,
-        note_mutation::RenamedBacklinks::Deferred(_) => 0,
+    let rewritten = match renamed.backlinks {
+        note_mutation::RenamedBacklinks::Rewritten(paths) => paths,
+        note_mutation::RenamedBacklinks::Deferred(_) => Vec::new(),
     };
     Ok(RenameNoteResult {
         note: renamed.note,
-        updated_count,
+        updated_count: rewritten.len(),
+        rewritten,
     })
 }
 
@@ -319,18 +326,20 @@ fn rename_note_inner(
 pub fn apply_backlink_rewrite(
     from_path: String,
     to_path: String,
+    app: AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<u32, String> {
-    with_open_ledger(&ledger, |l| {
+    let rewritten = with_open_ledger(&ledger, |l| {
         let rewrites = crate::commands::links::collect_backlink_rewrites_on_conn(
             l.path,
             l.conn,
             &from_path,
             &to_path,
         )?;
-        let count = note_mutation::commit_backlink_rewrites(l.conn, l.index, l.path, rewrites)?;
-        Ok(count as u32)
-    })
+        note_mutation::commit_backlink_rewrites(l.conn, l.index, l.path, rewrites)
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    Ok(rewritten.len() as u32)
 }
 
 #[tauri::command]

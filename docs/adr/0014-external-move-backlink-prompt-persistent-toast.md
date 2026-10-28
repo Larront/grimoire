@@ -12,6 +12,19 @@
 > links_ recomputes the set at apply time, _Leave them_ makes no backend call, and the
 > bulk path raises nothing.
 
+> **Amendment, 2026-10 design review: Repair links.** The follow-up this ADR recorded now
+> exists, and the bulk path is no longer silent — by the owner's choice, it is _quiet_.
+> When notes turn up at paths the records didn't hold (the Watcher's bulk rebuild emits
+> `notes:arrived`; an open says so in `notes_arrived`), the frontend asks
+> `plan_link_repairs` for links that resolve to nothing but whose file name a note still
+> has, and if there are any the world's "needs attention" place lists them — _Review
+> links_ / _Leave them_. It is a line in a list, never a prompt, and it rewrites nothing:
+> the GM ticks which links to point where (a name two notes share waits for them to
+> choose), and `apply_link_repairs` recomputes from those choices at apply time, as
+> _Update links_ does. The palette's _Repair links…_ runs the same check on demand. What
+> still holds: the bulk path heals nothing by itself, and a link that names no note — a
+> renamed file, or a note not written yet — is left alone, because a name can't find it.
+
 ## Context
 
 When a note is renamed _inside_ Grimoire, `rename_note` rewrites every `[[old path]]`

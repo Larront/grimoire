@@ -31,6 +31,13 @@ export const commands = {
 	 *  edited. Returns the number of notes whose files were actually rewritten.
 	 */
 	applyBacklinkRewrite: (fromPath: string, toPath: string) => __TAURI_INVOKE<number>("apply_backlink_rewrite", { fromPath, toPath }),
+	/**
+	 *  Point the chosen broken links at the notes the GM chose, through the same
+	 *  batched write the backlink rewrite uses. Returns how many notes were rewritten.
+	 */
+	applyLinkRepairs: (choices: LinkRepairChoice[]) => __TAURI_INVOKE<number>("apply_link_repairs", { choices }),
+	/**  The broken links in the open world that a note's name can still place. */
+	planLinkRepairs: () => __TAURI_INVOKE<LinkRepair[]>("plan_link_repairs"),
 	assignMapImage: (mapId: number, sourceImagePath: string, destFolder: string | null) => __TAURI_INVOKE<Map>("assign_map_image", { mapId, sourceImagePath, destFolder }),
 	closeLedger: () => __TAURI_INVOKE<null>("close_ledger"),
 	/**
@@ -324,8 +331,8 @@ export const commands = {
 	 *  The propagation is best-effort **after** the rename has landed: the scene is
 	 *  renamed either way, and failing the command over a note that could not be written
 	 *  would leave the GM's gesture looking rejected when the database took it. What is
-	 *  left behind in that case is a stale name in a note, which is what the planned
-	 *  repair-backlinks tool is for.
+	 *  left behind in that case is a stale name in a note, corrected by the scene's next
+	 *  rename. The notes it did rewrite are announced, so a pane holding one reloads.
 	 */
 	updateScene: (id: number, name: string) => __TAURI_INVOKE<Scene>("update_scene", { id, name }),
 	updateSceneSlot: (id: number, label: string, volume: number | null, loop: boolean, slotOrder: number, shuffle: boolean) => __TAURI_INVOKE<SceneSlot>("update_scene_slot", { id, label, volume, loop, slotOrder, shuffle }),
@@ -463,6 +470,25 @@ export type GraphNodeData_Serialize = {
 	 *  Always 0 for map and stub nodes.
 	 */
 	backlink_count: number,
+};
+
+/**  One broken link and the notes it could mean now. */
+export type LinkRepair = {
+	/**  The link as the notes write it, e.g. `Places/Thornhaven`. */
+	target: string,
+	/**
+	 *  Notes with the file name the link ends in, shortest path first. One is the
+	 *  usual case; more and the GM chooses.
+	 */
+	candidates: ResolvedNote[],
+	/**  The notes holding the link, by title. */
+	sources: ResolvedNote[],
+};
+
+/**  What the GM chose for one broken link: the note it should point at now. */
+export type LinkRepairChoice = {
+	target: string,
+	note_id: number,
 };
 
 /**  One note the menu can link to. */
@@ -627,6 +653,11 @@ export type OpenLedgerResult = {
 	salvaged: SalvageSummary | null,
 	/**  Set only by a rebuild: what it brought back besides the notes. */
 	rebuilt: RebuildSummary | null,
+	/**
+	 *  Notes turned up at paths the records didn't hold, so some links may point at
+	 *  where a note used to be: the frontend asks `plan_link_repairs`.
+	 */
+	notes_arrived: boolean,
 };
 
 export type OutboundLink = {

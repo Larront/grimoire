@@ -9,8 +9,9 @@
 import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
 import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
 import { staleLinks } from "$lib/stores/stale-links.svelte";
+import { linkRepairs } from "$lib/stores/link-repairs.svelte";
 
-export type AttentionKind = "pins" | "notes" | "links";
+export type AttentionKind = "pins" | "notes" | "links" | "repairs";
 
 export interface AttentionItem {
   kind: AttentionKind;
@@ -58,9 +59,24 @@ export const needsAttention = {
         dismiss: { label: "Leave them", run: () => staleLinks.leave(move.from) },
       });
     }
+    if (linkRepairs.noticed) {
+      const n = linkRepairs.linkCount;
+      items.push({
+        kind: "repairs",
+        key: "repairs",
+        label: `${plural(n, "link", "links")} point${n === 1 ? "s" : ""} to where a note used to be`,
+        action: { label: "Review links", run: () => linkRepairs.review() },
+        dismiss: { label: "Leave them", run: () => linkRepairs.leave() },
+      });
+    }
     return items;
   },
   get count() {
-    return unlinkedPins.count + unreadableNotes.count + staleLinks.count;
+    return (
+      unlinkedPins.count +
+      unreadableNotes.count +
+      staleLinks.count +
+      (linkRepairs.noticed ? 1 : 0)
+    );
   },
 };

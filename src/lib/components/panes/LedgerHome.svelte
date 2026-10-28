@@ -46,6 +46,7 @@
     pins: MapPinOff,
     notes: FileWarning,
     links: Link2Off,
+    repairs: Link2Off,
   };
   const quietLink =
     "rounded-sm text-(length:--font-ui) text-foreground-muted underline decoration-border underline-offset-2 hover:text-foreground";

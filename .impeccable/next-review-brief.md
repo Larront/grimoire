@@ -188,8 +188,6 @@ Not fixed yet; pick them up when they fit a pass above:
   Splash better was raised and not decided. (A world whose folder moved has Find it…
   now: it opens from where the GM says it is, a folder that isn't a world yet opening
   as one, by the owner's choice.)
-- **Broken wikilinks after bulk moves outside Grimoire**: a manual "repair backlinks"
-  tool is planned as the escape hatch.
 - **States, not screens**:
   - Map keyboard use hasn't landed: `MapCanvas.svelte` still has `keyboard: false`;
     pins are unnamed `role=button`s, can't be placed by keyboard, and focusing one

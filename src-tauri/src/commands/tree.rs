@@ -363,7 +363,7 @@ pub fn rename_folder_inner(
     new_name: &str,
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     let new_path = resolve_renamed_folder_path(ledger_path, old_path, new_name)?;
     relocate_folder_inner(ledger_path, old_path, &new_path, conn, index)
 }
@@ -377,7 +377,7 @@ pub fn move_folder_inner(
     dest_folder: &str,
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     let new_path = resolve_moved_folder_path(ledger_path, old_path, dest_folder)?;
     relocate_folder_inner(ledger_path, old_path, &new_path, conn, index)
 }
@@ -423,8 +423,8 @@ fn rekey_leading_prefix(
 }
 
 /// Carry a folder from `old_path` to `new_path` along with everything keyed by a
-/// path underneath it. Returns the number of notes whose links were rewritten,
-/// for the "N notes updated" toast.
+/// path underneath it. Returns the notes whose links were rewritten, for the
+/// "N notes updated" toast and to tell an open pane its file changed.
 ///
 /// The notes are [`crate::note_mutation::relocate_folder`]'s: their rows, their
 /// files, the wikilinks pointing into them, and the directory move itself, in the
@@ -442,7 +442,7 @@ pub fn relocate_folder_inner(
     new_path: &str,
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     let updated_count =
         crate::note_mutation::relocate_folder(conn, index, ledger_path, old_path, new_path)?;
 
@@ -465,13 +465,16 @@ pub fn relocate_folder_inner(
 pub fn rename_folder(
     old_path: String,
     new_name: String,
+    app: tauri::AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    with_open_ledger(&ledger, |l| {
-        // Cast the internal usize count to i32 at the command seam: specta forbids
-        // BigInt-style types in exported bindings, and link counts are always small.
-        rename_folder_inner(l.path, &old_path, &new_name, l.conn, l.index).map(|n| n as i32)
-    })
+    let rewritten = with_open_ledger(&ledger, |l| {
+        rename_folder_inner(l.path, &old_path, &new_name, l.conn, l.index)
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    // A count as i32 at the command seam: specta forbids BigInt-style types in
+    // exported bindings, and link counts are always small.
+    Ok(rewritten.len() as i32)
 }
 
 #[tauri::command]
@@ -479,11 +482,14 @@ pub fn rename_folder(
 pub fn move_folder(
     old_path: String,
     dest_folder: String,
+    app: tauri::AppHandle,
     ledger: State<AppLedger>,
 ) -> Result<i32, String> {
-    with_open_ledger(&ledger, |l| {
-        move_folder_inner(l.path, &old_path, &dest_folder, l.conn, l.index).map(|n| n as i32)
-    })
+    let rewritten = with_open_ledger(&ledger, |l| {
+        move_folder_inner(l.path, &old_path, &dest_folder, l.conn, l.index)
+    })?;
+    crate::ledger_watch::announce_rewritten(&app, &rewritten);
+    Ok(rewritten.len() as i32)
 }
 
 #[cfg(test)]
@@ -1202,7 +1208,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "dragons/wyvern.md");
 
-        let count = move_folder_inner(dir.path(), "dragons", "creatures", &mut conn, None).unwrap();
+        let count = move_folder_inner(dir.path(), "dragons", "creatures", &mut conn, None).unwrap().len();
 
         assert_eq!(count, 1, "the one note holding a full-path link is counted");
         assert_eq!(
@@ -1243,7 +1249,7 @@ mod tests {
             move_folder_inner(dir.path(), "creatures/dragons", "creatures", &mut conn, None)
                 .expect("a drop onto the current parent is a no-op, not a failure");
 
-        assert_eq!(count, 0);
+        assert!(count.is_empty());
         assert!(dir.path().join("creatures/dragons/wyvern.md").is_file());
         let updated: Vec<Note> = notes.load::<Note>(&mut conn).unwrap();
         assert_eq!(updated[0].path, "creatures/dragons/wyvern.md");
@@ -1287,7 +1293,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "creatures/dragon.md");
 
-        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap().len();
 
         assert_eq!(count, 1, "one note should be rewritten");
         let updated = fs::read_to_string(dir.path().join("index.md")).unwrap();
@@ -1332,7 +1338,7 @@ mod tests {
         insert_note(&mut conn, 2, "index.md", None);
         insert_note_link(&mut conn, 2, "dragon");
 
-        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap();
+        let count = rename_folder_inner(dir.path(), "creatures", "beasts", &mut conn, None).unwrap().len();
 
         assert_eq!(count, 0, "bare-stem link must not be rewritten");
         let content = fs::read_to_string(dir.path().join("index.md")).unwrap();

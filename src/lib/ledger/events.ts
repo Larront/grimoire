@@ -38,6 +38,11 @@ export interface LedgerEvents {
    *  only when there is something to heal. The count is display-only —
    *  `applyBacklinkRewrite` recomputes the real set (ADR-0014). */
   "note:external-move-links-stale": { from: string; to: string; count: number };
+  /** A bulk rebuild found notes at paths the records didn't hold — moved, most
+   *  likely — so links written as paths may point at where they used to be. Says
+   *  nothing about which: `planLinkRepairs` works that out. The open-time repair
+   *  reports the same through `open_ledger`'s `notes_arrived`. */
+  "notes:arrived": null;
 }
 
 export type LedgerEventName = keyof LedgerEvents;

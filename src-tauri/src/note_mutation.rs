@@ -138,8 +138,10 @@ pub fn commit_many(
 
 /// Write and reconcile an already-computed set of backlink rewrites (the
 /// plan-to-commit half of phase B): map each `(source, rewritten content)` to a
-/// [`CommitItem`] and issue one batched [`commit_many`], returning how many
-/// source files were rewritten.
+/// [`CommitItem`] and issue one batched [`commit_many`], returning the paths of the
+/// source files rewritten — for the caller's "N notes updated", and for
+/// `ledger_watch::announce_rewritten`, which tells a pane holding one of them that
+/// its file changed under it.
 ///
 /// Shared by [`rename`]'s phase B and the on-demand `apply_backlink_rewrite`
 /// command so the mechanics live in one place. Takes the rewrites already
@@ -159,8 +161,8 @@ pub fn commit_backlink_rewrites(
     index: Option<&tantivy::Index>,
     ledger_path: &Path,
     rewrites: Vec<(Note, String)>,
-) -> Result<usize, String> {
-    let count = rewrites.len();
+) -> Result<Vec<String>, String> {
+    let paths: Vec<String> = rewrites.iter().map(|(note, _)| note.path.clone()).collect();
     let items: Vec<CommitItem> = rewrites
         .into_iter()
         .map(|(note, content)| CommitItem {
@@ -170,7 +172,7 @@ pub fn commit_backlink_rewrites(
         })
         .collect();
     commit_many(conn, index, items)?;
-    Ok(count)
+    Ok(paths)
 }
 
 /// What phase B did to the notes that linked to the renamed note.
@@ -179,9 +181,9 @@ pub fn commit_backlink_rewrites(
 /// Ledger Watcher reads its length to decide whether to offer a heal, and the
 /// `apply_backlink_rewrite` command later recomputes and applies it.
 pub enum RenamedBacklinks {
-    /// `rewrite_backlinks` was true: phase B ran and rewrote this many source
-    /// notes' `[[old path]]` wikilinks (only those whose text actually changed).
-    Rewritten(usize),
+    /// `rewrite_backlinks` was true: phase B ran and rewrote these source notes'
+    /// `[[old path]]` wikilinks (only those whose text actually changed).
+    Rewritten(Vec<String>),
     /// `rewrite_backlinks` was false: phase B was skipped. These are the
     /// ledger-relative paths of the source notes that still link to the old
     /// path — the plan a caller can offer to apply later (the external-move
@@ -236,8 +238,7 @@ pub fn rename(
         &new_note.path,
     )?;
     let backlinks = if rewrite_backlinks {
-        let count = commit_backlink_rewrites(conn, index, ledger_path, rewrites)?;
-        RenamedBacklinks::Rewritten(count)
+        RenamedBacklinks::Rewritten(commit_backlink_rewrites(conn, index, ledger_path, rewrites)?)
     } else {
         RenamedBacklinks::Deferred(rewrites.into_iter().map(|(note, _)| note.path).collect())
     };
@@ -293,20 +294,21 @@ pub fn rename(
 /// Callers resolve **and refuse** their destination first — a folder name a
 /// sibling already holds, a move into the folder's own descendant — because
 /// those refusals are about the folder, not its notes. `old_path == new_path` is
-/// a no-op here rather than a caller's obligation. Returns the number of notes
-/// whose wikilinks were rewritten, for the "N notes updated" toast.
+/// a no-op here rather than a caller's obligation. Returns the notes whose wikilinks were
+/// rewritten, where they are now: for the "N notes updated" toast, and to tell an open
+/// pane its file changed.
 pub fn relocate_folder(
     conn: &mut SqliteConnection,
     index: Option<&tantivy::Index>,
     ledger_path: &Path,
     old_path: &str,
     new_path: &str,
-) -> Result<usize, String> {
+) -> Result<Vec<String>, String> {
     // Nothing was asked for: a rename to the name it already has, or a move into
     // the folder it already sits in. Leaving the filesystem alone is the whole
     // job — `fs::rename` of a directory onto itself is not portable.
     if old_path == new_path {
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     // 1. Every descendant and where it lands.
@@ -329,7 +331,7 @@ pub fn relocate_folder(
         .collect();
     let rewrites =
         crate::commands::links::collect_backlink_rewrites_for_moves(ledger_path, conn, &renames)?;
-    let rewritten_count = rewrites.len();
+    let mut rewritten_paths: Vec<String> = Vec::with_capacity(rewrites.len());
     let mut rewritten: HashMap<i32, (Note, String)> = rewrites
         .into_iter()
         .map(|(note, content)| (note.id, (note, content)))
@@ -349,6 +351,7 @@ pub fn relocate_folder(
         let content = match rewritten.remove(&note.id) {
             Some((_, new_content)) => {
                 write_note_file(&full_path, new_content.as_bytes())?;
+                rewritten_paths.push(landing.clone());
                 new_content
             }
             None => fs::read_to_string(&full_path).unwrap_or_default(),
@@ -365,6 +368,7 @@ pub fn relocate_folder(
     // The rewritten sources that stayed where they were.
     for (note, content) in rewritten.into_values() {
         write_note_file(&ledger_path.join(&note.path), content.as_bytes())?;
+        rewritten_paths.push(note.path.clone());
         items.push(ReconcileManyItem {
             note,
             content,
@@ -374,7 +378,7 @@ pub fn relocate_folder(
 
     note_index::reconcile_many(conn, index, &items)?;
 
-    Ok(rewritten_count)
+    Ok(rewritten_paths)
 }
 
 /// The external form of [`relocate_folder`]: a folder was renamed or moved
@@ -843,7 +847,7 @@ mod tests {
 
         // Phase B ran: the one source was rewritten.
         match result.backlinks {
-            RenamedBacklinks::Rewritten(n) => assert_eq!(n, 1),
+            RenamedBacklinks::Rewritten(paths) => assert_eq!(paths.len(), 1),
             RenamedBacklinks::Deferred(_) => panic!("expected phase B to run"),
         }
         // The source file on disk now points at the new path...
@@ -1017,7 +1021,7 @@ mod tests {
             relocate_folder(&mut conn, Some(&index), dir.path(), "creatures", "beasts").unwrap();
 
         assert_eq!(
-            rewritten, 2,
+            rewritten.len(), 2,
             "the outside note, and the moved note that linked to its neighbour",
         );
         assert_eq!(

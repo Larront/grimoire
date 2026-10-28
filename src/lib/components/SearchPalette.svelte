@@ -15,6 +15,7 @@
     Sun,
     FolderOpen,
     RefreshCw,
+    Link2Off,
     LayoutTemplate,
     SquarePen,
     FileDown,
@@ -42,6 +43,7 @@
   import { dialogs } from "$lib/stores/overlay.svelte";
   import { unlinkedPins } from "$lib/stores/unlinked-pins.svelte";
   import { unreadableNotes } from "$lib/stores/unreadable-notes.svelte";
+  import { linkRepairs } from "$lib/stores/link-repairs.svelte";
   import {
     createNamedNote,
     createNoteFromTemplate,
@@ -481,6 +483,19 @@
       noteOnly: false,
       icon: RefreshCw,
       action: cmdRebuildIndex,
+    },
+    {
+      // Found afresh each time: links broken by moves outside Grimoire, healed only
+      // where the GM ticks (ADR-0014's escape hatch for the bulk path).
+      label: "Repair links…",
+      testid: "cmd-repair-links",
+      also: ["broken links", "fix links", "moved notes"],
+      noteOnly: false,
+      icon: Link2Off,
+      action: () => {
+        searchPalette.open = false;
+        void linkRepairs.review();
+      },
     },
     {
       label: "Explore example world",
