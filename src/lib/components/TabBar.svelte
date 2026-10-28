@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { tabs } from "$lib/stores/tabs.svelte";
   import {
     FileText,
@@ -266,7 +267,7 @@
             <Icon class="size-3.5 shrink-0" />
             <!-- A template says so by its icon and its full name on hover. A "Template"
                  label beside the name left a narrow tab room for three letters of it. -->
-            <span class="truncate text-sm flex-1">{tab.title}</span>
+            <MiddleTruncate text={tab.title} class="text-sm flex-1" />
             {#if tab.type === "template"}<span class="sr-only">, template</span>{/if}
             <button
               type="button"
@@ -342,7 +343,7 @@
             onSelect={() => tabs.activateTab(pane, i)}
           >
             <Icon />
-            <span class="truncate">{tab.title}</span>
+            <MiddleTruncate text={tab.title} />
           </DropdownMenu.Item>
         {/each}
       </DropdownMenu.Content>

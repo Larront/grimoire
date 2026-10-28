@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MiddleTruncate from "$lib/components/MiddleTruncate.svelte";
   import { FilePlus2, FileText } from "@lucide/svelte";
   import { placeMenu } from "$lib/utils/anchored-menu";
   import { WIKI_MENU_ID, wikiOptionId, type WikiSuggestion } from "$lib/editor/wiki-suggest";
@@ -89,7 +90,7 @@
       >
         {#if item.kind === "note"}
           <FileText size={14} class="shrink-0 {selected ? '' : 'opacity-70'}" />
-          <span class="min-w-0 flex-1 truncate font-sans text-[0.8125rem]">{item.title}</span>
+          <MiddleTruncate text={item.title} class="min-w-0 flex-1 font-sans text-[0.8125rem]" />
           <!-- What tells two notes of one name apart, and why an alias answered: the
                folder it lives in rather than a file path, and the alias that matched. -->
           {#if item.alias || item.folder}
