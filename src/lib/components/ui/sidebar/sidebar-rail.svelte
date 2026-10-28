@@ -69,7 +69,7 @@
   bind:this={ref}
   data-sidebar="rail"
   data-slot="sidebar-rail"
-  aria-label="Toggle Sidebar"
+  aria-label="Toggle sidebar"
   tabindex={-1}
   {onpointerdown}
   {onpointermove}

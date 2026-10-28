@@ -240,7 +240,7 @@
       let picture: string | null = null;
       if (parentNode) {
         const picked = await open({
-          title: "Choose Map Image",
+          title: "Choose a map image",
           filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
         });
         if (!picked || typeof picked !== "string") return;

@@ -63,7 +63,7 @@ describe("AnnotationDetails — rendering", () => {
       },
     });
     await flush();
-    expect(getByText("Text Label")).toBeTruthy();
+    expect(getByText("Text label")).toBeTruthy();
   });
 
   it("renders kind badge for circle annotation", async () => {

@@ -498,7 +498,7 @@
 
   async function handleFilePick() {
     const picked = await open({
-      title: "Choose Audio File",
+      title: "Choose an audio file",
       filters: [
         {
           name: "Audio",
@@ -722,7 +722,7 @@
             onclick={handlePlayStop}
           >
             <Play class="size-3.5" />
-            Play Scene
+            Play scene
           </Button>
         {/if}
 

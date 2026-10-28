@@ -769,7 +769,7 @@
           onclick={() => (pickerOpen = true)}
         >
           <Link2 class="size-3.5" />
-          Link Scene
+          Link scene
         </Button>
       </div>
     {/if}

@@ -84,13 +84,13 @@ export const BLOCK_VOCABULARY: Record<BlockVocabularyKey, BlockVocabularyEntry> 
     node: "heading",
   },
   bulletList: {
-    label: "Bullet List",
+    label: "Bullet list",
     word: "list",
     icon: "List",
     node: "bulletList",
   },
   orderedList: {
-    label: "Numbered List",
+    label: "Numbered list",
     word: "numbered list",
     icon: "ListOrdered",
     node: "orderedList",
@@ -99,7 +99,7 @@ export const BLOCK_VOCABULARY: Record<BlockVocabularyKey, BlockVocabularyEntry> 
   // callout is named by its own type word (see `blockLabel`).
   quote: { label: "Quote", word: "quote", icon: "Quote", node: "blockquote" },
   codeBlock: {
-    label: "Code Block",
+    label: "Code block",
     word: "code block",
     icon: "Code",
     node: "codeBlock",

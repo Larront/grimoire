@@ -121,7 +121,7 @@
   function handleTitleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
-      const input = e.target as HTMLInputElement;
+      const input = e.target as HTMLTextAreaElement;
       input.blur();
       // On into the text, as a note's title does.
       input.closest("[data-note-column]")?.querySelector<HTMLElement>(".ProseMirror")?.focus();
@@ -129,7 +129,7 @@
     if (e.key === "Escape") {
       draftTitle = templateTitle;
       titleRefused = null;
-      (e.target as HTMLInputElement).blur();
+      (e.target as HTMLTextAreaElement).blur();
     }
   }
 
@@ -158,19 +158,23 @@
     <!-- A template is a note being written, so it gets the note's column and with it the
          block gutter (#190) — see `[data-note-column]` in app.css. -->
     <div bind:this={column} data-note-column class="w-full mx-auto pt-10 pb-20 max-w-[46rem]">
-      <input
+      <!-- Wraps as a note's title does (NotePane): a second line, not a cut end. -->
+      <textarea
         bind:value={draftTitle}
+        rows="1"
         aria-label="Template name"
         aria-invalid={!!titleRefused}
         aria-describedby="template-title-problem"
-        title={draftTitle}
-        class="w-full bg-transparent border-none outline-none p-0
-               font-heading text-[2.75rem] leading-[1.15] tracking-tight text-ellipsis
+        class="block w-full resize-none overflow-hidden bg-transparent border-none outline-none p-0
+               font-heading text-[2.75rem] leading-[1.15] tracking-tight [field-sizing:content]
                text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
         placeholder="Name the template"
+        oninput={() => {
+          if (/[\r\n]/.test(draftTitle)) draftTitle = draftTitle.replace(/\s*[\r\n]+\s*/g, " ");
+        }}
         onblur={commitTitle}
         onkeydown={handleTitleKeydown}
-      />
+      ></textarea>
       <p id="template-title-problem" aria-live="polite" class="text-(length:--font-ui)">
         {#if titleRefused}
           <span class="mt-2 inline-flex items-center gap-1.5 text-error">

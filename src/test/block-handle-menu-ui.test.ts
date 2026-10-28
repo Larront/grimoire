@@ -695,9 +695,9 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
 
   it.each([
     ["Heading 2", "## The Lower Halls"],
-    ["Bullet List", "- The Lower Halls"],
+    ["Bullet list", "- The Lower Halls"],
     ["Quote", "> The Lower Halls"],
-    ["Numbered List", "1. The Lower Halls"],
+    ["Numbered list", "1. The Lower Halls"],
   ])("writes the markers %s is spelled with", async (label, expected) => {
     const editor = note("The Lower Halls");
     const { el } = grip(editor);
@@ -758,7 +758,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     openTurnInto();
     const checked = items().filter((i) => i.getAttribute("aria-checked") === "true");
 
-    expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Numbered List"]);
+    expect(checked.map((i) => i.getAttribute("aria-label"))).toEqual(["Numbered list"]);
   });
 
   it("offers every kind as a radio, so a screen reader reads it as a choice", async () => {
@@ -781,7 +781,7 @@ describe("the Turn into section, on the blocks that have an answer to it", () =>
     const editor = note(md);
     const { el } = grip(editor);
     await fireEvent.click(el);
-    await fireEvent.click(item("Bullet List"));
+    await fireEvent.click(item("Bullet list"));
 
     expect(saved(editor)).toBe(md);
   });

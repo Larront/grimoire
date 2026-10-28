@@ -117,7 +117,7 @@ export const CALLOUT_TYPES: readonly CalloutTypeSpec[] = [
   },
   {
     type: "read-aloud",
-    label: "Read Aloud",
+    label: "Read aloud",
     icon: "Speech",
     keywords: ["callout", "boxed", "text", "players"],
   },

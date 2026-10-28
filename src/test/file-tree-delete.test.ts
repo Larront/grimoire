@@ -154,6 +154,38 @@ describe("FileTree delete — folder", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("“My Folder” is in the Trash"));
     expect(toastUndo).not.toHaveBeenCalled();
   });
+
+  it("says what went with it (2026-10 design review)", async () => {
+    const leaf = (name: string, extra: Partial<FileNode>): FileNode => ({
+      path: `My Folder/${name}`,
+      name,
+      is_dir: false,
+      note_id: null,
+      map_id: null,
+      children: [],
+      ...extra,
+    });
+    const full: FileNode = {
+      ...folderNode,
+      children: [
+        leaf("A.md", { note_id: 1 }),
+        leaf("B.md", { note_id: 2 }),
+        leaf("Vale", { map_id: 3 }),
+        {
+          ...leaf("Deeper", { is_dir: true }),
+          children: [leaf("Deeper/C.md", { note_id: 4 }), leaf("Deeper/Rules.pdf", {})],
+        },
+      ],
+    };
+    const { container } = render(FileTree, { props: { node: full, ...defaultProps } });
+    await openContextMenu(container);
+    await fireEvent.click(await clickMenuItem("Delete “My Folder”"));
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "“My Folder” and the 3 notes, 1 map and 1 PDF in it are in the Trash",
+      ),
+    );
+  });
 });
 
 // ── The row's menu (2026-10 design review) ──────────────────────────────────
@@ -207,6 +239,14 @@ describe("FileTree row menu", () => {
   it("has a visible way into the same menu", () => {
     const { getByRole } = render(FileTree, { props: { node: noteNode, ...defaultProps } });
     expect(getByRole("button", { name: "More for Test Note" })).toBeTruthy();
+  });
+
+  it("puts the current row's ⋯ in the Tab order, after the row", () => {
+    const { getByRole } = render(FileTree, {
+      props: { node: noteNode, first: true, ...defaultProps },
+    });
+    expect(getByRole("button", { name: /^Test Note$/ }).tabIndex).toBe(0);
+    expect(getByRole("button", { name: "More for Test Note" }).tabIndex).toBe(0);
   });
 });
 

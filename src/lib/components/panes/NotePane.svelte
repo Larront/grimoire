@@ -332,7 +332,7 @@
 
   // ── Title editing ─────────────────────────────────────────────────────────
   let draftTitle = $state("");
-  let titleInput: HTMLInputElement | undefined = $state();
+  let titleInput: HTMLTextAreaElement | undefined = $state();
   let isSavingTitle = $state(false);
 
   // ── Rename confirmation dialog ────────────────────────────────────────────
@@ -431,7 +431,7 @@
   function handleTitleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
-      const input = e.target as HTMLInputElement;
+      const input = e.target as HTMLTextAreaElement;
       input.blur();
       // On into the text, as a title's Enter does in any editor. It used to leave the
       // caret nowhere, so a GM naming their first note typed into nothing.
@@ -439,7 +439,7 @@
     }
     if (e.key === "Escape") {
       if (note) draftTitle = note.title;
-      (e.target as HTMLInputElement).blur();
+      (e.target as HTMLTextAreaElement).blur();
     }
   }
 
@@ -719,17 +719,25 @@
              its leading edge is the block gutter (#190) and is derived from the grip's
              own size, so it must not drift apart from a utility class. -->
         <div data-note-column class="w-full mx-auto pt-10 pb-20 max-w-[46rem]">
-          <input
+          <!-- A field that wraps: a long title takes a second line in a narrow pane,
+               where it used to be cut at its end ("Annals of the Iron Hand, V…"), by
+               the owner's choice (2026-10 design review). It grows with its text
+               (`field-sizing`) and never holds a line break: Enter leaves it, and a
+               pasted one becomes a space, because a title is one line of the file's name. -->
+          <textarea
             bind:this={titleInput}
             bind:value={draftTitle}
-            title={draftTitle}
-            class="w-full bg-transparent border-none outline-none p-0
-                   font-heading text-[2.75rem] leading-[1.15] tracking-tight text-ellipsis
+            rows="1"
+            class="block w-full resize-none overflow-hidden bg-transparent border-none outline-none p-0
+                   font-heading text-[2.75rem] leading-[1.15] tracking-tight [field-sizing:content]
                    text-foreground placeholder:text-muted-foreground/40 focus:ring-0"
             placeholder="Untitled"
+            oninput={() => {
+              if (/[\r\n]/.test(draftTitle)) draftTitle = draftTitle.replace(/\s*[\r\n]+\s*/g, " ");
+            }}
             onblur={commitTitle}
             onkeydown={handleTitleKeydown}
-          />
+          ></textarea>
           <div class="mt-3 mb-8 h-px bg-border"></div>
           {#if loadError}
             <!-- No Editor mounts in this state, so no autosave can recreate
