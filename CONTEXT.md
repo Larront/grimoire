@@ -105,8 +105,18 @@ The scene that is playing, in the sidebar's footer: its name (which opens it), P
 
 ### Ledger
 
-The folder a GM's campaign lives in — its notes, maps, PDFs and the `.grimoire/` folder beside them — and the word the GM reads for it everywhere the app names it: "New ledger", "Open a ledger folder…", "Other ledgers", "This ledger's colour", "Every ledger." **World** is never the folder: it is the fiction the GM builds inside one ("the world you're building", "Every world begins with its first note"). Decided by the owner on 2026-10-29, reversing the 2026-10 design review, which had made the app's copy say "world" for the folder; the website always said "Ledger". Code identifiers that predate the change (`worldName`, `WorldRow`, `world-words.ts`) keep their names.
-_Avoid_: "world" for the folder, "vault" (Obsidian's word), "project".
+A GM's campaign — its notes, maps, scenes and PDFs — and the word the GM reads for it everywhere the app names it: "New ledger", "Open a ledger folder…", "Other ledgers", "This ledger's colour", "Every ledger." Stored one of two ways, a [[Local Ledger]] or a [[Cloud Ledger]], and everything inside it means the same thing in both. **World** is never the ledger: it is the fiction the GM builds inside one ("the world you're building", "Every world begins with its first note"). Decided by the owner on 2026-10-29, reversing the 2026-10 design review, which had made the app's copy say "world" for the folder; the website always said "Ledger". Code identifiers that predate the change (`worldName`, `WorldRow`, `world-words.ts`) keep their names.
+_Avoid_: "world" for the ledger, "vault" (Obsidian's word), "project".
+
+### Local Ledger
+
+A [[Ledger]] kept as a folder on the GM's own computer — its notes as plain `.md` files with the `.grimoire/` folder beside them — and editable by other tools while Grimoire has it open. What every ledger was before the [[Cloud Ledger]] existed. Opened only by the desktop app. Needs no account.
+_Avoid_: "offline ledger" (it is about where the ledger lives, not the network), "desktop ledger" (desktop can open a Cloud Ledger too).
+
+### Cloud Ledger
+
+A [[Ledger]] kept on the Grimoire server and reached by signing in, from the browser or from the desktop app — the same ledger from any device, private to the one GM whose account holds it. Usable only while online; there is no offline copy. Edits made on one device appear on the others, and two devices changing the same note meet the way an outside edit does today. A [[Local Ledger]] can be **copied** to the cloud and a Cloud Ledger copied down to a folder; either copy is independent from then on, and the original is never touched. Signing in is needed for Cloud Ledgers and nothing else.
+_Avoid_: "online ledger", "synced ledger" (nothing syncs between a Local Ledger and its cloud copy), "shared ledger" (it belongs to one GM).
 
 ### Scene
 
